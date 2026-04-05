@@ -1,0 +1,52 @@
+@import "katex/dist/katex.min.css";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { font-size: 13.5px; }
+}
+
+@layer components {
+  .card { @apply bg-surface border border-border rounded-xl p-5 shadow-sm; }
+  .card-title { @apply text-[10px] font-bold uppercase tracking-[1.2px] text-ink-3 mb-4; }
+  .btn { @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-0 font-sans transition-all duration-150; }
+  .btn-primary { @apply bg-accent text-white shadow-md hover:bg-accent-hover hover:-translate-y-px; }
+  .btn-secondary { @apply bg-surface text-ink-2 border border-border shadow-sm hover:bg-surface-2 hover:border-border-2; }
+  .btn-danger { @apply bg-red-50 text-danger border border-red-200 hover:bg-red-100; }
+  .btn-sm { @apply px-3 py-1 text-[11px] rounded-md; }
+  .badge { @apply inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono; }
+  .badge-green { @apply bg-green-50 text-success; }
+  .badge-red   { @apply bg-red-50 text-danger; }
+  .badge-yellow{ @apply bg-yellow-50 text-warning; }
+  .badge-blue  { @apply bg-accent-soft text-accent; }
+  .badge-gray  { @apply bg-surface-2 text-ink-2; }
+  .form-input { @apply w-full bg-surface-2 border-[1.5px] border-border rounded-lg px-3 py-2 text-[13px] font-sans text-ink outline-none transition-all focus:border-accent focus:bg-white; }
+  .form-label { @apply block text-[10.5px] font-bold uppercase tracking-[1px] text-ink-2 mb-1.5; }
+  .stat-card { @apply bg-surface border border-border rounded-xl p-5 shadow-sm transition-shadow hover:shadow-md; }
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ced2e8; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #5b5ef4; }
+
+/* Safe area for mobile devices with home indicator */
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Mobile-specific tweaks */
+@media (max-width: 767px) {
+  .card { @apply p-4; }
+  .stat-card { @apply p-4; }
+  .stat-value { @apply text-[24px]; }
+}
+
+/* Edit mode field styles */
+.edit-label {
+  @apply block text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-1;
+}
+.edit-input {
+  @apply w-full text-[12px] border border-border rounded-lg px-3 py-2 outline-none
+         bg-surface font-sans transition-colors focus:border-accent;
+}
