@@ -2,15 +2,21 @@ import { useState } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState } from '../../components/ui'
 import { getAllStudents } from '../../lib/analytics'
+import { useMode } from '../../context/ModeContext'
 import StudentView from './StudentView'
+import ImportStudentsModal from '../../components/students/ImportStudentsModal'
+import ManageBatchBranchModal from './ManageBatchBranchModal'
 
 export default function StudentsPage() {
   const exams = useStore(s => s.exams)
   const activeStudent = useStore(s => s.activeStudent)
   const setActiveStudent = useStore(s => s.setActiveStudent)
+  const mode = useMode()
 
   const [query, setQuery] = useState('')
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
 
   const allStudents = getAllStudents(exams)
   const filtered = query.trim()
@@ -19,7 +25,26 @@ export default function StudentsPage() {
 
   return (
     <div>
-      <PageHeader title="Students" sub="Search a student to view their performance" />
+      <PageHeader
+        title="Students"
+        sub="Search a student to view their performance"
+        actions={mode === 'faculty' && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setManageOpen(true)}
+              className="btn btn-secondary text-[13px]"
+            >
+              🏷️ Manage Batches &amp; Branches
+            </button>
+            <button
+              onClick={() => setImportOpen(true)}
+              className="btn btn-secondary text-[13px]"
+            >
+              👤 Import Students
+            </button>
+          </div>
+        )}
+      />
 
       {/* Search */}
       <div className="relative mb-6 max-w-md">
@@ -63,6 +88,9 @@ export default function StudentsPage() {
           ? <EmptyState icon="👤" title="No exams yet" sub="Add exams first to see student data" />
           : <EmptyState icon="🔍" title="Search for a student" sub={`${allStudents.length} students across ${exams.length} exams`} />
       )}
+
+      {importOpen && <ImportStudentsModal onClose={() => setImportOpen(false)} />}
+      {manageOpen && <ManageBatchBranchModal onClose={() => setManageOpen(false)} />}
     </div>
   )
 }

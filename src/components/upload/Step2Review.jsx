@@ -1,5 +1,6 @@
 import { Alert } from '../ui'
 import { getAllBatches } from '../../lib/matchStudents'
+import { SUBJECTS } from '../../lib/ndaFreq'
 import useStore from '../../store/useStore'
 
 export default function Step2Review({ state, onChange, onNext, onBack }) {
@@ -7,7 +8,7 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
     tagsSource, hasNegative, students, totalQs,
     examName, examDate, markCorrect, markWrong, subject,
     detectedBatch, batchConfidence, batchMatchedCount,
-    batchTotalCount, batchCounts, batch,
+    batchTotalCount, batchCounts, batch, branch,
   } = state
 
   const studentProfiles = useStore(s => s.studentProfiles)
@@ -15,7 +16,13 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
   const hasProfiles     = Object.keys(studentProfiles).length > 0
 
   // Current selected batch — use manually set or detected
-  const currentBatch = batch !== undefined ? batch : (detectedBatch || '')
+  const currentBatch   = batch !== undefined ? batch : (detectedBatch || '')
+  const currentBranch  = branch || ''
+
+  // Unique branches from student profiles
+  const allBranches = [...new Set(
+    Object.values(studentProfiles).map(p => p.branch).filter(Boolean)
+  )].sort()
 
   // Confidence display
   const confPct = batchConfidence ? Math.round(batchConfidence * 100) : 0
@@ -88,17 +95,20 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
 
       <div className="mb-4">
         <label className="form-label">
-          Subject / Chapter
+          Subject
           <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-ink-3">
-            default chapter name if no tags file
+            default chapter if no tags file
           </span>
         </label>
-        <input
+        <select
           className="form-input"
-          value={subject}
+          value={subject || 'Maths'}
           onChange={e => onChange({ subject: e.target.value })}
-          placeholder="e.g. Differentiation, Trigonometry"
-        />
+        >
+          {SUBJECTS.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
 
       {/* ── Batch detection ──────────────────────────────── */}
@@ -162,6 +172,36 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
                 </button>
               ))}
           </div>
+        )}
+      </div>
+
+      {/* ── Branch ───────────────────────────────────────── */}
+      <div className="mb-5">
+        <label className="form-label">Branch
+          {!hasProfiles && (
+            <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-ink-3">
+              import Students DB to enable dropdown
+            </span>
+          )}
+        </label>
+        {hasProfiles && allBranches.length > 0 ? (
+          <select
+            className="form-input"
+            value={currentBranch}
+            onChange={e => onChange({ branch: e.target.value })}
+          >
+            <option value="">— No branch assigned —</option>
+            {allBranches.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="form-input"
+            value={currentBranch}
+            onChange={e => onChange({ branch: e.target.value })}
+            placeholder="e.g. Pune Main"
+          />
         )}
       </div>
 

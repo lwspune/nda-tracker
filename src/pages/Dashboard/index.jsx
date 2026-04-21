@@ -1,21 +1,58 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState, StatCard, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
-import { computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents } from '../../lib/analytics'
-import { NDA_FREQ_DEFAULT } from '../../lib/ndaFreq'
+import { computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames } from '../../lib/analytics'
 import { getAllBatches } from '../../lib/matchStudents'
+import FrequencyTableEditor from './FrequencyTableEditor'
 
 export default function DashboardPage() {
-  const exams        = useStore(s => s.exams)
-  const ndaFreq      = useStore(s => s.ndaFreq)
-  const setNdaFreq   = useStore(s => s.setNdaFreq)
-  const resetNdaFreq = useStore(s => s.resetNdaFreq)
-  const studentProfiles = useStore(s => s.studentProfiles)
+  const exams              = useStore(s => s.exams)
+  const ndaFreqBySubject   = useStore(s => s.ndaFreqBySubject)
+  const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
+  const setNdaFreq         = useStore(s => s.setNdaFreq)
+  const resetNdaFreq       = useStore(s => s.resetNdaFreq)
+  const setSubjectTotalMarks = useStore(s => s.setSubjectTotalMarks)
+  const studentProfiles    = useStore(s => s.studentProfiles)
 
-  const [batchFilter, setBatchFilter] = useState('all')
-  const [filterVal, setFilterVal]     = useState('all')
-  const [freqOpen, setFreqOpen]       = useState(false)
-  const [localFreq, setLocalFreq]     = useState(null)
+  const [subjectFilter, setSubjectFilter] = useState('all')
+  const [branchFilter, setBranchFilter]   = useState('all')
+  const [batchFilter, setBatchFilter]     = useState('all')
+  const [filterVal, setFilterVal]         = useState('all')
+
+  // ── Filter chain — computed unconditionally (hooks must not come after early returns) ──
+  // Subjects that actually have exams (sorted alphabetically)
+  const availableSubjects = [...new Set(exams.map(e => e.subject || 'Maths'))].sort()
+
+  // Filter chain: subject → branch → batch → specific exam
+  const subjectFiltered = subjectFilter === 'all'
+    ? exams
+    : exams.filter(e => (e.subject || 'Maths') === subjectFilter)
+
+  // Branches visible after subject filter
+  const allBranches = [...new Set(subjectFiltered.map(e => e.branch).filter(Boolean))].sort()
+
+  const branchFiltered = branchFilter === 'all'
+    ? subjectFiltered
+    : subjectFiltered.filter(e => e.branch === branchFilter)
+
+  // Batches visible after branch filter
+  const allBatches = [...new Set(branchFiltered.map(e => e.batch).filter(Boolean))]
+
+  const batchFiltered = batchFilter === 'all'
+    ? branchFiltered
+    : branchFiltered.filter(e => e.batch === batchFilter)
+
+  const filtered = filterVal === 'all'
+    ? batchFiltered
+    : batchFiltered.filter(e => e.id === filterVal)
+
+  // Valid students: those whose matched profile has a regDate.
+  // null when no profiles are imported — analytics functions treat null as "no filter".
+  // useMemo must be called unconditionally before any early return (Rules of Hooks).
+  const validNames = useMemo(() => {
+    if (!Object.keys(studentProfiles).length) return null
+    return getValidStudentNames(filtered, studentProfiles)
+  }, [filtered, studentProfiles])
 
   if (!exams.length) {
     return (
@@ -26,22 +63,13 @@ export default function DashboardPage() {
     )
   }
 
-  // All unique batches across all exams
-  const allBatches = [...new Set(exams.map(e => e.batch).filter(Boolean))]
+  const students     = getAllStudents(filtered, validNames)
+  const chapterStats = computeChapterStats(filtered, validNames)
+  const atRisk       = getAtRisk(filtered, validNames)
+  const hardest      = getHardestQuestions(filtered, 8, validNames)
 
-  // Filter by batch first, then by specific exam
-  const batchFiltered = batchFilter === 'all'
-    ? exams
-    : exams.filter(e => e.batch === batchFilter)
-
-  const filtered = filterVal === 'all'
-    ? batchFiltered
-    : batchFiltered.filter(e => e.id === filterVal)
-
-  const students  = getAllStudents(filtered)
-  const chapterStats = computeChapterStats(filtered)
-  const atRisk    = getAtRisk(filtered)
-  const hardest   = getHardestQuestions(filtered)
+  // Total names in exams — used to show "X registered of Y in exams"
+  const totalInExams = validNames !== null ? getAllStudents(filtered).length : null
 
   const avgScore  = filtered.length
     ? filtered.reduce((s, e) =>
@@ -57,32 +85,6 @@ export default function DashboardPage() {
     return { name: ch, pct: total > 0 ? correct / total : 0, correct, total }
   }).sort((a, b) => a.pct - b.pct)
 
-  // Working freq rows — local edits before save
-  const workingFreq = localFreq || ndaFreq
-  const freqTotal   = workingFreq.reduce((s, r) => s + (parseFloat(r.pct) || 0), 0)
-  const freqValid   = Math.abs(freqTotal - 100) < 0.15
-
-  function updateFreqRow(i, val) {
-    const next = workingFreq.map((r, ri) =>
-      ri === i ? { ...r, pct: parseFloat(val) || 0 } : r
-    )
-    setLocalFreq(next)
-  }
-
-  function saveFreq() {
-    if (!freqValid) return
-    setNdaFreq(workingFreq)
-    setLocalFreq(null)
-  }
-
-  function handleReset() {
-    if (!confirm('Reset to default NDA PYQ 2018–2024 weights?')) return
-    resetNdaFreq()
-    setLocalFreq(null)
-  }
-
-  const hasUnsaved = localFreq !== null
-
   return (
     <div>
       {/* Header + filters */}
@@ -92,9 +94,38 @@ export default function DashboardPage() {
           <p className="text-[13px] text-ink-2 mt-1">Class performance overview</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
+          {/* Subject filter */}
+          <select
+            aria-label="Subject filter"
+            value={subjectFilter}
+            onChange={e => { setSubjectFilter(e.target.value); setBranchFilter('all'); setBatchFilter('all'); setFilterVal('all') }}
+            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
+            style={{ minWidth: '160px' }}
+          >
+            <option value="all">All Subjects</option>
+            {availableSubjects.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          {/* Branch filter */}
+          {allBranches.length > 0 && (
+            <select
+              aria-label="Branch filter"
+              value={branchFilter}
+              onChange={e => { setBranchFilter(e.target.value); setBatchFilter('all'); setFilterVal('all') }}
+              className="form-input w-auto text-[13px] pr-8 cursor-pointer"
+              style={{ minWidth: '160px' }}
+            >
+              <option value="all">All Branches</option>
+              {allBranches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          )}
           {/* Batch filter */}
           {allBatches.length > 0 && (
             <select
+              aria-label="Batch filter"
               value={batchFilter}
               onChange={e => { setBatchFilter(e.target.value); setFilterVal('all') }}
               className="form-input w-auto text-[13px] pr-8 cursor-pointer"
@@ -108,6 +139,7 @@ export default function DashboardPage() {
           )}
           {/* Exam filter */}
           <select
+            aria-label="Exam filter"
             value={filterVal}
             onChange={e => setFilterVal(e.target.value)}
             className="form-input w-auto text-[13px] pr-8 cursor-pointer"
@@ -123,7 +155,15 @@ export default function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
-        <StatCard label="Students"  value={students.length}      color="text-accent" />
+        <StatCard
+          label={validNames !== null ? 'Registered' : 'Students'}
+          value={students.length}
+          color="text-accent"
+          delta={totalInExams !== null && totalInExams !== students.length
+            ? `of ${totalInExams} in exams`
+            : null}
+          deltaUp={null}
+        />
         <StatCard label="Exams"     value={filtered.length}      color="text-indigo-400" />
         <StatCard label="Avg Score" value={avgScore.toFixed(1)}  color="text-success" />
         <StatCard label="At-Risk"   value={atRisk.length}        color="text-danger" />
@@ -180,8 +220,15 @@ export default function DashboardPage() {
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left border-b border-border">
-                  {['Exam', 'Q#', 'Chapter', 'Subtopic', 'Score', 'Difficulty'].map(h => (
-                    <th key={h} className="text-[10px] font-bold uppercase tracking-[1px] text-ink-3 pb-2 pr-4">{h}</th>
+                  {[
+                    { label: 'Exam', cls: '' },
+                    { label: 'Q#', cls: '' },
+                    { label: 'Chapter', cls: '' },
+                    { label: 'Subtopic', cls: 'hidden sm:table-cell' },
+                    { label: 'Score', cls: '' },
+                    { label: 'Difficulty', cls: 'hidden sm:table-cell' },
+                  ].map(h => (
+                    <th key={h.label} className={`text-[10px] font-bold uppercase tracking-[1px] text-ink-3 pb-2 pr-4 ${h.cls}`}>{h.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -191,7 +238,7 @@ export default function DashboardPage() {
                     <td className="py-2 pr-4 text-ink-3 text-[11px]">{q.examName}</td>
                     <td className="py-2 pr-4 font-mono">Q{q.q}</td>
                     <td className="py-2 pr-4 font-medium">{q.chapter}</td>
-                    <td className="py-2 pr-4 text-ink-2">{q.subtopic}</td>
+                    <td className="py-2 pr-4 text-ink-2 hidden sm:table-cell">{q.subtopic}</td>
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
@@ -202,7 +249,7 @@ export default function DashboardPage() {
                         <span className="font-mono text-[10px]">{(q.pct*100).toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className="py-2">
+                    <td className="py-2 hidden sm:table-cell">
                       <Badge variant={q.pct < 0.3 ? 'red' : q.pct < 0.6 ? 'yellow' : 'green'}>
                         {q.pct < 0.3 ? 'Hard' : q.pct < 0.6 ? 'Medium' : 'Easy'}
                       </Badge>
@@ -215,121 +262,15 @@ export default function DashboardPage() {
         )}
       </Card>
 
-      {/* ── NDA Chapter Frequency Table ─────────────────── */}
-      <Card>
-        {/* Collapsible header */}
-        <div
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setFreqOpen(o => !o)}
-        >
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[1.2px] text-ink-3">
-              📊 NDA Chapter Frequency Table
-              {hasUnsaved && <span className="ml-2 text-warning font-bold">· Unsaved changes</span>}
-            </div>
-            <div className="text-[11px] text-ink-3 font-normal mt-1 normal-case tracking-normal">
-              Weights used for projected NDA score · based on PYQ 2018–2024 · click to edit
-            </div>
-          </div>
-          <span
-            className="text-[13px] text-ink-3 transition-transform duration-200 flex-shrink-0 ml-4"
-            style={{ transform: freqOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-          >▶</span>
-        </div>
-
-        {/* Collapsible body */}
-        {freqOpen && (
-          <div className="mt-5">
-            {/* Column headers */}
-            <div className="grid gap-2 px-2 mb-2"
-                 style={{ gridTemplateColumns: '1fr 90px 90px' }}>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3">Chapter</div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 text-center">Weight %</div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 text-center">NDA Marks</div>
-            </div>
-
-            {/* Rows */}
-            <div className="space-y-0.5 mb-4">
-              {workingFreq.map((row, i) => (
-                <div
-                  key={row.chapter}
-                  className={`grid gap-2 px-2 py-1.5 rounded-lg items-center
-                              ${i % 2 === 0 ? 'bg-surface-2' : 'bg-surface'}`}
-                  style={{ gridTemplateColumns: '1fr 90px 90px' }}
-                >
-                  <div className="text-[12px] font-medium text-ink">{row.chapter}</div>
-                  <div className="text-center">
-                    <input
-                      type="number"
-                      step="0.1" min="0" max="100"
-                      value={row.pct}
-                      onChange={e => updateFreqRow(i, e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                      className="w-16 text-center text-[12px] font-mono border border-border
-                                 rounded-md px-2 py-1 outline-none bg-surface
-                                 focus:border-accent focus:bg-white transition-colors"
-                    />
-                  </div>
-                  <div className="text-center text-[12px] font-mono text-ink-2">
-                    {(parseFloat(row.pct) * 3).toFixed(1)}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Total row */}
-            <div className="grid gap-2 px-2 py-2 border-t border-border mb-4"
-                 style={{ gridTemplateColumns: '1fr 90px 90px' }}>
-              <div className="text-[12px] font-bold text-ink">Total</div>
-              <div className="text-center">
-                <span className={`text-[13px] font-extrabold font-mono
-                  ${freqValid ? 'text-success' : 'text-danger'}`}>
-                  {freqTotal.toFixed(1)}%
-                </span>
-                {!freqValid && (
-                  <div className="text-[10px] text-danger mt-0.5">Must equal 100%</div>
-                )}
-              </div>
-              <div className="text-center text-[12px] font-mono font-bold text-ink">
-                {(freqTotal * 3).toFixed(1)}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <button
-                onClick={saveFreq}
-                disabled={!freqValid || !hasUnsaved}
-                className={`btn btn-primary btn-sm
-                  ${(!freqValid || !hasUnsaved) ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                💾 Save Weights
-              </button>
-              <button
-                onClick={handleReset}
-                className="btn btn-secondary btn-sm"
-              >
-                ↺ Reset to Defaults
-              </button>
-              {!freqValid && (
-                <span className="text-[11px] text-danger font-semibold">
-                  ⚠️ Total must equal 100% before saving
-                </span>
-              )}
-              {freqValid && hasUnsaved && (
-                <span className="text-[11px] text-warning font-semibold">
-                  Unsaved — click Save Weights to apply
-                </span>
-              )}
-              {freqValid && !hasUnsaved && (
-                <span className="text-[11px] text-success">
-                  ✅ Saved — projected scores are up to date
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-      </Card>
+      {/* Chapter Frequency Table */}
+      <FrequencyTableEditor
+        exams={exams}
+        ndaFreqBySubject={ndaFreqBySubject}
+        setNdaFreq={setNdaFreq}
+        resetNdaFreq={resetNdaFreq}
+        ndaMarksBySubject={ndaMarksBySubject}
+        setSubjectTotalMarks={setSubjectTotalMarks}
+      />
     </div>
   )
 }

@@ -3,10 +3,11 @@ import useStore from '../../store/useStore'
 export default function Step4Confirm({ state, onSave, onBack }) {
   const {
     examName, examDate, markCorrect, markWrong,
-    students, tags, tagsSource, batch, detectedBatch,
+    students, tags, tagsSource, batch, detectedBatch, subject, branch,
   } = state
 
-  const displayBatch = batch || detectedBatch || null
+  const displayBatch  = batch || detectedBatch || null
+  const displayBranch = branch || null
 
   const exams       = useStore(s => s.exams)
   const replaceExam = useStore(s => s.replaceExam)
@@ -30,7 +31,9 @@ export default function Step4Confirm({ state, onSave, onBack }) {
       id: id || 'exam_' + Date.now(),
       name: examName,
       date: examDate,
+      subject: subject || 'Maths',
       batch: state.batch || state.detectedBatch || null,
+      branch: state.branch || null,
       marking: { correct: markCorrect, wrong: markWrong },
       questions: tags || [],
       students: students || [],
@@ -106,7 +109,9 @@ export default function Step4Confirm({ state, onSave, onBack }) {
       <div className="grid grid-cols-2 gap-3 mb-5">
         <SummaryCard label="Exam Name" value={examName || '—'} />
         <SummaryCard label="Date" value={examDate || '—'} />
-        <SummaryCard label="Batch" value={displayBatch || 'Not assigned'} valueColor={displayBatch ? 'text-ink' : 'text-ink-3'} />
+        <SummaryCard label="Subject" value={subject || 'Maths'} />
+        <SummaryCard label="Batch"   value={displayBatch  || 'Not assigned'} valueColor={displayBatch  ? 'text-ink' : 'text-ink-3'} />
+        <SummaryCard label="Branch"  value={displayBranch || 'Not assigned'} valueColor={displayBranch ? 'text-ink' : 'text-ink-3'} />
         <SummaryCard label="Students" value={students?.length || 0} />
         <SummaryCard label="Questions" value={tags?.length || 0} />
         <SummaryCard label="Marking" value={`+${markCorrect} / ${markWrong}`} />

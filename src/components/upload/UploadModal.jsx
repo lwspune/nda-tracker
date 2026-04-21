@@ -44,7 +44,14 @@ export default function UploadModal() {
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center"
       style={{ background: 'rgba(15,18,45,0.55)', backdropFilter: 'blur(6px)' }}
-      onClick={e => e.target === e.currentTarget && handleClose()}
+      onClick={e => {
+        if (e.target !== e.currentTarget) return
+        if (step > 1) {
+          if (confirm('Close and discard this exam upload? All progress will be lost.')) handleClose()
+        } else {
+          handleClose()
+        }
+      }}
     >
       <div
         className="bg-surface rounded-2xl shadow-lg w-[620px] max-w-[95vw] max-h-[90vh]

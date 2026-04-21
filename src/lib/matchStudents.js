@@ -95,7 +95,7 @@ export function detectBatch(students, studentProfiles) {
   const sorted = Object.entries(batchCounts).sort((a, b) => b[1] - a[1])
   const [topBatch, topCount] = sorted[0]
   const matchedCount = matches.filter(m => m.profile).length
-  const confidence = topCount / students.length
+  const confidence = matchedCount > 0 ? topCount / matchedCount : 0
 
   return {
     batch: topBatch,

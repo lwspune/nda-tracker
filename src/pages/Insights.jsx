@@ -52,7 +52,7 @@ export default function InsightsPage() {
               No plans saved. Export your data → upload to Claude → ask for student plans → import the enriched JSON.
             </p>
           ) : (
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[50vh] md:max-h-[600px] overflow-y-auto pr-1">
               {plans.map(([name, data]) => (
                 <div key={name}>
                   <div className="flex items-center gap-2 mb-2">
@@ -62,7 +62,7 @@ export default function InsightsPage() {
                     </span>
                   </div>
                   <div className="bg-surface-2 border border-border rounded-xl p-3 text-[12px]
-                                  leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto font-sans">
+                                  leading-relaxed whitespace-pre-wrap max-h-[30vh] md:max-h-[200px] overflow-y-auto font-sans">
                     {data.text}
                   </div>
                 </div>

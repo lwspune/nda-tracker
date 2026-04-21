@@ -1,25 +1,43 @@
-import { NDA_FREQ_DEFAULT } from './ndaFreq'
+import { NDA_FREQ_BY_SUBJECT } from './ndaFreq'
 
-// Master chapter list — single source of truth
-export const VALID_CHAPTERS = NDA_FREQ_DEFAULT.map(r => r.chapter)
+// Returns the valid chapter list for a given subject.
+// Returns [] for subjects with no freq data — callers treat this as "skip validation".
+export function getValidChapters(subject) {
+  return (NDA_FREQ_BY_SUBJECT[subject] || []).map(r => r.chapter)
+}
 
-// Validate tags array against master chapter list
-// Returns { valid: bool, issues: [{q, chapter, suggestion}] }
-export function validateTags(tags) {
+// Backward-compat export — Maths chapter list, used in legacy call sites
+export const VALID_CHAPTERS = getValidChapters('Maths')
+
+// Validate tags array against chapter lists.
+// Each tag is validated against its own tag.subject when present,
+// falling back to the passed defaultSubject.
+// When a subject has no chapter list configured (empty []), that tag is accepted —
+// the teacher tags freely and can configure freq later.
+// Returns { valid: bool, issues: [{q, chapter, suggestion, type}] }
+export function validateTags(tags, defaultSubject = 'Maths') {
   const issues = []
+
   tags.forEach(tag => {
+    // Per-tag subject takes priority; fall back to the exam-level default
+    const subject = tag.subject || defaultSubject
+    const validChapters = getValidChapters(subject)
+
+    // No freq data for this subject — skip validation for this tag
+    if (validChapters.length === 0) return
+
     if (!tag.chapter || tag.chapter.trim() === '') {
       issues.push({ q: tag.q, chapter: tag.chapter, suggestion: null, type: 'empty' })
       return
     }
-    const exact = VALID_CHAPTERS.find(
+    const exact = validChapters.find(
       c => c.toLowerCase() === tag.chapter.toLowerCase()
     )
     if (!exact) {
       issues.push({
         q: tag.q,
         chapter: tag.chapter,
-        suggestion: findClosest(tag.chapter, VALID_CHAPTERS),
+        suggestion: findClosest(tag.chapter, validChapters),
         type: 'unrecognised',
       })
     }
@@ -29,6 +47,7 @@ export function validateTags(tags) {
 
 // Find closest chapter name using character overlap scoring
 export function findClosest(input, list) {
+  if (!list.length) return null
   const inp = input.toLowerCase().trim()
   let best = null
   let bestScore = 0
@@ -42,8 +61,8 @@ export function findClosest(input, list) {
     }
   })
 
-  // Only suggest if similarity is above threshold — avoid terrible suggestions
-  return bestScore > 0.25 ? best : null
+  if (inp.length < 4) return null // too short to fuzzy match reliably
+  return bestScore > 0.45 ? best : null
 }
 
 // Simple similarity: Jaccard on bigrams
@@ -64,7 +83,15 @@ function bigrams(str) {
   return set
 }
 
-// Normalise a chapter name to exact case from master list
-export function normaliseChapter(name) {
-  return VALID_CHAPTERS.find(c => c.toLowerCase() === name?.toLowerCase()) || name
+// Normalise a chapter name to exact case from the subject's chapter list
+export function normaliseChapter(name, subject = 'Maths') {
+  const validChapters = getValidChapters(subject)
+  return validChapters.find(c => c.toLowerCase() === name?.toLowerCase()) || name
+}
+
+// For GAT (combined) exams: every tag must have a non-empty subject value.
+// Returns { valid: bool, missingQs: number[] }
+export function validateGatSubjects(tags) {
+  const missingQs = tags.filter(t => !t.subject?.trim()).map(t => t.q)
+  return { valid: missingQs.length === 0, missingQs }
 }

@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import { parseExcelFull, parseTagsFile } from '../../lib/excel'
-import { validateTags, VALID_CHAPTERS } from '../../lib/validateTags'
+import { validateTags, getValidChapters, validateGatSubjects } from '../../lib/validateTags'
 import { detectBatch } from '../../lib/matchStudents'
-import { Alert, Spinner } from '../ui'
+import { Alert, Spinner, DropZone } from '../ui'
+import ValidationIssuesPanel from './ValidationIssuesPanel'
 import useStore from '../../store/useStore'
 
 export default function Step1Upload({ onNext, onCancel }) {
@@ -15,9 +16,11 @@ export default function Step1Upload({ onNext, onCancel }) {
   const [tagsDragging, setTagsDragging] = useState(false)
 
   // Validation state
-  const [parsedTags, setParsedTags]   = useState(null)
-  const [tagIssues, setTagIssues]     = useState([])  // [{q, chapter, suggestion, type}]
-  const [fixedTags, setFixedTags]     = useState(null) // working copy with accepted fixes
+  const [parsedTags, setParsedTags]           = useState(null)
+  const [tagIssues, setTagIssues]             = useState([])
+  const [fixedTags, setFixedTags]             = useState(null)
+  const [tagsSubject, setTagsSubject]         = useState('Maths')
+  const [detectedSubjectFromTags, setDetectedSubjectFromTags] = useState(null)
 
   const xlsxRef = useRef()
   const tagsRef = useRef()
@@ -26,9 +29,8 @@ export default function Step1Upload({ onNext, onCancel }) {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (!file) return
-    if (type === 'xlsx') setXlsxFile(file)
-    else { setTagsFile(file); setParsedTags(null); setTagIssues([]); setFixedTags(null) }
-    if (type === 'xlsx') setXlsxDragging(false)
+    if (type === 'xlsx') { setXlsxFile(file); setXlsxDragging(false) }
+    // tags drop is handled entirely by handleTagsChange — do not set state here
     else setTagsDragging(false)
   }
 
@@ -37,14 +39,37 @@ export default function Step1Upload({ onNext, onCancel }) {
     setParsedTags(null)
     setTagIssues([])
     setFixedTags(null)
+    setDetectedSubjectFromTags(null)
     if (!file) return
 
     try {
       const tags = await parseTagsFile(file)
-      const { valid, issues } = validateTags(tags)
+
+      // Detect primary subject from the tags file's Subject column (if present).
+      // Returns 'GAT' when multiple distinct subjects are found (combined exam).
+      const detected = detectSubjectFromTags(tags)
+      setDetectedSubjectFromTags(detected)
+
+      // For GAT exams: every question must have a Subject value — block if any missing
+      if (detected === 'GAT') {
+        const { valid, missingQs } = validateGatSubjects(tags)
+        if (!valid) {
+          const sample = missingQs.slice(0, 3).map(q => `Q${q}`).join(', ')
+          const extra = missingQs.length > 3 ? ` (+${missingQs.length - 3} more)` : ''
+          setError(`GAT exams require a Subject for every question. Missing: ${sample}${extra}.`)
+          return
+        }
+      }
+
+      // Validate: per-tag subject takes priority (via validateTags internals),
+      // fall back to detected subject or Maths. Non-Maths subjects with no freq
+      // data skip validation automatically.
+      const fallback = detected === 'GAT' ? 'GAT' : (detected || 'Maths')
+      const { issues } = validateTags(tags, fallback)
       setParsedTags(tags)
       setFixedTags([...tags])
       setTagIssues(issues)
+      setTagsSubject(fallback)
     } catch (e) {
       setError(`Tags file error: ${e.message}`)
     }
@@ -68,7 +93,6 @@ export default function Step1Upload({ onNext, onCancel }) {
     setTagIssues(prev => prev.filter(i => !i.suggestion))
   }
 
-  const allSuggestable  = tagIssues.length > 0 && tagIssues.every(i => i.suggestion)
   const hasBlockingIssues = tagIssues.length > 0
 
   async function handleNext() {
@@ -83,7 +107,38 @@ export default function Step1Upload({ onNext, onCancel }) {
       // Detect batch from student names + profiles
       const batchResult = detectBatch(extracted.students, studentProfiles)
 
+      // Resolve final subject:
+      // - tags-file detection is most reliable (explicit data)
+      // - GAT exam names contain "GAT" but filename-stripping leaves artifacts like "GAT  1"
+      //   so we normalise those to plain 'GAT'
+      const looksLikeGAT = /\bgat\b/i.test(extracted.examName)
+      const finalSubject = detectedSubjectFromTags ||
+        (looksLikeGAT ? 'GAT' : extracted.subject) ||
+        'Maths'
+
+      // For GAT exams: if tags exist they must have a Subject column
       let tags = fixedTags || null
+      if (finalSubject === 'GAT' && tags) {
+        const hasSubjectColumn = tags.some(t => t.subject !== null)
+        if (!hasSubjectColumn) {
+          setError('GAT exams require a Subject column in the tags file so each question is routed to its subject.')
+          setLoading(false)
+          return
+        }
+      }
+
+      // Re-validate with the resolved subject (handles edge case where tags were
+      // initially validated against a different subject before Excel was parsed).
+      if (tags) {
+        const { issues } = validateTags(tags, finalSubject)
+        setTagIssues(issues)
+        setTagsSubject(finalSubject)
+        if (issues.length > 0) {
+          setLoading(false)
+          return // block — user must fix remaining issues
+        }
+      }
+
       let tagsSource = null
       if (tagsFile && tags) {
         tagsSource = `${tagsFile.name} — ${tags.length} questions tagged`
@@ -92,7 +147,7 @@ export default function Step1Upload({ onNext, onCancel }) {
       onNext({
         examName:    extracted.examName,
         examDate:    extracted.examDate,
-        subject:     extracted.subject,
+        subject:     finalSubject,
         markCorrect: extracted.markCorrect,
         markWrong:   extracted.markWrong,
         hasNegative: extracted.hasNegative,
@@ -152,83 +207,24 @@ export default function Step1Upload({ onNext, onCancel }) {
             dragging={tagsDragging}
             accept=".xlsx,.xls"
             icon="🏷️"
-            hint="Q · Chapter · Subtopic · Question · Options · Answer · Solution"
+            hint="Q · Chapter · Subtopic · Question · Options · Answer · Solution · Subject (required for GAT)"
             inputRef={tagsRef}
             onDragOver={e => { e.preventDefault(); setTagsDragging(true) }}
             onDragLeave={() => setTagsDragging(false)}
-            onDrop={e => { handleDrop(e, 'tags'); handleTagsChange(e.dataTransfer.files[0]) }}
+            onDrop={e => { handleDrop(e, 'tags'); handleTagsChange(e.dataTransfer.files[0] || null) }}
             onChange={e => handleTagsChange(e.target.files[0])}
           />
         </div>
       </div>
 
-      {/* ── Validation issues — hard block ─────────────── */}
+      {/* Validation issues — hard block */}
       {tagIssues.length > 0 && (
-        <div className="mb-4 border border-red-200 rounded-xl overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-red-50 border-b border-red-200">
-            <div className="flex items-center gap-2">
-              <span className="text-danger font-bold text-[13px]">
-                ❌ {tagIssues.length} chapter name issue{tagIssues.length > 1 ? 's' : ''} — fix to continue
-              </span>
-            </div>
-            {allSuggestable && tagIssues.length > 1 && (
-              <button
-                onClick={acceptAll}
-                className="text-[11px] font-bold text-accent bg-accent-soft border border-accent/25
-                           px-3 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors"
-              >
-                ✓ Accept All Suggestions
-              </button>
-            )}
-          </div>
-
-          {/* Issue rows */}
-          <div className="divide-y divide-red-100">
-            {tagIssues.map(issue => (
-              <div key={issue.q} className="px-4 py-3 bg-white flex items-center gap-3 flex-wrap">
-                <span className="font-mono font-bold text-[11px] text-ink-3 flex-shrink-0 w-8">
-                  Q{issue.q}
-                </span>
-
-                {/* Wrong name */}
-                <span className="text-[12px] font-semibold text-danger bg-red-50
-                                 px-2 py-0.5 rounded border border-red-200">
-                  {issue.chapter || '(empty)'}
-                </span>
-
-                {issue.suggestion ? (
-                  <>
-                    <span className="text-ink-3 text-[11px]">→ Did you mean:</span>
-                    <span className="text-[12px] font-semibold text-success bg-green-50
-                                     px-2 py-0.5 rounded border border-green-200">
-                      {issue.suggestion}
-                    </span>
-                    <button
-                      onClick={() => acceptSuggestion(issue.q, issue.suggestion)}
-                      className="ml-auto text-[11px] font-bold text-accent bg-accent-soft
-                                 border border-accent/25 px-3 py-1 rounded-lg
-                                 hover:bg-accent hover:text-white transition-colors flex-shrink-0"
-                    >
-                      Accept
-                    </button>
-                  </>
-                ) : (
-                  <span className="text-[11px] text-ink-3 italic ml-1">
-                    No suggestion found — fix in Excel and re-upload
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Footer hint */}
-          <div className="px-4 py-2.5 bg-red-50 border-t border-red-100">
-            <span className="text-[10.5px] text-danger/70">
-              Valid chapters: {VALID_CHAPTERS.join(' · ')}
-            </span>
-          </div>
-        </div>
+        <ValidationIssuesPanel
+          tagIssues={tagIssues}
+          tagsSubject={tagsSubject}
+          onAccept={acceptSuggestion}
+          onAcceptAll={acceptAll}
+        />
       )}
 
       {/* Tags valid confirmation */}
@@ -259,32 +255,15 @@ export default function Step1Upload({ onNext, onCancel }) {
   )
 }
 
-function DropZone({ file, dragging, accept, icon, hint, inputRef, onDragOver, onDragLeave, onDrop, onChange }) {
-  const hasFile = !!file
-  return (
-    <div
-      onClick={() => inputRef.current.click()}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={`
-        border-2 rounded-xl p-5 text-center cursor-pointer transition-all duration-200
-        ${hasFile
-          ? 'border-success bg-green-50 border-solid'
-          : dragging
-          ? 'border-accent bg-accent-soft border-dashed'
-          : 'border-border-2 bg-surface-2 border-dashed hover:border-accent hover:bg-accent-soft'
-        }
-      `}
-    >
-      <div className="text-2xl mb-1.5">{hasFile ? '✅' : icon}</div>
-      <div className="text-[13px] font-medium text-ink-2 truncate px-2">
-        {hasFile ? file.name : 'Click or drag file here'}
-      </div>
-      <div className="text-[11px] text-ink-3 mt-1">
-        {hasFile ? `${(file.size / 1024).toFixed(1)} KB` : hint}
-      </div>
-      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={onChange} />
-    </div>
-  )
+// Returns the subject from tags' Subject column:
+// - null when no Subject column present
+// - 'GAT' when multiple distinct subjects found (combined exam)
+// - single subject name when all tags share one subject
+function detectSubjectFromTags(tags) {
+  const counts = {}
+  tags.forEach(t => { if (t.subject) counts[t.subject] = (counts[t.subject] || 0) + 1 })
+  const entries = Object.entries(counts)
+  if (!entries.length) return null
+  if (entries.length > 1) return 'GAT'
+  return entries[0][0]
 }

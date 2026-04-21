@@ -1,15 +1,24 @@
-// Detect if running on GitHub Pages (read-only) vs localhost (full access)
-export const IS_READ_ONLY = window.location.hostname !== 'localhost' &&
-  !window.location.hostname.startsWith('127.')
+// Detect read-only mode (GitHub Pages) vs full mode (localhost / LAN dev server)
+const _h = window.location.hostname
+export const IS_READ_ONLY = _h !== 'localhost' &&
+  !_h.startsWith('127.') &&
+  !_h.startsWith('192.168.') &&
+  !_h.startsWith('10.') &&
+  !_h.startsWith('172.')
 
-// URL to fetch db.json from the repo when in read-only mode
-// Update REPO_NAME to match your GitHub repo
 const REPO_NAME = 'nda-tracker'
-const GH_USER = 'lwspune' // Update to your GitHub username
-export const REMOTE_DATA_URL = IS_READ_ONLY
-  ? `/${REPO_NAME}/data/db.json`
-  : '/data/db.json'
+
+// Base URL for data files on GitHub Pages
+const BASE = IS_READ_ONLY ? `/${REPO_NAME}` : ''
+
+export const REMOTE_DATA_URL    = `${BASE}/data/db.json`
+export const INDEX_URL          = `${BASE}/data/index.json`
+export const STUDENT_FILE_URL   = (file) => `${BASE}/data/students/${file}`
+// Session config
+export const SESSION_KEY         = 'nda_student_session'
+export const TEACHER_SESSION_KEY = 'nda_teacher_session'
+export const SESSION_DAYS        = 7
 
 // App info
-export const APP_NAME = 'NDA Maths Tracker'
-export const APP_SUB = 'LWS PUNE'
+export const APP_NAME = 'NDA Tracker'
+export const APP_SUB  = 'LWS PUNE'

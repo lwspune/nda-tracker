@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 // Reads the student responses file from Evalbee/similar
 // Returns: { examName, examDate, subject, markCorrect, markWrong,
 //            hasNegative, totalQs, students }
+// Each student: { name, rollNo, totalMarks, correct, incorrect, notAttempted, responses }
+// rollNo is '' when the file has no "Roll No" column.
 // ============================================================
 export async function parseExcelFull(file) {
   const buf = await file.arrayBuffer()
@@ -24,10 +26,17 @@ export async function parseExcelFull(file) {
 
   const examCol = idx('exam')
   const ni  = idx('name')
+  const ri  = idx('roll no')
   const ti  = idx('total marks')
   const ci  = idx('correct answers')
   const ii  = idx('incorrect answers')
   const nai = idx('not attempted')
+
+  const REQUIRED_COLS = ['name', 'total marks', 'correct answers', 'incorrect answers']
+  const missing = REQUIRED_COLS.filter(col => idx(col) === -1)
+  if (missing.length > 0) {
+    throw new Error(`Missing required columns: ${missing.join(', ')}. Check your Excel headers.`)
+  }
 
   // Q columns: "Q N Marks" and "Q N Options"
   const qm = {}, qo = {}
@@ -76,6 +85,7 @@ export async function parseExcelFull(file) {
     })
     students.push({
       name:         String(row[ni]).trim(),
+      rollNo:       ri >= 0 ? String(row[ri] || '').trim() : '',
       totalMarks:   parseFloat(tm) || 0,
       correct:      parseInt(row[ci])  || 0,
       incorrect:    parseInt(row[ii])  || 0,
@@ -123,6 +133,7 @@ export async function parseTagsFile(file) {
   const qi   = headers.findIndex(c => /^q(uestion)?#?$/.test(c))
   const chi  = headers.findIndex(c => c.includes('chapter'))
   const sti  = headers.findIndex(c => c.includes('subtopic') || c.includes('sub topic') || c === 'topic')
+  const subi = headers.findIndex(c => c === 'subject')
   const qui  = headers.findIndex(c => c === 'question')
   const oai  = headers.findIndex(c => c === 'optiona' || c === 'option a' || c === 'option_a')
   const obi  = headers.findIndex(c => c === 'optionb' || c === 'option b' || c === 'option_b')
@@ -130,6 +141,7 @@ export async function parseTagsFile(file) {
   const odi  = headers.findIndex(c => c === 'optiond' || c === 'option d' || c === 'option_d')
   const ani  = headers.findIndex(c => c === 'answer')
   const soli = headers.findIndex(c => c === 'solution')
+  const difi = headers.findIndex(c => c.includes('difficulty'))
 
   if (qi < 0)  throw new Error('Could not find "Q" column')
   if (chi < 0) throw new Error('Could not find "Chapter" column')
@@ -142,23 +154,110 @@ export async function parseTagsFile(file) {
     if (isNaN(qNum)) continue
 
     tags.push({
-      q:        qNum,
-      chapter:  cell(row, chi) || 'Unknown',
-      subtopic: cell(row, sti) || 'General',
+      q:          qNum,
+      subject:    cell(row, subi),   // null when column absent — per-tag subject override
+      chapter:    cell(row, chi) || 'Unknown',
+      subtopic:   cell(row, sti) || 'General',
       // Enriched columns (optional — null if not present)
-      question: cell(row, qui),
-      optionA:  cell(row, oai),
-      optionB:  cell(row, obi),
-      optionC:  cell(row, oci),
-      optionD:  cell(row, odi),
-      answer:   cell(row, ani)?.toUpperCase() || null,
-      solution: cell(row, soli),
+      question:   cell(row, qui),
+      optionA:    cell(row, oai),
+      optionB:    cell(row, obi),
+      optionC:    cell(row, oci),
+      optionD:    cell(row, odi),
+      answer:     cell(row, ani)?.toUpperCase() || null,
+      solution:   cell(row, soli),
+      difficulty: cell(row, difi),   // 'Easy' | 'Moderate' | 'Hard' | null
     })
   }
 
   if (!tags.length) throw new Error('No valid rows found in tags file')
   tags.sort((a, b) => a.q - b.q)
   return tags
+}
+
+// ============================================================
+// PARSE STUDENTS EXCEL
+// Reads the LWS student list exported from EIS.
+// Row 0 is a title row; row 1 is headers; rows 2+ are data.
+//
+// Returns an array of student objects ready for mergeStudents():
+// { eis_reg_no, canonical_name, gender, dob, mobile, email,
+//   batches, coming_status, account_status, registration_date, quit_date }
+// ============================================================
+export async function parseStudentsExcel(file) {
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1 })
+
+  if (raw.length < 3) throw new Error('Student Excel file appears empty')
+
+  // Row 1 (index 1) is headers; row 0 is the title
+  const headers = raw[1].map(h => String(h || '').trim())
+  const idx = label => headers.findIndex(h => h === label)
+
+  const cols = {
+    eisRegNo:      idx('RegistrationNo.'),
+    name:          idx('Name'),
+    gender:        idx('Gender'),
+    dob:           idx('DOB'),
+    mobile:        idx('Mobile No'),
+    email:         idx('Email'),
+    batch:         idx('Batch'),
+    branch:        idx('Branch'),
+    comingStatus:  idx('Coming Status'),
+    accountStatus: idx('Account Status'),
+    regDate:       idx('RegistrationDate'),
+    quitDate:      idx('Quit Date'),
+  }
+
+  if (cols.name < 0)     throw new Error('Could not find "Name" column in student Excel')
+  if (cols.eisRegNo < 0) throw new Error('Could not find "RegistrationNo." column in student Excel')
+
+  const rows = []
+  for (let r = 2; r < raw.length; r++) {
+    const row = raw[r]
+    if (!row) continue
+    const name = cols.name >= 0 ? String(row[cols.name] || '').trim() : ''
+    if (!name) continue
+
+    rows.push({
+      eis_reg_no:        String(row[cols.eisRegNo] || '').trim(),
+      canonical_name:    name,
+      gender:            cols.gender        >= 0 ? String(row[cols.gender]        || '').trim() : '',
+      dob:               parseStudentDate(row[cols.dob]),
+      mobile:            cols.mobile        >= 0 ? String(row[cols.mobile]        || '').trim() : '',
+      email:             cols.email         >= 0 ? String(row[cols.email]         || '').trim() : '',
+      batches:           parseBatchCell(row[cols.batch]),
+      branch:            cols.branch        >= 0 ? String(row[cols.branch]        || '').trim() : '',
+      coming_status:     cols.comingStatus  >= 0 ? String(row[cols.comingStatus]  || '').trim() : '',
+      account_status:    cols.accountStatus >= 0 ? String(row[cols.accountStatus] || '').trim() : '',
+      registration_date: parseStudentDate(row[cols.regDate]),
+      quit_date:         parseStudentDate(row[cols.quitDate]),
+    })
+  }
+
+  if (!rows.length) throw new Error('No valid student rows found in file')
+  return rows
+}
+
+// ── Helpers (also exported for testing) ─────────────────────
+
+/** DD/MM/YYYY → YYYY-MM-DD. Returns null for empty/unrecognised values. */
+export function parseStudentDate(val) {
+  if (val === null || val === undefined || val === '') return null
+  const s = String(val).trim()
+  if (!s) return null
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  return s   // already ISO or unknown — pass through
+}
+
+/** Wrap a single batch string in an array; return [] for blank. */
+function parseBatchCell(val) {
+  if (val === null || val === undefined || val === '') return []
+  const s = String(val).trim()
+  return s ? [s] : []
 }
 
 // ── Helper ───────────────────────────────────────────────────
