@@ -8,7 +8,7 @@ Three distinct runtime modes:
 - **Faculty mode** (`localhost` / LAN): full read-write access — upload exams, tag questions, generate AI insights. Data stored in `data/faculty-data.json` via a Vite dev plugin.
 - **Teacher portal** (GitHub Pages): read-only. Teachers log in with a shared password, which decrypts `db.json` client-side. Full view of all pages.
 - **Student portal** (GitHub Pages): read-only. Students log in with their mobile number (hashed SHA-256). Each student sees only their own data from a per-student JSON file.
-- **Demo mode** (GitHub Pages): public, no login. URL: `?demo=true`. NOT YET IMPLEMENTED — see below.
+- **Demo mode** (GitHub Pages): public, no login. URL: `?demo=true`. NOT YET IMPLEMENTED — see memory `project_demo_mode.md`.
 
 ## Tech stack
 
@@ -90,7 +90,7 @@ Key implementation notes:
 
 ### Store structure (`src/store/useStore.js`)
 State keys: `exams`, `studentProfiles`, `savedInsights`, `ndaFreqBySubject`, `ndaMarksBySubject`, `costLog`, `apiKey`, `lastDeployedAt`, `hydrated`.
-All mutations call `get()._save()` immediately. Store is split into slices under `src/store/slices/` — see module map below.
+All mutations call `get()._save()` immediately. Store is split into slices under `src/store/slices/`.
 
 - `loadStudentData(data)` — loads a single student's JSON file (student portal)
 - `loadRemoteData(data)` — loads the decrypted full dataset (teacher portal)
@@ -154,40 +154,6 @@ Use `useMode()` — not `IS_READ_ONLY` — for per-feature visibility in compone
 
 ---
 
-## Demo mode — NOT YET IMPLEMENTED
-
-**URL:** `https://<user>.github.io/nda-tracker/?demo=true`
-**Purpose:** Public demo — one student's full view, no login, no personal info.
-
-### How it works
-1. `IS_DEMO = IS_READ_ONLY && new URLSearchParams(window.location.search).has('demo')` in `config.js`
-2. `App.jsx` checks `IS_DEMO` before the login gate — auto-fetches `DEMO_DATA_URL`, renders `DemoPortal`
-3. `DemoPortal` — same as `StudentPortal` but top bar shows "Demo Mode", no logout button
-4. `public/data/demo.json` — sanitized student JSON from `generate_demo.py`
-
-### Personal info treatment
-| Field | Treatment |
-|---|---|
-| Name | Replaced with `"Demo Student"` in all exam records |
-| Profile (LWS ID, mobile, DOB, branch, batch) | Set to `null` — `ProfileCard` not rendered |
-| Exam scores / responses | Kept |
-
-### Files to create / change
-1. `generate_demo.py` — `--student "Name"` arg or auto-picks topper; writes `public/data/demo.json`
-2. `package.json` — add `"demo": "python generate_demo.py"`; add to deploy pipeline
-3. `src/config.js` — add `IS_DEMO` and `DEMO_DATA_URL`
-4. `src/App.jsx` — `IS_DEMO` branch before login gate; `DemoPortal` component
-
-### Routing order in `App.jsx` (IS_READ_ONLY block)
-```
-IS_DEMO                      → <DemoPortal>      (no login)
-!teacherData && !studentData → <LoginPage>
-teacherData                  → <TeacherPortal>
-studentData                  → <StudentPortal>
-```
-
----
-
 ## Excel upload format
 
 **Results file** (from Evalbee):
@@ -199,77 +165,6 @@ studentData                  → <StudentPortal>
 - Required: `Q` (or `Question#`), `Chapter`
 - Optional: `Subtopic`, `Question`, `OptionA`–`OptionD`, `Answer`, `Solution`, `Difficulty`
 - **GAT combined exams**: `Subject` column per question is **required**. Without it, all 150 questions are unroutable to their subjects.
-
----
-
-## GAT combined exam upload — COMPLETE (April 2026)
-
-GAT mocks (e.g. NDA GAT MOCK 1) contain 150 questions spanning English, Physics, Chemistry, Biology, Geography, History, Polity, Economics, Others. Questions must be routed to their respective subject pools for `ndaFreqBySubject`, chapter analytics, and StudentView subject filter.
-
-### Phase 1 — Validation enforcement (DONE)
-- `validateTags.js`: `validateGatSubjects(tags)` returns `{ valid, missingQs[] }`
-- `Step1Upload.jsx`: blocks if tags file missing Subject column or any row has empty Subject for a GAT exam
-- `detectSubjectFromTags` returns `'GAT'` when multiple distinct subjects found (not most-common)
-- Exam names like "GAT  1" from filename-stripping normalised to `'GAT'` in `handleNext`
-
-### Phase 2 — Step3Tags UI for GAT exams (DONE)
-- 4-column grid (Q# · Subject · Chapter · Subtopic) when `exam.subject === 'GAT'`, 3-column otherwise
-- Subject dropdown per row (all subjects except GAT); Chapter dropdown scoped to that row's subject freq list
-- Changing subject clears chapter; chapter disabled until subject selected
-
-### Phase 3 — Analytics routing (DONE — was broken, now fixed)
-- `computeStudentChapterStats(name, exams, qSubject?)`: `qSubject` param skips questions where `q.subject` is set and doesn't match; `q.subject=null` (non-GAT) always included
-- `computeWrongAudit` / `computeSkippedAudit`: `qSubject` pass-through added
-- `StudentView`: derives subject tabs from per-question subjects in GAT exams; includes GAT exams in subject-filtered `examData`; passes `qSubject` to analytics; `aq`/consistency still use full exam totals (acceptable)
-
-**Key insight:** Evalbee results file has no subject info at all. Subject assignment is entirely the tags file's responsibility.
-
----
-
-## Exam PDF export — COMPLETE (April 2026)
-
-`src/lib/examPdf.js` — async `downloadExamPdf(exam)`, called from the 📄 PDF button on the Exams page. Available to faculty and teacher modes. Uses dynamic `import('jspdf')` + `import('jspdf-autotable')` so they split into separate chunks (~400 KB + 30 KB) and don't bloat the main bundle.
-
-**PDF structure:**
-1. **Page 1** — accent header band (exam name, date, subject, batch, branch, marking scheme); stat boxes (students, questions, min/avg/max); median + above-50% note; top 5 / bottom 5 students side by side; top-5 most-wrong and most-skipped question summary tables; question detail cards (see below); topper analysis section (cutoff info + wrong/skipped questions among top 25% — no student name list).
-2. **Page 2+** — full ranked student table (rank, name, score, %, correct, wrong, skipped).
-
-**Question detail cards** — rendered after each summary table for questions that have text (`q.question`). Each card shows: coloured header (Q# · chapter · subtopic · count/rate), question text (word-wrapped), options A–D in a 2×2 grid with correct answer in green bold, answer + difficulty footer. Questions without text are silently skipped.
-
-**`stripLatex(text)`** — converts LaTeX markup to readable Unicode before rendering: superscripts (`x² y³`), subscripts, `\mathbb{N/R/Z/Q/C}` → `ℕ/ℝ/ℤ/ℚ/ℂ`, set symbols (∈ ∪ ∩), comparison (≤ ≥ ≠), arrows (⇒ → ↔), full Greek alphabet, `\frac{a}{b}` → `(a)/(b)`, `\sqrt{x}` → `√(x)`, `\text{}` unwrapped. Unknown commands stripped; braces removed.
-
----
-
-## Chapter Frequency Table — Sync Chapters (April 2026)
-
-`syncFreqChapters(savedFreq, exams, subject)` in `src/lib/ndaFreq.js` — computes the current chapter set from uploaded exams (matching both `exam.subject === subject` and `q.subject === subject` for GAT routing), then diffs against the saved freq rows. Returns `{ rows, added, removed }` where `rows` redistributes all chapters to equal weights (100/n with rounding correction on last row).
-
-`FrequencyTableEditor` (`src/pages/Dashboard/FrequencyTableEditor.jsx`) has a 🔄 Sync Chapters button that calls this and shows a result banner: green = already up to date; amber = lists added/removed chapters with instruction to review weights and save.
-
----
-
-## Student branch/batch inline editing (April 2026)
-
-`ProfileCard` in `src/pages/Students/studentViewComponents.jsx` has an ✏️ button (faculty mode only, top-right of card) that switches to edit mode:
-- Branch: free-text input with `<datalist>` suggestions from all known profiles
-- Batches: removable pill tags + free-text input with `<datalist>` + Enter / + Add button
-- 💾 Save calls `updateStudentBranchBatch(lwsId, name, { branch, batches })` in `studentSlice`
-
-`updateStudentBranchBatch` in `src/store/slices/studentSlice.js` fetches `students_db.json`, mutates the matching record (matches by `lws_id` if present, else by canonical name), and persists via `persistStudentsDB`.
-
----
-
-## Module map
-
-Files have been modularized — facades keep all existing import paths working:
-
-| Facade | Folder | Notes |
-|---|---|---|
-| `src/lib/analytics.js` | `src/lib/analytics/` | filters, chapterStats, performance, projection, classMetrics, examInsights |
-| `src/lib/mergeStudents.js` | `src/lib/merge/` | lwsHelpers, mergeLogic, rollEnrichment, deduplication, recordMerge |
-| `src/store/useStore.js` | `src/store/slices/` | defaults, examsSlice, studentSlice, insightsSlice, ndaSlice |
-| `src/pages/Students/ManageBatchBranchModal.jsx` | `src/pages/Students/batchBranch/` | helpers, TabBtn, RenameTab, BulkAssignTab, FindDuplicatesTab |
-| `src/components/students/ImportStudentsModal.jsx` | `src/components/students/import/` | Steps, UnresolvedRow, useImportFlow |
 
 ---
 
