@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import useStore from '../store/useStore'
+import { supabase } from '../lib/supabase'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
 import { getBatchOptions, getExamsForBatch } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
@@ -59,11 +60,14 @@ export default function ExamsPage() {
     try {
       await bulkUpdateStudentContacts(edits)
       const body = { examName: exam.name }
-      if (redirectTo)    body.redirectTo = redirectTo
-      if (studentNames)  body.students   = studentNames
+      if (redirectTo)   body.redirectTo = redirectTo
+      if (studentNames) body.students   = studentNames
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const headers = { 'Content-Type': 'application/json' }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
       })
       const result = await res.json()
