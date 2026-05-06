@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   // Load exam from faculty_state JSONB
   const { data: stateRow, error: stateErr } = await supabase
     .from('faculty_state')
-    .select('state')
+    .select('data')
     .eq('id', 1)
     .single()
 
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const exams = stateRow.state.exams || []
+  const exams = stateRow.data?.exams || []
   const exam = examName
     ? exams.find(e => (e.name || '').trim().toLowerCase() === (examName || '').trim().toLowerCase())
     : [...exams].sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0]

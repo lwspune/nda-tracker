@@ -22,12 +22,12 @@ export async function loadFromSupabase() {
 
 export function saveToSupabase(data) {
   if (!supabase) return
-  supabase.auth.getSession().then(({ data: { session } }) => {
+  supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (!session) return
-    supabase.from('faculty_state')
+    const { error } = await supabase.from('faculty_state')
       .update({ data, updated_at: new Date().toISOString() })
       .eq('id', 1)
-      .catch(e => console.error('[persist] Supabase save failed:', e))
+    if (error) console.error('[persist] Supabase save failed:', error)
   })
 }
 
@@ -100,7 +100,7 @@ export function clearStorage() {
   if (supabase) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      supabase.from('faculty_state').update({ data: null }).eq('id', 1).catch(() => {})
+      supabase.from('faculty_state').update({ data: null }).eq('id', 1)
     })
   }
 }
