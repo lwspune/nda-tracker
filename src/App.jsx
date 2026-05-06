@@ -3,6 +3,7 @@ import useStore from './store/useStore'
 import { IS_READ_ONLY } from './config'
 import { supabase } from './lib/supabase'
 import { ModeContext } from './context/ModeContext'
+import { loadFromSupabase } from './store/persist'
 import Sidebar from './components/layout/Sidebar'
 import ApiBar from './components/layout/ApiBar'
 import UploadModal from './components/upload/UploadModal'
@@ -14,7 +15,7 @@ import InsightsPage from './pages/Insights'
 import CostsPage from './pages/Costs'
 import SyllabusPage from './pages/Syllabus/SyllabusPage'
 import TimetablePage from './pages/Timetable/TimetablePage'
-import LoginPage, { clearStudentSession, clearTeacherSession } from './components/auth/LoginPage'
+import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 
 export default function App() {
@@ -23,8 +24,7 @@ export default function App() {
   const initStore        = useStore(s => s.initStore)
 
   // GitHub Pages / Vercel: track which mode authenticated
-  const [studentData, setStudentData]       = useState(null)
-  const [teacherData, setTeacherData]       = useState(null)
+  const [studentData, setStudentData]         = useState(null)
   const [supabaseSession, setSupabaseSession] = useState(null)
   const [sessionChecked, setSessionChecked]   = useState(!IS_READ_ONLY) // dev = already known
 
@@ -56,40 +56,30 @@ export default function App() {
     )
   }
 
-  // ── Online faculty mode (Vercel + Supabase session) ────────
-  if (IS_READ_ONLY && supabaseSession) {
-    return <OnlineFacultyPortal onLogout={() => supabase.auth.signOut()} />
-  }
-
   // ── Read-only (Vercel / GitHub Pages) mode ─────────────────
   if (IS_READ_ONLY) {
-    // Neither teacher nor student logged in → show unified login
-    if (!teacherData && !studentData) {
-      return (
-        <LoginPage
-          onTeacherLogin={setTeacherData}
-          onStudentLogin={setStudentData}
-        />
-      )
+    // Teacher role — individual Supabase account with role='teacher'
+    if (supabaseSession?.user?.user_metadata?.role === 'teacher') {
+      return <TeacherPortal onLogout={() => supabase.auth.signOut()} />
     }
 
-    // Teacher portal — full-dataset read-only view
-    if (teacherData) {
-      return (
-        <TeacherPortal
-          data={teacherData}
-          onLogout={() => { clearTeacherSession(); setTeacherData(null) }}
-        />
-      )
+    // Online faculty — Supabase session without teacher role
+    if (supabaseSession) {
+      return <OnlineFacultyPortal onLogout={() => supabase.auth.signOut()} />
     }
 
     // Student portal
-    return (
-      <StudentPortal
-        data={studentData}
-        onLogout={() => { clearStudentSession(); setStudentData(null) }}
-      />
-    )
+    if (studentData) {
+      return (
+        <StudentPortal
+          data={studentData}
+          onLogout={() => { clearStudentSession(); setStudentData(null) }}
+        />
+      )
+    }
+
+    // No session → unified login
+    return <LoginPage onStudentLogin={setStudentData} />
   }
 
   // ── Faculty mode (localhost) ────────────────────────────────
@@ -153,12 +143,18 @@ function OnlineFacultyPortal({ onLogout }) {
 }
 
 // ── Teacher Portal ─────────────────────────────────────────────
-// Receives already-decrypted data from LoginPage and renders the full sidebar layout.
-function TeacherPortal({ data, onLogout }) {
+// Loads read-only data from Supabase faculty_state on mount.
+function TeacherPortal({ onLogout }) {
   const loadRemoteData = useStore(s => s.loadRemoteData)
   const activePage     = useStore(s => s.activePage)
+  const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => { loadRemoteData(data) }, [data])
+  useEffect(() => {
+    loadFromSupabase().then(data => {
+      if (data) loadRemoteData(data)
+      setLoaded(true)
+    })
+  }, [])
 
   const pages = {
     dashboard: <DashboardPage />,
@@ -167,6 +163,14 @@ function TeacherPortal({ data, onLogout }) {
     toppers:   <ToppersPage />,
     syllabus:  <SyllabusPage />,
     timetable: <TimetablePage />,
+  }
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-[14px] font-semibold text-ink-2">Loading data…</div>
+      </div>
+    )
   }
 
   return (

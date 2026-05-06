@@ -11,62 +11,11 @@
 
 import { useState, useEffect } from 'react'
 import {
-  REMOTE_DATA_URL,
-  SESSION_KEY, TEACHER_SESSION_KEY, SESSION_DAYS,
+  SESSION_KEY, SESSION_DAYS,
   APP_NAME, APP_SUB,
 } from '../../config'
 import { supabase } from '../../lib/supabase'
 
-// ── Crypto helpers ─────────────────────────────────────────────────────────────
-
-function b64ToBytes(b64) {
-  return Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-}
-
-/**
- * Decrypt an AES-256-GCM payload produced by split_students.py.
- * Key is derived from the password using PBKDF2-SHA256 (100,000 iterations).
- * Throws DOMException if the password is wrong (authentication tag mismatch).
- */
-async function decryptDb(encrypted, password) {
-  const salt = b64ToBytes(encrypted.salt)
-  const iv   = b64ToBytes(encrypted.iv)
-  const data = b64ToBytes(encrypted.data)
-
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password.trim()),
-    'PBKDF2', false, ['deriveKey'],
-  )
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false, ['decrypt'],
-  )
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data)
-  return JSON.parse(new TextDecoder().decode(decrypted))
-}
-
-// ── Session helpers — teacher ──────────────────────────────────────────────────
-// Decrypted data is kept in sessionStorage (cleared when browser tab closes).
-// The plain-text password is never stored.
-
-function saveTeacherSession(data) {
-  sessionStorage.setItem(TEACHER_SESSION_KEY, JSON.stringify(data))
-}
-
-function loadTeacherSession() {
-  try {
-    const raw = sessionStorage.getItem(TEACHER_SESSION_KEY)
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch { return null }
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function clearTeacherSession() {
-  sessionStorage.removeItem(TEACHER_SESSION_KEY)
-}
 
 // ── Session helpers — student ──────────────────────────────────────────────────
 
@@ -92,14 +41,15 @@ export function clearStudentSession() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
-  const [tab, setTab]         = useState('student') // 'student' | 'teacher'
+export default function LoginPage({ onStudentLogin }) {
+  const [tab, setTab]         = useState('student') // 'student' | 'teacher' | 'faculty'
   const [checking, setChecking] = useState(true)
 
   // Teacher tab state
-  const [password, setPassword] = useState('')
-  const [teacherLoading, setTeacherLoading] = useState(false)
-  const [teacherError, setTeacherError]     = useState(null)
+  const [teacherEmail, setTeacherEmail]       = useState('')
+  const [teacherPassword, setTeacherPassword] = useState('')
+  const [teacherLoading, setTeacherLoading]   = useState(false)
+  const [teacherError, setTeacherError]       = useState(null)
 
   // Student tab state
   const [mobile, setMobile]     = useState('')
@@ -115,18 +65,13 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
   // ── Pre-fill mobile from ?mobile= URL param ────────────────
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get('mobile')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (param) setMobile(param.replace(/\D/g, '').slice(0, 10))
   }, [])
 
   // ── Auto-restore existing session on mount ──────────────────
   useEffect(() => {
     async function restore() {
-      // Teacher session takes priority (decrypted data in sessionStorage)
-      const teacherData = loadTeacherSession()
-      if (teacherData) {
-        onTeacherLogin(teacherData)
-        return
-      }
       // Student session — re-fetch live data from Supabase via serverless endpoint
       const session = loadStudentSession()
       if (session?.mobile) {
@@ -148,35 +93,20 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
     restore()
   }, [])
 
-  // ── Teacher login ───────────────────────────────────────────
+  // ── Teacher login (Supabase) ────────────────────────────────
   async function handleTeacherLogin() {
-    if (!password) return
+    if (!teacherEmail || !teacherPassword) return
     setTeacherError(null)
     setTeacherLoading(true)
-    try {
-      const res = await fetch(REMOTE_DATA_URL)
-      if (!res.ok) throw new Error('Teacher data not found. Run npm run deploy first.')
-      const json = await res.json()
-
-      if (!json.encrypted) {
-        throw new Error('Teacher login is not configured. Contact the faculty admin.')
-      }
-
-      let data
-      try {
-        data = await decryptDb(json, password)
-      } catch {
-        setTeacherError('Incorrect password. Please try again.')
-        setTeacherLoading(false)
-        return
-      }
-
-      saveTeacherSession(data)
-      onTeacherLogin(data)
-    } catch (e) {
-      setTeacherError(e.message || 'Could not connect. Please try again.')
+    const { error } = await supabase.auth.signInWithPassword({
+      email: teacherEmail.trim(),
+      password: teacherPassword,
+    })
+    if (error) {
+      setTeacherError(error.message)
       setTeacherLoading(false)
     }
+    // On success: App.jsx onAuthStateChange fires → TeacherPortal renders (role check)
   }
 
   // ── Faculty login (Supabase) ────────────────────────────────
@@ -310,7 +240,24 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
             <> {/* ── Teacher ── */}
               <div className="text-[15px] font-bold text-ink mb-1">Teacher Access</div>
               <div className="text-[13px] text-ink-3 mb-5">
-                Enter the teacher password to view all student results.
+                Sign in with your teacher account to view student results.
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={teacherEmail}
+                  onChange={e => setTeacherEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleTeacherLogin()}
+                  placeholder="teacher@example.com"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
+                             focus:border-accent outline-none transition-colors
+                             text-[14px] text-ink placeholder:text-ink-3/50"
+                  autoFocus={tab === 'teacher'}
+                />
               </div>
 
               <div className="mb-4">
@@ -319,14 +266,13 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
                 </label>
                 <input
                   type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  value={teacherPassword}
+                  onChange={e => setTeacherPassword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleTeacherLogin()}
-                  placeholder="Enter teacher password"
+                  placeholder="••••••••"
                   className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
                              focus:border-accent outline-none transition-colors
                              text-[14px] text-ink placeholder:text-ink-3/50"
-                  autoFocus={tab === 'teacher'}
                 />
               </div>
 
@@ -334,14 +280,14 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
 
               <button
                 onClick={handleTeacherLogin}
-                disabled={teacherLoading || !password}
+                disabled={teacherLoading || !teacherEmail || !teacherPassword}
                 className={`w-full py-3 rounded-xl font-bold text-[14px] transition-all
-                  ${teacherLoading || !password
+                  ${teacherLoading || !teacherEmail || !teacherPassword
                     ? 'bg-surface-3 text-ink-3 cursor-not-allowed'
                     : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
                   }`}
               >
-                {teacherLoading ? 'Verifying…' : 'Enter Teacher View →'}
+                {teacherLoading ? 'Signing in…' : 'Teacher Login →'}
               </button>
             </>
           ) : (
@@ -405,7 +351,7 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
           {tab === 'student'
             ? 'Having trouble? Contact your LWS Pune faculty.'
             : tab === 'teacher'
-            ? 'Teachers only. Contact faculty admin for the password.'
+            ? 'Teachers only. Contact the faculty admin for your account.'
             : 'Faculty only. Contact the system admin for access.'}
         </div>
       </div>
