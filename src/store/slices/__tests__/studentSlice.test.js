@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createStudentSlice } from '../studentSlice'
 
+// No Supabase session in tests → all mutations use the /api/students-db (dev) path.
+vi.mock('../../../lib/supabase', () => ({ supabase: null }))
+
 function makeStore() {
   let state = { studentProfiles: {} }
   let slice

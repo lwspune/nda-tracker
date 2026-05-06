@@ -57,8 +57,12 @@ const useStore = create((set, get) => ({
               examSchedules:           saved.examSchedules || [],
               hydrated: true,
             })
+            // Load fresh student profiles from normalised Supabase tables,
+            // overwriting any stale studentProfiles baked into faculty_state.
+            get().loadStudentsFromSupabase()
           } else {
             set({ hydrated: true })
+            get().loadStudentsFromSupabase()
           }
           return
         }
