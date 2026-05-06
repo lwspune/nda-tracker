@@ -200,7 +200,7 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
           <div>{studentCount} student{studentCount !== 1 ? 's' : ''}</div>
           {profileCount > 0 && <div>{profileCount} profiles</div>}
         </div>
-        {mode === 'teacher' && onLogout && (
+        {onLogout && (
           <button
             onClick={onLogout}
             className="mt-3 w-full text-left text-[11px] font-semibold text-indigo-300/40
