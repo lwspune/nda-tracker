@@ -21,7 +21,7 @@ from datetime import datetime
 
 FACULTY_DATA = "data/faculty-data.json"
 STUDENTS_DB  = "students_db.json"
-TRACKER_BASE = "https://lwspune.github.io/nda-tracker/"
+TRACKER_BASE = "https://nda-tracker.vercel.app/"
 WABRIDGE_URL = "https://web.wabridge.com/api/createmessage"
 
 

@@ -286,7 +286,7 @@ def format_email(student_name, exam, student_row, q_subject=None, mobile=None):
     exam_name = exam.get("name", "Exam")
     exam_date = exam.get("date", "")
     chapter_html = _chapter_body_html(stats)
-    tracker_url = f"https://lwspune.github.io/nda-tracker/?mobile={mobile}" if mobile else "https://lwspune.github.io/nda-tracker"
+    tracker_url = f"https://nda-tracker.vercel.app/?mobile={mobile}" if mobile else "https://nda-tracker.vercel.app"
     login_html = (f'<span style="font-weight:600;color:#1e293b">{mobile}</span>' if mobile
                   else "your registered mobile number")
 
