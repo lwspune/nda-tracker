@@ -28,7 +28,7 @@ export default function Step4Confirm({ state, onSave, onBack }) {
 
   function buildExam(id) {
     return {
-      id: id || 'exam_' + Date.now(),
+      id,
       name: examName,
       date: examDate,
       subject: subject || 'Maths',
@@ -42,7 +42,7 @@ export default function Step4Confirm({ state, onSave, onBack }) {
   }
 
   function handleSaveNew() {
-    onSave(buildExam(null))
+    onSave(buildExam('exam_' + Date.now()))
   }
 
   function handleReplace() {

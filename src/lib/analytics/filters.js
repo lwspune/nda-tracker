@@ -54,6 +54,49 @@ export function getAllStudents(exams, validNames = null) {
   return [...names].sort()
 }
 
+// Build name→profile lookup covering canonical name + nameVariants
+function buildProfileLookup(studentProfiles) {
+  const map = {}
+  Object.values(studentProfiles).forEach(p => {
+    if (p.name) map[p.name] = p
+    ;(p.nameVariants || []).forEach(v => { if (v) map[v] = p })
+  })
+  return map
+}
+
+// Unique batch options for a set of exams, derived primarily from profile.batches[].
+// Falls back to exam.batch only for exams where no student has a profile.
+export function getBatchOptions(exams, studentProfiles) {
+  const lookup = buildProfileLookup(studentProfiles)
+  const batches = new Set()
+  exams.forEach(e => {
+    let anyProfiled = false
+    e.students.forEach(s => {
+      const profile = lookup[s.name]
+      if (profile) {
+        anyProfiled = true
+        ;(profile.batches || []).forEach(b => batches.add(b))
+      }
+    })
+    if (!anyProfiled && e.batch) batches.add(e.batch)
+  })
+  return [...batches].sort()
+}
+
+// Filter exams to those where at least one student has batchName in profile.batches[].
+// Falls back to exam.batch for exams where no student has a profile.
+export function getExamsForBatch(exams, studentProfiles, batchName) {
+  const lookup = buildProfileLookup(studentProfiles)
+  return exams.filter(e => {
+    for (const s of e.students) {
+      const profile = lookup[s.name]
+      if (profile && (profile.batches || []).includes(batchName)) return true
+    }
+    const hasAnyProfile = e.students.some(s => lookup[s.name])
+    return !hasAnyProfile && e.batch === batchName
+  })
+}
+
 // All exams a student appeared in, with their record
 export function getStudentExams(name, exams) {
   return exams

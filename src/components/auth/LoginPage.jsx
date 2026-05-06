@@ -15,6 +15,7 @@ import {
   SESSION_KEY, TEACHER_SESSION_KEY, SESSION_DAYS,
   APP_NAME, APP_SUB,
 } from '../../config'
+import { supabase } from '../../lib/supabase'
 
 // ── Crypto helpers ─────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ function loadTeacherSession() {
   } catch { return null }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearTeacherSession() {
   sessionStorage.removeItem(TEACHER_SESSION_KEY)
 }
@@ -90,6 +92,7 @@ function loadStudentSession() {
   } catch { return null }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearStudentSession() {
   localStorage.removeItem(SESSION_KEY)
 }
@@ -109,6 +112,18 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
   const [mobile, setMobile]     = useState('')
   const [studentLoading, setStudentLoading] = useState(false)
   const [studentError, setStudentError]     = useState(null)
+
+  // Faculty tab state
+  const [facultyEmail, setFacultyEmail]       = useState('')
+  const [facultyPassword, setFacultyPassword] = useState('')
+  const [facultyLoading, setFacultyLoading]   = useState(false)
+  const [facultyError, setFacultyError]       = useState(null)
+
+  // ── Pre-fill mobile from ?mobile= URL param ────────────────
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('mobile')
+    if (param) setMobile(param.replace(/\D/g, '').slice(0, 10))
+  }, [])
 
   // ── Auto-restore existing session on mount ──────────────────
   useEffect(() => {
@@ -167,6 +182,22 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
     }
   }
 
+  // ── Faculty login (Supabase) ────────────────────────────────
+  async function handleFacultyLogin() {
+    if (!facultyEmail || !facultyPassword) return
+    setFacultyError(null)
+    setFacultyLoading(true)
+    const { error } = await supabase.auth.signInWithPassword({
+      email: facultyEmail.trim(),
+      password: facultyPassword,
+    })
+    if (error) {
+      setFacultyError(error.message)
+      setFacultyLoading(false)
+    }
+    // On success: App.jsx onAuthStateChange fires → faculty portal renders
+  }
+
   // ── Student login ───────────────────────────────────────────
   async function handleStudentLogin() {
     const digits = mobile.replace(/\D/g, '')
@@ -220,11 +251,11 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
 
         {/* Tab switcher */}
         <div className="flex rounded-xl bg-surface-2 border border-border p-1 mb-5 gap-1">
-          {[['student', 'Student'], ['teacher', 'Teacher']].map(([key, label]) => (
+          {[['student', 'Student'], ['teacher', 'Teacher'], ['faculty', 'Faculty']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex-1 py-2 rounded-lg text-[13px] font-semibold transition-all
+              className={`flex-1 py-2.5 rounded-lg text-[13px] font-semibold transition-all min-h-[44px] flex items-center justify-center
                 ${tab === key
                   ? 'bg-accent text-white shadow-sm'
                   : 'text-ink-3 hover:text-ink'}`}
@@ -238,7 +269,7 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
         <div className="bg-surface border border-border rounded-2xl p-4 md:p-6 shadow-sm">
 
           {tab === 'student' ? (
-            <>
+            <> {/* ── Student ── */}
               <div className="text-[15px] font-bold text-ink mb-1">Welcome back</div>
               <div className="text-[13px] text-ink-3 mb-5">
                 Enter your registered mobile number to view your results.
@@ -280,8 +311,8 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
                 {studentLoading ? 'Checking…' : 'View My Results →'}
               </button>
             </>
-          ) : (
-            <>
+          ) : tab === 'teacher' ? (
+            <> {/* ── Teacher ── */}
               <div className="text-[15px] font-bold text-ink mb-1">Teacher Access</div>
               <div className="text-[13px] text-ink-3 mb-5">
                 Enter the teacher password to view all student results.
@@ -318,13 +349,69 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
                 {teacherLoading ? 'Verifying…' : 'Enter Teacher View →'}
               </button>
             </>
+          ) : (
+            <>
+              <div className="text-[15px] font-bold text-ink mb-1">Faculty Access</div>
+              <div className="text-[13px] text-ink-3 mb-5">
+                Sign in with your faculty account to manage exams and students.
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={facultyEmail}
+                  onChange={e => setFacultyEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleFacultyLogin()}
+                  placeholder="official@example.com"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
+                             focus:border-accent outline-none transition-colors
+                             text-[14px] text-ink placeholder:text-ink-3/50"
+                  autoFocus={tab === 'faculty'}
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={facultyPassword}
+                  onChange={e => setFacultyPassword(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleFacultyLogin()}
+                  placeholder="••••••••"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
+                             focus:border-accent outline-none transition-colors
+                             text-[14px] text-ink placeholder:text-ink-3/50"
+                />
+              </div>
+
+              {facultyError && <ErrorBox message={facultyError} />}
+
+              <button
+                onClick={handleFacultyLogin}
+                disabled={facultyLoading || !facultyEmail || !facultyPassword}
+                className={`w-full py-3 rounded-xl font-bold text-[14px] transition-all
+                  ${facultyLoading || !facultyEmail || !facultyPassword
+                    ? 'bg-surface-3 text-ink-3 cursor-not-allowed'
+                    : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
+                  }`}
+              >
+                {facultyLoading ? 'Signing in…' : 'Faculty Login →'}
+              </button>
+            </>
           )}
         </div>
 
         <div className="text-center mt-6 text-[11px] text-ink-3">
           {tab === 'student'
             ? 'Having trouble? Contact your LWS Pune faculty.'
-            : 'Teachers only. Contact faculty admin for the password.'}
+            : tab === 'teacher'
+            ? 'Teachers only. Contact faculty admin for the password.'
+            : 'Faculty only. Contact the system admin for access.'}
         </div>
       </div>
     </div>

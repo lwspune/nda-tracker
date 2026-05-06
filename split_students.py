@@ -160,6 +160,7 @@ def main():
                 'batches':       s.get('batches', []),
                 'accountStatus': s.get('account_status', ''),
                 'regDate':       s.get('registration_date', ''),
+                'parent_mobiles': s.get('parent_mobiles', []),
             }
 
             for nm in [canon] + variants:

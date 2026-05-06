@@ -209,6 +209,7 @@ export async function parseStudentsExcel(file) {
     accountStatus: idx('Account Status'),
     regDate:       idx('RegistrationDate'),
     quitDate:      idx('Quit Date'),
+    guardianMobile: idx('Guardian No.'),
   }
 
   if (cols.name < 0)     throw new Error('Could not find "Name" column in student Excel')
@@ -230,10 +231,11 @@ export async function parseStudentsExcel(file) {
       email:             cols.email         >= 0 ? String(row[cols.email]         || '').trim() : '',
       batches:           parseBatchCell(row[cols.batch]),
       branch:            cols.branch        >= 0 ? String(row[cols.branch]        || '').trim() : '',
-      coming_status:     cols.comingStatus  >= 0 ? String(row[cols.comingStatus]  || '').trim() : '',
-      account_status:    cols.accountStatus >= 0 ? String(row[cols.accountStatus] || '').trim() : '',
+      coming_status:     cols.comingStatus   >= 0 ? String(row[cols.comingStatus]   || '').trim() : '',
+      account_status:    cols.accountStatus  >= 0 ? String(row[cols.accountStatus]  || '').trim() : '',
       registration_date: parseStudentDate(row[cols.regDate]),
       quit_date:         parseStudentDate(row[cols.quitDate]),
+      guardian_mobile:   cols.guardianMobile >= 0 ? String(row[cols.guardianMobile] || '').trim() : '',
     })
   }
 

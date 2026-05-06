@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import useStore from '../../store/useStore'
 import Step1Upload from './Step1Upload'
 import Step2Review from './Step2Review'

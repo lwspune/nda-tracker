@@ -8,8 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
   exams: [],
+  studentProfiles: {},
+  whatsappSendHistory: {},
   deleteExam: vi.fn(),
   openUploadModal: vi.fn(),
+  bulkUpdateStudentContacts: vi.fn(),
+  setWhatsappSendHistory: vi.fn(),
 }
 
 vi.mock('../../store/useStore', () => ({
@@ -18,6 +22,17 @@ vi.mock('../../store/useStore', () => ({
 
 // Faculty mode so the "+ Add Exam" button and subject dropdown are both visible
 vi.mock('../../config', () => ({ IS_READ_ONLY: false }))
+
+// Mock ModeContext so individual tests can override the mode
+vi.mock('../../context/ModeContext', () => ({
+  useMode: vi.fn(() => 'faculty'),
+  ModeContext: { Provider: ({ children }) => children },
+}))
+
+// Mock EmailResultsModal — not under test here
+vi.mock('../Exams/EmailResultsModal', () => ({
+  default: ({ onClose }) => <button onClick={onClose}>close-email-modal</button>,
+}))
 
 // Mock the re-upload modals so Exams.test.jsx doesn't need their deps
 vi.mock('../../components/upload/ReuploadTagsModal', () => ({
@@ -37,6 +52,7 @@ vi.mock('../../components/upload/ReuploadResultsModal', () => ({
 }))
 
 import ExamsPage from '../Exams'
+import { useMode } from '../../context/ModeContext'
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
@@ -328,5 +344,25 @@ describe('Exams page — re-upload buttons (faculty mode)', () => {
     await user.click(tagButtons[1]) // click second exam's button
     expect(screen.getByTestId('reupload-tags-modal'))
       .toHaveAttribute('data-exam-id', exam2.id)
+  })
+})
+
+// ── Email Results button — mode visibility ────────────────────────────────────
+
+describe('Exams page — Email Results button', () => {
+  beforeEach(() => { useMode.mockReturnValue('faculty') })
+  afterEach(() => { useMode.mockReturnValue('faculty') })
+
+  it('shows Email Results button in faculty mode when exam has results', () => {
+    setExams([makeExam()])   // makeExam always includes 1 student
+    renderExams()
+    expect(screen.getByRole('button', { name: /email results/i })).toBeInTheDocument()
+  })
+
+  it('hides Email Results button in teacher mode', () => {
+    useMode.mockReturnValue('teacher')
+    setExams([makeExam()])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /email results/i })).not.toBeInTheDocument()
   })
 })

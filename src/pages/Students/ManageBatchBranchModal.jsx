@@ -16,6 +16,7 @@ export default function ManageBatchBranchModal({ onClose }) {
   const bulkAssignBatch      = useStore(s => s.bulkAssignBatch)
   const bulkAssignBranch     = useStore(s => s.bulkAssignBranch)
   const mergeStudentProfiles = useStore(s => s.mergeStudentProfiles)
+  const addNameVariant       = useStore(s => s.addNameVariant)
 
   const students = useMemo(() => uniqueStudents(studentProfiles), [studentProfiles])
 
@@ -70,7 +71,10 @@ export default function ManageBatchBranchModal({ onClose }) {
           ) : (
             <FindDuplicatesTab
               students={students}
+              studentProfiles={studentProfiles}
+              exams={exams}
               mergeStudentProfiles={mergeStudentProfiles}
+              addNameVariant={addNameVariant}
             />
           )}
         </div>

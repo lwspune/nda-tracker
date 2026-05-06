@@ -1,63 +1,90 @@
 // ── Storage backend ────────────────────────────────────────────
 // Dev mode  (npm run dev):  reads/writes data/faculty-data.json via the Vite
 //                           dev plugin. No size limit. Survives browser clears.
-// Prod mode (GitHub Pages): falls back to localStorage (student read-only
-//                           sessions only — their data is tiny).
+// Prod mode (Vercel):       reads/writes Supabase faculty_state table when a
+//                           faculty session is active (teacher/student skipped).
 // ──────────────────────────────────────────────────────────────
 
+import { supabase } from '../lib/supabase'
+
 const IS_DEV = import.meta.env.DEV
-const LS_KEY = 'nda_tracker_v2'
 const API    = '/api/data'
 
-// ── Sync load (prod only) ─────────────────────────────────────
-// Returns persisted data or null. Called synchronously during store
-// creation — only used in prod. In dev the store starts with DEFAULTS
-// and initStore() hydrates asynchronously.
+// ── Supabase helpers (prod faculty mode) ─────────────────────
+
+export async function loadFromSupabase() {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('faculty_state').select('data').eq('id', 1).single()
+  if (error) return null
+  return data?.data ?? null
+}
+
+export function saveToSupabase(data) {
+  if (!supabase) return
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!session) return
+    supabase.from('faculty_state')
+      .update({ data, updated_at: new Date().toISOString() })
+      .eq('id', 1)
+      .catch(e => console.error('[persist] Supabase save failed:', e))
+  })
+}
+
+// ── Sync load (unused in prod — kept for legacy LS migration guard) ──────────
 export function loadFromStorage() {
-  if (IS_DEV) return null // async path — see loadFromDisk()
+  if (IS_DEV) return null
   try {
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem('nda_tracker_v2')
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-// ── Async load (dev only) ─────────────────────────────────────
-// Called by useStore.initStore() after the store is created.
+// ── Async load (dev: file plugin, prod: Supabase) ─────────────
 export async function loadFromDisk() {
-  try {
-    const r = await fetch(API)
-    if (!r.ok) return null
-    const text = await r.text()
-    return text && text !== 'null' ? JSON.parse(text) : null
-  } catch {
-    return null
+  if (IS_DEV) {
+    try {
+      const r = await fetch(API)
+      if (!r.ok) return null
+      const text = await r.text()
+      return text && text !== 'null' ? JSON.parse(text) : null
+    } catch {
+      return null
+    }
   }
+  return loadFromSupabase()
 }
 
 // ── Save ──────────────────────────────────────────────────────
-// apiKey is intentionally excluded — kept in memory only (Bug 1 fix).
+// apiKey is intentionally excluded — kept in memory only.
 export function saveToStorage(state) {
-  const { exams, studentProfiles, savedInsights, ndaFreqBySubject, costLog, lastDeployedAt } = state
-  const payload = JSON.stringify({ exams, studentProfiles, savedInsights, ndaFreqBySubject, costLog, lastDeployedAt })
+  const {
+    exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
+    batchChapterTimelines,
+    timetableTeachers, timetableMappings, timetables, examSchedules,
+    whatsappSendHistory,
+  } = state
+  const data = {
+    exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
+    batchChapterTimelines,
+    timetableTeachers, timetableMappings, timetables, examSchedules,
+    whatsappSendHistory,
+  }
 
   if (IS_DEV) {
-    // Fire-and-forget — we never need to await a save
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: payload,
+      body: JSON.stringify(data),
     }).catch(e => console.error('[persist] Save to disk failed:', e))
     return
   }
 
-  try {
-    localStorage.setItem(LS_KEY, payload)
-  } catch (e) {
-    console.error('[persist] Storage save failed:', e)
-    alert('Warning: Data could not be saved. localStorage may be full. Export your data as a backup.')
-  }
+  saveToSupabase(data)
 }
 
 // ── Clear ─────────────────────────────────────────────────────
@@ -70,5 +97,10 @@ export function clearStorage() {
     }).catch(() => {})
     return
   }
-  localStorage.removeItem(LS_KEY)
+  if (supabase) {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('faculty_state').update({ data: null }).eq('id', 1).catch(() => {})
+    })
+  }
 }

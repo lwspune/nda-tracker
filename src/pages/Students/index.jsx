@@ -9,6 +9,7 @@ import ManageBatchBranchModal from './ManageBatchBranchModal'
 
 export default function StudentsPage() {
   const exams = useStore(s => s.exams)
+  const studentProfiles = useStore(s => s.studentProfiles)
   const activeStudent = useStore(s => s.activeStudent)
   const setActiveStudent = useStore(s => s.setActiveStudent)
   const mode = useMode()
@@ -18,7 +19,15 @@ export default function StudentsPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
 
-  const allStudents = getAllStudents(exams)
+  const variantNames = new Set(
+    Object.entries(studentProfiles)
+      .filter(([key, p]) => p.name !== key)
+      .map(([key]) => key)
+  )
+  const examNames = new Set(getAllStudents(exams).filter(n => !variantNames.has(n)))
+  const profileNames = [...new Set(Object.values(studentProfiles).map(p => p.name).filter(Boolean))]
+  const allStudents = [...new Set([...examNames, ...profileNames])].sort((a, b) => a.localeCompare(b))
+
   const filtered = query.trim()
     ? allStudents.filter(n => n.toLowerCase().includes(query.toLowerCase()))
     : []
@@ -86,7 +95,7 @@ export default function StudentsPage() {
       ) : (
         exams.length === 0
           ? <EmptyState icon="👤" title="No exams yet" sub="Add exams first to see student data" />
-          : <EmptyState icon="🔍" title="Search for a student" sub={`${allStudents.length} students across ${exams.length} exams`} />
+          : <EmptyState icon="🔍" title="Search for a student" sub={`${allStudents.length} students · ${examNames.size} with exam records`} />
       )}
 
       {importOpen && <ImportStudentsModal onClose={() => setImportOpen(false)} />}

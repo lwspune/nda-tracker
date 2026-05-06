@@ -65,11 +65,6 @@ function getSubjectSelect() {
   return screen.getByRole('combobox', { name: /subject/i })
 }
 
-function getBatchSelect() {
-  // Batch dropdown is only rendered when batches exist
-  return screen.queryByRole('combobox', { name: /batch/i })
-}
-
 function getExamSelect() {
   return screen.getByRole('combobox', { name: /exam/i })
 }

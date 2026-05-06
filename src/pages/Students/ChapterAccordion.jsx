@@ -18,12 +18,12 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {chapterSummary.map(({ ch, avg, trend, subs }) => (
+      {chapterSummary.map(({ ch, avg, subs }) => (
         <div key={ch}>
 
           {/* ── Chapter row ─────────────────────────────── */}
           <div
-            className="flex items-center gap-2.5 py-2 cursor-pointer group"
+            className="flex items-center gap-2.5 py-3 cursor-pointer group min-h-[44px]"
             onClick={() => toggleChapter(ch)}
           >
             <div className="w-[120px] md:w-[175px] min-w-[120px] md:min-w-[175px] text-[12.5px] text-ink font-semibold

@@ -6,10 +6,9 @@ export const IS_READ_ONLY = _h !== 'localhost' &&
   !_h.startsWith('10.') &&
   !_h.startsWith('172.')
 
-const REPO_NAME = 'nda-tracker'
-
-// Base URL for data files on GitHub Pages
-const BASE = IS_READ_ONLY ? `/${REPO_NAME}` : ''
+// Base URL for data files — '/' in dev and Vercel, '/nda-tracker/' on GitHub Pages
+// Set by passing --base=/nda-tracker/ to vite build in the predeploy script.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 export const REMOTE_DATA_URL    = `${BASE}/data/db.json`
 export const INDEX_URL          = `${BASE}/data/index.json`

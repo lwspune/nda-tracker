@@ -30,6 +30,7 @@ export const createStudentSlice = (set, get) => ({
         gender:        s.gender || '',
         branch:        s.branch || '',
         batches:       s.batches || [],
+        parentMobiles: s.parent_mobiles || [],
         accountStatus: s.account_status || '',
         comingStatus:  s.coming_status || '',
         regDate:       s.registration_date || '',
@@ -132,6 +133,18 @@ export const createStudentSlice = (set, get) => ({
     } catch (_) { /* no-op in prod */ }
   },
 
+  async updateStudentParentMobiles(lwsId, name, parentMobiles) {
+    try {
+      const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+      if (!existing?.students) return
+      const students = existing.students.map(s => {
+        const match = lwsId ? s.lws_id === lwsId : (s.canonical_name || s.name) === name
+        return match ? { ...s, parent_mobiles: parentMobiles } : s
+      })
+      await persistStudentsDB(get, existing, students)
+    } catch (_) { /* no-op in prod */ }
+  },
+
   async updateStudentBranchBatch(lwsId, name, { branch, batches }) {
     try {
       const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
@@ -139,6 +152,43 @@ export const createStudentSlice = (set, get) => ({
       const students = existing.students.map(s => {
         const match = lwsId ? s.lws_id === lwsId : (s.canonical_name || s.name) === name
         return match ? { ...s, branch, batches } : s
+      })
+      await persistStudentsDB(get, existing, students)
+    } catch (_) { /* no-op in prod */ }
+  },
+
+  async addNameVariant(lwsId, variantName) {
+    if (!lwsId || !variantName) return
+    try {
+      const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+      if (!existing?.students) return
+      const students = existing.students.map(s => {
+        if (s.lws_id !== lwsId) return s
+        const variants = s.name_variants || []
+        if (variants.includes(variantName)) return s
+        return { ...s, name_variants: [...variants, variantName] }
+      })
+      await persistStudentsDB(get, existing, students)
+    } catch (_) { /* no-op in prod */ }
+  },
+
+  async bulkUpdateStudentContacts(edits) {
+    // edits: Array<{ lwsId, name, branch, mobile, parentMobiles }>
+    if (!edits?.length) return
+    try {
+      const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+      if (!existing?.students) return
+      const students = existing.students.map(s => {
+        const edit = edits.find(e =>
+          e.lwsId ? s.lws_id === e.lwsId : (s.canonical_name || s.name) === e.name
+        )
+        if (!edit) return s
+        return {
+          ...s,
+          branch:        edit.branch,
+          mobile:        edit.mobile,
+          parent_mobiles: edit.parentMobiles,
+        }
       })
       await persistStudentsDB(get, existing, students)
     } catch (_) { /* no-op in prod */ }

@@ -1,11 +1,14 @@
 import { create } from 'zustand'
 import { loadFromDisk, saveToStorage, clearStorage } from './persist'
+import { supabase } from '../lib/supabase'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
 import { DEFAULTS, hydrate } from './slices/defaults'
 import { createExamsSlice } from './slices/examsSlice'
 import { createStudentSlice } from './slices/studentSlice'
 import { createInsightsSlice } from './slices/insightsSlice'
 import { createNdaSlice } from './slices/ndaSlice'
+import { createSyllabusSlice } from './slices/syllabusSlice'
+import { createTimetableSlice } from './slices/timetableSlice'
 
 const useStore = create((set, get) => ({
   // ── Data state ────────────────────────────────────────────
@@ -21,11 +24,45 @@ const useStore = create((set, get) => ({
     saveToStorage(get())
   },
 
-  // ── Async initialisation (dev mode only) ──────────────────
-  // Loads data from data/faculty-data.json via the Vite dev plugin.
-  // On the very first run, migrates any existing localStorage data to disk.
+  // ── Async initialisation ──────────────────────────────────
+  // Dev:            loads from data/faculty-data.json via Vite plugin.
+  // Prod (faculty): Supabase session detected → loads from faculty_state table.
+  // Prod (teacher/student): no session → sets hydrated immediately.
   async initStore() {
     if (!import.meta.env.DEV) {
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          set({ hydrated: false })
+          const saved = await loadFromDisk()
+          if (saved) {
+            const { apiKey: _dropped, ...safeFields } = saved
+            set({
+              ...DEFAULTS,
+              ...safeFields,
+              savedInsights:           { ...DEFAULTS.savedInsights, ...saved.savedInsights },
+              ndaFreqBySubject:        migrateFreq(saved),
+              ndaMarksBySubject:       saved.ndaMarksBySubject || DEFAULTS.ndaMarksBySubject,
+              syllabusPrograms:        saved.syllabusPrograms || [],
+              syllabusBatches:         saved.syllabusBatches?.length
+                                         ? saved.syllabusBatches
+                                         : Object.keys(saved.batchProgramAssignments || {}),
+              syllabusBatchBranches:   saved.syllabusBatchBranches || {},
+              batchProgramAssignments: saved.batchProgramAssignments || {},
+              batchSyllabusProgress:   saved.batchSyllabusProgress || {},
+              batchChapterTimelines:   saved.batchChapterTimelines || {},
+              timetableTeachers:       saved.timetableTeachers || [],
+              timetableMappings:       saved.timetableMappings || [],
+              timetables:              saved.timetables || [],
+              examSchedules:           saved.examSchedules || [],
+              hydrated: true,
+            })
+          } else {
+            set({ hydrated: true })
+          }
+          return
+        }
+      }
       set({ hydrated: true })
       return
     }
@@ -50,14 +87,28 @@ const useStore = create((set, get) => ({
       set({
         ...DEFAULTS,
         ...safeFields,
-        savedInsights:     { ...DEFAULTS.savedInsights, ...saved.savedInsights },
-        ndaFreqBySubject:  migrateFreq(saved),
-        ndaMarksBySubject: saved.ndaMarksBySubject || DEFAULTS.ndaMarksBySubject,
+        savedInsights:          { ...DEFAULTS.savedInsights, ...saved.savedInsights },
+        ndaFreqBySubject:       migrateFreq(saved),
+        ndaMarksBySubject:      saved.ndaMarksBySubject || DEFAULTS.ndaMarksBySubject,
+        syllabusPrograms:        saved.syllabusPrograms || [],
+        syllabusBatches:         saved.syllabusBatches?.length
+                                   ? saved.syllabusBatches
+                                   : Object.keys(saved.batchProgramAssignments || {}),
+        syllabusBatchBranches:   saved.syllabusBatchBranches || {},
+        batchProgramAssignments: saved.batchProgramAssignments || {},
+        batchSyllabusProgress:   saved.batchSyllabusProgress || {},
+        batchChapterTimelines:   saved.batchChapterTimelines || {},
+        timetableTeachers:       saved.timetableTeachers || [],
+        timetableMappings:       saved.timetableMappings || [],
+        timetables:              saved.timetables || [],
+        examSchedules:           saved.examSchedules || [],
         hydrated: true,
       })
     } else {
       set({ hydrated: true })
     }
+    // Seed program definitions if this is a fresh install
+    get().seedSyllabusPrograms()
   },
 
   // ── Navigation ────────────────────────────────────────────
@@ -94,11 +145,23 @@ const useStore = create((set, get) => ({
   loadRemoteData(data) {
     if (!data) return
     set({
-      exams:            data.exams || [],
-      studentProfiles:  data.studentProfiles || {},
-      savedInsights:    data.savedInsights || DEFAULTS.savedInsights,
-      ndaFreqBySubject: migrateFreq(data),
-      costLog:          data.costLog || [],
+      exams:                   data.exams || [],
+      studentProfiles:         data.studentProfiles || {},
+      savedInsights:           data.savedInsights || DEFAULTS.savedInsights,
+      ndaFreqBySubject:        migrateFreq(data),
+      costLog:                 data.costLog || [],
+      syllabusPrograms:        data.syllabusPrograms || [],
+      syllabusBatches:         data.syllabusBatches?.length
+                                 ? data.syllabusBatches
+                                 : Object.keys(data.batchProgramAssignments || {}),
+      syllabusBatchBranches:   data.syllabusBatchBranches || {},
+      batchProgramAssignments: data.batchProgramAssignments || {},
+      batchSyllabusProgress:   data.batchSyllabusProgress || {},
+      batchChapterTimelines:   data.batchChapterTimelines || {},
+      timetableTeachers:       data.timetableTeachers || [],
+      timetableMappings:       data.timetableMappings || [],
+      timetables:              data.timetables || [],
+      examSchedules:           data.examSchedules || [],
     })
   },
 
@@ -121,11 +184,19 @@ const useStore = create((set, get) => ({
     set({ ...DEFAULTS, activePage: 'dashboard', activeStudent: null, uploadModalOpen: false })
   },
 
+  // ── WhatsApp send history (faculty only, persisted) ──────
+  setWhatsappSendHistory(examId, record) {
+    set(s => ({ whatsappSendHistory: { ...s.whatsappSendHistory, [examId]: record } }))
+    get()._save()
+  },
+
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
   ...createStudentSlice(set, get),
   ...createInsightsSlice(set, get),
   ...createNdaSlice(set, get),
+  ...createSyllabusSlice(set, get),
+  ...createTimetableSlice(set, get),
 }))
 
 export default useStore

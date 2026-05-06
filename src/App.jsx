@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import useStore from './store/useStore'
 import { IS_READ_ONLY } from './config'
+import { supabase } from './lib/supabase'
 import { ModeContext } from './context/ModeContext'
 import Sidebar from './components/layout/Sidebar'
 import ApiBar from './components/layout/ApiBar'
@@ -11,37 +12,56 @@ import StudentsPage from './pages/Students'
 import ToppersPage from './pages/Toppers'
 import InsightsPage from './pages/Insights'
 import CostsPage from './pages/Costs'
+import SyllabusPage from './pages/Syllabus/SyllabusPage'
+import TimetablePage from './pages/Timetable/TimetablePage'
 import LoginPage, { clearStudentSession, clearTeacherSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 
 export default function App() {
-  const activePage       = useStore(s => s.activePage)
-  const activeStudent    = useStore(s => s.activeStudent)
-  const setActiveStudent = useStore(s => s.setActiveStudent)
-  const hydrated         = useStore(s => s.hydrated)
+  const activePage = useStore(s => s.activePage)
+  const hydrated   = useStore(s => s.hydrated)
   const initStore        = useStore(s => s.initStore)
 
-  // GitHub Pages: track which mode authenticated
-  const [studentData, setStudentData] = useState(null)  // set after student login
-  const [teacherData, setTeacherData] = useState(null)  // set after teacher login (decrypted db)
+  // GitHub Pages / Vercel: track which mode authenticated
+  const [studentData, setStudentData]       = useState(null)
+  const [teacherData, setTeacherData]       = useState(null)
+  const [supabaseSession, setSupabaseSession] = useState(null)
+  const [sessionChecked, setSessionChecked]   = useState(!IS_READ_ONLY) // dev = already known
 
-  // Load data from disk (dev) or localStorage (prod) before rendering
+  // Supabase auth listener — online faculty mode
+  useEffect(() => {
+    if (!supabase) { setSessionChecked(true); return }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseSession(session)
+      setSessionChecked(true)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Load data: dev = from disk, prod faculty = from Supabase, prod teacher/student = no-op
   useEffect(() => { initStore() }, [])
 
-  // In dev mode, block render until async disk load completes
-  if (!hydrated) {
+  // Block render until data is loaded AND (for IS_READ_ONLY) auth state is known
+  if (!hydrated || (IS_READ_ONLY && !sessionChecked)) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="text-center">
           <div className="text-[28px] mb-3">📊</div>
           <div className="text-[14px] font-semibold text-ink-2">Loading data…</div>
-          <div className="text-[11px] text-ink-3 mt-1 font-mono">reading faculty-data.json</div>
+          <div className="text-[11px] text-ink-3 mt-1 font-mono">
+            {import.meta.env.DEV ? 'reading faculty-data.json' : 'connecting…'}
+          </div>
         </div>
       </div>
     )
   }
 
-  // ── Read-only (GitHub Pages) mode ──────────────────────────
+  // ── Online faculty mode (Vercel + Supabase session) ────────
+  if (IS_READ_ONLY && supabaseSession) {
+    return <OnlineFacultyPortal onLogout={() => supabase.auth.signOut()} />
+  }
+
+  // ── Read-only (Vercel / GitHub Pages) mode ─────────────────
   if (IS_READ_ONLY) {
     // Neither teacher nor student logged in → show unified login
     if (!teacherData && !studentData) {
@@ -78,6 +98,40 @@ export default function App() {
     exams:     <ExamsPage />,
     students:  <StudentsPage />,
     toppers:   <ToppersPage />,
+    syllabus:   <SyllabusPage />,
+    timetable:  <TimetablePage />,
+    insights:   <InsightsPage />,
+    costs:      <CostsPage />,
+  }
+
+  return (
+    <ModeContext.Provider value="faculty">
+      <div className="flex min-h-screen bg-bg">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
+          <div className="hidden md:block"><ApiBar /></div>
+          <main className="flex-1 p-4 md:p-8 md:pt-7">
+            {pages[activePage] ?? <DashboardPage />}
+          </main>
+        </div>
+        <UploadModal />
+      </div>
+    </ModeContext.Provider>
+  )
+}
+
+// ── Online Faculty Portal ──────────────────────────────────────
+// Vercel + Supabase auth session. Same layout as dev faculty mode.
+function OnlineFacultyPortal({ onLogout }) {
+  const activePage = useStore(s => s.activePage)
+
+  const pages = {
+    dashboard: <DashboardPage />,
+    exams:     <ExamsPage />,
+    students:  <StudentsPage />,
+    toppers:   <ToppersPage />,
+    syllabus:  <SyllabusPage />,
+    timetable: <TimetablePage />,
     insights:  <InsightsPage />,
     costs:     <CostsPage />,
   }
@@ -85,7 +139,7 @@ export default function App() {
   return (
     <ModeContext.Provider value="faculty">
       <div className="flex min-h-screen bg-bg">
-        <Sidebar />
+        <Sidebar onLogout={onLogout} />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <div className="hidden md:block"><ApiBar /></div>
           <main className="flex-1 p-4 md:p-8 md:pt-7">
@@ -111,6 +165,8 @@ function TeacherPortal({ data, onLogout }) {
     exams:     <ExamsPage />,
     students:  <StudentsPage />,
     toppers:   <ToppersPage />,
+    syllabus:  <SyllabusPage />,
+    timetable: <TimetablePage />,
   }
 
   return (
@@ -153,7 +209,7 @@ function StudentPortal({ data, onLogout }) {
           <button
             onClick={onLogout}
             className="text-[11px] font-semibold text-indigo-300/50 hover:text-indigo-300
-                       transition-colors px-3 py-1.5 rounded-lg hover:bg-white/10"
+                       transition-colors px-3 py-2.5 rounded-lg hover:bg-white/10 min-h-[44px] flex items-center"
           >
             Logout
           </button>

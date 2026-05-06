@@ -25,6 +25,7 @@ function loadSession() {
   } catch { return null }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY)
 }

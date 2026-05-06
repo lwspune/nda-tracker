@@ -1,16 +1,25 @@
 import { useState } from 'react'
 import useStore from '../store/useStore'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
+import { getBatchOptions, getExamsForBatch } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
-import { downloadExamPdf }  from '../lib/examPdf'
+import EmailResultsModal      from './Exams/EmailResultsModal'
+import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
+import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
+import { downloadExamPdf }         from '../lib/examPdf'
+import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
 
 export default function ExamsPage() {
   const exams = useStore(s => s.exams)
+  const studentProfiles = useStore(s => s.studentProfiles)
   const deleteExam = useStore(s => s.deleteExam)
   const openUploadModal = useStore(s => s.openUploadModal)
+  const bulkUpdateStudentContacts  = useStore(s => s.bulkUpdateStudentContacts)
+  const whatsappSendHistory        = useStore(s => s.whatsappSendHistory)
+  const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
   const mode = useMode()
 
   const [subjectFilter, setSubjectFilter] = useState('all')
@@ -21,9 +30,77 @@ export default function ExamsPage() {
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
   const [expandedExamId, setExpandedExamId]           = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
+  const [reportsGenerating, setReportsGenerating]     = useState(null)
+  const [emailSending, setEmailSending]               = useState(null)
+  const [emailResult, setEmailResult]                 = useState(null)
+  const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
+  const [whatsappSending, setWhatsappSending]         = useState(false)
+  const [whatsappResult, setWhatsappResult]           = useState(null)
 
   function toggleInsights(id) {
     setExpandedExamId(prev => prev === id ? null : id)
+  }
+
+  function parseFailedNames(lines) {
+    const names = new Set()
+    ;(lines || []).forEach(line => {
+      const t = line.trim()
+      const skip = t.match(/^SKIP (.+?) —/)
+      if (skip) { names.add(skip[1]); return }
+      const fail = t.match(/^FAIL → (.+?) \(student/)
+      if (fail) names.add(fail[1])
+    })
+    return [...names]
+  }
+
+  async function handleWhatsAppConfirm(edits, redirectTo, studentNames) {
+    const exam = whatsappPreviewExam
+    setWhatsappSending(true)
+    try {
+      await bulkUpdateStudentContacts(edits)
+      const body = { examName: exam.name }
+      if (redirectTo)    body.redirectTo = redirectTo
+      if (studentNames)  body.students   = studentNames
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const result = await res.json()
+      if (result.ok) {
+        setWhatsappSendHistory(exam.id, {
+          sentAt:      new Date().toISOString(),
+          sent:        result.sent,
+          skipped:     result.skipped,
+          failedNames: parseFailedNames(result.lines),
+        })
+      }
+      setWhatsappPreviewExam(null)
+      setWhatsappResult({ examName: exam.name, ...result })
+    } catch (e) {
+      setWhatsappPreviewExam(null)
+      setWhatsappResult({ examName: exam.name, ok: false, error: e.message })
+    } finally {
+      setWhatsappSending(false)
+    }
+  }
+
+  async function handleEmailResults(exam) {
+    setEmailSending(exam.id)
+    setEmailResult(null)
+    try {
+      const res = await fetch('/api/send-results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examName: exam.name }),
+      })
+      const result = await res.json()
+      setEmailResult({ examName: exam.name, ...result })
+    } catch (e) {
+      setEmailResult({ examName: exam.name, ok: false, error: e.message })
+    } finally {
+      setEmailSending(null)
+    }
   }
 
   const availableSubjects = [...new Set(exams.map(e => e.subject || 'Maths'))].sort()
@@ -38,11 +115,11 @@ export default function ExamsPage() {
     ? subjectFiltered
     : subjectFiltered.filter(e => e.branch === branchFilter)
 
-  const availableBatches = [...new Set(branchFiltered.map(e => e.batch).filter(Boolean))].sort()
+  const availableBatches = getBatchOptions(branchFiltered, studentProfiles)
 
   const filteredExams = batchFilter === 'all'
     ? branchFiltered
-    : branchFiltered.filter(e => e.batch === batchFilter)
+    : getExamsForBatch(branchFiltered, studentProfiles, batchFilter)
 
   const sortedExams = [...filteredExams].sort((a, b) => {
     if (sortBy === 'date-desc') return b.date.localeCompare(a.date)
@@ -223,8 +300,43 @@ export default function ExamsPage() {
                       </button>
                     )}
 
+                    {/* Student reports PDF */}
+                    {exam.students.length > 0 && exam.questions.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          setReportsGenerating(exam.id)
+                          await new Promise(r => setTimeout(r, 50))
+                          await downloadStudentReportsPdf(exam)
+                          setReportsGenerating(null)
+                        }}
+                        disabled={reportsGenerating === exam.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px]
+                                   font-semibold border transition-all flex-shrink-0
+                                   bg-surface-2 text-ink-2 border-border
+                                   hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300
+                                   disabled:opacity-50 disabled:cursor-wait"
+                      >
+                        {reportsGenerating === exam.id ? '⏳ Generating…' : '📋 Reports'}
+                      </button>
+                    )}
+
                     {mode === 'faculty' && (
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {exam.students.length > 0 && (() => {
+                          const history = whatsappSendHistory[exam.id]
+                          return (
+                            <button
+                              onClick={() => setWhatsappPreviewExam(exam)}
+                              className="btn btn-sm btn-secondary text-[11px]
+                                         hover:bg-green-50 hover:text-green-700 hover:border-green-300"
+                              title={history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp results to students and parents'}
+                            >
+                              {history
+                                ? `💬 Sent ${history.sent}✓ ${history.skipped}✗ · Resend`
+                                : '💬 WhatsApp Results'}
+                            </button>
+                          )
+                        })()}
                         <button
                           onClick={() => setReuploadResultsExam(exam)}
                           className="btn btn-sm btn-secondary text-[11px]"
@@ -270,6 +382,28 @@ export default function ExamsPage() {
         <ReuploadResultsModal
           exam={reuploadResultsExam}
           onClose={() => setReuploadResultsExam(null)}
+        />
+      )}
+
+      {emailResult && (
+        <EmailResultsModal
+          result={emailResult}
+          onClose={() => setEmailResult(null)}
+        />
+      )}
+      {whatsappPreviewExam && (
+        <WhatsAppPreviewModal
+          exam={whatsappPreviewExam}
+          sending={whatsappSending}
+          onClose={() => !whatsappSending && setWhatsappPreviewExam(null)}
+          onConfirm={handleWhatsAppConfirm}
+          failedNames={whatsappSendHistory[whatsappPreviewExam.id]?.failedNames ?? null}
+        />
+      )}
+      {whatsappResult && (
+        <WhatsAppResultsModal
+          result={whatsappResult}
+          onClose={() => setWhatsappResult(null)}
         />
       )}
     </div>

@@ -241,7 +241,7 @@ export default function ExamHistoryTable({ scores }) {
               <button
                 key={i}
                 onClick={() => { setPage(i); setOpenRows(new Set()) }}
-                className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all
+                className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg text-[11px] font-bold transition-all flex items-center justify-center
                   ${i === page
                     ? 'bg-accent text-white'
                     : 'bg-surface-2 text-ink-3 hover:bg-accent-soft hover:text-accent'

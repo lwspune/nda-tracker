@@ -8,6 +8,8 @@ const NAV = [
   { id: 'exams',     icon: '📝', label: 'Exams' },
   { id: 'students',  icon: '👤', label: 'Students' },
   { id: 'toppers',   icon: '🏆', label: 'Toppers' },
+  { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
+  { id: 'timetable', icon: '🗓', label: 'Timetable' },
   { id: 'insights',  icon: '🧠', label: 'Insights', facultyOnly: true },
   { id: 'costs',     icon: '💰', label: 'API Costs', facultyOnly: true },
 ]
@@ -117,14 +119,14 @@ export default function Sidebar({ onLogout }) {
           <button
             key={item.id}
             onClick={() => navigate(item.id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all
+            className={`flex flex-col items-center gap-0.5 px-3 py-3 rounded-lg transition-all min-h-[44px]
               ${activePage === item.id
                 ? 'text-indigo-300'
                 : 'text-white/35 hover:text-white/60'
               }`}
           >
             <span className="text-[18px] leading-none">{item.icon}</span>
-            <span className="text-[9px] font-semibold tracking-wide">{item.label}</span>
+            <span className="text-[10px] font-semibold tracking-wide">{item.label}</span>
           </button>
         ))}
       </nav>

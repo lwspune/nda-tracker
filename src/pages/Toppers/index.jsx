@@ -4,8 +4,7 @@ import { EmptyState, StatCard } from '../../components/ui'
 import {
   getToppers, getValidStudentNames,
   getStudentExams, filterValidExams,
-  computeProjectedScore, computeAttemptQuality,
-  computeConsistency
+  computeProjectedScore, getBatchOptions, getExamsForBatch
 } from '../../lib/analytics'
 import { getFreqForSubject } from '../../lib/ndaFreq'
 import { useMode } from '../../context/ModeContext'
@@ -29,11 +28,11 @@ export default function ToppersPage() {
   // ── All computations and hooks BEFORE early returns (Rules of Hooks) ──────────
   // When exams=[], these produce empty arrays/null — safe to compute unconditionally.
 
-  // Batch filter
-  const allBatches = [...new Set(exams.map(e => e.batch).filter(Boolean))]
+  // Batch filter — derived from profile.batches[] (primary)
+  const allBatches = getBatchOptions(exams, studentProfiles)
   const batchFiltered = batchFilter === 'all'
     ? exams
-    : exams.filter(e => e.batch === batchFilter)
+    : getExamsForBatch(exams, studentProfiles, batchFilter)
 
   // Subject filter — derived from exams actually present
   const allSubjects = [...new Set(batchFiltered.map(e => e.subject || 'Maths'))].sort()

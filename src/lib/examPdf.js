@@ -4,77 +4,96 @@ import {
   getExamToppers,
 } from './analytics'
 
-// ── LaTeX → readable Unicode ──────────────────────────────────
+// ── LaTeX → plain ASCII (jsPDF Helvetica is WinAnsi-encoded;
+//    every Unicode symbol above U+00FF renders as garbage) ─────
 function stripLatex(text) {
   if (!text) return ''
-  const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹'
-  const sub = '₀₁₂₃₄₅₆₇₈₉'
   return text
+    // strip math-mode delimiters
     .replace(/\\\[|\\\]/g, '')
     .replace(/\\\(|\\\)/g, '')
-    // fracs and sqrt
-    .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)')
-    .replace(/\\sqrt\{([^}]*)\}/g, '√($1)')
-    .replace(/\\sqrt\s+(\w)/g, '√$1')
-    // superscripts — digits → unicode, others → ^(...)
-    .replace(/\^\{(\d+)\}/g, (_, n) => [...n].map(d => sup[+d]).join(''))
-    .replace(/\^(\d)/g, (_, d) => sup[+d])
+    // flatten environments before anything else
+    .replace(/\\begin\{[^}]+\}|\\end\{[^}]+\}/g, '')
+    .replace(/\\\\/g, '; ')          // LaTeX line break → semicolon
+    .replace(/\\cr\b/g, '; ')
+    .replace(/&/g, ' ')              // alignment character → space
+    // invisible spacing commands
+    .replace(/\\!/g, '')             // negative thin space
+    .replace(/\\[,;:]\s*/g, ' ')     // thin / medium / thick space
+    // math function names — must come before the final command strip
+    .replace(/\\log\b/g, 'log').replace(/\\ln\b/g, 'ln').replace(/\\exp\b/g, 'exp')
+    .replace(/\\sin\b/g, 'sin').replace(/\\cos\b/g, 'cos').replace(/\\tan\b/g, 'tan')
+    .replace(/\\cot\b/g, 'cot').replace(/\\sec\b/g, 'sec').replace(/\\csc\b/g, 'csc')
+    .replace(/\\arcsin\b/g, 'arcsin').replace(/\\arccos\b/g, 'arccos').replace(/\\arctan\b/g, 'arctan')
+    .replace(/\\max\b/g, 'max').replace(/\\min\b/g, 'min').replace(/\\lim\b/g, 'lim')
+    .replace(/\\gcd\b/g, 'gcd').replace(/\\det\b/g, 'det').replace(/\\mod\b/g, 'mod')
+    // fracs — handle one level of nested braces (e.g. \frac{x^{2}}{1+x^{2}})
+    .replace(/\\frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, '($1)/($2)')
+    // sqrt — same nested-brace handling
+    .replace(/\\sqrt\{((?:[^{}]|\{[^{}]*\})*)\}/g, 'sqrt($1)')
+    .replace(/\\sqrt\s+(\w)/g, 'sqrt($1)')
+    // superscripts — plain ^n (Unicode sup chars ⁰⁴-⁹ outside WinAnsi)
+    .replace(/\^\{(\d+)\}/g, '^$1')
+    .replace(/\^(\d)/g, '^$1')
     .replace(/\^\{([^}]*)\}/g, '^($1)')
-    // subscripts — digits → unicode, others → _(...)
-    .replace(/_\{(\d+)\}/g, (_, n) => [...n].map(d => sub[+d]).join(''))
-    .replace(/_(\d)/g, (_, d) => sub[+d])
+    // subscripts — plain _n (Unicode sub chars ₀-₉ outside WinAnsi)
+    .replace(/_\{(\d+)\}/g, '_$1')
+    .replace(/_(\d)/g, '_$1')
     .replace(/_\{([^}]*)\}/g, '_($1)')
-    // number sets
-    .replace(/\\mathbb\{N\}/g, 'ℕ').replace(/\\mathbb\{R\}/g, 'ℝ')
-    .replace(/\\mathbb\{Z\}/g, 'ℤ').replace(/\\mathbb\{Q\}/g, 'ℚ')
-    .replace(/\\mathbb\{C\}/g, 'ℂ')
-    // set operations
-    .replace(/\\in\b/g, '∈').replace(/\\notin\b/g, '∉')
-    .replace(/\\subseteq\b/g, '⊆').replace(/\\subset\b/g, '⊂')
-    .replace(/\\supseteq\b/g, '⊇').replace(/\\supset\b/g, '⊃')
-    .replace(/\\cup\b/g, '∪').replace(/\\cap\b/g, '∩')
-    .replace(/\\setminus\b/g, '∖').replace(/\\emptyset\b/g, '∅')
-    .replace(/\\varnothing\b/g, '∅')
+    .replace(/_([a-zA-Z])/g, '_$1')
+    // number sets — plain letters (ℕℝℤℚℂ outside WinAnsi)
+    .replace(/\\mathbb\{N\}/g, 'N').replace(/\\mathbb\{R\}/g, 'R')
+    .replace(/\\mathbb\{Z\}/g, 'Z').replace(/\\mathbb\{Q\}/g, 'Q')
+    .replace(/\\mathbb\{C\}/g, 'C')
+    // set operations — ASCII equivalents (∈⊆∪∩∅ outside WinAnsi)
+    .replace(/\\in\b/g, ' in ').replace(/\\notin\b/g, ' not in ')
+    .replace(/\\subseteq\b/g, ' C= ').replace(/\\subset\b/g, ' C ')
+    .replace(/\\supseteq\b/g, ' =C ').replace(/\\supset\b/g, ' D ')
+    .replace(/\\cup\b/g, ' U ').replace(/\\cap\b/g, ' n ')
+    .replace(/\\setminus\b/g, '\\').replace(/\\emptyset\b/g, '{}')
+    .replace(/\\varnothing\b/g, '{}')
     // arithmetic / comparison
-    .replace(/\\times\b/g, '×').replace(/\\div\b/g, '÷')
-    .replace(/\\cdot\b/g, '·').replace(/\\pm\b/g, '±').replace(/\\mp\b/g, '∓')
-    .replace(/\\leq\b/g, '≤').replace(/\\geq\b/g, '≥')
-    .replace(/\\le\b/g, '≤').replace(/\\ge\b/g, '≥')
-    .replace(/\\neq\b/g, '≠').replace(/\\ne\b/g, '≠')
-    .replace(/\\approx\b/g, '≈').replace(/\\equiv\b/g, '≡').replace(/\\sim\b/g, '~')
-    // arrows
-    .replace(/\\Rightarrow\b/g, '⇒').replace(/\\Leftarrow\b/g, '⇐')
-    .replace(/\\Leftrightarrow\b/g, '⇔').replace(/\\rightarrow\b/g, '→')
-    .replace(/\\leftarrow\b/g, '←').replace(/\\leftrightarrow\b/g, '↔')
-    .replace(/\\to\b/g, '→').replace(/\\mapsto\b/g, '↦')
-    // Greek — lowercase
-    .replace(/\\alpha\b/g, 'α').replace(/\\beta\b/g, 'β').replace(/\\gamma\b/g, 'γ')
-    .replace(/\\delta\b/g, 'δ').replace(/\\varepsilon\b/g, 'ε').replace(/\\epsilon\b/g, 'ε')
-    .replace(/\\zeta\b/g, 'ζ').replace(/\\eta\b/g, 'η')
-    .replace(/\\vartheta\b/g, 'ϑ').replace(/\\theta\b/g, 'θ')
-    .replace(/\\iota\b/g, 'ι').replace(/\\kappa\b/g, 'κ').replace(/\\lambda\b/g, 'λ')
-    .replace(/\\mu\b/g, 'μ').replace(/\\nu\b/g, 'ν').replace(/\\xi\b/g, 'ξ')
-    .replace(/\\pi\b/g, 'π').replace(/\\rho\b/g, 'ρ').replace(/\\sigma\b/g, 'σ')
-    .replace(/\\tau\b/g, 'τ').replace(/\\upsilon\b/g, 'υ')
-    .replace(/\\varphi\b/g, 'φ').replace(/\\phi\b/g, 'φ')
-    .replace(/\\chi\b/g, 'χ').replace(/\\psi\b/g, 'ψ').replace(/\\omega\b/g, 'ω')
-    // Greek — uppercase
-    .replace(/\\Gamma\b/g, 'Γ').replace(/\\Delta\b/g, 'Δ').replace(/\\Theta\b/g, 'Θ')
-    .replace(/\\Lambda\b/g, 'Λ').replace(/\\Xi\b/g, 'Ξ').replace(/\\Pi\b/g, 'Π')
-    .replace(/\\Sigma\b/g, 'Σ').replace(/\\Upsilon\b/g, 'Υ').replace(/\\Phi\b/g, 'Φ')
-    .replace(/\\Psi\b/g, 'Ψ').replace(/\\Omega\b/g, 'Ω')
-    // misc symbols
-    .replace(/\\infty\b/g, '∞').replace(/\\forall\b/g, '∀').replace(/\\exists\b/g, '∃')
-    .replace(/\\partial\b/g, '∂').replace(/\\nabla\b/g, '∇')
-    .replace(/\\angle\b/g, '∠').replace(/\\perp\b/g, '⊥').replace(/\\parallel\b/g, '∥')
-    .replace(/\\therefore\b/g, '∴').replace(/\\because\b/g, '∵')
-    // text/font wrappers
+    // × ÷ ± · are U+00D7/F7/B1/B7 — inside WinAnsi, safe to keep
+    .replace(/\\times\b/g, '\xD7').replace(/\\div\b/g, '\xF7')
+    .replace(/\\cdot\b/g, '\xB7').replace(/\\pm\b/g, '\xB1').replace(/\\mp\b/g, '-/+')
+    // ≤ ≥ ≠ ≈ ≡ are outside WinAnsi — use ASCII
+    .replace(/\\leq\b/g, '<=').replace(/\\geq\b/g, '>=')
+    .replace(/\\le\b/g, '<=').replace(/\\ge\b/g, '>=')
+    .replace(/\\neq\b/g, '!=').replace(/\\ne\b/g, '!=')
+    .replace(/\\approx\b/g, '~=').replace(/\\equiv\b/g, '==').replace(/\\sim\b/g, '~')
+    // arrows — all outside WinAnsi
+    .replace(/\\Rightarrow\b/g, '=>').replace(/\\Leftarrow\b/g, '<=')
+    .replace(/\\Leftrightarrow\b/g, '<=>').replace(/\\rightarrow\b/g, '->')
+    .replace(/\\leftarrow\b/g, '<-').replace(/\\leftrightarrow\b/g, '<->')
+    .replace(/\\to\b/g, '->').replace(/\\mapsto\b/g, '|->')
+    // Greek — ASCII names (all Greek code-points outside WinAnsi)
+    .replace(/\\alpha\b/g, 'alpha').replace(/\\beta\b/g, 'beta').replace(/\\gamma\b/g, 'gamma')
+    .replace(/\\delta\b/g, 'delta').replace(/\\varepsilon\b/g, 'eps').replace(/\\epsilon\b/g, 'eps')
+    .replace(/\\zeta\b/g, 'zeta').replace(/\\eta\b/g, 'eta')
+    .replace(/\\vartheta\b/g, 'theta').replace(/\\theta\b/g, 'theta')
+    .replace(/\\iota\b/g, 'iota').replace(/\\kappa\b/g, 'kappa').replace(/\\lambda\b/g, 'lambda')
+    .replace(/\\mu\b/g, 'mu').replace(/\\nu\b/g, 'nu').replace(/\\xi\b/g, 'xi')
+    .replace(/\\pi\b/g, 'pi').replace(/\\rho\b/g, 'rho').replace(/\\sigma\b/g, 'sigma')
+    .replace(/\\tau\b/g, 'tau').replace(/\\upsilon\b/g, 'upsilon')
+    .replace(/\\varphi\b/g, 'phi').replace(/\\phi\b/g, 'phi')
+    .replace(/\\chi\b/g, 'chi').replace(/\\psi\b/g, 'psi').replace(/\\omega\b/g, 'omega')
+    // Greek uppercase
+    .replace(/\\Gamma\b/g, 'Gamma').replace(/\\Delta\b/g, 'Delta').replace(/\\Theta\b/g, 'Theta')
+    .replace(/\\Lambda\b/g, 'Lambda').replace(/\\Xi\b/g, 'Xi').replace(/\\Pi\b/g, 'Pi')
+    .replace(/\\Sigma\b/g, 'Sigma').replace(/\\Upsilon\b/g, 'Upsilon').replace(/\\Phi\b/g, 'Phi')
+    .replace(/\\Psi\b/g, 'Psi').replace(/\\Omega\b/g, 'Omega')
+    // misc symbols — all outside WinAnsi
+    .replace(/\\infty\b/g, 'inf').replace(/\\forall\b/g, 'for all').replace(/\\exists\b/g, 'exists')
+    .replace(/\\partial\b/g, 'd').replace(/\\nabla\b/g, 'del')
+    .replace(/\\angle\b/g, 'angle').replace(/\\perp\b/g, '_|_').replace(/\\parallel\b/g, '||')
+    .replace(/\\therefore\b/g, ':.').replace(/\\because\b/g, 'because')
+    // text / font wrappers
     .replace(/\\(?:text|mathrm|mathbf|mathit|textbf|textit)\{([^}]*)\}/g, '$1')
     // escaped braces and pipes
     .replace(/\\{/g, '{').replace(/\\}/g, '}')
     .replace(/\\\|/g, '|').replace(/\\lvert\b/g, '|').replace(/\\rvert\b/g, '|')
-    .replace(/\\lVert\b/g, '‖').replace(/\\rVert\b/g, '‖')
-    // remove remaining unknown commands and bare braces
+    .replace(/\\lVert\b/g, '||').replace(/\\rVert\b/g, '||')
+    // strip any remaining unknown commands, then bare braces
     .replace(/\\[a-zA-Z]+[*]?/g, '').replace(/[{}]/g, '')
     .replace(/\s+/g, ' ').trim()
 }
@@ -202,7 +221,6 @@ function drawStatBoxes(doc, y, exam) {
 
 // ── Students table (top or bottom) ───────────────────────────
 function studentsTable(doc, autoTable, students, startY, title, rankOffset = 1) {
-  const maxM = students[0]?.maxM ?? 0
   autoTable(doc, {
     startY,
     margin: { left: 14, right: 14 },
@@ -245,6 +263,7 @@ function questionsTable(doc, autoTable, items, startY, title, type) {
   autoTable(doc, {
     startY,
     margin: { left: 14, right: 14 },
+    showHead: 'firstPage',
     head: [
       [{ content: title, colSpan: 5, styles: { halign: 'left', fillColor: hdrColor, textColor: C.white, fontStyle: 'bold', fontSize: 8 } }],
       ['Q#', 'Chapter', 'Subtopic', isWrong ? 'Wrong' : 'Skipped', 'Rate'],
@@ -469,7 +488,7 @@ export async function downloadExamPdf(exam) {
   const bottom = getExamBottomStudents(exam, 5)
 
   // Left table: Top 5
-  studentsTable(doc, autoTable, top, y, '🏆 Top 5 Students')
+  studentsTable(doc, autoTable, top, y, 'Top 5 Students')
   const leftY = doc.lastAutoTable.finalY
 
   // Right table: Bottom 5 — placed to the right of top table
@@ -478,7 +497,7 @@ export async function downloadExamPdf(exam) {
     startY: y,
     margin: { left: 14 + halfW, right: 14 },
     head: [
-      [{ content: '⚠️ Bottom 5 Students', colSpan: 4, styles: { halign: 'left', fillColor: C.danger, textColor: C.white, fontStyle: 'bold', fontSize: 8 } }],
+      [{ content: 'Bottom 5 Students', colSpan: 4, styles: { halign: 'left', fillColor: C.danger, textColor: C.white, fontStyle: 'bold', fontSize: 8 } }],
       ['#', 'Student', 'Score', '%'],
     ],
     body: bottom.map((s, i) => [
@@ -513,19 +532,19 @@ export async function downloadExamPdf(exam) {
   if (wrong.length) {
     y = ensureSpace(doc, y, 50)
     y = sectionLabel(doc, y, 'Most Challenging Questions — All Students')
-    y = questionsTable(doc, autoTable, wrong, y, '❌ Top 5 Most Wrong Questions', 'wrong') + 6
+    y = questionsTable(doc, autoTable, wrong, y, 'Top 5 Most Wrong Questions', 'wrong') + 6
     y = questionDetailCards(doc, wrong, y, 'wrong') + 4
   }
 
   if (skipped.length) {
     y = ensureSpace(doc, y, 50)
     if (!wrong.length) y = sectionLabel(doc, y, 'Most Challenging Questions — All Students')
-    y = questionsTable(doc, autoTable, skipped, y, '⬜ Top 5 Most Skipped Questions', 'skipped') + 6
+    y = questionsTable(doc, autoTable, skipped, y, 'Top 5 Most Skipped Questions', 'skipped') + 6
     y = questionDetailCards(doc, skipped, y, 'skipped') + 4
   }
 
   // ── Toppers section (questions only, no list) ─────────────
-  const { toppers, names, count, cutoffScore } = getExamToppers(exam, 0.25)
+  const { names, count, cutoffScore } = getExamToppers(exam, 0.25)
   const cutoffPct = maxM > 0 ? Math.round(cutoffScore / maxM * 100) : 0
   const tWrong    = getExamWrongQuestions(exam, names, 5)
   const tSkipped  = getExamSkippedQuestions(exam, names, 5)
@@ -535,12 +554,12 @@ export async function downloadExamPdf(exam) {
     y = sectionLabel(doc, y, `Topper Analysis — Top 25% (${count} students · cutoff ≥ ${cutoffScore}, ${cutoffPct}%)`)
 
     if (tWrong.length) {
-      y = questionsTable(doc, autoTable, tWrong, y, '❌ Wrong Questions Among Toppers', 'wrong') + 6
+      y = questionsTable(doc, autoTable, tWrong, y, 'Wrong Questions Among Toppers', 'wrong') + 6
       y = questionDetailCards(doc, tWrong, y, 'wrong') + 4
     }
     if (tSkipped.length) {
       y = ensureSpace(doc, y, 45)
-      y = questionsTable(doc, autoTable, tSkipped, y, '⬜ Skipped Questions Among Toppers', 'skipped') + 6
+      y = questionsTable(doc, autoTable, tSkipped, y, 'Skipped Questions Among Toppers', 'skipped') + 6
       y = questionDetailCards(doc, tSkipped, y, 'skipped') + 4
     }
   }

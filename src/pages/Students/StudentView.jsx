@@ -31,15 +31,32 @@ export default function StudentView({ name }) {
   const profile = studentProfiles[name] ||
     Object.values(studentProfiles).find(p => p.name?.toLowerCase() === name.toLowerCase())
 
+  // Normalize variant names to canonical name so all analytics use a single key.
+  // Exam records store the name as uploaded; variants are linked later via addNameVariant.
+  const allNames = new Set([name, ...(profile?.nameVariants || [])])
+  const normalizedExams = allNames.size > 1
+    ? exams.map(exam => ({
+        ...exam,
+        students: exam.students.map(s =>
+          allNames.has(s.name) && s.name !== name ? { ...s, name } : s
+        ),
+      }))
+    : exams
+
   // All exam appearances for this student
-  const allExamData = getStudentExams(name, exams)
+  const allExamData = getStudentExams(name, normalizedExams)
 
   // Filter to exams on/after the student's registration date (no-op when regDate absent)
   const validExamData  = filterValidExams(allExamData, profile?.regDate)
   const excludedCount  = allExamData.length - validExamData.length
 
   if (!allExamData.length) {
-    return <EmptyState icon="🔍" title="No data" sub={`No exam records found for "${name}"`} />
+    return (
+      <>
+        {profile && <ProfileCard name={name} profile={profile} />}
+        <EmptyState icon="📋" title="No exam records" sub={`${name} is registered but hasn't sat any exams yet`} />
+      </>
+    )
   }
 
   // Subjects derived from valid exams only — pre-registration subjects don't appear.

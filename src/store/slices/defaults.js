@@ -12,6 +12,15 @@ export const DEFAULTS = {
   apiKey: '',
   lastDeployedAt: null,
   hydrated: !import.meta.env.DEV,
+  syllabusPrograms: [],
+  syllabusBatches: [],
+  syllabusBatchBranches: {},
+  batchProgramAssignments: {},
+  batchSyllabusProgress: {},
+  timetableTeachers: [],
+  timetableMappings: [],
+  timetables: [],
+  whatsappSendHistory: {},
 }
 
 // Merge saved data with defaults (handles missing keys from old versions)
@@ -22,8 +31,19 @@ export function hydrate() {
   return {
     ...DEFAULTS,
     ...safeFields,
-    savedInsights:     { ...DEFAULTS.savedInsights, ...saved.savedInsights },
-    ndaFreqBySubject:  migrateFreq(saved),
-    ndaMarksBySubject: migrateMarks(saved),
+    savedInsights:           { ...DEFAULTS.savedInsights, ...saved.savedInsights },
+    ndaFreqBySubject:        migrateFreq(saved),
+    ndaMarksBySubject:       migrateMarks(saved),
+    syllabusPrograms:        saved.syllabusPrograms || [],
+    // Migration: if syllabusBatches not stored yet, seed from existing assignment keys
+    syllabusBatches:         saved.syllabusBatches?.length
+                               ? saved.syllabusBatches
+                               : Object.keys(saved.batchProgramAssignments || {}),
+    syllabusBatchBranches:   saved.syllabusBatchBranches || {},
+    batchProgramAssignments: saved.batchProgramAssignments || {},
+    batchSyllabusProgress:   saved.batchSyllabusProgress || {},
+    timetableTeachers:       saved.timetableTeachers || [],
+    timetableMappings:       saved.timetableMappings || [],
+    timetables:              saved.timetables || [],
   }
 }

@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState, StatCard, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
-import { computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames } from '../../lib/analytics'
-import { getAllBatches } from '../../lib/matchStudents'
+import { computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames, getBatchOptions, getExamsForBatch } from '../../lib/analytics'
 import FrequencyTableEditor from './FrequencyTableEditor'
 
 export default function DashboardPage() {
@@ -35,12 +34,12 @@ export default function DashboardPage() {
     ? subjectFiltered
     : subjectFiltered.filter(e => e.branch === branchFilter)
 
-  // Batches visible after branch filter
-  const allBatches = [...new Set(branchFiltered.map(e => e.batch).filter(Boolean))]
+  // Batches visible after branch filter — derived from profile.batches[] (primary)
+  const allBatches = getBatchOptions(branchFiltered, studentProfiles)
 
   const batchFiltered = batchFilter === 'all'
     ? branchFiltered
-    : branchFiltered.filter(e => e.batch === batchFilter)
+    : getExamsForBatch(branchFiltered, studentProfiles, batchFilter)
 
   const filtered = filterVal === 'all'
     ? batchFiltered

@@ -2,13 +2,14 @@
 // Subject filter is now self-contained inside StudentView — no dropdown lives here.
 // These tests only cover the search + student selection behaviour.
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ── Mock store ────────────────────────────────────────────────────────────────
 
 const mockStore = {
   exams: [],
+  studentProfiles: {},
   activeStudent: null,
   setActiveStudent: vi.fn(),
 }
@@ -92,5 +93,27 @@ describe('StudentsPage — student selected', () => {
     renderPage()
     // The stub only exposes data-name; no data-subject attribute should be set
     expect(screen.getByTestId('student-view')).not.toHaveAttribute('data-subject')
+  })
+})
+
+// ── Variant names excluded from search ────────────────────────────────────────
+
+describe('StudentsPage — variant name filtering', () => {
+  it('excludes name variants from search results, showing only the primary name', () => {
+    const profile = { name: 'Swarup Yuvraj Karle', nameVariants: ['Swarup karle'], lwsId: 'L001',
+      branch: '', batches: [], mobile: '', parentMobiles: [], regDate: '', accountStatus: '', comingStatus: '' }
+    mockStore.studentProfiles = {
+      'Swarup Yuvraj Karle': profile,
+      'Swarup karle': profile,
+    }
+    setExams([makeExam('Swarup karle'), makeExam('Swarup Yuvraj Karle')])
+    renderPage()
+
+    const input = screen.getByPlaceholderText(/search student name/i)
+    fireEvent.change(input, { target: { value: 'Swarup' } })
+    fireEvent.focus(input)
+
+    expect(screen.getByText('Swarup Yuvraj Karle')).toBeInTheDocument()
+    expect(screen.queryByText('Swarup karle')).not.toBeInTheDocument()
   })
 })

@@ -42,6 +42,7 @@ vi.mock('../UnattemptedAudit', () => ({
 }))
 
 vi.mock('../../../lib/ndaFreq', () => ({
+  NDA_FREQ_BY_SUBJECT: {},
   getFreqForSubject: () => [],
 }))
 
@@ -89,7 +90,7 @@ describe('StudentView — empty state', () => {
   it('shows empty state when student has no exams', () => {
     setExams([])
     renderView()
-    expect(screen.getByText(/no data/i)).toBeInTheDocument()
+    expect(screen.getByText(/no exam records/i)).toBeInTheDocument()
   })
 
   it('does not render subject dropdown in empty state', () => {
@@ -288,6 +289,48 @@ describe('StudentView — chapter accordion scoped to subject filter', () => {
     const accordion = screen.getByTestId('chapter-accordion')
     expect(accordion.dataset.chapters).toContain('Optics')
     expect(accordion.dataset.chapters).not.toContain('Algebra')
+  })
+})
+
+// ── Name variant normalization ────────────────────────────────────────────────
+
+describe('StudentView — name variant normalization', () => {
+  it('shows exam records stored under a variant name when the canonical name is passed', () => {
+    const profile = {
+      name: 'Swarup Yuvraj Karle', nameVariants: ['Swarup karle'],
+      lwsId: 'L001', branch: '', batches: [], mobile: '',
+      parentMobiles: [], regDate: '', accountStatus: '', comingStatus: '',
+    }
+    mockStore.studentProfiles = {
+      'Swarup Yuvraj Karle': profile,
+      'Swarup karle': profile,
+    }
+    setExams([makeExam({ studentName: 'Swarup karle', examName: 'Mock 1' })])
+    renderView('Swarup Yuvraj Karle')
+    expect(screen.queryByText(/no exam records/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Mock 1')).toBeInTheDocument()
+  })
+
+  it('combines exams across multiple variant names', () => {
+    const profile = {
+      name: 'Swarup Yuvraj Karle', nameVariants: ['Swarup karle', 'S Karle'],
+      lwsId: 'L001', branch: '', batches: [], mobile: '',
+      parentMobiles: [], regDate: '', accountStatus: '', comingStatus: '',
+    }
+    mockStore.studentProfiles = {
+      'Swarup Yuvraj Karle': profile,
+      'Swarup karle': profile,
+      'S Karle': profile,
+    }
+    setExams([
+      makeExam({ studentName: 'Swarup karle', examName: 'Mock 1' }),
+      makeExam({ studentName: 'S Karle',      examName: 'Mock 2' }),
+    ])
+    renderView('Swarup Yuvraj Karle')
+    expect(screen.getByText('Mock 1')).toBeInTheDocument()
+    expect(screen.getByText('Mock 2')).toBeInTheDocument()
+    const card = screen.getByText('Exams Taken').closest('.stat-card')
+    expect(within(card).getByText('2')).toBeInTheDocument()
   })
 })
 

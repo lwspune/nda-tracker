@@ -24,15 +24,18 @@ function accountStatusBadge(status) {
 
 // ── Profile Card ──────────────────────────────────────────────
 export function ProfileCard({ name, profile }) {
-  const mode                   = useMode()
-  const studentProfiles        = useStore(s => s.studentProfiles)
-  const updateStudentBranchBatch = useStore(s => s.updateStudentBranchBatch)
+  const mode                       = useMode()
+  const studentProfiles            = useStore(s => s.studentProfiles)
+  const updateStudentBranchBatch   = useStore(s => s.updateStudentBranchBatch)
+  const updateStudentParentMobiles = useStore(s => s.updateStudentParentMobiles)
 
-  const [isEditing, setIsEditing]     = useState(false)
-  const [editBranch, setEditBranch]   = useState('')
-  const [editBatches, setEditBatches] = useState([])
-  const [batchInput, setBatchInput]   = useState('')
-  const [saving, setSaving]           = useState(false)
+  const [isEditing, setIsEditing]           = useState(false)
+  const [editBranch, setEditBranch]         = useState('')
+  const [editBatches, setEditBatches]       = useState([])
+  const [batchInput, setBatchInput]         = useState('')
+  const [editParentMobiles, setEditParentMobiles] = useState([])
+  const [parentInput, setParentInput]       = useState('')
+  const [saving, setSaving]                 = useState(false)
 
   const statusBadge  = accountStatusBadge(profile.accountStatus)
   const regFormatted = fmtDate(profile.regDate)
@@ -46,6 +49,8 @@ export function ProfileCard({ name, profile }) {
     setEditBranch(profile.branch || '')
     setEditBatches([...(profile.batches || [])])
     setBatchInput('')
+    setEditParentMobiles([...(profile.parentMobiles || [])])
+    setParentInput('')
     setIsEditing(true)
   }
 
@@ -63,12 +68,25 @@ export function ProfileCard({ name, profile }) {
     setEditBatches(bs => bs.filter(x => x !== b))
   }
 
+  function addParentMobile() {
+    const val = parentInput.trim().replace(/\D/g, '')
+    if (val && !editParentMobiles.includes(val)) setEditParentMobiles(m => [...m, val])
+    setParentInput('')
+  }
+
+  function removeParentMobile(m) {
+    setEditParentMobiles(ms => ms.filter(x => x !== m))
+  }
+
   async function saveEdit() {
     setSaving(true)
-    await updateStudentBranchBatch(profile.lwsId || null, name, {
-      branch: editBranch.trim(),
-      batches: editBatches,
-    })
+    await Promise.all([
+      updateStudentBranchBatch(profile.lwsId || null, name, {
+        branch: editBranch.trim(),
+        batches: editBatches,
+      }),
+      updateStudentParentMobiles(profile.lwsId || null, name, editParentMobiles),
+    ])
     setSaving(false)
     setIsEditing(false)
   }
@@ -145,6 +163,33 @@ export function ProfileCard({ name, profile }) {
               </div>
             </div>
 
+            {/* Parent Mobiles */}
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-1">Parent Mobiles</div>
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {editParentMobiles.map((m, i) => (
+                  <span key={i} className="flex items-center gap-1 bg-surface-2 border border-border
+                                           text-[11px] font-mono px-2 py-0.5 rounded">
+                    {m}
+                    <button onClick={() => removeParentMobile(m)}
+                            className="text-ink-3 hover:text-danger leading-none ml-0.5">×</button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <input
+                  type="tel"
+                  value={parentInput}
+                  onChange={e => setParentInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addParentMobile())}
+                  placeholder="Add mobile number…"
+                  className="form-input text-[12px] py-1 flex-1"
+                />
+                <button onClick={addParentMobile}
+                        className="btn btn-secondary btn-sm text-[11px] px-2">+ Add</button>
+              </div>
+            </div>
+
             {/* Save / Cancel */}
             <div className="flex gap-2">
               <button
@@ -182,6 +227,16 @@ export function ProfileCard({ name, profile }) {
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-1">Mobile</div>
             <span>{profile.mobile}</span>
+          </div>
+        )}
+        {profile.parentMobiles?.length > 0 && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-1">Parent Mobiles</div>
+            <div className="flex flex-wrap gap-1">
+              {profile.parentMobiles.map((m, i) => (
+                <span key={i} className="bg-surface-2 border border-border text-[11px] font-mono px-2 py-0.5 rounded">{m}</span>
+              ))}
+            </div>
           </div>
         )}
         {statusBadge && (

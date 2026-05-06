@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateTags, validateGatSubjects, getValidChapters, findClosest } from '../validateTags'
+import { validateTags, validateGatSubjects, getValidChapters } from '../validateTags'
 
 // ── validateGatSubjects ────────────────────────────────────────
 

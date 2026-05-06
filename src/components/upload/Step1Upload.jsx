@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { parseExcelFull, parseTagsFile } from '../../lib/excel'
-import { validateTags, getValidChapters, validateGatSubjects } from '../../lib/validateTags'
+import { validateTags, validateGatSubjects } from '../../lib/validateTags'
 import { detectBatch } from '../../lib/matchStudents'
 import { Alert, Spinner, DropZone } from '../ui'
 import ValidationIssuesPanel from './ValidationIssuesPanel'

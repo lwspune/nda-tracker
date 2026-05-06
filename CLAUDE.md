@@ -3,12 +3,12 @@
 ## Project overview
 
 A React + Vite faculty tool for LWS Pune to track NDA Maths exam performance.
-Three distinct runtime modes:
+Three runtime modes:
 
-- **Faculty mode** (`localhost` / LAN): full read-write access — upload exams, tag questions, generate AI insights. Data stored in `data/faculty-data.json` via a Vite dev plugin.
-- **Teacher portal** (GitHub Pages): read-only. Teachers log in with a shared password, which decrypts `db.json` client-side. Full view of all pages.
-- **Student portal** (GitHub Pages): read-only. Students log in with their mobile number (hashed SHA-256). Each student sees only their own data from a per-student JSON file.
-- **Demo mode** (GitHub Pages): public, no login. URL: `?demo=true`. NOT YET IMPLEMENTED — see memory `project_demo_mode.md`.
+- **Faculty** (`localhost` / LAN): full read-write. Data in `data/faculty-data.json` via Vite plugin.
+- **Teacher** (GitHub Pages): read-only, password login decrypts `db.json` client-side.
+- **Student** (GitHub Pages): read-only, mobile-number login, own data only.
+- **Demo** (`?demo=true`): NOT YET IMPLEMENTED — see memory `project_demo_mode.md`.
 
 ## Tech stack
 
@@ -19,230 +19,310 @@ Three distinct runtime modes:
 | Build | Vite 8 |
 | Testing | Vitest 4 + React Testing Library 16 + jsdom |
 | Excel parsing | xlsx (`src/lib/excel.js`) |
+| Excel export (styled) | xlsx-js-style (`src/pages/Timetable/TimetablePage.jsx`) |
 | Math rendering | KaTeX |
 | Deploy | GitHub Pages via `gh-pages` |
-| Python crypto | `cryptography` package (`pip install cryptography`) |
+| Python crypto | `cryptography` (`pip install cryptography`), `tzdata` (`pip install tzdata`) |
 
 ## Key commands
 
 ```bash
-npm run dev          # start dev server (faculty mode, data saved to disk)
-npm run build        # production build
-npm run test         # run test suite (Vitest)
-npm run test:watch   # run tests in watch mode
-npm run split        # python -X utf8 split_students.py (generates per-student JSON)
-npm run deploy       # split + build + push to GitHub Pages
-npm run lint         # ESLint
+npm run dev             # faculty mode, data saved to disk
+npm run test            # Vitest
+npm run test:watch
+npm run split           # python -X utf8 split_students.py
+npm run deploy          # split + build + gh-pages push
+npm run results:preview # dry-run email — writes preview_<name>.html (gitignored; delete after review)
+npm run results:email   # send result emails via Gmail
+npm run lint
 ```
 
 ## Slash commands
 
-| Command | File | Purpose |
-|---|---|---|
-| `/subtopic-analyse` | `.claude/commands/subtopic-analyse.md` | Scans `data/faculty-data.json` and reports near-duplicate subtopic names within each chapter. Read-only — run after bulk tag uploads. |
+| Command | Purpose |
+|---|---|
+| `/subtopic-analyse` | Near-duplicate subtopic names in `faculty-data.json`. Run after bulk tag uploads. |
 
 ---
 
 ## Architecture decisions
 
 ### Data persistence
-- **Dev**: `data/faculty-data.json` — written by the Vite `localDataPlugin` in `vite.config.js` via `POST /api/data`. Bypasses the 5 MB localStorage limit.
-- **Prod (student)**: localStorage — session token only (`SESSION_KEY`), expires after `SESSION_DAYS` days.
-- **Prod (teacher)**: sessionStorage — decrypted `db.json` stored under `TEACHER_SESSION_KEY`, cleared when tab closes. The plain-text password is never stored anywhere.
+- **Dev**: `data/faculty-data.json` via `POST /api/data` (Vite `localDataPlugin`). Bypasses 5 MB localStorage limit.
+- **Prod teacher**: sessionStorage (`TEACHER_SESSION_KEY`) — decrypted dataset only. Plain-text password never stored.
+- **Prod student**: localStorage — session token only (`SESSION_KEY`), expires after `SESSION_DAYS`.
 - `apiKey` is **never** persisted to disk or localStorage — memory only.
 
-### Mode detection
-`src/config.js` detects GitHub Pages by hostname. Any non-localhost hostname → `IS_READ_ONLY = true`.
-Mode is propagated app-wide via `ModeContext` (`src/context/ModeContext.jsx`). Use `useMode()` in components. Default is `'faculty'` so tests work without a Provider.
+### Mode detection & routing
+`src/config.js`: non-localhost hostname → `IS_READ_ONLY = true` (URL/routing only — never use for component visibility).
+`ModeContext` (`src/context/ModeContext.jsx`) propagates `'faculty' | 'teacher' | 'student'` app-wide. Default is `'faculty'` so tests work without a Provider. Always use `useMode()` in components.
 
-```
-'faculty'  — localhost / LAN, full read-write
-'teacher'  — GitHub Pages, password-authenticated, all pages read-only
-'student'  — GitHub Pages, mobile-authenticated, own data only
-```
+`src/App.jsx`: `teacherData` → `<TeacherPortal>`, `studentData` → `<StudentPortal>`, neither → `<LoginPage>`. Each portal sets `ModeContext`.
 
-`IS_READ_ONLY` is used only for URL base-path calculation and top-level routing — not for component-level visibility.
+**Hooks must be called before any early returns** — store is empty at first render in teacher mode; `loadRemoteData` fires after mount. All `useMemo` in Dashboard/Toppers is placed before early returns to prevent React error #310.
 
-### GitHub Pages login (`src/components/auth/LoginPage.jsx`)
-**Teacher tab:** fetches encrypted `db.json` → derives key from password → decrypts via Web Crypto API. Wrong password fails decryption. Decrypted dataset stored in `sessionStorage` (`TEACHER_SESSION_KEY`).
-
-**Student tab:** mobile → SHA-256 normalised → matched against `index.json` → per-student file fetched → session saved to `localStorage`.
-
-### Teacher portal routing (`src/App.jsx`)
-- `teacherData` → `<TeacherPortal>` (receives `data` prop, calls `loadRemoteData(data)` directly)
-- `studentData` → `<StudentPortal>`
-- Neither → `<LoginPage>`
-- Each portal wraps its tree with `<ModeContext.Provider value="teacher|student">`
-- **Hooks must be called before any early returns** — store starts empty in teacher mode; `loadRemoteData` fires after mount causing re-renders. All `useMemo` hooks in Dashboard/Toppers are placed before early returns to prevent React error #310.
+### Login (`src/components/auth/LoginPage.jsx`)
+- **Teacher**: password → PBKDF2 key → AES-256-GCM decrypt `db.json` → store in sessionStorage.
+- **Student**: mobile → SHA-256 → match `index.json` → fetch per-student file → store in localStorage.
+- `?mobile=XXXXXXXXXX` param pre-fills mobile input (used in result emails for one-click login).
 
 ### Student split script (`split_students.py`)
-Requires `pip install cryptography` only when `teacher_password.txt` exists.
+Outputs `public/data/index.json`, `public/data/students/<lws-id>.json`, `public/data/db.json`.
+- `lws_to_info` uses camelCase keys (`regDate`, `accountStatus`) from snake_case `students_db.json` fields.
+- PBKDF2 iteration count (`100_000`) **must stay in sync** with `LoginPage.jsx` (`decryptDb`).
 
-Reads `data/faculty-data.json` + `students_db.json`. Outputs:
-- `public/data/index.json` — login index (lwsId, name, mobileHash, file)
-- `public/data/students/<lws-id>.json` — per-student file with `profile`, `exams`, `ndaFreq`
-- `public/data/db.json` — AES-256-GCM encrypted when `teacher_password.txt` exists, else plain JSON
-
-Key implementation notes:
-- `lws_to_info` dict uses camelCase keys (`regDate`, `accountStatus`) — built from `students_db.json` snake_case fields (`registration_date`, `account_status`)
-- `npm run split` uses `python -X utf8` to handle emoji in print statements on Windows
-- PBKDF2 iteration count (`100_000`) must stay in sync with `LoginPage.jsx` (`decryptDb`)
-
-### Store structure (`src/store/useStore.js`)
-State keys: `exams`, `studentProfiles`, `savedInsights`, `ndaFreqBySubject`, `ndaMarksBySubject`, `costLog`, `apiKey`, `lastDeployedAt`, `hydrated`.
-All mutations call `get()._save()` immediately. Store is split into slices under `src/store/slices/`.
-
-- `loadStudentData(data)` — loads a single student's JSON file (student portal)
-- `loadRemoteData(data)` — loads the decrypted full dataset (teacher portal)
+### Store (`src/store/useStore.js`)
+State keys: `exams`, `studentProfiles`, `savedInsights`, `ndaFreqBySubject`, `ndaMarksBySubject`, `costLog`, `apiKey`, `lastDeployedAt`, `hydrated`, `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `whatsappSendHistory`.
+Slices under `src/store/slices/`. All mutations call `get()._save()` immediately.
+- `loadStudentData(data)` — student portal; `loadRemoteData(data)` — teacher portal.
+- `loadRemoteData` sets all six syllabus keys (`syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`) from the decrypted payload.
 
 ### Subject filtering
-Every exam has a `subject` field (one of the 11 subjects in `src/lib/ndaFreq.js`). Filters are **local state per page** — not in the store.
+Subject filter is **local state per page** — not in the store. Dashboard: subject → branch → batch → exam chain. Exams: sort + subject → branch → batch. StudentView: self-contained, shown when student has 2+ subjects.
 
-- **Dashboard**: subject → branch → batch → exam filter chain. Changing subject resets downstream selectors.
-- **Exams**: sort + subject → branch → batch filter chain in header. Subtitle shows `X of Y exams`. Branch/batch selects hidden when no data for current subject selection.
-- **StudentView**: self-contained subject filter — works in all three modes without prop threading. Shown only when student has 2+ subjects. Scopes all analytics to the selected subject.
-- Section order in StudentView: Stats → ProjectedScoreCard → Chapter Accordion → Exam History → Wrong Answer Audit → Unattempted Audit → Improvement Plan.
+### Batch filtering
+Batch dropdown options and filter logic use **`profile.batches[]` as primary** (app-assigned), with `exam.batch` as fallback only for exams where no student has a profile.
+- `getBatchOptions(exams, studentProfiles)` — builds dropdown options from profiles; falls back to `exam.batch` for unmatched exams.
+- `getExamsForBatch(exams, studentProfiles, batchName)` — returns exams where ≥1 student has `batchName` in their `profile.batches[]`; falls back to `exam.batch` when no student has a profile.
+- Both helpers live in `src/lib/analytics/filters.js` and are re-exported via `src/lib/analytics.js`.
+- Used by Dashboard, Exams, and Toppers pages. Do not revert to filtering on `exam.batch` directly.
 
-### Valid students & registration-date filtering
-- **Valid student**: has a `studentProfiles` entry with a non-empty `regDate`
-- **Valid exam** for a student: `exam.date >= profile.regDate`
-- Students without a `regDate` are excluded from class-level analytics
-- `accountStatus` is display-only — does not gate analytics
+### Valid students & regDate filtering
+Valid student = `studentProfiles` entry with non-empty `regDate`. Valid exam = `exam.date >= profile.regDate`. Students without `regDate` are excluded from class-level analytics. `accountStatus` is display-only.
+Analytics functions (`getAllStudents`, `computeChapterStats`, `getAtRisk`, `getHardestQuestions`, `getToppers`) accept optional `validNames: Set | null` (`null` = no filter).
 
-Key analytics API (in `src/lib/analytics/filters.js`):
-```js
-filterValidExams(studentExams, regDate)   // no-op when regDate is falsy
-getValidStudentNames(exams, studentProfiles)  // → Set<string> of registered student names
-```
-All class-level functions accept optional `validNames` param (`null` = no filter): `getAllStudents`, `computeChapterStats`, `getAtRisk`, `getHardestQuestions`, `getToppers`.
+### Students page search
+`src/pages/Students/index.jsx` builds the search list as a union of exam-appearing names **and** all `studentProfiles` names — so all 309+ registered students are searchable even if they have no exam records. **Only canonical (primary) names appear in search** — variant names (keys in `studentProfiles` where key ≠ `profile.name`) are filtered out before building the list. `StudentView` shows a profile card for students with no exams (early-return at `!allExamData.length` renders `<ProfileCard>` + empty state, not a blank screen).
 
-Key analytics API for GAT subject routing (in `src/lib/analytics/chapterStats.js`, `performance.js`):
-```js
-computeStudentChapterStats(name, exams, qSubject?)  // qSubject filters to matching q.subject; null=all
-computeWrongAudit(name, exams, qSubject?)           // pass-through to computeStudentChapterStats
-computeSkippedAudit(name, exams, qSubject?)         // pass-through to computeStudentChapterStats
-```
-`qSubject` only filters questions where `q.subject` is set (GAT questions). Questions with `q.subject=null` (non-GAT exams) are always included.
+**Name variant normalization in `StudentView`**: after the profile lookup, builds `allNames = Set([name, ...(profile?.nameVariants || [])])` and creates `normalizedExams` — a shallow in-memory copy where any student entry whose name is a known variant is renamed to the canonical name. All analytics (`getStudentExams`, `computeStudentChapterStats`, audits, etc.) then operate on the canonical name and find records regardless of which spelling appeared in the uploaded results. No-op when the student has no variants.
 
-Pre-registration exclusion banner in `StudentView` is hidden in student mode (`mode !== 'student'` guard).
+### Duplicate detection & name-variant linking (`src/lib/merge/`)
 
-### GAT & per-subject marks
-`ndaMarksBySubject` (store) holds NDA paper marks per subject. GAT total (600) is always derived — never stored or edited independently. `CONFIGURABLE_SUBJECTS` in `src/lib/ndaFreq.js` excludes GAT from the freq table editor.
+Six files under `src/lib/merge/`, re-exported as a flat API via `src/lib/mergeStudents.js`.
 
-For combined GAT mock uploads, tags file **must** include a `Subject` column per question.
+**Profile–profile dedup** (`deduplication.js`): `findDuplicateCandidates(snakeStudents, opts)` signals: Jaccard bigram similarity ≥ 0.75 (`name_similar`), all tokens of shorter name in longer name (`name_subset`, requires ≥ 2 tokens to avoid false positives on shared surnames), same mobile, same EIS. No `branchFilter` → flat cross-branch scan; specific `branchFilter` → within that branch only.
 
-### Chapter accordion (`src/pages/Students/ChapterAccordion.jsx`)
-Subtopics with no wrong answers and no skipped questions are hidden in all modes.
+**Exam-name scanning** (`deduplication.js`):
+- `getUnmatchedExamNames(exams, studentProfiles)` — exam names not yet indexed in `studentProfiles` (includes canonical name + all name variants as keys).
+- `findExamNameCandidates(unmatchedNames, snakeProfiles)` — same signals, returns `{ examName, profile, score, reasons }[]`.
+
+**Link action** (`studentSlice.js`): `addNameVariant(lwsId, variantName)` — appends exam name to `name_variants[]` in `students_db.json` and immediately re-indexes `studentProfiles` in memory.
+
+**UI** (`FindDuplicatesTab.jsx`): combined scan runs both passes. Profile–profile pairs → merge (choose primary). Exam-name–profile pairs → "Link as variant" button (directional, exam name always goes into the profile). `ExamNameCard` uses dashed border + purple "exam name" badge + exam count. `pairKey` for exam pairs: `'exam:' + examName + '|' + lws_id`.
+
+### WhatsApp Results flow
+`💬 WhatsApp Results` button (faculty, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).
+
+**Pre-send modal** (`WhatsAppPreviewModal.jsx`): rows built from `exam.students` + `studentProfiles`; branch dropdown (derived from `studentProfiles`), mobile + parent mobiles editable inline. Footer has optional "redirect all to" test field. On "Confirm Send": calls `bulkUpdateStudentContacts(edits)` (single fetch→patch→write to `students_db.json`), then POSTs `{ examName, redirectTo?, students? }` to `/api/send-whatsapp`.
+
+**Send history** (`whatsappSendHistory` store key, `{ [examId]: { sentAt, sent, skipped, failedNames[] } }`): persisted to `faculty-data.json`. Button shows `💬 Sent N✓ M✗ · Resend` after first send. `failedNames[]` is parsed from log lines client-side (`SKIP Name —` and `FAIL → Name (student`).
+
+**Resend scope toggle**: when `failedNames` is non-null (previous send exists), modal shows amber banner with radio: "Failed & skipped only (N)" (default) / "All students". Scope controls the `students[]` array forwarded to `--students` in the script.
+
+**`--students` filter** in `send_results_whatsapp.py`: comma-separated names, case-insensitive; filters `results` list before the send loop. Forwarded from POST body by the Vite endpoint.
+
+### Student profiles & parent mobiles
+`importStudentsDB` maps `students_db.json` snake_case fields to camelCase profile keys. Profile shape includes `parentMobiles: string[]` (from `parent_mobiles[]` in `students_db.json`).
+
+**Population**: Student import XLS `Guardian No.` column is parsed as `guardian_mobile` in `parseStudentsExcel`. `mergeStudents` appends it to `parent_mobiles[]` if not already present — merge never overwrites, so manually-added numbers survive re-import. New students get `parent_mobiles: [guardian_mobile]` on first import.
+
+**Edit UI**: `ProfileCard` (`studentViewComponents.jsx`) shows parent mobiles as pills and lets faculty add/remove numbers (digits-only normalisation on input). Saved via `updateStudentParentMobiles(lwsId, name, parentMobiles)` in `studentSlice.js`, alongside branch/batch in one Save action.
+
+`split_students.py`'s `lws_to_info` carries `parent_mobiles` for use by `send_results_whatsapp.py`.
+
+### GAT subject routing
+`computeStudentChapterStats / computeWrongAudit / computeSkippedAudit` accept `qSubject?` — filters questions where `q.subject` matches. Questions with `q.subject=null` (non-GAT exams) are always included.
+GAT total (600) is always derived — never stored. `CONFIGURABLE_SUBJECTS` excludes GAT from the freq editor. Tags file **must** include a `Subject` column per question for combined GAT mocks.
+
+### Syllabus Tracker (`src/pages/Syllabus/`)
+Tracks teaching progress per batch, independent of exam data.
+
+**Data model**: `syllabusPrograms` — `{ id, name, trackingColumns[], subjects[{ id, name, chapters[{ id, name, group }] }] }`. `syllabusBatches` — `string[]` (user-managed, independent of exam batches). `syllabusBatchBranches` — `{ batchName: branchName }` (optional per-batch branch tag). `batchProgramAssignments` — `{ batchName: [programId] }`. `batchSyllabusProgress` — `{ batchName: { programId: { subjectId: { chapterId: { col: status } } } } }`. `batchChapterTimelines` — `{ batchName: { programId: { subjectId: { chapterId: "YYYY-MM" } } } }` — per-batch scheduled month for each chapter.
+
+**Status cycle**: `null → 'In Progress' → 'Done' → null` (faculty only). Seed data in `src/lib/syllabusSeed.js` (generated by `generate_syllabus_seed.py`) auto-loaded when `syllabusPrograms` is empty.
+
+**Chapter timeline**: `setChapterTimeline(batchName, programId, subjectId, chapterId, "YYYY-MM")` / `getChapterTimeline(...)` in `syllabusSlice.js`. Displayed in `SubjectAccordion` as a fixed "Timeline" column (before tracking columns) showing `"Jun 2026"` format. Faculty clicks cell → inline `<input type="month">`; teacher sees read-only. `clearSubjectProgress` does NOT clear timelines — resetting tracking status keeps the planned schedule. Timeline is batch-level (different batches may have different schedules for the same chapter).
+
+**Batch tabs** come from `syllabusBatches` — standalone list independent of `exams[].batch` or `studentProfiles[].batches`. Faculty can add, rename, and delete batches from the tab bar. `AssignProgramsModal` selects from this list only (no inline batch creation). Migration: on first load, if `syllabusBatches` is empty, seeded from `Object.keys(batchProgramAssignments)`. Chapters support optional `group` string for section headers.
+
+**Branch filter**: branch pills above batch tabs are sourced from `timetables[].branch` (same source as TimetablePage/ExamScheduleView). `syllabusBatchBranches` maps batch names to branches — set via `setSyllabusBatchBranch(batchName, branch)` or the ⋯ menu "Set branch" option. When adding a batch with a branch filter active, the batch is auto-tagged to that branch.
+
+Syllabus batch mutations: `addSyllabusBatch`, `renameSyllabusBatch` (cascades to assignments + progress + `syllabusBatchBranches` + `batchChapterTimelines` keys), `deleteSyllabusBatch` (cascades all four) — all in `syllabusSlice.js`. `deleteProgram`, `deleteSubject`, `deleteChapter` also cascade to `batchChapterTimelines`.
+
+### Timetable (`src/pages/Timetable/`)
+CRUD for branch/batch timetables: time slots, a Mon–Sat grid of cells (class, break, or full-row span), subject-teacher mappings, and a batchwise exam schedule.
+
+**Data model**:
+- `timetableTeachers` — `{ id, name, email }`
+- `timetableMappings` — `{ id, label, subject, teacherId }`
+- `timetables` — `{ id, branch, batchName, timeSlots[{ id, startTime, endTime }], grid: { [slotId]: { [day]: { type, mappingId|label } | null, __span? } } }`
+- `examSchedules` — `{ id, date, startTime, endTime, subject, chapter, teacherId, branch, batchName, status }`. `status` cycles `Planned → Completed → Cancelled → Planned` (faculty only). `branch`/`batchName` come from existing `timetables[]` entries — not from syllabus batches or exam batches.
+
+**Teacher email**: stored on `timetableTeachers[].email`. `updateTimetableTeacher(id, patch)` accepts `{ name?, email? }` — not a bare string. Teachers without email are skipped by `send_schedule.py`. Deleting a teacher cascades: nulls `teacherId` on both `timetableMappings` and `examSchedules`.
+
+**Schedule emails**: `send_schedule.py` reads `faculty-data.json` and sends HTML email via Gmail SMTP. Modes: `--weekly` (next Mon–Sat, appends "Upcoming Exams This Week" section); `--daily` (tomorrow, Sat → Mon); `--exam-reminder N` (exams N days from today, N=1 or 2). Triggered from the UI via `POST /api/send-schedule` (`vite.config.js`). `SendScheduleModal` handles all three modes.
+
+**Excel export**: `downloadTimetableExcel` uses `xlsx-js-style` (not `xlsx`) to produce a styled workbook — Times New Roman font, bold title row (merged, 13 pt), bold headers and time column (10–11 pt), thin black borders on all cells, and explicit row heights. Do not revert this import to `xlsx` (the community edition has no styling API).
+
+**Views**: "Student View" (timetable grid per branch/batch, PNG + Excel export), "Teacher Schedule" (all slots for a selected teacher, clash detection), and "Exam Schedule" (batchwise exam list with branch-pill / batch-underline-tab filter identical to Student View, status badges, reminder email buttons).
 
 ### Mode-conditional visibility
-Use `useMode()` — not `IS_READ_ONLY` — for per-feature visibility in components.
+Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 
 | Feature | Faculty | Teacher | Student |
 |---|---|---|---|
-| Add / delete exams | ✓ | — | — |
-| Re-upload results / tags | ✓ | — | — |
-| Edit questions | ✓ | — | — |
-| Edit student branch/batch (ProfileCard) | ✓ | — | — |
+| Add/delete exams, re-upload, edit questions | ✓ | — | — |
+| WhatsApp Results button | ✓ | — | — |
+| Email Results button | hidden | — | — |
+| Edit student branch/batch | ✓ | — | — |
+| Syllabus Tracker (edit) | ✓ | — | — |
 | ProjectedScoreCard | ✓ | ✓ | — |
-| WrongAnswerAudit | ✓ | ✓ | ✓ |
-| UnattemptedAudit | ✓ | ✓ | ✓ |
+| WrongAnswerAudit / UnattemptedAudit | ✓ | ✓ | ✓ |
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |
-| Insights page | ✓ | — | — |
-| API Costs page | ✓ | — | — |
+| Syllabus Tracker (view) | ✓ | ✓ | — |
+| Insights / API Costs pages | ✓ | — | — |
+| Timetable (edit cells, add slots) | ✓ | — | — |
+| Send Schedule email button | ✓ | — | — |
+| Exam Schedule (add/edit/delete, status cycle, send reminders) | ✓ | — | — |
+| Exam Schedule (view) | ✓ | ✓ | — |
 | Sidebar | ✓ | ✓ | — |
 
 ---
 
 ## Excel upload format
 
-**Results file** (from Evalbee):
-- Required: `Name`, `Total Marks`, `Correct Answers`, `Incorrect Answers`
-- Per-question: `Q N Marks`, `Q N Options`
-- Note: The results file has NO per-question subject info — the `Subject 1`, `Subject 2` columns are aggregate score totals, not per-question tags.
+**Results** (Evalbee): `Name`, `Total Marks`, `Correct Answers`, `Incorrect Answers`, `Q N Marks`, `Q N Options`. The `Subject 1/2` columns are aggregate totals — no per-question subject info.
 
-**Tags file:**
-- Required: `Q` (or `Question#`), `Chapter`
-- Optional: `Subtopic`, `Question`, `OptionA`–`OptionD`, `Answer`, `Solution`, `Difficulty`
-- **GAT combined exams**: `Subject` column per question is **required**. Without it, all 150 questions are unroutable to their subjects.
+**Tags**: required `Q` (or `Question#`), `Chapter`. Optional: `Subtopic`, `Question`, `OptionA–D`, `Answer`, `Solution`, `Difficulty`. **GAT combined exams**: `Subject` column per question is required — without it all 150 Qs are unroutable.
+
+**Student import** (same XLS format as the Student Search List export): row 0 = title, row 1 = headers, row 2+ = data. Key columns: `RegistrationNo.`, `Name`, `Mobile No`, `Email`, `Guardian No.`, `Batch`, `Coming Status`, `Account Status`, `RegistrationDate`, `Quit Date`. `Guardian No.` is merged into `parent_mobiles[]` (see Student profiles section above).
 
 ---
 
-## Important files
+## Key files
 
 | File | Purpose |
 |---|---|
-| `src/config.js` | Mode detection (`IS_READ_ONLY`), URL constants, session keys |
-| `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` hook |
+| `src/config.js` | Mode detection, URL constants, session keys |
+| `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler |
 | `src/store/persist.js` | Disk (dev) / localStorage (prod) read-write |
-| `src/components/auth/LoginPage.jsx` | Unified teacher + student login; AES-GCM decryption |
-| `src/components/upload/UploadModal.jsx` | 4-step modal for adding a new exam |
-| `src/components/upload/ReuploadResultsModal.jsx` | Replace student scores for an existing exam |
-| `src/components/upload/ReuploadTagsModal.jsx` | Replace tag metadata for an existing exam |
-| `src/lib/excel.js` | Excel parsing for results, tags, and student import files |
-| `src/lib/mergeStudents.js` | Student import merge + roll-number enrichment (facade) |
-| `src/lib/analytics.js` | Exam analytics calculations (facade) |
-| `src/lib/ndaFreq.js` | NDA topic frequency data + `SUBJECTS` + `CONFIGURABLE_SUBJECTS` + `syncFreqChapters` |
-| `src/lib/examPdf.js` | Client-side PDF export: `downloadExamPdf(exam)` — uses jsPDF + jspdf-autotable (dynamic import); renders header, stat boxes, top/bottom students, wrong/skipped questions with full question cards (LaTeX stripped to Unicode), topper analysis, full ranked student table |
-| `src/lib/matchStudents.js` | Fuzzy name matching between exam names and student profiles |
-| `src/lib/validateTags.js` | Tags file validation + `validateGatSubjects` for GAT combined exams |
+| `src/store/slices/syllabusSlice.js` | Syllabus CRUD + progress cycle |
+| `src/store/slices/timetableSlice.js` | Timetable, slot, mapping, teacher CRUD |
+| `src/pages/Timetable/` | TimetablePage, TimetableGrid, ExamScheduleView, AddExamScheduleModal, Edit/Add modals, SendScheduleModal |
+| `src/pages/Exams/WhatsAppPreviewModal.jsx` | Pre-send review modal: editable student table (branch dropdown, mobile, parent mobiles), scope toggle for resend, test redirect-to field |
+| `src/pages/Exams/WhatsAppResultsModal.jsx` | Post-send log modal — sent/skipped counts + per-line colour-coded log |
+| `src/components/auth/LoginPage.jsx` | Teacher + student login; AES-GCM decryption |
+| `src/components/upload/UploadModal.jsx` | 4-step add-exam modal |
+| `src/lib/excel.js` | Excel parsing (results, tags, student import) |
+| `src/lib/analytics.js` | Analytics facade |
+| `src/lib/ndaFreq.js` | `SUBJECTS`, `CONFIGURABLE_SUBJECTS`, `syncFreqChapters` |
+| `src/lib/examPdf.js` | `downloadExamPdf(exam)` — jsPDF exam report; `stripLatex()` converts LaTeX → ASCII for WinAnsi-safe rendering |
+| `src/lib/studentReportPdf.js` | `downloadStudentReportsPdf(exam)` — per-student A4 PDF |
+| `src/lib/validateTags.js` | Tags + GAT subject validation |
+| `src/lib/syllabusSeed.js` | Seed programs (generated by `generate_syllabus_seed.py`) |
 | `src/lib/persistence.js` | `exportDB`, `importDB`, `migrateMarks` |
-| `src/pages/Exams/ExamInsightsPanel.jsx` | Per-exam drill-down: top/bottom students, wrong/skipped Qs, toppers tab |
-| `src/pages/Students/ExamHistoryTable.jsx` | Paginated exam history (5/page, newest first) + per-exam wrong/skipped breakdown |
-| `src/pages/Students/ManageBatchBranchModal.jsx` | Rename/bulk-assign/dedup batches & branches (faculty only) |
-| `src/components/students/ImportStudentsModal.jsx` | 4-step EIS Excel import modal |
-| `split_students.py` | Pre-deploy: generates per-student files + encrypted db.json |
-| `tests/test_split.py` | pytest tests for split_students.py |
-| `vite.config.js` | Vite config + `localDataPlugin` + Vitest config |
-| `data/faculty-data.json` | Primary data store in dev (gitignored) |
-| `students_db.json` | Student roster with mobile numbers (gitignored — sensitive) |
-| `teacher_password.txt` | Teacher password for db.json encryption (gitignored — sensitive) |
-| `public/data/` | Generated output for GitHub Pages |
+| `src/lib/mergeStudents.js` | Re-export barrel for `src/lib/merge/` (dedup, record merge, roll enrichment) |
+| `src/lib/merge/deduplication.js` | `findDuplicateCandidates`, `getUnmatchedExamNames`, `findExamNameCandidates` |
+| `src/lib/merge/recordMerge.js` | `mergeStudentRecords` — merges two profile records, primary wins on conflicts |
+| `src/store/slices/studentSlice.js` | `importStudentsDB`, `addNameVariant`, `mergeStudentProfiles`, `bulkUpdateStudentContacts`, branch/batch/mobile updates |
+| `src/pages/Students/ManageBatchBranchModal.jsx` | Rename / Bulk Assign / Find Duplicates tabs |
+| `src/pages/Students/batchBranch/FindDuplicatesTab.jsx` | Combined profile–profile + exam-name scan; merge and link-as-variant actions |
+| `src/pages/Syllabus/` | SyllabusPage, SubjectAccordion, Manage*Modal, AssignProgramsModal |
+| `split_students.py` | Pre-deploy: per-student files + encrypted db.json |
+| `send_results.py` | Gmail SMTP result emails. `--dry-run` / `--to <addr>`. Reads `students_db.json` + `faculty-data.json`. |
+| `send_results_whatsapp.py` | Wabridge WhatsApp result messages to students + parents. `--exam` / `--dry-run` / `--to` / `--redirect-to` / `--students "Name1,Name2"`. Payload: top-level `variables` array. Logs to `whatsapp_send_log.jsonl` (capped 500 entries). Triggered via `POST /api/send-whatsapp` in `vite.config.js`. |
+| `send_schedule.py` | Gmail SMTP teacher schedule + exam reminder emails. `--weekly` / `--daily` / `--exam-reminder N` / `--dry-run` / `--to` / `--teacher-id`. Requires `tzdata`. |
+| `generate_syllabus_seed.py` | Excel → `src/lib/syllabusSeed.js` |
+| `data/faculty-data.json` | Primary dev data store (gitignored) |
+| `students_db.json` | Student roster with mobiles (gitignored) |
+| `teacher_password.txt` | Teacher password for db.json encryption (gitignored) |
 
 ---
 
-## Test structure
+## Tests
 
-| Path | What it covers |
+Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **377 tests passing** (as of 2026-05-04; 1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests).
+
+**Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
+- Mock stores for pages using batch filtering must include `studentProfiles: {}`.
+- `vi.mock('../../../lib/ndaFreq', ...)` must include `NDA_FREQ_BY_SUBJECT: {}` — `validateTags.js` imports it directly.
+- `WrongAnswerAudit` + `UnattemptedAudit` + `ExamHistoryTable` all use `PAGE_SIZE = 5`.
+- `syllabusSlice.test.js` mock state must include `syllabusBatchBranches: {}` and `batchChapterTimelines: {}` — `deleteSyllabusBatch` and `renameSyllabusBatch` destructure both.
+- Async slice actions that call `fetch` (e.g. `addNameVariant`) must use `vi.stubGlobal('fetch', vi.fn(...))` with a `beforeEach(() => vi.restoreAllMocks())` guard — see `src/store/slices/__tests__/studentSlice.test.js`.
+- `Exams.test.jsx` mock store must include `whatsappSendHistory: {}`, `bulkUpdateStudentContacts: vi.fn()`, and `setWhatsappSendHistory: vi.fn()` — all three are now read from the store at component mount.
+
+## Lint
+
+`npm run lint` — `eslint.config.js` (flat config). Current state: **2 errors** (unused vars in `Exams.jsx` from hidden Email Results button — pre-existing), **13 warnings** (all `react-hooks/exhaustive-deps` — intentional).
+
+**Config structure:**
+- Browser globals + React/react-hooks/react-refresh plugins for all source files.
+- Extra `globals.node` block for `vite.config.js` (uses `process`, `__dirname`).
+- Extra Vitest globals block for `**/__tests__/**` and `**/*.test.*` files (`describe`, `it`, `expect`, `vi`, etc.).
+- `no-unused-vars`: `varsIgnorePattern: '^[A-Z_]'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'` — prefix unused args/catches with `_` to suppress.
+- `react-hooks/preserve-manual-memoization` disabled globally (React Compiler rule, not applicable here).
+
+**Intentional `eslint-disable` comments in source:**
+- `SyllabusPage.jsx` and `ExamScheduleView.jsx`: `react-hooks/set-state-in-effect` — auto-select first item when the list changes; the pattern is deliberate.
+- `LoginPage.jsx` and `StudentLogin.jsx`: `react-refresh/only-export-components` — session-clear helpers are co-located with the component that owns the session; splitting would be artificial.
+
+---
+
+## Deployment
+
+1. `npm run dev` — add exams, tag questions.
+2. Create `teacher_password.txt` (absent → plain JSON, teacher login disabled).
+3. `npm run deploy` — runs split → Vite build → push to `gh-pages`.
+
+`REPO_NAME` must match in both `vite.config.js` and `src/config.js`.
+
+---
+
+## Decisions log
+
+Captures the *why* behind non-obvious architectural choices so they aren't re-litigated.
+
+| Decision | Why |
 |---|---|
-| `src/lib/__tests__/analytics.test.js` | `filterValidExams`, `getValidStudentNames` |
-| `src/lib/__tests__/validateTags.test.js` | `validateTags`, `validateGatSubjects` |
-| `src/lib/__tests__/gatRouting.test.js` | `computeStudentChapterStats` / `computeWrongAudit` / `computeSkippedAudit` with `qSubject` filtering |
-| `src/lib/__tests__/dashboardFilter.test.js` | Filter chain, batch/exam scoping |
-| `src/pages/Dashboard/__tests__/Dashboard.test.jsx` | Dashboard subject dropdown + filter behaviour |
-| `src/pages/__tests__/Exams.test.jsx` | Exams page filtering, X-of-Y count, re-upload buttons |
-| `src/pages/Students/__tests__/StudentsPage.test.jsx` | Student search and selection |
-| `src/lib/__tests__/mergeStudents.test.js` | `nextLwsId`, `mergeStudents`, `parseStudentDate` |
-| `src/pages/Students/__tests__/StudentView.test.jsx` | Self-contained subject filter, stats, accordion |
-| `src/components/upload/__tests__/ReuploadTagsModal.test.jsx` | Tags re-upload flow |
-| `src/components/upload/__tests__/ReuploadResultsModal.test.jsx` | Results re-upload flow |
-| `tests/test_split.py` | Python: `build_db_payload`, `encrypt_db_payload`, `main()` |
-
-Test setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — tests work without a Provider.
-
----
-
-## Deployment workflow
-
-1. Run `npm run dev`, add exams, tag questions.
-2. Create `teacher_password.txt` with the shared teacher password (absent → plain JSON, teacher login disabled).
-3. Run `npm run deploy`:
-   - Runs `split_students.py` (generates `public/data/`, encrypts `db.json`)
-   - Builds the Vite app
-   - Pushes `dist/` to the `gh-pages` branch
-
-`REPO_NAME` must match the GitHub repo name in both `vite.config.js` and `src/config.js`.
+| `whatsappSendHistory` lives in Zustand (persisted to `faculty-data.json`), not on the exam record | It's operational state (last-sent timestamp, fail list) that must survive page refresh but is not educational data. Keeping it separate from the exam record avoids bloating exam objects and makes it easy to clear independently. |
+| `failedNames` parsed client-side from script log lines (`SKIP Name —` / `FAIL → Name (student`) | Simpler than changing the Python script's stdout format. Log line format is stable; parsing it in JS avoids adding a structured JSON output path that would need to stay in sync across both ends. |
+| `bulkUpdateStudentContacts` does a single fetch→patch→write for all edited rows | Avoids N sequential round-trips when the faculty edits many students in the preview modal before sending. One read, one map, one write. |
+| `db.json` is always valid JSON (encrypted or not) — checking `json.load()` success does not confirm it is plain | Encrypted `db.json` is `{ encrypted: true, salt, iv, data }` — all valid JSON. Always check for the `encrypted: true` key explicitly, not whether `json.load()` succeeds. |
+| Batch name `LWS_NDA_2Y_(26-28)` has no space before `(` | Normalised 2026-05-04. The stray-space variant (`LWS_NDA_2Y_ (26-28)`) caused exam-filter mismatches in teacher mode. All three data sources (`students_db.json`, `faculty-data.json` exams, `faculty-data.json` profiles) were patched. The correct form matches the `(25-27)` cohort pattern. |
+| Subject filter is local component state, not in the store | Filters reset naturally on navigation (correct UX). No cross-page filter persistence was ever requested. Lifting to the store would add complexity with no benefit. |
+| `failedNames` defaults to `null` (not `[]`) on first send | `null` means "no history" — the preview modal uses this to decide whether to show the resend scope toggle. An empty `[]` would show the toggle but with 0 students, which is confusing. |
+| `stripLatex` in `examPdf.js` outputs ASCII only (not Unicode math symbols) | jsPDF's built-in Helvetica is WinAnsi-encoded — every Unicode symbol above U+00FF (Greek letters, set operators, arrows, `≤≥≠`, `∈∪∩`, `∞`, `ℝ`, etc.) renders as garbage bytes. `×` `÷` `±` `·` (U+00D7/F7/B1/B7) are within WinAnsi and are kept. Embedding a custom Unicode font would significantly inflate the bundle; ASCII equivalents (`in`, `U`, `->`, `<=`, `alpha`, `inf`, etc.) are readable for NDA students. |
 
 ---
 
 ## What not to change
 
-- Do not persist `apiKey` anywhere on disk or localStorage — memory only.
-- Do not persist the teacher password or derived key — only the decrypted dataset goes to sessionStorage.
-- Subject filter state is intentionally local per page — do not lift to Zustand.
-- `StudentView` is intentionally self-contained for subject filtering — no prop threading needed.
-- Use `useMode()` for mode-conditional visibility — do not add new `IS_READ_ONLY` imports to components.
-- `ModeContext` default is `'faculty'` intentionally — changing it breaks tests.
-- PBKDF2 iteration count (`100_000`) must match between `split_students.py` and `LoginPage.jsx`.
-- All `useMemo` and other hooks must be called **before** any early returns in page components.
+- Do not persist `apiKey` anywhere — memory only.
+- Do not persist teacher password or derived key — only decrypted dataset in sessionStorage.
+- Subject filter state is local per page — do not lift to Zustand.
+- `StudentView` subject filtering is self-contained — no prop threading.
+- Use `useMode()` for visibility — no new `IS_READ_ONLY` imports in components.
+- `ModeContext` default is `'faculty'` — changing it breaks tests.
+- PBKDF2 count (`100_000`) must match between `split_students.py` and `LoginPage.jsx`.
+- All hooks must be called **before** any early returns in page components.
+- Do not filter batch dropdowns or exam lists on `exam.batch` directly — always use `getBatchOptions` / `getExamsForBatch` from `src/lib/analytics`.
+- Syllabus Tracker batch names are independent of exam/student-profile batch names — do not derive them from `exams` or `studentProfiles`. Manage via `addSyllabusBatch` / `renameSyllabusBatch` / `deleteSyllabusBatch`.
+- Syllabus branch filter branches are sourced from `timetables[].branch` — do not create a separate branch list for the Syllabus Tracker. `syllabusBatchBranches` cascades on batch rename/delete.
+- `updateTimetableTeacher(id, patch)` takes `{ name?, email? }` — do not pass a bare string (breaking change from original signature).
+- Exam Schedule `branch`/`batchName` must come from `timetables[]` entries — do not derive from `syllabusBatches` or `exams[].batch`.
+- `guardian_mobile` from Excel merges (appends if absent) into `parent_mobiles[]` — do not change to overwrite semantics; manually-added parent numbers must survive re-import.
+- Touch targets must be ≥ 44px on all mobile-facing screens (`min-h-[44px]` or equivalent padding). Use `py-2.5`+ for buttons, `py-3`+ for nav items.
+- `findDuplicateCandidates` with no `branchFilter` does a flat cross-branch scan — do not revert to per-branch-group iteration.
+- The `name_subset` signal requires `shorter.length >= 2` — do not remove this guard (prevents false positives on shared single-word surnames).
+- `addNameVariant` deduplicates before appending — do not change to unconditional push.
+- Search list shows only canonical names — do not add variant names (keys where key ≠ `profile.name`) back into the search list; they would create duplicate entries for the same student.
+- `StudentView` normalizes exam records in-memory via `normalizedExams` — do not remove this or revert `getStudentExams` to using raw `exams`; doing so breaks analytics for students whose exam records are stored under a variant spelling.
+- Timetable Excel export uses `xlsx-js-style` — do not change the import back to `xlsx`.
+- `batchChapterTimelines` cascades on `deleteProgram`, `deleteSubject`, `deleteChapter`, `renameSyllabusBatch`, `deleteSyllabusBatch` — do not remove these cascade blocks.
+- `clearSubjectProgress` intentionally does NOT clear `batchChapterTimelines` — the planned chapter schedule must survive a status reset.
+- The "Timeline" column in `SubjectAccordion` is a fixed column (not a user-defined tracking column). If a user has a tracking column also named "Timeline", they will see two Timeline columns — the old one should be deleted from the program's tracking columns.
+- `stripLatex` in `examPdf.js` must only output ASCII + safe Latin-1 (`×÷±·`). Do not re-introduce Unicode math symbols (Greek, set ops, arrows, `≤≥≠`, `∈∪∩`, `ℝ`) — all fall outside jsPDF Helvetica's WinAnsi encoding and render as garbage.

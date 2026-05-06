@@ -23,7 +23,37 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', {
+        varsIgnorePattern: '^[A-Z_]',
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+      // React Compiler skips components with manual useMemo it can't verify — not a runtime error
+      'react-hooks/preserve-manual-memoization': 'off',
+    },
+  },
+  // Node.js globals for Vite config (process, __dirname, etc.)
+  {
+    files: ['vite.config.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  // Vitest globals for test files (describe, it, expect, vi, etc.)
+  {
+    files: ['**/__tests__/**/*.{js,jsx}', '**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        describe:  'readonly',
+        it:        'readonly',
+        test:      'readonly',
+        expect:    'readonly',
+        beforeEach: 'readonly',
+        afterEach:  'readonly',
+        beforeAll:  'readonly',
+        afterAll:   'readonly',
+        vi:        'readonly',
+      },
     },
   },
 ])

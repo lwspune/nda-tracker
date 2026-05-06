@@ -66,6 +66,13 @@ export function mergeStudents(existingStudents, importedRows) {
         changed = true
       }
 
+      // Merge guardian mobile into parent_mobiles[] — never overwrites manually-added numbers
+      const gMobile = (row.guardian_mobile || '').trim()
+      if (gMobile && !(s.parent_mobiles || []).includes(gMobile)) {
+        s.parent_mobiles = [...(s.parent_mobiles || []), gMobile]
+        changed = true
+      }
+
       if (changed) updated++
       else unchanged++
 
@@ -87,6 +94,7 @@ export function mergeStudents(existingStudents, importedRows) {
         account_status:    row.account_status     || '',
         coming_status:     row.coming_status      || '',
         quit_date:         row.quit_date          || null,
+        parent_mobiles:    row.guardian_mobile ? [row.guardian_mobile] : [],
         name_variants:     row.canonical_name ? [row.canonical_name] : [],
         evalbee_roll_nos:  [],
         match_signatures:  [

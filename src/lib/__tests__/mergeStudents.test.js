@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextLwsId, mergeStudents, enrichWithRollNos, applyManualMatch, findDuplicateCandidates, mergeStudentRecords } from '../mergeStudents'
+import { nextLwsId, mergeStudents, enrichWithRollNos, applyManualMatch, findDuplicateCandidates, mergeStudentRecords, getUnmatchedExamNames, findExamNameCandidates } from '../mergeStudents'
 import { parseStudentDate } from '../excel'
 
 // ── Fixtures ──────────────────────────────────────────────────
@@ -617,13 +617,14 @@ describe('findDuplicateCandidates — name similarity', () => {
     expect(result[0].score).toBeGreaterThanOrEqual(0.75)
   })
 
-  it('does NOT flag a pair with similar names in different branches', () => {
+  it('DOES flag a pair with similar names in different branches when no branchFilter is set', () => {
     const students = [
-      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Vihan Batwal',  branch: 'Branch A' }),
-      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Vihaan Batwal', branch: 'Branch B' }),
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Vihan Batwal',  branch: 'Branch A', mobile: '1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Vihaan Batwal', branch: 'Branch B', mobile: '2' }),
     ]
     const result = findDuplicateCandidates(students)
-    expect(result).toHaveLength(0)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_similar')
   })
 
   it('does NOT flag clearly different names', () => {
@@ -725,6 +726,81 @@ describe('findDuplicateCandidates — branchFilter', () => {
     ]
     const result = findDuplicateCandidates(students, { branchFilter: 'Branch A' })
     expect(result).toHaveLength(0)
+  })
+})
+
+// ── findDuplicateCandidates — name_subset signal ──────────────
+
+describe('findDuplicateCandidates — name_subset signal', () => {
+  it('flags same first+last with different middle name (e.g. Nirnit Hemraj Patil vs Nirnit Patil)', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Nirnit Hemraj Patil', branch: 'B', mobile: '1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Nirnit Patil',         branch: 'B', mobile: '2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_subset')
+  })
+
+  it('flags when all tokens of shorter name appear in longer (order-independent)', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Patil Nirnit',         branch: 'B', mobile: '1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Nirnit Hemraj Patil',  branch: 'B', mobile: '2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_subset')
+  })
+
+  it('does NOT flag when the shorter name has a token not in the longer name', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Ram Sharma',   branch: 'B', mobile: '1', eis_reg_no: 'E1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Priya Sharma', branch: 'B', mobile: '2', eis_reg_no: 'E2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(0)
+  })
+
+  it('does NOT flag single-token names as subset of any longer name', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Sharma',     branch: 'B', mobile: '1', eis_reg_no: 'E1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Ram Sharma', branch: 'B', mobile: '2', eis_reg_no: 'E2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(0)
+  })
+})
+
+// ── findDuplicateCandidates — cross-branch scan ───────────────
+
+describe('findDuplicateCandidates — cross-branch scan', () => {
+  it('flags name_subset pairs across different branches when no branchFilter is set', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Nirnit Hemraj Patil', branch: 'Branch A', mobile: '1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Nirnit Patil',         branch: 'Branch B', mobile: '2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_subset')
+  })
+
+  it('does NOT flag cross-branch pair when a specific branchFilter is set', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Nirnit Hemraj Patil', branch: 'Branch A', mobile: '1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Nirnit Patil',         branch: 'Branch B', mobile: '2' }),
+    ]
+    const result = findDuplicateCandidates(students, { branchFilter: 'Branch A' })
+    expect(result).toHaveLength(0)
+  })
+
+  it('flags same-mobile students across branches when no branchFilter is set', () => {
+    const students = [
+      makeDedupStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma',        branch: 'Branch A', mobile: '9000000001', eis_reg_no: 'E1' }),
+      makeDedupStudent({ lws_id: 'LWS-002', canonical_name: 'Completely Different', branch: 'Branch B', mobile: '9000000001', eis_reg_no: 'E2' }),
+    ]
+    const result = findDuplicateCandidates(students)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('same_mobile')
   })
 })
 
@@ -896,5 +972,95 @@ describe('mergeStudentRecords — secondary removal', () => {
     const original = JSON.stringify(students)
     mergeStudentRecords(students, 'LWS-001', 'LWS-002')
     expect(JSON.stringify(students)).toBe(original)
+  })
+})
+
+// ── getUnmatchedExamNames ─────────────────────────────────────
+
+describe('getUnmatchedExamNames', () => {
+  it('returns exam names not present as a key in studentProfiles', () => {
+    const exams = [{ students: [{ name: 'Nirnit Patil' }, { name: 'Alice Sharma' }] }]
+    const studentProfiles = { 'Alice Sharma': { lwsId: 'LWS-001', name: 'Alice Sharma' } }
+    expect(getUnmatchedExamNames(exams, studentProfiles)).toEqual(['Nirnit Patil'])
+  })
+
+  it('excludes names already indexed as a name variant (variant key present in studentProfiles)', () => {
+    const exams = [{ students: [{ name: 'Nirnit Patil' }] }]
+    const studentProfiles = {
+      'Nirnit Hemraj Patil': { lwsId: 'LWS-183', name: 'Nirnit Hemraj Patil' },
+      'Nirnit Patil':        { lwsId: 'LWS-183', name: 'Nirnit Hemraj Patil' },
+    }
+    expect(getUnmatchedExamNames(exams, studentProfiles)).toEqual([])
+  })
+
+  it('deduplicates exam names that appear across multiple exams', () => {
+    const exams = [
+      { students: [{ name: 'Unknown Person' }] },
+      { students: [{ name: 'Unknown Person' }] },
+    ]
+    expect(getUnmatchedExamNames(exams, {})).toEqual(['Unknown Person'])
+  })
+
+  it('skips students with empty or missing name', () => {
+    const exams = [{ students: [{ name: '' }, { name: null }, { name: 'Real Name' }] }]
+    expect(getUnmatchedExamNames(exams, {})).toEqual(['Real Name'])
+  })
+
+  it('returns empty array when all exam names are matched', () => {
+    const exams = [{ students: [{ name: 'Alice Sharma' }] }]
+    const studentProfiles = { 'Alice Sharma': { lwsId: 'LWS-001' } }
+    expect(getUnmatchedExamNames(exams, studentProfiles)).toEqual([])
+  })
+})
+
+// ── findExamNameCandidates ────────────────────────────────────
+
+const EXAM_SNAKE_PROFILES = [
+  { lws_id: 'LWS-183', canonical_name: 'Nirnit Hemraj Patil', branch: 'APJSCH', mobile: '' },
+  { lws_id: 'LWS-001', canonical_name: 'Alice Sharma',         branch: 'Kothrud', mobile: '' },
+]
+
+describe('findExamNameCandidates', () => {
+  it('catches name_subset: Nirnit Patil vs Nirnit Hemraj Patil', () => {
+    const result = findExamNameCandidates(['Nirnit Patil'], EXAM_SNAKE_PROFILES)
+    expect(result).toHaveLength(1)
+    expect(result[0].examName).toBe('Nirnit Patil')
+    expect(result[0].profile.lws_id).toBe('LWS-183')
+    expect(result[0].reasons).toContain('name_subset')
+  })
+
+  it('catches name_similar for a typo (Alice Sharmaa vs Alice Sharma)', () => {
+    const result = findExamNameCandidates(['Alice Sharmaa'], EXAM_SNAKE_PROFILES)
+    expect(result).toHaveLength(1)
+    expect(result[0].examName).toBe('Alice Sharmaa')
+    expect(result[0].profile.lws_id).toBe('LWS-001')
+    expect(result[0].reasons).toContain('name_similar')
+  })
+
+  it('does NOT flag completely different names', () => {
+    const result = findExamNameCandidates(['Completely Unrelated Name'], EXAM_SNAKE_PROFILES)
+    expect(result).toHaveLength(0)
+  })
+
+  it('returns multiple pairs when one exam name matches multiple profiles', () => {
+    const profiles = [
+      { lws_id: 'LWS-001', canonical_name: 'Nirnit Hemraj Patil', branch: '', mobile: '' },
+      { lws_id: 'LWS-002', canonical_name: 'Nirnit Kumar Patil',  branch: '', mobile: '' },
+    ]
+    const result = findExamNameCandidates(['Nirnit Patil'], profiles)
+    expect(result).toHaveLength(2)
+    expect(result.map(r => r.profile.lws_id)).toContain('LWS-001')
+    expect(result.map(r => r.profile.lws_id)).toContain('LWS-002')
+  })
+
+  it('sorts results by score descending', () => {
+    const result = findExamNameCandidates(['Alice Sharmaa', 'Nirnit Patil'], EXAM_SNAKE_PROFILES)
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i - 1].score).toBeGreaterThanOrEqual(result[i].score)
+    }
+  })
+
+  it('returns an empty array for an empty unmatched names list', () => {
+    expect(findExamNameCandidates([], EXAM_SNAKE_PROFILES)).toEqual([])
   })
 })

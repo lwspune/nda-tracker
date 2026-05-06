@@ -39,16 +39,17 @@ export default function RenameTab({ students, exams, renameBatch, renameBranch }
         ) : (
           <div>
             {allBatches.map(b => {
-              const studentCount = students.filter(p => (p.batches || []).includes(b)).length
-              const examCount    = exams.filter(e => e.batch === b).length
+              const batchStudents = students.filter(p => (p.batches || []).includes(b))
+              const examCount     = exams.filter(e => e.batch === b).length
               return (
                 <RenameRow
                   key={b}
                   name={b}
-                  studentCount={studentCount}
+                  studentCount={batchStudents.length}
                   examCount={examCount}
                   saving={saving}
                   onSave={handleRenameBatch}
+                  studentNames={batchStudents.map(p => p.name)}
                 />
               )
             })}

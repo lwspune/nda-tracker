@@ -75,15 +75,15 @@ describe('UnattemptedAudit — rendering', () => {
 
 // ── Pagination — not shown when ≤10 ──────────────────────────────────────────
 
-describe('UnattemptedAudit — no pagination when ≤10 items', () => {
-  it('does not render Prev or Next when there are 10 items', () => {
-    renderAudit(makeItems(10))
+describe('UnattemptedAudit — no pagination when ≤5 items', () => {
+  it('does not render Prev or Next when there are 5 items', () => {
+    renderAudit(makeItems(5))
     expect(screen.queryByRole('button', { name: /prev/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /next/i })).not.toBeInTheDocument()
   })
 
-  it('does not render the counter when there are fewer than 10 items', () => {
-    renderAudit(makeItems(7))
+  it('does not render the counter when there are fewer than 5 items', () => {
+    renderAudit(makeItems(3))
     expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
   })
 })
@@ -91,22 +91,22 @@ describe('UnattemptedAudit — no pagination when ≤10 items', () => {
 // ── Pagination — shown when >10 ───────────────────────────────────────────────
 
 describe('UnattemptedAudit — pagination with 15 items', () => {
-  it('shows Prev and Next buttons when there are 11+ items', () => {
-    renderAudit(makeItems(11))
+  it('shows Prev and Next buttons when there are 6+ items', () => {
+    renderAudit(makeItems(6))
     expect(screen.getByRole('button', { name: /prev/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument()
   })
 
-  it('shows only first 10 subtopics on page 1', () => {
+  it('shows only first 5 subtopics on page 1', () => {
     renderAudit(makeItems(15))
     expect(screen.getByText('Subtopic 1')).toBeInTheDocument()
-    expect(screen.getByText('Subtopic 10')).toBeInTheDocument()
-    expect(screen.queryByText('Subtopic 11')).not.toBeInTheDocument()
+    expect(screen.getByText('Subtopic 5')).toBeInTheDocument()
+    expect(screen.queryByText('Subtopic 6')).not.toBeInTheDocument()
   })
 
-  it('shows "Showing 1–10 of 15" counter on first page', () => {
-    renderAudit(makeItems(15))
-    expect(screen.getByText(/showing 1.10 of 15/i)).toBeInTheDocument()
+  it('shows "Showing 1–5 of 7" counter on first page', () => {
+    renderAudit(makeItems(7))
+    expect(screen.getByText(/showing 1.5 of 7/i)).toBeInTheDocument()
   })
 
   it('Prev button is disabled on the first page', () => {
@@ -121,22 +121,22 @@ describe('UnattemptedAudit — pagination with 15 items', () => {
 
   it('advances to page 2 when Next is clicked', async () => {
     const user = userEvent.setup()
-    renderAudit(makeItems(15))
+    renderAudit(makeItems(7))
     await user.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.queryByText('Subtopic 1')).not.toBeInTheDocument()
-    expect(screen.getByText('Subtopic 11')).toBeInTheDocument()
+    expect(screen.getByText('Subtopic 6')).toBeInTheDocument()
   })
 
-  it('shows "Showing 11–15 of 15" on second page', async () => {
+  it('shows "Showing 6–7 of 7" on second page', async () => {
     const user = userEvent.setup()
-    renderAudit(makeItems(15))
+    renderAudit(makeItems(7))
     await user.click(screen.getByRole('button', { name: /next/i }))
-    expect(screen.getByText(/showing 11.15 of 15/i)).toBeInTheDocument()
+    expect(screen.getByText(/showing 6.7 of 7/i)).toBeInTheDocument()
   })
 
   it('Next is disabled on the last page', async () => {
     const user = userEvent.setup()
-    renderAudit(makeItems(15))
+    renderAudit(makeItems(7))
     await user.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
   })
@@ -157,12 +157,12 @@ describe('UnattemptedAudit — pagination with 15 items', () => {
     expect(screen.queryByText('Subtopic 11')).not.toBeInTheDocument()
   })
 
-  it('shows exactly 10 items on a full page and fewer on the last page', async () => {
+  it('shows exactly 5 items on a full page and fewer on the last page', async () => {
     const user = userEvent.setup()
-    renderAudit(makeItems(15))
-    expect(screen.getAllByRole('button', { name: /show questions/i })).toHaveLength(10)
-    await user.click(screen.getByRole('button', { name: /next/i }))
+    renderAudit(makeItems(7))
     expect(screen.getAllByRole('button', { name: /show questions/i })).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.getAllByRole('button', { name: /show questions/i })).toHaveLength(2)
   })
 })
 
