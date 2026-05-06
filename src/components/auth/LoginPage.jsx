@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from 'react'
 import {
-  INDEX_URL, STUDENT_FILE_URL, REMOTE_DATA_URL,
+  REMOTE_DATA_URL,
   SESSION_KEY, TEACHER_SESSION_KEY, SESSION_DAYS,
   APP_NAME, APP_SUB,
 } from '../../config'
@@ -21,13 +21,6 @@ import { supabase } from '../../lib/supabase'
 
 function b64ToBytes(b64) {
   return Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-}
-
-async function hashMobile(mobile) {
-  const m = mobile.trim().replace(/\s|-/g, '')
-    .replace(/^\+91/, '').replace(/^91(?=\d{10}$)/, '')
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(m))
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 /**
@@ -77,9 +70,9 @@ export function clearTeacherSession() {
 
 // ── Session helpers — student ──────────────────────────────────────────────────
 
-function saveStudentSession(lwsId, name, file) {
+function saveStudentSession(lwsId, name, mobile) {
   const expiry = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ lwsId, name, file, expiry }))
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ lwsId, name, mobile, expiry }))
 }
 
 function loadStudentSession() {
@@ -134,11 +127,15 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
         onTeacherLogin(teacherData)
         return
       }
-      // Student session
+      // Student session — re-fetch live data from Supabase via serverless endpoint
       const session = loadStudentSession()
-      if (session) {
+      if (session?.mobile) {
         try {
-          const res = await fetch(STUDENT_FILE_URL(session.file))
+          const res = await fetch('/api/student-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mobile: session.mobile }),
+          })
           if (res.ok) {
             const data = await res.json()
             onStudentLogin(data)
@@ -208,23 +205,21 @@ export default function LoginPage({ onTeacherLogin, onStudentLogin }) {
     setStudentError(null)
     setStudentLoading(true)
     try {
-      const hash     = await hashMobile(digits)
-      const indexRes = await fetch(INDEX_URL)
-      if (!indexRes.ok) throw new Error('Could not connect. Please try again.')
-      const index  = await indexRes.json()
-      const entry  = index.find(e => e.mobileHash === hash)
-      if (!entry) {
-        setStudentError('Mobile number not found. Please check your number or contact LWS Pune.')
+      const res = await fetch('/api/student-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: digits }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setStudentError(data.error || 'Mobile number not found. Please check your number or contact LWS Pune.')
         setStudentLoading(false)
         return
       }
-      const dataRes = await fetch(STUDENT_FILE_URL(entry.file))
-      if (!dataRes.ok) throw new Error('Could not load your data. Please try again.')
-      const data = await dataRes.json()
-      saveStudentSession(entry.lwsId, entry.name, entry.file)
+      saveStudentSession(data.lwsId, data.name, digits)
       onStudentLogin(data)
-    } catch (e) {
-      setStudentError(e.message || 'Something went wrong. Please try again.')
+    } catch {
+      setStudentError('Could not connect. Please try again.')
       setStudentLoading(false)
     }
   }

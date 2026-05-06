@@ -11,8 +11,6 @@ export const IS_READ_ONLY = _h !== 'localhost' &&
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 export const REMOTE_DATA_URL    = `${BASE}/data/db.json`
-export const INDEX_URL          = `${BASE}/data/index.json`
-export const STUDENT_FILE_URL   = (file) => `${BASE}/data/students/${file}`
 // Session config
 export const SESSION_KEY         = 'nda_student_session'
 export const TEACHER_SESSION_KEY = 'nda_teacher_session'
