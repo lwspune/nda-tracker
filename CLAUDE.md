@@ -23,7 +23,7 @@ Four runtime modes:
 | Excel export (styled) | xlsx-js-style (`src/pages/Timetable/TimetablePage.jsx`) |
 | Math rendering | KaTeX |
 | Deploy | Vercel for all three portals (faculty, teacher, student); GitHub Pages legacy static build via `npm run deploy` |
-| Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `students_meta` tables) |
+| Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `student_logins`, `students_meta` tables) |
 | Python deps | `tzdata` (`pip install tzdata`) for `send_schedule.py`; `cryptography` only if regenerating `split_students.py` output |
 
 ## Key commands
@@ -59,6 +59,7 @@ npm run lint
   - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, insights, cost log, etc. (exams removed as of Phase 5). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips `exams` before writing.
   - Normalised exam tables — `exams` (id, name, date, subject, batch, branch, marking JSONB, questions JSONB, created_at) + `exam_results` (exam_id FK ON DELETE CASCADE, student_name, roll_no, total_marks, correct, incorrect, not_attempted, responses JSONB). Written by `examsSlice.js` via `src/store/slices/examSupabase.js` helpers. Read via `loadExamsFromSupabase()` (paginated, 1000-row pages).
   - Normalised student tables — `students`, `student_batches`, `student_attendance`, `students_meta`. Each mutation in `studentSlice.js` writes targeted rows; `loadStudentsFromSupabase()` is called on faculty login to populate `studentProfiles` in-store. Teacher/student portals never touch these tables (RLS: authenticated only).
+  - `student_logins (id, lws_id, logged_in_at)` — one row per student login event. Written fire-and-forget by `api/student-login.js` after successful mobile auth. Read by `StudentView` (faculty/teacher only) to show last-login and login count in `ProfileCard`.
   - `students_db.exams[]` is dead data — not mapped by any code path; dropped from Supabase schema.
 - **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders.
 - **Prod student**: localStorage — session token only (`SESSION_KEY`, contains `lwsId`, `name`, `mobile`), expires after `SESSION_DAYS`.
@@ -89,7 +90,7 @@ Slices under `src/store/slices/`. All mutations call `get()._save()` immediately
 - `loadRemoteData` sets all six syllabus keys (`syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`) from the decrypted payload.
 
 ### Subject filtering
-Subject filter is **local state per page** — not in the store. Dashboard: subject → branch → batch → exam chain. Exams: sort + subject → branch → batch. StudentView: self-contained, shown when student has 2+ subjects.
+Subject filter is **local state per page** — not in the store. Dashboard: subject → branch → batch → exam chain. Exams: sort + subject → branch → batch. StudentView: self-contained, shown when student has 2+ subjects. **`StudentView` defaults to `'Maths'`** (not `'all'`) — matches the primary use-case; students with no Maths exams see an empty-state for the filter.
 
 ### Batch filtering
 Batch dropdown options and filter logic use **`profile.batches[]` as primary** (app-assigned), with `exam.batch` as fallback only for exams where no student has a profile.
@@ -186,6 +187,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | WhatsApp Results button | ✓ | — | — |
 | Email Results button | hidden | — | — |
 | Edit student branch/batch | ✓ | — | — |
+| Attendance page (import XLS + class metrics table) | ✓ | ✓ | — |
+| Attendance rings (student monthly % view) | ✓ (StudentView) | ✓ (StudentView) | ✓ (portal, inline scroll) |
 | Syllabus Tracker (edit) | ✓ | — | — |
 | ProjectedScoreCard | ✓ | ✓ | — |
 | WrongAnswerAudit / UnattemptedAudit | ✓ | ✓ | ✓ |
@@ -209,6 +212,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 
 **Student import** (same XLS format as the Student Search List export): row 0 = title, row 1 = headers, row 2+ = data. Key columns: `RegistrationNo.`, `Name`, `Mobile No`, `Email`, `Guardian No.`, `Batch`, `Coming Status`, `Account Status`, `RegistrationDate`, `Quit Date`. `Guardian No.` is merged into `parent_mobiles[]` (see Student profiles section above).
 
+**Attendance import** (LWS attendance export): row 0 = title, row 1 = headers, row 2+ = data. Required columns: `Student Name`, `Mobile No.`. Date columns in `DD-MM-YYYY` format (header), values `P` / `A` / `-` (dash = skip). Parsed by `parseAttendanceExcel` in `src/lib/excel.js`; matched to `studentProfiles` by mobile (primary) or name (fallback). Upserted into `student_attendance` with `onConflict: 'lws_id,date'`.
+
 ---
 
 ## Key files
@@ -216,7 +221,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | File | Purpose |
 |---|---|
 | `src/config.js` | Mode detection (`IS_READ_ONLY`), session keys (`SESSION_KEY`, `SESSION_DAYS`), app info |
-| `api/student-login.js` | Vercel serverless — normalises mobile, queries `students` table, then fetches student's `exam_results` rows + matching `exams` rows; returns student data |
+| `api/student-login.js` | Vercel serverless — normalises mobile, queries `students` table, fetches `exam_results` + `exams` + `student_attendance`; fire-and-forgets a `student_logins` insert; returns student data |
 | `create_teacher_account.js` | Admin script — creates/updates Supabase auth user with `role='teacher'` metadata. Usage: `node create_teacher_account.js <email> <password>` |
 | `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler |
@@ -236,7 +241,10 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/pages/Exams/WhatsAppResultsModal.jsx` | Post-send log modal — sent/skipped counts + per-line colour-coded log |
 | `src/components/auth/LoginPage.jsx` | Three-tab login (Faculty/Teacher/Student); Faculty + Teacher via Supabase auth; Student via `/api/student-login` |
 | `src/components/upload/UploadModal.jsx` | 4-step add-exam modal |
-| `src/lib/excel.js` | Excel parsing (results, tags, student import) |
+| `src/lib/excel.js` | Excel parsing (results, tags, student import, attendance import) |
+| `src/store/slices/attendanceSlice.js` | `importAttendance(parsed)` — mobile→lwsId matching, upsert to `student_attendance` |
+| `src/pages/Attendance/index.jsx` | Faculty/teacher page: batch filter, Supabase fetch, class avg/at-risk metrics, student table with % badges, Import XLS button |
+| `src/pages/Attendance/AttendanceRings.jsx` | SVG donut rings per calendar month (R=40, stroke-dasharray arc); rendered inline in StudentPortal (below exam results) and in StudentView (below profile card) |
 | `src/lib/analytics.js` | Analytics facade |
 | `src/lib/ndaFreq.js` | `SUBJECTS`, `CONFIGURABLE_SUBJECTS`, `syncFreqChapters` |
 | `src/lib/examPdf.js` | `downloadExamPdf(exam)` — jsPDF exam report; `stripLatex()` converts LaTeX → ASCII for WinAnsi-safe rendering |
@@ -265,8 +273,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **503 tests passing** (as of 2026-05-07; 1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests).
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **529 tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -338,6 +346,11 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `migrate_exams_to_supabase.js --cleanup` prints SQL but does not execute it | The 2026-05-07 incident: cleanup ran before the tables were populated (script read local file, which had 0 exams on dev). Lesson: always seed → verify row count matches source → then run cleanup SQL manually in Supabase SQL editor after confirming the app works with normalised data. |
 | `loadExamsFromSupabase` uses paginated `.range(from, from+PAGE-1)` loop | Supabase default `SELECT *` is capped at 1000 rows. With 1472+ `exam_results` rows the bare query silently cut off 472 rows, making new exams show 0 students. All queries on tables that can exceed 1000 rows must use `fetchAllRows()` pagination. |
 | Exams page pagination: PAGE_SIZE = 10 | 39+ exams and growing made a single-page list hard to scan. 10 per page keeps the list short without excessive clicks. `page` state resets on filter/sort changes. |
+| Attendance not stored in Zustand — fetched on demand from Supabase | Attendance data is large (many rows per student, many students) and is read-only in the app (no client-side mutations after import). Fetching per-page avoids bloating the store and makes RLS enforcement natural. |
+| `student_logins` insert is fire-and-forget (`.then(() => {})`) | Blocking the student login response on an audit write would degrade perceived performance and punish students for Supabase latency spikes. A missed login record is tolerable; a slow login is not. |
+| `student_logins` table separate from `students` | Login events are operational audit data, not student profile data. Separate table keeps the `students` row small and allows efficient "last login per student" queries via the `(lws_id, logged_in_at desc)` index. |
+| `StudentView` subject filter defaults to `'Maths'` | Nearly all NDA students at LWS sit Maths exams; defaulting to `'all'` caused GAT students' exams to appear alongside Maths in the default view, diluting the Maths analytics. Faculty can still select `'All Subjects'`. |
+| WhatsApp TRACKER_BASE hardcoded in `api/send-whatsapp.js` (not an env var) | The tracker URL is stable and public — it's the same Vercel deployment the file lives on. Making it an env var adds a config step for no benefit. If the domain ever changes, update the constant in both `api/send-whatsapp.js` and `send_results_whatsapp.py`. |
 
 ---
 
@@ -375,5 +388,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `migrate_exams_to_supabase.js --cleanup` only prints the cleanup SQL; it does not execute it. Run the SQL manually in Supabase SQL editor only after confirming exam counts match and the live app shows correct data. Never run cleanup before seeding.
 - `students_db.exams[]` must not be seeded into Supabase — confirmed dead data (no code path reads it). The normalised schema deliberately omits it.
 - `student_batches` PK is `(lws_id, batch_name)` — to rename a batch, you must DELETE old rows and INSERT new ones; you cannot UPDATE the PK in place.
-- `student_attendance` UNIQUE constraint is `(lws_id, date, batch)` — not just `(lws_id, date)` because a student can have multiple attendance records on the same date (different batches).
+- `student_attendance` UNIQUE constraint is `(lws_id, date)` — batch column was dropped (2026-05-07); upsert conflict target is `lws_id,date`.
 - Vercel env vars `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` must be set in the Vercel dashboard; they are not in the repo. `src/lib/supabase.js` returns `null` when they are absent (safe no-op on dev/GH Pages).
+- Attendance data is not stored in Zustand — always fetched from Supabase on demand. Do not add it to the store or persist it to `faculty-data.json`.
+- `attendanceSlice.importAttendance` matches students by mobile first, then by name — do not change to name-only matching; mobile is more reliable when names vary across XLS files.
+- `AttendanceRings` uses `relative` + `absolute inset-0` overlay for the % label — do not revert to the `marginTop` hack; it places text outside the ring bounds on light backgrounds.
+- `student_logins` insert uses `.then(() => {})` — do not add `await`; it must remain fire-and-forget so login latency is unaffected.
