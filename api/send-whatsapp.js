@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
-const TRACKER_BASE = 'https://lwspune.github.io/nda-tracker/'
+const TRACKER_BASE = 'https://nda-tracker.vercel.app/'
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 function readEnvLocal() {
