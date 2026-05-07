@@ -185,11 +185,11 @@ export default function AttendancePage() {
       {/* Batch filter */}
       {allBatches.length > 0 && (
         <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <span className="text-[11px] text-white/30 font-mono uppercase tracking-widest">Batch</span>
+          <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">Batch</span>
           <button
             onClick={() => setBatchFilter('all')}
             className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all min-h-[36px]
-              ${batchFilter === 'all' ? 'bg-indigo-300/20 text-indigo-300' : 'text-white/40 hover:text-white/70'}`}
+              ${batchFilter === 'all' ? 'bg-indigo-300/20 text-indigo-300' : 'text-ink-3 hover:text-ink-2'}`}
           >
             All
           </button>
@@ -198,7 +198,7 @@ export default function AttendancePage() {
               key={b}
               onClick={() => setBatchFilter(b)}
               className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all min-h-[36px] truncate max-w-[200px]
-                ${batchFilter === b ? 'bg-indigo-300/20 text-indigo-300' : 'text-white/40 hover:text-white/70'}`}
+                ${batchFilter === b ? 'bg-indigo-300/20 text-indigo-300' : 'text-ink-3 hover:text-ink-2'}`}
             >
               {b}
             </button>
@@ -210,17 +210,17 @@ export default function AttendancePage() {
       {studentStats.length > 0 && (
         <div className="flex gap-4 mb-6 flex-wrap">
           <div className="card px-5 py-3 flex items-center gap-3">
-            <span className="text-[11px] text-white/30 font-mono uppercase tracking-widest">Class avg</span>
+            <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">Class avg</span>
             <span className={`text-[22px] font-extrabold ${pctColor(classAvg)}`}>{classAvg}%</span>
           </div>
           <div className="card px-5 py-3 flex items-center gap-3">
-            <span className="text-[11px] text-white/30 font-mono uppercase tracking-widest">At risk</span>
+            <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">At risk</span>
             <span className="text-[22px] font-extrabold text-red-400">{atRisk}</span>
-            <span className="text-[11px] text-white/30">below 75%</span>
+            <span className="text-[11px] text-ink-3">below 75%</span>
           </div>
           <div className="card px-5 py-3 flex items-center gap-3">
-            <span className="text-[11px] text-white/30 font-mono uppercase tracking-widest">Students</span>
-            <span className="text-[22px] font-extrabold text-white/70">{studentStats.length}</span>
+            <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">Students</span>
+            <span className="text-[22px] font-extrabold text-ink-2">{studentStats.length}</span>
           </div>
         </div>
       )}
@@ -228,7 +228,7 @@ export default function AttendancePage() {
       {/* Table */}
       {loading
         ? (
-          <div className="flex items-center gap-3 py-16 justify-center text-white/30">
+          <div className="flex items-center gap-3 py-16 justify-center text-ink-3">
             <Spinner /> Loading attendance…
           </div>
         )
@@ -246,7 +246,7 @@ export default function AttendancePage() {
             <div className="card overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="border-b border-white/[0.07] text-[10.5px] font-mono uppercase tracking-widest text-white/30">
+                  <tr className="border-b border-border text-[10.5px] font-mono uppercase tracking-widest text-ink-3">
                     <th className="text-left px-4 py-3">Student</th>
                     <th className="text-right px-4 py-3">Present</th>
                     <th className="text-right px-4 py-3">Absent</th>
@@ -258,13 +258,13 @@ export default function AttendancePage() {
                   {studentStats.map((s, i) => (
                     <tr
                       key={s.lwsId}
-                      className={`border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors
-                        ${i % 2 === 0 ? '' : 'bg-white/[0.015]'}`}
+                      className={`border-b border-border hover:bg-accent-soft/30 transition-colors
+                        ${i % 2 === 0 ? '' : 'bg-surface-2/40'}`}
                     >
-                      <td className="px-4 py-2.5 font-medium text-white/80">{s.name}</td>
-                      <td className="px-4 py-2.5 text-right text-green-400 font-mono">{s.p}</td>
+                      <td className="px-4 py-2.5 font-medium text-ink">{s.name}</td>
+                      <td className="px-4 py-2.5 text-right text-green-500 font-mono">{s.p}</td>
                       <td className="px-4 py-2.5 text-right text-red-400 font-mono">{s.a}</td>
-                      <td className="px-4 py-2.5 text-right text-white/40 font-mono">{s.total}</td>
+                      <td className="px-4 py-2.5 text-right text-ink-3 font-mono">{s.total}</td>
                       <td className="px-4 py-2.5 text-right pr-5">
                         <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono border
                           ${pctBg(s.pct)} ${pctColor(s.pct)}`}>
