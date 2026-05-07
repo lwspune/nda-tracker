@@ -9,6 +9,7 @@ import { createInsightsSlice } from './slices/insightsSlice'
 import { createNdaSlice } from './slices/ndaSlice'
 import { createSyllabusSlice } from './slices/syllabusSlice'
 import { createTimetableSlice } from './slices/timetableSlice'
+import { createAttendanceSlice } from './slices/attendanceSlice'
 
 const useStore = create((set, get) => ({
   // ── Data state ────────────────────────────────────────────
@@ -209,6 +210,7 @@ const useStore = create((set, get) => ({
   ...createNdaSlice(set, get),
   ...createSyllabusSlice(set, get),
   ...createTimetableSlice(set, get),
+  ...createAttendanceSlice(set, get),
 }))
 
 export default useStore

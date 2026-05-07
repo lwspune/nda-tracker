@@ -23,7 +23,7 @@ Four runtime modes:
 | Excel export (styled) | xlsx-js-style (`src/pages/Timetable/TimetablePage.jsx`) |
 | Math rendering | KaTeX |
 | Deploy | Vercel for all three portals (faculty, teacher, student); GitHub Pages legacy static build via `npm run deploy` |
-| Backend | Supabase (Auth + `faculty_state` JSONB table + `students`, `student_batches`, `student_attendance`, `students_meta` tables) |
+| Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `students_meta` tables) |
 | Python deps | `tzdata` (`pip install tzdata`) for `send_schedule.py`; `cryptography` only if regenerating `split_students.py` output |
 
 ## Key commands
@@ -38,6 +38,7 @@ npm run results:preview # dry-run email — writes preview_<name>.html (gitignor
 npm run results:email   # send result emails via Gmail
 npm run migrate         # one-time: seed data/faculty-data.json → Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:students  # seed students_db.json → Supabase students tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY)
+npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY; --cleanup prints cleanup SQL)
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run lint
 ```
@@ -54,11 +55,12 @@ npm run lint
 
 ### Data persistence
 - **Dev**: `data/faculty-data.json` via `POST /api/data` (Vite `localDataPlugin`). Bypasses 5 MB localStorage limit.
-- **Prod online faculty** (Vercel): Two Supabase stores:
-  - `faculty_state` JSONB row (`id=1`) — exams, syllabus, timetable, insights, etc. Fire-and-forget saves via `saveToSupabase` (session-gated).
+- **Prod online faculty** (Vercel): Three Supabase stores:
+  - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, insights, cost log, etc. (exams removed as of Phase 5). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips `exams` before writing.
+  - Normalised exam tables — `exams` (id, name, date, subject, batch, branch, marking JSONB, questions JSONB, created_at) + `exam_results` (exam_id FK ON DELETE CASCADE, student_name, roll_no, total_marks, correct, incorrect, not_attempted, responses JSONB). Written by `examsSlice.js` via `src/store/slices/examSupabase.js` helpers. Read via `loadExamsFromSupabase()` (paginated, 1000-row pages).
   - Normalised student tables — `students`, `student_batches`, `student_attendance`, `students_meta`. Each mutation in `studentSlice.js` writes targeted rows; `loadStudentsFromSupabase()` is called on faculty login to populate `studentProfiles` in-store. Teacher/student portals never touch these tables (RLS: authenticated only).
   - `students_db.exams[]` is dead data — not mapped by any code path; dropped from Supabase schema.
-- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` on mount to get read-only data.
+- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders.
 - **Prod student**: localStorage — session token only (`SESSION_KEY`, contains `lwsId`, `name`, `mobile`), expires after `SESSION_DAYS`.
 - `apiKey` is **never** persisted to disk or localStorage — memory only.
 
@@ -214,17 +216,19 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | File | Purpose |
 |---|---|
 | `src/config.js` | Mode detection (`IS_READ_ONLY`), session keys (`SESSION_KEY`, `SESSION_DAYS`), app info |
-| `api/student-login.js` | Vercel serverless — normalises mobile, queries `students` table, filters `faculty_state` exams, returns student data |
+| `api/student-login.js` | Vercel serverless — normalises mobile, queries `students` table, then fetches student's `exam_results` rows + matching `exams` rows; returns student data |
 | `create_teacher_account.js` | Admin script — creates/updates Supabase auth user with `role='teacher'` metadata. Usage: `node create_teacher_account.js <email> <password>` |
 | `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler |
 | `src/store/persist.js` | Dev: disk via Vite plugin. Prod faculty: Supabase `faculty_state`. Teacher/student: no-op. |
 | `src/lib/supabase.js` | Null-guarded Supabase client (returns `null` if env vars absent) |
 | `vercel.json` | SPA rewrite rule — all non-`/data/|api/` paths → `index.html` |
-| `api/send-whatsapp.js` | Vercel serverless function — verifies faculty JWT, loads exam from `faculty_state`, builds Wabridge payloads; mirrors the Vite dev endpoint at the same `/api/send-whatsapp` URL |
+| `api/send-whatsapp.js` | Vercel serverless function — verifies faculty JWT, loads exam from `exams` table + results from `exam_results`, builds Wabridge payloads; mirrors the Vite dev endpoint at the same `/api/send-whatsapp` URL |
 | `migrate_to_supabase.js` | One-time seed script: `faculty-data.json` → Supabase (needs `SUPABASE_SERVICE_ROLE_KEY`) |
+| `migrate_exams_to_supabase.js` | Re-runnable seed: exams + results → `exams`/`exam_results` tables. Falls back to Supabase JSONB if local file has 0 exams. Verifies row count after seed; `--cleanup` prints SQL only (run manually after verification) |
 | `migrate_students_to_supabase.js` | Re-runnable seed: `students_db.json` → 4 Supabase tables (upsert; drops dead `exams[]`) |
 | `sync_students_from_supabase.js` | Reverse sync: Supabase tables → `students_db.json` (for Python scripts) |
+| `src/store/slices/examSupabase.js` | Supabase helpers for exam mutations: `upsertExam`, `deleteExamById`, `updateExamQuestions`, `buildExamRow`, `buildResultRows` |
 | `src/store/slices/syllabusSlice.js` | Syllabus CRUD + progress cycle |
 | `src/store/slices/timetableSlice.js` | Timetable, slot, mapping, teacher CRUD |
 | `src/pages/Timetable/` | TimetablePage, TimetableGrid, ExamScheduleView, AddExamScheduleModal, Edit/Add modals, SendScheduleModal |
@@ -261,8 +265,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **409 tests passing** (as of 2026-05-06; 1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests).
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **503 tests passing** (as of 2026-05-07; 1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -271,6 +275,7 @@ Key coverage: analytics filters, GAT routing, tag validation, dashboard filters,
 - `syllabusSlice.test.js` mock state must include `syllabusBatchBranches: {}` and `batchChapterTimelines: {}` — `deleteSyllabusBatch` and `renameSyllabusBatch` destructure both.
 - Async slice actions that call `fetch` (e.g. `addNameVariant`) must use `vi.stubGlobal('fetch', vi.fn(...))` with a `beforeEach(() => vi.restoreAllMocks())` guard — see `src/store/slices/__tests__/studentSlice.test.js`.
 - `Exams.test.jsx` mock store must include `whatsappSendHistory: {}`, `bulkUpdateStudentContacts: vi.fn()`, and `setWhatsappSendHistory: vi.fn()` — all three are now read from the store at component mount.
+- Exams pagination tests use `data-testid="exam-card"` (not `role="heading"`) — exam names render in `<div>`, not `<h3>`; `Card` spreads `...props` so the attribute passes through.
 - `api/__tests__/student-login.test.js` uses `@vitest-environment node` docblock (Node.js APIs: `fs`, `process.env`) and mocks `@supabase/supabase-js` with `createClient: vi.fn()` configured per-test via `makeMockClient()`.
 
 ## Lint
@@ -319,8 +324,8 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Subject filter is local component state, not in the store | Filters reset naturally on navigation (correct UX). No cross-page filter persistence was ever requested. Lifting to the store would add complexity with no benefit. |
 | `failedNames` defaults to `null` (not `[]`) on first send | `null` means "no history" — the preview modal uses this to decide whether to show the resend scope toggle. An empty `[]` would show the toggle but with 0 students, which is confusing. |
 | `stripLatex` in `examPdf.js` outputs ASCII only (not Unicode math symbols) | jsPDF's built-in Helvetica is WinAnsi-encoded — every Unicode symbol above U+00FF (Greek letters, set operators, arrows, `≤≥≠`, `∈∪∩`, `∞`, `ℝ`, etc.) renders as garbage bytes. `×` `÷` `±` `·` (U+00D7/F7/B1/B7) are within WinAnsi and are kept. Embedding a custom Unicode font would significantly inflate the bundle; ASCII equivalents (`in`, `U`, `->`, `<=`, `alpha`, `inf`, etc.) are readable for NDA students. |
-| Single JSONB row in Supabase vs normalised schema | 2.3 MB state blob migrates and evolves without SQL schema changes; relational normalisation (Phase 5) is deferred until there's a clear read-performance need. |
-| Students use normalised tables; everything else stays in JSONB | Student mutations (batch assign, name variants, profile edits) were no-ops on Vercel because `/api/students-db` is a Vite-only dev plugin. Normalised tables fix this without migrating the full 2.3 MB state. Exam/syllabus/timetable data stays in `faculty_state` JSONB since it never had the same mutation gap. |
+| `faculty_state` JSONB for non-exam data; normalised tables for exams + students | Exams normalised in Phase 5: 2.3 MB → 224 KB JSONB. Syllabus/timetable/insights stay in JSONB — no mutation gap and no `api/` endpoint reads them by ID. Student mutations were no-ops on Vercel (Vite-only dev plugin) — normalised tables fix this. Exam mutations (`addExam`, `replaceExam`, `deleteExam`, `updateQuestion`) now write to `exams`/`exam_results` via `examSupabase.js` in addition to the JSONB-free `_save()`. |
+| Students use normalised tables; exams now normalised too (Phase 5) | Student mutations (batch assign, name variants, profile edits) were no-ops on Vercel because `/api/students-db` is a Vite-only dev plugin. Exam mutations had the same gap — reads came from JSONB but writes landed only in local JSON. Both are now dual-path: Supabase table write if session active, else dev-server fetch. |
 | `studentSlice.js` mutations use dual-path (Supabase if session, fetch if not) | Keeps dev workflow (local `students_db.json`) unchanged. No Vite config changes needed. The `getSession()` check is cheap — single Supabase client call. |
 | `sync:students` as a manual step for Python scripts | Python scripts (`send_results.py`, `send_results_whatsapp.py`) read `students_db.json`. Rather than rewriting them to query Supabase, a one-command sync keeps the Python side unchanged. Only needed before sends when student profile data changed online. |
 | `saveToSupabase` is fire-and-forget (no await) | Blocking the UI on every Zustand mutation would degrade responsiveness. Supabase writes are idempotent (last-write-wins on a single row); a dropped write is recovered on next mutation or reload. |
@@ -330,6 +335,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Student login via `/api/student-login` serverless instead of static JSON files | GitHub Pages can only serve static files — `/api/student-login` can't run there. Moving student login to a Vercel serverless function enables live Supabase queries, removes the need to regenerate `public/data/` on every deploy, and keeps student data server-side. |
 | Teacher accounts use individual Supabase auth with `role='teacher'` in `user_metadata` | AES-GCM shared password was brittle (one password for all teachers) and required a static `db.json` that needed regenerating on every data change. Individual Supabase accounts give per-teacher accountability, work with the existing `onAuthStateChange` flow, and always serve fresh data via `loadFromSupabase()`. |
 | `create_teacher_account.js` uses `supabase.auth.admin` (service role) not the public API | `signUp` would require email confirmation and a browser context. Admin API creates confirmed accounts instantly with custom metadata — appropriate for provisioning internal users. Requires `SUPABASE_SERVICE_ROLE_KEY` locally; teacher accounts are created once and managed via the Supabase dashboard thereafter. |
+| `migrate_exams_to_supabase.js --cleanup` prints SQL but does not execute it | The 2026-05-07 incident: cleanup ran before the tables were populated (script read local file, which had 0 exams on dev). Lesson: always seed → verify row count matches source → then run cleanup SQL manually in Supabase SQL editor after confirming the app works with normalised data. |
+| `loadExamsFromSupabase` uses paginated `.range(from, from+PAGE-1)` loop | Supabase default `SELECT *` is capped at 1000 rows. With 1472+ `exam_results` rows the bare query silently cut off 472 rows, making new exams show 0 students. All queries on tables that can exceed 1000 rows must use `fetchAllRows()` pagination. |
+| Exams page pagination: PAGE_SIZE = 10 | 39+ exams and growing made a single-page list hard to scan. 10 per page keeps the list short without excessive clicks. `page` state resets on filter/sort changes. |
 
 ---
 
@@ -362,6 +370,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - Do not use `.catch()` on Supabase query builder chains — `PostgrestFilterBuilder` is a thenable, not a full Promise; `.catch` is `undefined` and throws silently. Always use `async/await` with `{ error }` destructuring inside the `.then()` callback.
 - `studentSlice.js` mutations must check `getSession()` before choosing Supabase vs fetch path — do not remove this dual-path logic. Dev mode depends on the fetch path; Vercel depends on the Supabase path.
 - `loadStudentsFromSupabase()` must be called after `faculty_state` loads in `initStore()` — it overwrites the stale `studentProfiles` baked into `faculty_state` with fresh data from the normalised tables. Do not remove this call.
+- `loadExamsFromSupabase()` is called in `initStore()` (faculty) and in `TeacherPortal` mount (teacher) — both paths must await it; removing it leaves the store with stale JSONB data (or no data).
+- `fetchAllRows` pagination in `persist.js` is required for all Supabase tables that can exceed 1000 rows (`exam_results` already at 1472+). Do not replace with a bare `.select('*')` — it silently truncates.
+- `migrate_exams_to_supabase.js --cleanup` only prints the cleanup SQL; it does not execute it. Run the SQL manually in Supabase SQL editor only after confirming exam counts match and the live app shows correct data. Never run cleanup before seeding.
 - `students_db.exams[]` must not be seeded into Supabase — confirmed dead data (no code path reads it). The normalised schema deliberately omits it.
 - `student_batches` PK is `(lws_id, batch_name)` — to rename a batch, you must DELETE old rows and INSERT new ones; you cannot UPDATE the PK in place.
 - `student_attendance` UNIQUE constraint is `(lws_id, date, batch)` — not just `(lws_id, date)` because a student can have multiple attendance records on the same date (different batches).

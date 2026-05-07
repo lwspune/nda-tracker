@@ -262,6 +262,56 @@ function parseBatchCell(val) {
   return s ? [s] : []
 }
 
+// ============================================================
+// PARSE ATTENDANCE EXCEL
+// LWS/EISM attendance export format:
+//   Row 0: title, Row 1: headers, Row 2+: student data
+// Date columns have DD-MM-YYYY headers; values are P, A, or -
+// Returns: { students: [{ name, mobile, dates: { 'YYYY-MM-DD': 'P'|'A' } }] }
+// ============================================================
+export async function parseAttendanceExcel(file) {
+  const buf = await file.arrayBuffer()
+  const wb  = XLSX.read(buf, { type: 'array' })
+  const ws  = wb.Sheets[wb.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1 })
+
+  if (raw.length < 3) throw new Error('Attendance file appears empty')
+
+  const headers = raw[1].map(h => String(h || '').trim())
+  const nameIdx   = headers.findIndex(h => h === 'Student Name')
+  const mobileIdx = headers.findIndex(h => h === 'Mobile No.')
+
+  if (nameIdx < 0) throw new Error('Cannot find "Student Name" column in attendance file')
+
+  // Identify date columns: headers matching DD-MM-YYYY
+  const dateColPattern = /^(\d{2})-(\d{2})-(\d{4})$/
+  const dateCols = headers
+    .map((h, i) => {
+      const m = h.match(dateColPattern)
+      if (!m) return null
+      return { colIdx: i, isoDate: `${m[3]}-${m[2]}-${m[1]}` }
+    })
+    .filter(Boolean)
+
+  const students = []
+  for (let r = 2; r < raw.length; r++) {
+    const row  = raw[r]
+    if (!row) continue
+    const name = String(row[nameIdx] || '').trim()
+    if (!name) continue
+
+    const mobile = mobileIdx >= 0 ? String(row[mobileIdx] || '').trim() : ''
+    const dates  = {}
+    for (const { colIdx, isoDate } of dateCols) {
+      const val = String(row[colIdx] || '').trim()
+      if (val === 'P' || val === 'A') dates[isoDate] = val
+    }
+    students.push({ name, mobile, dates })
+  }
+
+  return { students }
+}
+
 // ── Helper ───────────────────────────────────────────────────
 function cell(row, idx) {
   if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '') return null

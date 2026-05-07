@@ -17,6 +17,8 @@ import SyllabusPage from './pages/Syllabus/SyllabusPage'
 import TimetablePage from './pages/Timetable/TimetablePage'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
+import AttendancePage from './pages/Attendance'
+import AttendanceRings from './pages/Attendance/AttendanceRings'
 
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -84,10 +86,11 @@ export default function App() {
 
   // ── Faculty mode (localhost) ────────────────────────────────
   const pages = {
-    dashboard: <DashboardPage />,
-    exams:     <ExamsPage />,
-    students:  <StudentsPage />,
-    toppers:   <ToppersPage />,
+    dashboard:  <DashboardPage />,
+    exams:      <ExamsPage />,
+    students:   <StudentsPage />,
+    attendance: <AttendancePage />,
+    toppers:    <ToppersPage />,
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
     insights:   <InsightsPage />,
@@ -116,14 +119,15 @@ function OnlineFacultyPortal({ onLogout }) {
   const activePage = useStore(s => s.activePage)
 
   const pages = {
-    dashboard: <DashboardPage />,
-    exams:     <ExamsPage />,
-    students:  <StudentsPage />,
-    toppers:   <ToppersPage />,
-    syllabus:  <SyllabusPage />,
-    timetable: <TimetablePage />,
-    insights:  <InsightsPage />,
-    costs:     <CostsPage />,
+    dashboard:  <DashboardPage />,
+    exams:      <ExamsPage />,
+    students:   <StudentsPage />,
+    attendance: <AttendancePage />,
+    toppers:    <ToppersPage />,
+    syllabus:   <SyllabusPage />,
+    timetable:  <TimetablePage />,
+    insights:   <InsightsPage />,
+    costs:      <CostsPage />,
   }
 
   return (
@@ -163,12 +167,13 @@ function TeacherPortal({ onLogout }) {
   }, [])
 
   const pages = {
-    dashboard: <DashboardPage />,
-    exams:     <ExamsPage />,
-    students:  <StudentsPage />,
-    toppers:   <ToppersPage />,
-    syllabus:  <SyllabusPage />,
-    timetable: <TimetablePage />,
+    dashboard:  <DashboardPage />,
+    exams:      <ExamsPage />,
+    students:   <StudentsPage />,
+    attendance: <AttendancePage />,
+    toppers:    <ToppersPage />,
+    syllabus:   <SyllabusPage />,
+    timetable:  <TimetablePage />,
   }
 
   if (!loaded) {
@@ -197,10 +202,13 @@ function TeacherPortal({ onLogout }) {
 // Wraps StudentView with student-specific data loaded from their JSON file
 function StudentPortal({ data, onLogout }) {
   const loadStudentData = useStore(s => s.loadStudentData)
+  const [activeTab, setActiveTab] = useState('results')
 
   useEffect(() => {
     loadStudentData(data)
   }, [data])
+
+  const attendance = data.attendance || []
 
   return (
     <ModeContext.Provider value="student">
@@ -225,9 +233,28 @@ function StudentPortal({ data, onLogout }) {
           </button>
         </div>
 
-        {/* Student view — full StudentView component */}
-        <div className="pt-[60px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
-          <StudentView name={data.name} />
+        {/* Tab bar */}
+        <div className="fixed top-[56px] left-0 right-0 z-40 bg-sidebar border-b border-white/[0.07]
+                        flex items-center px-4 gap-1">
+          {[{ id: 'results', label: 'Results' }, { id: 'attendance', label: 'Attendance' }].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`px-4 py-2.5 text-[13px] font-semibold border-b-2 transition-all min-h-[44px]
+                ${activeTab === t.id
+                  ? 'text-indigo-300 border-indigo-300'
+                  : 'text-white/40 border-transparent hover:text-white/70'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="pt-[104px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
+          {activeTab === 'results'
+            ? <StudentView name={data.name} />
+            : <AttendanceRings attendance={attendance} />
+          }
         </div>
       </div>
     </ModeContext.Provider>

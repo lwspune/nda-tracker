@@ -133,7 +133,14 @@ export default async function handler(req, res) {
     })
     .filter(exam => exam.students.length > 0)
 
-  // ── 5. Load ndaFreqBySubject from faculty_state (still needed until 5e) ──
+  // ── 5. Load attendance for this student ─────────────────────────────────
+
+  const { data: attendanceRows } = await supabase
+    .from('student_attendance')
+    .select('date, status')
+    .eq('lws_id', student.lws_id)
+
+  // ── 6. Load ndaFreqBySubject from faculty_state ──────────────────────────
 
   const { data: stateRow, error: stateErr } = await supabase
     .from('faculty_state')
@@ -166,6 +173,7 @@ export default async function handler(req, res) {
     lwsId:            student.lws_id,
     profile,
     exams,
+    attendance:       attendanceRows || [],
     ndaFreqBySubject: stateRow.data?.ndaFreqBySubject || {},
   })
 }

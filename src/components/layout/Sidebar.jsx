@@ -6,8 +6,9 @@ import { useMode } from '../../context/ModeContext'
 const NAV = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'exams',     icon: '📝', label: 'Exams' },
-  { id: 'students',  icon: '👤', label: 'Students' },
-  { id: 'toppers',   icon: '🏆', label: 'Toppers' },
+  { id: 'students',   icon: '👤', label: 'Students' },
+  { id: 'attendance', icon: '📋', label: 'Attendance' },
+  { id: 'toppers',    icon: '🏆', label: 'Toppers' },
   { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
   { id: 'insights',  icon: '🧠', label: 'Insights', facultyOnly: true },
