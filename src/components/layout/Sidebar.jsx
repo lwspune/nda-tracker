@@ -15,14 +15,6 @@ const NAV = [
 ]
 
 // Returns true if exams exist that post-date the last deploy run.
-function useIsStale() {
-  const exams          = useStore(s => s.exams)
-  const lastDeployedAt = useStore(s => s.lastDeployedAt)
-  if (!exams.length) return false
-  if (!lastDeployedAt) return true  // never deployed
-  const deployDate = lastDeployedAt.slice(0, 10) // YYYY-MM-DD
-  return exams.some(e => e.date > deployDate)
-}
 
 export default function Sidebar({ onLogout }) {
   const activePage    = useStore(s => s.activePage)
@@ -30,7 +22,6 @@ export default function Sidebar({ onLogout }) {
   const exams         = useStore(s => s.exams)
   const studentProfiles = useStore(s => s.studentProfiles)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const isStale = useIsStale()
   const mode = useMode()
 
   const studentCount = new Set(
@@ -58,7 +49,7 @@ export default function Sidebar({ onLogout }) {
           exams={exams}
           studentCount={studentCount}
           profileCount={profileCount}
-          isStale={isStale}
+
           mode={mode}
           onLogout={onLogout}
         />
@@ -104,7 +95,7 @@ export default function Sidebar({ onLogout }) {
               exams={exams}
               studentCount={studentCount}
               profileCount={profileCount}
-              isStale={isStale}
+    
               mode={mode}
               onLogout={onLogout}
             />
@@ -134,7 +125,7 @@ export default function Sidebar({ onLogout }) {
   )
 }
 
-function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount, profileCount, isStale, mode, onLogout }) {
+function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount, profileCount, mode, onLogout }) {
   return (
     <>
       {/* Logo */}
@@ -178,20 +169,6 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
         ))}
       </nav>
 
-      {/* Stale data warning — faculty mode only */}
-      {mode === 'faculty' && isStale && (
-        <div className="mx-3 mb-3 px-3 py-2.5 rounded-lg bg-yellow-400/10 border border-yellow-400/30">
-          <div className="text-[10px] font-bold text-yellow-300 uppercase tracking-wide mb-1">
-            ⚠️ Students out of date
-          </div>
-          <div className="text-[10px] text-yellow-300/70 leading-snug">
-            New exams haven't been deployed. Run:
-          </div>
-          <div className="mt-1.5 font-mono text-[10px] bg-black/30 rounded px-2 py-1 text-yellow-200 select-all">
-            npm run deploy
-          </div>
-        </div>
-      )}
 
       {/* Footer stats + teacher logout */}
       <div className="px-5 pt-4 border-t border-white/[0.07]">
