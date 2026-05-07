@@ -18,8 +18,6 @@ import TimetablePage from './pages/Timetable/TimetablePage'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 import AttendancePage from './pages/Attendance'
-import AttendanceRings from './pages/Attendance/AttendanceRings'
-
 export default function App() {
   const activePage = useStore(s => s.activePage)
   const hydrated   = useStore(s => s.hydrated)
@@ -207,8 +205,6 @@ function StudentPortal({ data, onLogout }) {
     loadStudentData(data)
   }, [data])
 
-  const attendance = data.attendance || []
-
   return (
     <ModeContext.Provider value="student">
       <div className="min-h-screen bg-bg">
@@ -234,11 +230,6 @@ function StudentPortal({ data, onLogout }) {
 
         <div className="pt-[72px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
           <StudentView name={data.name} />
-          {attendance.length > 0 && (
-            <div className="mt-4">
-              <AttendanceRings attendance={attendance} />
-            </div>
-          )}
         </div>
       </div>
     </ModeContext.Provider>
