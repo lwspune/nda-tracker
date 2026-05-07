@@ -202,7 +202,6 @@ function TeacherPortal({ onLogout }) {
 // Wraps StudentView with student-specific data loaded from their JSON file
 function StudentPortal({ data, onLogout }) {
   const loadStudentData = useStore(s => s.loadStudentData)
-  const [activeTab, setActiveTab] = useState('results')
 
   useEffect(() => {
     loadStudentData(data)
@@ -233,28 +232,13 @@ function StudentPortal({ data, onLogout }) {
           </button>
         </div>
 
-        {/* Tab bar */}
-        <div className="fixed top-[56px] left-0 right-0 z-40 bg-sidebar border-b border-white/[0.07]
-                        flex items-center px-4 gap-1">
-          {[{ id: 'results', label: 'Results' }, { id: 'attendance', label: 'Attendance' }].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2.5 text-[13px] font-semibold border-b-2 transition-all min-h-[44px]
-                ${activeTab === t.id
-                  ? 'text-indigo-300 border-indigo-300'
-                  : 'text-white/40 border-transparent hover:text-white/70'}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="pt-[104px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
-          {activeTab === 'results'
-            ? <StudentView name={data.name} />
-            : <AttendanceRings attendance={attendance} />
-          }
+        <div className="pt-[72px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
+          <StudentView name={data.name} />
+          {attendance.length > 0 && (
+            <div className="mt-4">
+              <AttendanceRings attendance={attendance} />
+            </div>
+          )}
         </div>
       </div>
     </ModeContext.Provider>
