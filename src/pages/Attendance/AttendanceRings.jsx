@@ -12,33 +12,35 @@ function Ring({ pct, label }) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <svg width={SIZE} height={SIZE} className="-rotate-90">
-        {/* Track */}
-        <circle
-          cx={CX} cy={CY} r={R}
-          fill="none"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={STROKE}
-        />
-        {/* Progress */}
-        <circle
-          cx={CX} cy={CY} r={R}
-          fill="none"
-          stroke={color}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeDasharray={`${filled} ${C}`}
-          style={{ transition: 'stroke-dasharray 0.6s ease' }}
-        />
-      </svg>
-      {/* Percentage centred over the SVG */}
-      <div
-        className="absolute text-[15px] font-extrabold"
-        style={{ color, marginTop: `-${SIZE / 2 + 10}px` }}
-      >
-        {pct}%
+      <div className="relative" style={{ width: SIZE, height: SIZE }}>
+        <svg width={SIZE} height={SIZE} className="-rotate-90">
+          {/* Track */}
+          <circle
+            cx={CX} cy={CY} r={R}
+            fill="none"
+            stroke="rgba(0,0,0,0.08)"
+            strokeWidth={STROKE}
+          />
+          {/* Progress */}
+          <circle
+            cx={CX} cy={CY} r={R}
+            fill="none"
+            stroke={color}
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${C}`}
+            style={{ transition: 'stroke-dasharray 0.6s ease' }}
+          />
+        </svg>
+        {/* Percentage centred inside the ring */}
+        <div
+          className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold"
+          style={{ color }}
+        >
+          {pct}%
+        </div>
       </div>
-      <span data-testid="ring-month-label" className="text-[11px] font-mono text-white/40 tracking-wide">
+      <span data-testid="ring-month-label" className="text-[11px] font-mono text-ink-3 tracking-wide">
         {label}
       </span>
     </div>
@@ -80,7 +82,7 @@ export default function AttendanceRings({ attendance = [] }) {
 
   return (
     <div className="py-4">
-      <div className="text-[13px] font-semibold text-white/50 mb-6">My Attendance</div>
+      <div className="text-[13px] font-semibold text-ink-3 mb-6">My Attendance</div>
       <div className="flex flex-wrap gap-8 justify-start">
         {stats.map(({ month, pct, label }) => (
           <div key={month} className="relative flex flex-col items-center">

@@ -187,6 +187,14 @@ export default function StudentView({ name }) {
       {/* Profile card */}
       {profile && <ProfileCard name={name} profile={profile} />}
 
+      {/* Attendance rings — directly below profile */}
+      {attendance.length > 0 && (
+        <Card>
+          <CardTitle>Attendance</CardTitle>
+          <AttendanceRings attendance={attendance} />
+        </Card>
+      )}
+
       {/* Pre-registration exclusion notice — faculty/teacher only */}
       {excludedCount > 0 && mode !== 'student' && (
         <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200
@@ -286,14 +294,6 @@ export default function StudentView({ name }) {
 
       {/* Improvement plan */}
       <ImprovementPlan savedPlan={savedPlan} />
-
-      {/* Attendance rings — shown when data exists */}
-      {attendance.length > 0 && (
-        <Card>
-          <CardTitle>Attendance</CardTitle>
-          <AttendanceRings attendance={attendance} />
-        </Card>
-      )}
     </div>
   )
 }
