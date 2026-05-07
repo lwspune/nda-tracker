@@ -1,5 +1,16 @@
 // Re-runnable migration: faculty-data.json exams[] → Supabase normalised tables.
-// Usage: SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_exams_to_supabase.js
+//
+// Usage:
+//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_exams_to_supabase.js
+//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_exams_to_supabase.js --cleanup
+//
+// --cleanup  After verifying seed counts match, removes the stale exams key from
+//            the faculty_state JSONB blob. Only runs if seeded count === source count.
+//            Do NOT pass --cleanup until you have confirmed the app reads from tables.
+//
+// Source priority:
+//   1. data/faculty-data.json  (if exams.length > 0)
+//   2. Supabase faculty_state JSONB  (fallback when local file is empty)
 //
 // Tables populated:
 //   exams        — exam metadata + questions (questions stored as JSONB)
@@ -81,19 +92,75 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(1)
   }
 
-  let data
+  const runCleanup = process.argv.includes('--cleanup')
+  const supabase = createClient(SUPABASE_URL, key, { auth: { persistSession: false } })
+
+  // ── Load source exams ───────────────────────────────────────────────────────
+  let exams = []
+  let source = ''
+
   try {
-    data = JSON.parse(readFileSync('data/faculty-data.json', 'utf8'))
-  } catch (e) {
-    console.error('Could not read data/faculty-data.json:', e.message)
+    const data = JSON.parse(readFileSync('data/faculty-data.json', 'utf8'))
+    if ((data.exams || []).length > 0) {
+      exams = data.exams
+      source = 'data/faculty-data.json'
+    }
+  } catch { /* file absent or unreadable — fall through to Supabase */ }
+
+  if (exams.length === 0) {
+    console.log('Local file empty or absent — loading exams from Supabase faculty_state…')
+    const { data: row, error } = await supabase
+      .from('faculty_state').select('data').eq('id', 1).single()
+    if (error) {
+      console.error('Could not load faculty_state from Supabase:', error.message)
+      process.exit(1)
+    }
+    exams = row?.data?.exams || []
+    source = 'Supabase faculty_state JSONB'
+  }
+
+  if (exams.length === 0) {
+    console.error('Error: 0 exams found in both local file and Supabase JSONB. Aborting — nothing to migrate.')
     process.exit(1)
   }
 
-  const exams = data.exams || []
+  console.log(`Source: ${source}`)
   console.log(`Migrating ${exams.length} exams…`)
 
-  const supabase = createClient(SUPABASE_URL, key, { auth: { persistSession: false } })
-
   const { exams: examCount, results: resultCount } = await migrateExams(supabase, exams)
-  console.log(`\nDone — ${examCount} exams, ${resultCount} student results migrated to Supabase.`)
+
+  // ── Verify seeded counts match source ───────────────────────────────────────
+  const { count: seededExams } = await supabase
+    .from('exams').select('*', { count: 'exact', head: true })
+  const { count: seededResults } = await supabase
+    .from('exam_results').select('*', { count: 'exact', head: true })
+
+  const sourceResults = exams.reduce((n, e) => n + (e.students?.length ?? 0), 0)
+
+  console.log(`\nSeeded:  ${examCount} exams, ${resultCount} results`)
+  console.log(`Tables:  ${seededExams} exams, ${seededResults} results in Supabase`)
+
+  if (seededExams < exams.length) {
+    console.error(`\nVerification FAILED — expected ${exams.length} exams in table, got ${seededExams}. Aborting cleanup.`)
+    process.exit(1)
+  }
+
+  console.log('\nVerification passed ✓')
+
+  // ── Optional cleanup ────────────────────────────────────────────────────────
+  if (runCleanup) {
+    // Verify the JSONB still has exams before printing cleanup SQL
+    const { data: row } = await supabase
+      .from('faculty_state').select('data').eq('id', 1).single()
+    if (!(row?.data?.exams)) {
+      console.log('faculty_state.data.exams already absent — nothing to clean up.')
+    } else {
+      console.log('\nVerification passed. Run this in the Supabase SQL editor to remove the stale key:')
+      console.log("  UPDATE faculty_state SET data = data - 'exams' WHERE id = 1;")
+    }
+  } else {
+    console.log('\nNext step: once you have confirmed the app is reading from tables correctly,')
+    console.log('re-run with --cleanup to get the SQL that removes the stale exams key from faculty_state:')
+    console.log('  SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_exams_to_supabase.js --cleanup')
+  }
 }
