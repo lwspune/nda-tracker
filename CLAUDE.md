@@ -40,6 +40,8 @@ npm run migrate         # one-time: seed data/faculty-data.json → Supabase (ne
 npm run migrate:students  # seed students_db.json → Supabase students tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY; --cleanup prints cleanup SQL)
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs SUPABASE_SERVICE_ROLE_KEY)
+npm run merge:subtopics       # python -X utf8 merge_subtopics.py — apply subtopic renames to data/faculty-data.json
+npm run merge:subtopics:sync  # node migrate_subtopics_supabase.js — push renames to Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
 npm run lint
 ```
 
@@ -47,7 +49,7 @@ npm run lint
 
 | Command | Purpose |
 |---|---|
-| `/subtopic-analyse` | Near-duplicate subtopic names in `faculty-data.json`. Run after bulk tag uploads. |
+| `/subtopic-analyse` | Near-duplicate subtopic names queried live from Supabase. Run after bulk tag uploads. |
 
 ---
 
@@ -243,8 +245,9 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/components/upload/UploadModal.jsx` | 4-step add-exam modal |
 | `src/lib/excel.js` | Excel parsing (results, tags, student import, attendance import) |
 | `src/store/slices/attendanceSlice.js` | `importAttendance(parsed)` — mobile→lwsId matching, upsert to `student_attendance` |
-| `src/pages/Attendance/index.jsx` | Faculty/teacher page: batch filter, Supabase fetch, class avg/at-risk metrics, student table with % badges, Import XLS button |
-| `src/pages/Attendance/AttendanceRings.jsx` | SVG donut rings per calendar month (R=40, stroke-dasharray arc); rendered inline in StudentPortal (below exam results) and in StudentView (below profile card) |
+| `src/pages/Attendance/index.jsx` | Faculty/teacher page: consecutive absences alert (editable N days, ignores Sundays), paginated Supabase fetch, class avg/at-risk metrics, student table with % badges, Import XLS button |
+| `src/pages/Attendance/consecutiveAbsent.js` | Pure fn `buildConsecutiveAbsent(records, lwsIdToName, n)` — uses last N non-Sunday global dates; students absent on all N are flagged with `{ lwsId, name, since }` |
+| `src/pages/Attendance/AttendanceRings.jsx` | SVG donut rings per calendar month (R=40, stroke-dasharray arc); sorted latest-first; rendered inside `StudentView` (below exam data), visible in all three portals |
 | `src/lib/analytics.js` | Analytics facade |
 | `src/lib/ndaFreq.js` | `SUBJECTS`, `CONFIGURABLE_SUBJECTS`, `syncFreqChapters` |
 | `src/lib/examPdf.js` | `downloadExamPdf(exam)` — jsPDF exam report; `stripLatex()` converts LaTeX → ASCII for WinAnsi-safe rendering |
@@ -264,6 +267,9 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `send_results_whatsapp.py` | Wabridge WhatsApp result messages to students + parents. `--exam` / `--dry-run` / `--to` / `--redirect-to` / `--students "Name1,Name2"`. Payload: top-level `variables` array. Logs to `whatsapp_send_log.jsonl` (capped 500 entries). Triggered via `POST /api/send-whatsapp` in `vite.config.js`. |
 | `send_schedule.py` | Gmail SMTP teacher schedule + exam reminder emails. `--weekly` / `--daily` / `--exam-reminder N` / `--dry-run` / `--to` / `--teacher-id`. Requires `tzdata`. |
 | `generate_syllabus_seed.py` | Excel → `src/lib/syllabusSeed.js` |
+| `merge_subtopics.py` | One-time subtopic rename script: 28-entry `SUBTOPIC_RENAMES` map + `apply_renames(exams, map)` — updates `data/faculty-data.json`; run `merge:subtopics:sync` after to push to Supabase |
+| `migrate_subtopics_supabase.js` | Patches `exams.questions` JSONB in Supabase with the same 28-entry rename map (needs `SUPABASE_SERVICE_ROLE_KEY`); idempotent |
+| `tests/test_subtopic_merge.py` | 39 pytest tests for `merge_subtopics.py` rename logic |
 | `data/faculty-data.json` | Primary dev data store (gitignored) |
 | `students_db.json` | Student roster with mobiles (gitignored) |
 | `teacher_password.txt` | Legacy — was used to encrypt `db.json` for static teacher login. No longer needed; teacher login is now Supabase auth. |
@@ -273,8 +279,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **529 tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI).
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests).
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **543 Vitest tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI). **39 Python tests** in `tests/test_subtopic_merge.py`.
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -351,6 +357,10 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `student_logins` table separate from `students` | Login events are operational audit data, not student profile data. Separate table keeps the `students` row small and allows efficient "last login per student" queries via the `(lws_id, logged_in_at desc)` index. |
 | `StudentView` subject filter defaults to `'Maths'` | Nearly all NDA students at LWS sit Maths exams; defaulting to `'all'` caused GAT students' exams to appear alongside Maths in the default view, diluting the Maths analytics. Faculty can still select `'All Subjects'`. |
 | WhatsApp TRACKER_BASE hardcoded in `api/send-whatsapp.js` (not an env var) | The tracker URL is stable and public — it's the same Vercel deployment the file lives on. Making it an env var adds a config step for no benefit. If the domain ever changes, update the constant in both `api/send-whatsapp.js` and `send_results_whatsapp.py`. |
+| Attendance page has no batch filter | Consecutive absence detection is meaningful class-wide: if a student missed every class in the last N days, faculty needs to know regardless of batch. A batch filter would require joining across tables or client-side filtering of a large paginated dataset. |
+| `buildConsecutiveAbsent` uses the last N non-Sunday dates from the **global** dataset | Using per-student "last N" would vary by student and produce incoherent comparisons. Global last-N shared dates means the alert has a consistent meaning: these students were absent on the same N days the rest of the class attended. |
+| `/subtopic-analyse` skill reads from Supabase, not `faculty-data.json` | Tags uploaded on Vercel go to Supabase but don't sync back to the local file. Reading from the local file after a prod upload would produce stale or incomplete analysis results. |
+| Subtopic renames applied via direct MCP SQL, not the migration script | For a known one-time JSONB fixup, a single SQL `UPDATE` with `jsonb_agg(CASE ...)` is atomic and requires no env vars. `migrate_subtopics_supabase.js` is retained for future runs and for team members without MCP access. |
 
 ---
 
@@ -394,3 +404,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `attendanceSlice.importAttendance` matches students by mobile first, then by name — do not change to name-only matching; mobile is more reliable when names vary across XLS files.
 - `AttendanceRings` uses `relative` + `absolute inset-0` overlay for the % label — do not revert to the `marginTop` hack; it places text outside the ring bounds on light backgrounds.
 - `student_logins` insert uses `.then(() => {})` — do not add `await`; it must remain fire-and-forget so login latency is unaffected.
+- `AttendanceRings` renders months latest-first (`b.localeCompare(a)`) — do not revert to ascending sort.
+- `buildConsecutiveAbsent` uses the last N non-Sunday dates from the **global** `records` dataset — all students are measured against the same reference dates. Do not switch to per-student date filtering.
+- `StudentView`'s `attendance: attendanceProp = null` prop bypasses the Supabase fetch when provided — required for the student portal because students have no Supabase auth session (RLS blocks unauthenticated reads). Removing the prop bypass breaks attendance rings in the student portal.
+- Attendance page has no batch filter by design — consecutive absence detection is class-wide.
