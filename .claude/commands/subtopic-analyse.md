@@ -2,24 +2,43 @@
 context: fork
 ---
 
-Do NOT read `data/faculty-data.json` directly — it is too large. Run this Python script via Bash; it finds near-duplicate subtopics itself and outputs only the suspect groups:
+Supabase is the authoritative source for question data. Do NOT read `data/faculty-data.json` — it may lag behind tags uploaded on Vercel.
+
+## Step 1 — fetch subtopics from Supabase
+
+Use the `mcp__supabase__execute_sql` tool with this query:
+
+```sql
+SELECT
+  COALESCE(q->>'subject', 'Maths') AS subject,
+  q->>'chapter'                    AS chapter,
+  q->>'subtopic'                   AS subtopic,
+  COUNT(*)::int                    AS cnt
+FROM exams,
+     jsonb_array_elements(questions) AS q
+WHERE q->>'chapter'  IS NOT NULL
+  AND q->>'subtopic' IS NOT NULL
+  AND trim(q->>'subtopic') != ''
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3;
+```
+
+## Step 2 — write result to a temp file
+
+Write the JSON array returned by Step 1 to `C:/Windows/Temp/nda_subtopics.json` using the Write tool (Windows path — use forward slashes).
+
+## Step 3 — run similarity analysis
 
 ```bash
 python -X utf8 -c "
 import json, collections, difflib
 
-with open('data/faculty-data.json', encoding='utf-8') as f:
-    data = json.load(f)
+with open('C:/Windows/Temp/nda_subtopics.json', encoding='utf-8') as f:
+    rows = json.load(f)
 
-# Build { (subj, ch): Counter(subtopic -> count) }
 tree = collections.defaultdict(collections.Counter)
-for exam in data.get('exams', []):
-    for q in exam.get('questions', []):
-        ch = (q.get('chapter') or '').strip()
-        st = (q.get('subtopic') or '').strip()
-        subj = (q.get('subject') or 'Maths').strip()
-        if ch and st:
-            tree[(subj, ch)][st] += 1
+for r in rows:
+    tree[(r['subject'], r['chapter'])][r['subtopic']] += int(r['cnt'])
 
 def normalise(s):
     return s.lower().rstrip('s').replace('&', 'and').replace('-', ' ').replace('  ', ' ').strip()
@@ -56,19 +75,19 @@ if not found_any:
 "
 ```
 
-The script prints only chapters that have near-duplicate subtopic groups, in the form:
+The script prints only chapters with near-duplicate groups:
 ```
 SUBJECT: Maths  CHAPTER: Trigonometry
   GROUP: "Heights & Distance" (12), "Height and Distance" (3)
 ```
 
-Your task:
-1. Review the script output.
-2. For each GROUP, suggest a single canonical merged name.
-3. Produce a structured report:
+## Step 4 — produce report
 
-## Subject: <subject> — Chapter: <chapter>
-### Group N
+1. For each GROUP, suggest a single canonical merged name.
+2. Produce a structured report:
+
+### Subject: <subject> — Chapter: <chapter>
+#### Group N
 - Variants: `Name A` (n), `Name B` (n)
 - Suggested merge: `Canonical Name`
 
