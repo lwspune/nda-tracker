@@ -4,6 +4,7 @@ import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import { parseAttendanceExcel } from '../../lib/excel'
 import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
+import { buildConsecutiveAbsent } from './consecutiveAbsent'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -38,38 +39,6 @@ function buildStudentStats(records, lwsIdToName) {
       }
     })
     .sort((a, b) => a.pct - b.pct || a.name.localeCompare(b.name))
-}
-
-// Returns students absent on each of the last n non-Sunday dates in the dataset.
-// A student is flagged only if they have an 'A' record on ALL n target dates.
-function buildConsecutiveAbsent(records, lwsIdToName, n) {
-  if (n < 1 || !records.length) return []
-
-  const allDates = [...new Set(records.map(r => r.date))]
-    .filter(d => new Date(d).getDay() !== 0) // exclude Sundays
-    .sort((a, b) => b.localeCompare(a))      // latest first
-
-  const targetDates = allDates.slice(0, n)
-  if (targetDates.length < n) return []      // not enough data yet
-
-  const targetSet = new Set(targetDates)
-
-  // Build { lws_id: { date: status } } for target dates only
-  const byLwsId = {}
-  for (const r of records) {
-    if (!targetSet.has(r.date)) continue
-    if (!byLwsId[r.lws_id]) byLwsId[r.lws_id] = {}
-    byLwsId[r.lws_id][r.date] = r.status
-  }
-
-  const result = []
-  for (const [lwsId, dateMap] of Object.entries(byLwsId)) {
-    if (targetDates.every(d => dateMap[d] === 'A')) {
-      const since = targetDates[targetDates.length - 1] // earliest absent date
-      result.push({ lwsId, name: lwsIdToName[lwsId] || lwsId, since })
-    }
-  }
-  return result.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function fmtDate(iso) {
