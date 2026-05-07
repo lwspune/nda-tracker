@@ -40,6 +40,43 @@ function buildStudentStats(records, lwsIdToName) {
     .sort((a, b) => a.pct - b.pct || a.name.localeCompare(b.name))
 }
 
+// Returns students absent on each of the last n non-Sunday dates in the dataset.
+// A student is flagged only if they have an 'A' record on ALL n target dates.
+function buildConsecutiveAbsent(records, lwsIdToName, n) {
+  if (n < 1 || !records.length) return []
+
+  const allDates = [...new Set(records.map(r => r.date))]
+    .filter(d => new Date(d).getDay() !== 0) // exclude Sundays
+    .sort((a, b) => b.localeCompare(a))      // latest first
+
+  const targetDates = allDates.slice(0, n)
+  if (targetDates.length < n) return []      // not enough data yet
+
+  const targetSet = new Set(targetDates)
+
+  // Build { lws_id: { date: status } } for target dates only
+  const byLwsId = {}
+  for (const r of records) {
+    if (!targetSet.has(r.date)) continue
+    if (!byLwsId[r.lws_id]) byLwsId[r.lws_id] = {}
+    byLwsId[r.lws_id][r.date] = r.status
+  }
+
+  const result = []
+  for (const [lwsId, dateMap] of Object.entries(byLwsId)) {
+    if (targetDates.every(d => dateMap[d] === 'A')) {
+      const since = targetDates[targetDates.length - 1] // earliest absent date
+      result.push({ lwsId, name: lwsIdToName[lwsId] || lwsId, since })
+    }
+  }
+  return result.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-')
+  return new Date(+y, +m - 1, +d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
 // ── page ─────────────────────────────────────────────────────
 
 export default function AttendancePage() {
@@ -47,25 +84,13 @@ export default function AttendancePage() {
   const importAttendance = useStore(s => s.importAttendance)
   const mode = useMode()
 
-  const [batchFilter,    setBatchFilter]  = useState('all')
-  const [records,        setRecords]      = useState([])
-  const [loading,        setLoading]      = useState(false)
-  const [refreshKey,     setRefreshKey]   = useState(0)
-  const [importing,      setImporting]    = useState(false)
-  const [importResult,   setImportResult] = useState(null)
+  const [consecutiveDays, setConsecutiveDays] = useState(3)
+  const [records,         setRecords]         = useState([])
+  const [loading,         setLoading]         = useState(false)
+  const [refreshKey,      setRefreshKey]      = useState(0)
+  const [importing,       setImporting]       = useState(false)
+  const [importResult,    setImportResult]    = useState(null)
   const fileInputRef = useRef(null)
-
-  // All hooks before early returns
-  const allBatches = useMemo(() => {
-    const seen = new Set()
-    const batches = new Set()
-    for (const p of Object.values(studentProfiles)) {
-      if (!p.lwsId || seen.has(p.lwsId)) continue
-      seen.add(p.lwsId)
-      ;(p.batches || []).forEach(b => batches.add(b))
-    }
-    return [...batches].sort()
-  }, [studentProfiles])
 
   // lws_id → canonical name
   const lwsIdToName = useMemo(() => {
@@ -76,37 +101,39 @@ export default function AttendancePage() {
     return map
   }, [studentProfiles])
 
-  // lws_ids for selected batch
-  const batchLwsIds = useMemo(() => {
-    const seen = new Set()
-    const ids  = []
-    for (const p of Object.values(studentProfiles)) {
-      if (!p.lwsId || seen.has(p.lwsId)) continue
-      seen.add(p.lwsId)
-      if (batchFilter === 'all' || (p.batches || []).includes(batchFilter)) ids.push(p.lwsId)
-    }
-    return ids
-  }, [studentProfiles, batchFilter])
-
-  // Fetch attendance from Supabase
+  // Fetch all attendance records with pagination (Supabase caps bare select at 1000 rows)
   useEffect(() => {
-    if (!supabase || !batchLwsIds.length) { setRecords([]); return }
+    if (!supabase) { setRecords([]); return }
     let cancelled = false
     setLoading(true)
-    supabase.from('student_attendance')
-      .select('lws_id, date, status')
-      .in('lws_id', batchLwsIds)
-      .then(({ data, error }) => {
-        if (cancelled) return
-        if (!error) setRecords(data || [])
-        setLoading(false)
-      })
+    async function fetchAll() {
+      const PAGE = 1000
+      let from = 0
+      const all = []
+      while (true) {
+        const { data, error } = await supabase
+          .from('student_attendance')
+          .select('lws_id, date, status')
+          .range(from, from + PAGE - 1)
+        if (error || !data?.length) break
+        all.push(...data)
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      if (!cancelled) { setRecords(all); setLoading(false) }
+    }
+    fetchAll()
     return () => { cancelled = true }
-  }, [batchLwsIds, refreshKey])
+  }, [refreshKey])
 
   const studentStats = useMemo(
     () => buildStudentStats(records, lwsIdToName),
     [records, lwsIdToName]
+  )
+
+  const consecutiveAbsent = useMemo(
+    () => buildConsecutiveAbsent(records, lwsIdToName, consecutiveDays),
+    [records, lwsIdToName, consecutiveDays]
   )
 
   const classAvg = studentStats.length
@@ -182,27 +209,45 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* Batch filter */}
-      {allBatches.length > 0 && (
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">Batch</span>
-          <button
-            onClick={() => setBatchFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all min-h-[36px]
-              ${batchFilter === 'all' ? 'bg-indigo-300/20 text-indigo-300' : 'text-ink-3 hover:text-ink-2'}`}
-          >
-            All
-          </button>
-          {allBatches.map(b => (
-            <button
-              key={b}
-              onClick={() => setBatchFilter(b)}
-              className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all min-h-[36px] truncate max-w-[200px]
-                ${batchFilter === b ? 'bg-indigo-300/20 text-indigo-300' : 'text-ink-3 hover:text-ink-2'}`}
-            >
-              {b}
-            </button>
-          ))}
+      {/* Consecutive absences alert */}
+      {records.length > 0 && (
+        <div className="card px-5 py-4 mb-5">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="text-[12px] font-mono uppercase tracking-widest text-ink-3">Absent last</span>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={consecutiveDays}
+              onChange={e => setConsecutiveDays(Math.max(1, Math.min(30, +e.target.value || 1)))}
+              className="form-input w-14 text-center text-[13px] py-1 px-2"
+            />
+            <span className="text-[12px] font-mono uppercase tracking-widest text-ink-3">
+              consecutive days (excl. Sundays)
+            </span>
+            {consecutiveAbsent.length > 0 && (
+              <span className="ml-auto text-[12px] font-semibold text-red-400">
+                {consecutiveAbsent.length} student{consecutiveAbsent.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {consecutiveAbsent.length === 0 ? (
+            <div className="text-[13px] text-green-500 font-semibold">✓ No consecutive absences</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {consecutiveAbsent.map(s => (
+                <div
+                  key={s.lwsId}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg
+                             bg-red-400/10 border border-red-400/20"
+                >
+                  <span className="text-[13px] font-semibold text-ink">{s.name}</span>
+                  <span className="text-[11px] font-mono text-red-400">since {fmtDate(s.since)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -239,7 +284,7 @@ export default function AttendancePage() {
               title="No attendance data"
               sub={mode === 'faculty'
                 ? 'Import an attendance XLS file to get started.'
-                : 'No attendance records available for this batch.'}
+                : 'No attendance records available.'}
             />
           )
           : (

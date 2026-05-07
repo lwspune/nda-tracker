@@ -38,11 +38,11 @@ describe('AttendanceRings', () => {
     expect(screen.getByText(/No attendance/i)).toBeInTheDocument()
   })
 
-  it('renders rings sorted by month (oldest first)', () => {
+  it('renders rings sorted by month (latest first)', () => {
     render(<AttendanceRings attendance={ATTENDANCE} />)
     const labels = screen.getAllByTestId('ring-month-label').map(el => el.textContent)
-    expect(labels[0]).toMatch(/Apr/i)
-    expect(labels[1]).toMatch(/May/i)
+    expect(labels[0]).toMatch(/May/i)
+    expect(labels[1]).toMatch(/Apr/i)
   })
 
   it('counts only P and A — no status leaks into total', () => {
