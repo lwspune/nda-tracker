@@ -142,7 +142,7 @@ export function ProfileCard({ name, profile, loginStats = null }) {
       {/* Branch / Batch — view or edit */}
       <div className="flex flex-col md:flex-row flex-wrap gap-2 md:gap-4 text-[12px]">
         {isEditing ? (
-          <div className="flex flex-col gap-3 min-w-[260px]">
+          <div className="flex flex-col gap-3 w-full">
             {/* Branch input */}
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-1">Branch</div>
@@ -184,7 +184,7 @@ export function ProfileCard({ name, profile, loginStats = null }) {
                   {knownBatches.map(b => <option key={b} value={b} />)}
                 </datalist>
                 <button onClick={addBatch}
-                        className="btn btn-secondary btn-sm text-[11px] px-2">+ Add</button>
+                        className="btn btn-secondary btn-sm text-[11px] px-3 min-h-[44px]">+ Add</button>
               </div>
             </div>
 
@@ -211,7 +211,7 @@ export function ProfileCard({ name, profile, loginStats = null }) {
                   className="form-input text-[12px] py-1 flex-1"
                 />
                 <button onClick={addParentMobile}
-                        className="btn btn-secondary btn-sm text-[11px] px-2">+ Add</button>
+                        className="btn btn-secondary btn-sm text-[11px] px-3 min-h-[44px]">+ Add</button>
               </div>
             </div>
 

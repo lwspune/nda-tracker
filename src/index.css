@@ -22,7 +22,7 @@
   .badge-yellow{ @apply bg-yellow-50 text-warning; }
   .badge-blue  { @apply bg-accent-soft text-accent; }
   .badge-gray  { @apply bg-surface-2 text-ink-2; }
-  .form-input { @apply w-full bg-surface-2 border-[1.5px] border-border rounded-lg px-3 py-2.5 text-[13px] font-sans text-ink outline-none transition-all focus:border-accent focus:bg-white; }
+  .form-input { @apply w-full min-h-[44px] bg-surface-2 border-[1.5px] border-border rounded-lg px-3 py-2.5 text-[13px] font-sans text-ink outline-none transition-all focus:border-accent focus:bg-white; }
   .form-label { @apply block text-[10.5px] font-bold uppercase tracking-[1px] text-ink-2 mb-1.5; }
   .stat-card { @apply bg-surface border border-border rounded-xl p-5 shadow-sm transition-shadow hover:shadow-md; }
 }

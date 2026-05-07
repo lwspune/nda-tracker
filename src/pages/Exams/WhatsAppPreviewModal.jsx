@@ -127,7 +127,7 @@ export default function WhatsAppPreviewModal({ exam, onClose, onConfirm, sending
               No failed or skipped students from the previous send.
             </div>
           ) : (
-            <table className="w-full text-[12px] border-collapse">
+            <table className="w-full min-w-[560px] text-[12px] border-collapse">
               <thead className="sticky top-0 bg-surface-2 z-10">
                 <tr>
                   {['#', 'Name', 'Branch', 'Mobile', 'Parent Mobiles (comma-separated)'].map(h => (
