@@ -20,11 +20,27 @@ export async function loadFromSupabase() {
   return data?.data ?? null
 }
 
+// Fetches all rows from a table, paginating past Supabase's default 1000-row limit.
+async function fetchAllRows(table) {
+  const PAGE = 1000
+  const rows = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from(table).select('*').range(from, from + PAGE - 1)
+    if (error) return { data: null, error }
+    rows.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return { data: rows, error: null }
+}
+
 export async function loadExamsFromSupabase() {
   if (!supabase) return null
-  const { data: examRows, error: examsErr } = await supabase.from('exams').select('*')
+
+  const { data: examRows, error: examsErr } = await fetchAllRows('exams')
   if (examsErr) return null
-  const { data: resultRows, error: resultsErr } = await supabase.from('exam_results').select('*')
+  const { data: resultRows, error: resultsErr } = await fetchAllRows('exam_results')
   if (resultsErr) return null
 
   const resultsByExam = {}

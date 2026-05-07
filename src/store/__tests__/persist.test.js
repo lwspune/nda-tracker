@@ -113,13 +113,17 @@ const MOCK_RESULT_ROWS = [
     responses: { '1': -1 } },
 ]
 
+// loadExamsFromSupabase paginates via .select().range(from, to).
+// The mock returns all rows on the first page (length < PAGE_SIZE signals end).
 function makeExamsFromMock({ examsErr = null, resultsErr = null, examRows = MOCK_EXAM_ROWS, resultRows = MOCK_RESULT_ROWS } = {}) {
   supabase.from.mockImplementation(table => {
     if (table === 'exams') {
-      return { select: vi.fn().mockResolvedValue({ data: examRows, error: examsErr }) }
+      const range = vi.fn().mockResolvedValue({ data: examRows, error: examsErr })
+      return { select: vi.fn().mockReturnValue({ range }) }
     }
     if (table === 'exam_results') {
-      return { select: vi.fn().mockResolvedValue({ data: resultRows, error: resultsErr }) }
+      const range = vi.fn().mockResolvedValue({ data: resultRows, error: resultsErr })
+      return { select: vi.fn().mockReturnValue({ range }) }
     }
   })
 }
@@ -193,5 +197,35 @@ describe('loadExamsFromSupabase', () => {
     expect(exams).toHaveLength(2)
     expect(exams.find(e => e.id === 'exam_1').students).toHaveLength(1)
     expect(exams.find(e => e.id === 'exam_2').students).toHaveLength(1)
+  })
+
+  it('paginates exam_results when first page is full (> default 1000 row limit)', async () => {
+    const PAGE = 1000
+    // First page: exactly PAGE rows → triggers a second fetch
+    const page1 = Array.from({ length: PAGE }, (_, i) => ({
+      ...MOCK_RESULT_ROWS[0], student_name: `Student ${i}`,
+    }))
+    // Second page: 2 rows → signals end of data
+    const page2 = MOCK_RESULT_ROWS
+
+    const rangeMock = vi.fn()
+      .mockResolvedValueOnce({ data: page1, error: null })
+      .mockResolvedValueOnce({ data: page2, error: null })
+    supabase.from.mockImplementation(table => {
+      if (table === 'exams') {
+        return { select: vi.fn().mockReturnValue({
+          range: vi.fn().mockResolvedValue({ data: MOCK_EXAM_ROWS, error: null }),
+        }) }
+      }
+      if (table === 'exam_results') {
+        return { select: vi.fn().mockReturnValue({ range: rangeMock }) }
+      }
+    })
+
+    const [exam] = await loadExamsFromSupabase()
+    expect(exam.students).toHaveLength(PAGE + 2)
+    expect(rangeMock).toHaveBeenCalledTimes(2)
+    expect(rangeMock).toHaveBeenNthCalledWith(1, 0, PAGE - 1)
+    expect(rangeMock).toHaveBeenNthCalledWith(2, PAGE, PAGE * 2 - 1)
   })
 })
