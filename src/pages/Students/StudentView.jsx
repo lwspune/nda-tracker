@@ -19,7 +19,7 @@ import { ProfileCard, ImprovementPlan } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
-export default function StudentView({ name }) {
+export default function StudentView({ name, attendance: attendanceProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const savedInsights      = useStore(s => s.savedInsights)
@@ -45,17 +45,20 @@ export default function StudentView({ name }) {
       }))
     : exams
 
-  // Attendance — fetched from Supabase by lwsId; must be before early returns
-  const [attendance, setAttendance] = useState([])
+  // Attendance — prop takes precedence (student portal passes data from login API to avoid
+  // RLS block; faculty/teacher fetch directly from Supabase since they have an auth session)
+  const [fetchedAttendance, setFetchedAttendance] = useState([])
   useEffect(() => {
-    if (!supabase || !profile?.lwsId) { setAttendance([]); return }
+    if (attendanceProp !== null) { setFetchedAttendance([]); return }
+    if (!supabase || !profile?.lwsId) { setFetchedAttendance([]); return }
     let cancelled = false
     supabase.from('student_attendance')
       .select('date, status')
       .eq('lws_id', profile.lwsId)
-      .then(({ data }) => { if (!cancelled) setAttendance(data || []) })
+      .then(({ data }) => { if (!cancelled) setFetchedAttendance(data || []) })
     return () => { cancelled = true }
-  }, [profile?.lwsId])
+  }, [profile?.lwsId, attendanceProp])
+  const attendance = attendanceProp !== null ? attendanceProp : fetchedAttendance
 
   // Login stats — faculty/teacher only; must be before early returns
   const [loginStats, setLoginStats] = useState(null)
