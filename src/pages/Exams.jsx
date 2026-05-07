@@ -27,6 +27,9 @@ export default function ExamsPage() {
   const [branchFilter, setBranchFilter]   = useState('all')
   const [batchFilter, setBatchFilter]     = useState('all')
   const [sortBy, setSortBy]               = useState('date-desc')
+  const [page, setPage]                   = useState(0)
+
+  const PAGE_SIZE = 10
   const [reuploadTagsExam, setReuploadTagsExam]       = useState(null)
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
   const [expandedExamId, setExpandedExamId]           = useState(null)
@@ -132,6 +135,14 @@ export default function ExamsPage() {
     return 0
   })
 
+  const totalPages  = Math.ceil(sortedExams.length / PAGE_SIZE)
+  const visibleExams = sortedExams.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  function goToPage(p) {
+    setPage(p)
+    setExpandedExamId(null)
+  }
+
   const isFiltered = subjectFilter !== 'all' || branchFilter !== 'all' || batchFilter !== 'all'
   const countLabel = isFiltered
     ? `${filteredExams.length} of ${exams.length} exams`
@@ -147,7 +158,7 @@ export default function ExamsPage() {
             <select
               aria-label="Sort exams"
               value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
+              onChange={e => { setSortBy(e.target.value); setPage(0) }}
               className="form-input w-auto text-[13px] pr-8 cursor-pointer"
               style={{ minWidth: '160px' }}
             >
@@ -158,7 +169,7 @@ export default function ExamsPage() {
             <select
               aria-label="Subject filter"
               value={subjectFilter}
-              onChange={e => { setSubjectFilter(e.target.value); setBranchFilter('all'); setBatchFilter('all') }}
+              onChange={e => { setSubjectFilter(e.target.value); setBranchFilter('all'); setBatchFilter('all'); setPage(0) }}
               className="form-input w-auto text-[13px] pr-8 cursor-pointer"
               style={{ minWidth: '160px' }}
             >
@@ -171,7 +182,7 @@ export default function ExamsPage() {
               <select
                 aria-label="Branch filter"
                 value={branchFilter}
-                onChange={e => { setBranchFilter(e.target.value); setBatchFilter('all') }}
+                onChange={e => { setBranchFilter(e.target.value); setBatchFilter('all'); setPage(0) }}
                 className="form-input w-auto text-[13px] pr-8 cursor-pointer"
                 style={{ minWidth: '140px' }}
               >
@@ -185,7 +196,7 @@ export default function ExamsPage() {
               <select
                 aria-label="Batch filter"
                 value={batchFilter}
-                onChange={e => setBatchFilter(e.target.value)}
+                onChange={e => { setBatchFilter(e.target.value); setPage(0) }}
                 className="form-input w-auto text-[13px] pr-8 cursor-pointer"
                 style={{ minWidth: '140px' }}
               >
@@ -208,7 +219,7 @@ export default function ExamsPage() {
         <EmptyState icon="📝" title="No exams yet" sub="Upload your first results Excel to get started" />
       ) : (
         <div className="flex flex-col gap-3">
-          {sortedExams.map(exam => {
+          {visibleExams.map(exam => {
             const maxMarks = exam.questions.length * exam.marking.correct
             const scores   = exam.students.map(st => st.totalMarks)
             const avgScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
@@ -222,7 +233,7 @@ export default function ExamsPage() {
             const isExpanded = expandedExamId === exam.id
 
             return (
-              <Card key={exam.id} className="!p-0 overflow-hidden hover:border-accent/40 transition-colors">
+              <Card key={exam.id} data-testid="exam-card" className="!p-0 overflow-hidden hover:border-accent/40 transition-colors">
                 {/* ── Main exam row ── */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 px-4 py-3">
                   <div className="flex-1 min-w-0">
@@ -372,6 +383,30 @@ export default function ExamsPage() {
               </Card>
             )
           })}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 pt-2 pb-1">
+              <button
+                aria-label="Previous page"
+                onClick={() => goToPage(page - 1)}
+                disabled={page === 0}
+                className="btn btn-sm btn-secondary min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ← Previous
+              </button>
+              <span className="text-[13px] text-ink-3 font-mono">
+                Page {page + 1} of {totalPages}
+              </span>
+              <button
+                aria-label="Next page"
+                onClick={() => goToPage(page + 1)}
+                disabled={page >= totalPages - 1}
+                className="btn btn-sm btn-secondary min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       )}
 

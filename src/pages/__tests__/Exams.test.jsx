@@ -347,6 +347,117 @@ describe('Exams page — re-upload buttons (faculty mode)', () => {
   })
 })
 
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 10
+
+function makeExams(n, overrides = {}) {
+  return Array.from({ length: n }, (_, i) =>
+    makeExam({ name: `Exam Page Test ${i + 1}`, ...overrides })
+  )
+}
+
+describe('Exams page — pagination', () => {
+  it('renders all exams when count is at or below PAGE_SIZE', () => {
+    setExams(makeExams(PAGE_SIZE))
+    renderExams()
+    expect(screen.getAllByTestId('exam-card')).toHaveLength(PAGE_SIZE)
+  })
+
+  it('hides pagination controls when exams ≤ PAGE_SIZE', () => {
+    setExams(makeExams(PAGE_SIZE))
+    renderExams()
+    expect(screen.queryByRole('button', { name: /previous/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /next/i })).not.toBeInTheDocument()
+  })
+
+  it('shows only PAGE_SIZE exams when list exceeds PAGE_SIZE', () => {
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    expect(screen.getAllByTestId('exam-card')).toHaveLength(PAGE_SIZE)
+  })
+
+  it('shows pagination controls when exams > PAGE_SIZE', () => {
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument()
+  })
+
+  it('disables Prev button on first page', () => {
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    expect(screen.getByRole('button', { name: /previous/i })).toBeDisabled()
+  })
+
+  it('enables Next button on first page when more pages exist', () => {
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    expect(screen.getByRole('button', { name: /next/i })).not.toBeDisabled()
+  })
+
+  it('navigates to next page and shows remaining exams', async () => {
+    const user = userEvent.setup()
+    const exams = makeExams(PAGE_SIZE + 2)
+    setExams(exams)
+    renderExams()
+    // First page: first PAGE_SIZE exams visible
+    expect(screen.getByText('Exam Page Test 1')).toBeInTheDocument()
+    expect(screen.queryByText(`Exam Page Test ${PAGE_SIZE + 1}`)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    // Second page: remaining exams visible
+    expect(screen.queryByText('Exam Page Test 1')).not.toBeInTheDocument()
+    expect(screen.getByText(`Exam Page Test ${PAGE_SIZE + 1}`)).toBeInTheDocument()
+  })
+
+  it('disables Next button on last page', async () => {
+    const user = userEvent.setup()
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
+  })
+
+  it('Prev navigates back to previous page', async () => {
+    const user = userEvent.setup()
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /previous/i }))
+    expect(screen.getByText('Exam Page Test 1')).toBeInTheDocument()
+    expect(screen.queryByText(`Exam Page Test ${PAGE_SIZE + 1}`)).not.toBeInTheDocument()
+  })
+
+  it('resets to page 1 when subject filter changes', async () => {
+    const user = userEvent.setup()
+    // 11 Maths exams + 1 Physics — enough to paginate
+    setExams([
+      ...makeExams(PAGE_SIZE + 1, { subject: 'Maths' }),
+      makeExam({ name: 'Physics Exam', subject: 'Physics' }),
+    ])
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    // Now on page 2 — change filter
+    await user.selectOptions(getSubjectSelect(), 'Physics')
+    expect(screen.getByText('Physics Exam')).toBeInTheDocument()
+    // Should be on page 1 — no pagination controls since only 1 result
+    expect(screen.queryByRole('button', { name: /previous/i })).not.toBeInTheDocument()
+  })
+
+  it('resets to page 1 when sort order changes', async () => {
+    const user = userEvent.setup()
+    setExams(makeExams(PAGE_SIZE + 1))
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.queryByText('Exam Page Test 1')).not.toBeInTheDocument()
+    // Change sort
+    await user.selectOptions(screen.getByRole('combobox', { name: /sort/i }), 'date-asc')
+    expect(screen.getByText('Exam Page Test 1')).toBeInTheDocument()
+  })
+})
+
 // ── Email Results button — mode visibility ────────────────────────────────────
 
 describe('Exams page — Email Results button', () => {
