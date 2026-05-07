@@ -27,7 +27,7 @@ export default function StudentView({ name }) {
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
   const mode               = useMode()
 
-  const [subjectFilter, setSubjectFilter] = useState('all')
+  const [subjectFilter, setSubjectFilter] = useState('Maths')
 
   // Profile lookup — done first so regDate is available for exam filtering
   const profile = studentProfiles[name] ||
