@@ -69,8 +69,10 @@ function makeMockClient({
   resultsError  = null,
   examsError    = null,
   stateError    = null,
+  loginInsertError = null,
 } = {}) {
-  return {
+  const loginInsert = vi.fn().mockResolvedValue({ error: loginInsertError })
+  const client = {
     from: vi.fn(table => {
       if (table === 'students') {
         return {
@@ -91,6 +93,9 @@ function makeMockClient({
           }),
         }
       }
+      if (table === 'student_logins') {
+        return { insert: loginInsert }
+      }
       // faculty_state — ndaFreqBySubject only
       return {
         select: vi.fn().mockReturnValue({
@@ -100,7 +105,9 @@ function makeMockClient({
         }),
       }
     }),
+    loginInsert,
   }
+  return client
 }
 
 // ── Call helper ───────────────────────────────────────────────────────────────
@@ -275,5 +282,21 @@ describe('POST /api/student-login', () => {
       'https://test.supabase.co',
       'my-service-key'
     )
+  })
+
+  // ── Login tracking ────────────────────────────────────────────────────────
+
+  it('inserts a row into student_logins on successful login', async () => {
+    const client = makeMockClient()
+    vi.mocked(createClient).mockReturnValue(client)
+    await call({ mobile: '9876543210' })
+    expect(client.loginInsert).toHaveBeenCalledWith({ lws_id: 'LWS001' })
+  })
+
+  it('still returns 200 when student_logins insert fails (fire-and-forget)', async () => {
+    const client = makeMockClient({ loginInsertError: { message: 'DB error' } })
+    vi.mocked(createClient).mockReturnValue(client)
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(200)
   })
 })

@@ -125,13 +125,13 @@ describe('StudentView — subject dropdown with multiple subjects', () => {
     expect(getSubjectSelect()).toBeInTheDocument()
   })
 
-  it('defaults to "All Subjects"', () => {
+  it('defaults to "Maths"', () => {
     setExams([
       makeExam({ subject: 'Maths' }),
       makeExam({ subject: 'Physics' }),
     ])
     renderView()
-    expect(getSubjectSelect()).toHaveValue('all')
+    expect(getSubjectSelect()).toHaveValue('Maths')
   })
 
   it('lists only subjects the student has actually taken', () => {
@@ -176,20 +176,22 @@ describe('StudentView — subject dropdown with multiple subjects', () => {
 // ── Exam history — all subjects ───────────────────────────────────────────────
 
 describe('StudentView — exam history with no filter', () => {
-  it('shows all exams when subject is "All Subjects"', () => {
+  it('shows all exams when "all" is explicitly selected', async () => {
+    const user = userEvent.setup()
     setExams([
       makeExam({ subject: 'Maths',   examName: 'Maths Test 1' }),
       makeExam({ subject: 'Physics', examName: 'Physics Test 1' }),
     ])
     renderView()
+    await user.selectOptions(getSubjectSelect(), 'all')
     expect(screen.getByText('Maths Test 1')).toBeInTheDocument()
     expect(screen.getByText('Physics Test 1')).toBeInTheDocument()
   })
 
-  it('Exams Taken stat shows total exam count', () => {
+  it('Exams Taken stat shows count for default Maths filter', () => {
     setExams([
       makeExam({ subject: 'Maths' }),
-      makeExam({ subject: 'Physics' }),
+      makeExam({ subject: 'Maths' }),
     ])
     renderView()
     const card = screen.getByText('Exams Taken').closest('.stat-card')
@@ -267,12 +269,14 @@ describe('StudentView — exam history after selecting a subject', () => {
 // ── Chapter accordion scoped to selected subject ──────────────────────────────
 
 describe('StudentView — chapter accordion scoped to subject filter', () => {
-  it('shows chapters from all subjects when filter is "all"', () => {
+  it('shows chapters from all subjects when filter is "all"', async () => {
+    const user = userEvent.setup()
     setExams([
       makeExam({ subject: 'Maths',   chapter: 'Algebra' }),
       makeExam({ subject: 'Physics', chapter: 'Optics' }),
     ])
     renderView()
+    await user.selectOptions(getSubjectSelect(), 'all')
     const accordion = screen.getByTestId('chapter-accordion')
     expect(accordion.dataset.chapters).toContain('Algebra')
     expect(accordion.dataset.chapters).toContain('Optics')
@@ -337,7 +341,7 @@ describe('StudentView — name variant normalization', () => {
 // ── State resets on remount (simulates switching students) ────────────────────
 
 describe('StudentView — state resets when name prop changes', () => {
-  it('resets subject filter to "all" when component remounts with a new student', async () => {
+  it('resets subject filter to "Maths" when component remounts with a new student', async () => {
     const user = userEvent.setup()
     setExams([
       makeExam({ subject: 'Maths',   studentName: 'Alice', examName: 'Maths Test' }),
@@ -350,8 +354,8 @@ describe('StudentView — state resets when name prop changes', () => {
     await user.selectOptions(getSubjectSelect(), 'Physics')
     expect(getSubjectSelect()).toHaveValue('Physics')
 
-    // Remount with Bob — filter must reset
+    // Remount with Bob — filter must reset to default
     rerender(<StudentView key="Bob" name="Bob" />)
-    expect(getSubjectSelect()).toHaveValue('all')
+    expect(getSubjectSelect()).toHaveValue('Maths')
   })
 })

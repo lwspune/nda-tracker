@@ -13,6 +13,18 @@ function fmtDate(dateStr) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+/** Formats a UTC ISO timestamp as a relative human-readable string. */
+function relativeDate(isoString) {
+  if (!isoString) return null
+  const diff = Date.now() - new Date(isoString).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7)  return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? 's' : ''} ago`
+  return new Date(isoString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 /** Returns badge variant and label for the account status field. */
 function accountStatusBadge(status) {
   if (!status) return null
@@ -23,7 +35,7 @@ function accountStatusBadge(status) {
 }
 
 // ── Profile Card ──────────────────────────────────────────────
-export function ProfileCard({ name, profile }) {
+export function ProfileCard({ name, profile, loginStats = null }) {
   const mode                       = useMode()
   const studentProfiles            = useStore(s => s.studentProfiles)
   const updateStudentBranchBatch   = useStore(s => s.updateStudentBranchBatch)
@@ -112,6 +124,19 @@ export function ProfileCard({ name, profile }) {
           {profile.dob && <span>DOB: {fmtDate(profile.dob)}</span>}
           {regFormatted && <span>Reg: {regFormatted}</span>}
         </div>
+        {loginStats !== null && (
+          <div className="mt-1.5 text-[11px] font-mono">
+            {loginStats.count === 0
+              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                                 bg-amber-100 border border-amber-300 text-amber-700 font-semibold">
+                  ⚠ Never logged in
+                </span>
+              : <span className="text-ink-3">
+                  Last login: {relativeDate(loginStats.lastLogin)} · {loginStats.count} login{loginStats.count !== 1 ? 's' : ''}
+                </span>
+            }
+          </div>
+        )}
       </div>
 
       {/* Branch / Batch — view or edit */}

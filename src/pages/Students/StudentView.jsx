@@ -57,6 +57,22 @@ export default function StudentView({ name }) {
     return () => { cancelled = true }
   }, [profile?.lwsId])
 
+  // Login stats — faculty/teacher only; must be before early returns
+  const [loginStats, setLoginStats] = useState(null)
+  useEffect(() => {
+    if (!supabase || !profile?.lwsId || mode === 'student') { setLoginStats(null); return }
+    let cancelled = false
+    supabase.from('student_logins')
+      .select('logged_in_at', { count: 'exact' })
+      .eq('lws_id', profile.lwsId)
+      .order('logged_in_at', { ascending: false })
+      .limit(1)
+      .then(({ data, count }) => {
+        if (!cancelled) setLoginStats({ lastLogin: data?.[0]?.logged_in_at || null, count: count ?? 0 })
+      })
+    return () => { cancelled = true }
+  }, [profile?.lwsId, mode])
+
   // All exam appearances for this student
   const allExamData = getStudentExams(name, normalizedExams)
 
@@ -185,7 +201,7 @@ export default function StudentView({ name }) {
   return (
     <div className="space-y-4">
       {/* Profile card */}
-      {profile && <ProfileCard name={name} profile={profile} />}
+      {profile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
 
       {/* Attendance rings — directly below profile */}
       {attendance.length > 0 && (

@@ -140,6 +140,9 @@ export default async function handler(req, res) {
     .select('date, status')
     .eq('lws_id', student.lws_id)
 
+  // ── 5b. Record login event (fire-and-forget) ─────────────────────────────
+  supabase.from('student_logins').insert({ lws_id: student.lws_id }).then(() => {})
+
   // ── 6. Load ndaFreqBySubject from faculty_state ──────────────────────────
 
   const { data: stateRow, error: stateErr } = await supabase
