@@ -64,8 +64,8 @@ export default async function handler(req, res) {
   }
 
   const env = readEnvLocal()
-  const supabaseUrl  = env.VITE_SUPABASE_URL     || process.env.VITE_SUPABASE_URL     || ''
-  const supabaseAnon = env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+  const supabaseUrl  = env.VITE_SUPABASE_URL      || process.env.VITE_SUPABASE_URL      || ''
+  const supabaseAnon = env.VITE_SUPABASE_ANON_KEY  || process.env.VITE_SUPABASE_ANON_KEY  || ''
   const appKey     = env.WABRIDGE_APP_KEY      || process.env.WABRIDGE_APP_KEY      || ''
   const authKey    = env.WABRIDGE_AUTH_KEY     || process.env.WABRIDGE_AUTH_KEY     || ''
   const deviceId   = env.WABRIDGE_DEVICE_ID    || process.env.WABRIDGE_DEVICE_ID    || ''
@@ -89,36 +89,47 @@ export default async function handler(req, res) {
     return
   }
 
-  // Use user's JWT for all Supabase queries (respects RLS)
+  // JWT-scoped client for all DB queries (respects RLS)
   const supabase = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   })
 
   const { examName, redirectTo, students } = req.body
 
-  // Load exam from faculty_state JSONB
-  const { data: stateRow, error: stateErr } = await supabase
-    .from('faculty_state')
-    .select('data')
-    .eq('id', 1)
-    .single()
+  // ── Load exam from normalised exams table ──────────────────────────────────
 
-  if (stateErr || !stateRow) {
-    res.status(500).json({ ok: false, error: 'Could not load faculty state from Supabase' })
+  const { data: allExams, error: examsErr } = await supabase.from('exams').select('*')
+
+  if (examsErr) {
+    res.status(500).json({ ok: false, error: 'Could not load exams' })
     return
   }
 
-  const exams = stateRow.data?.exams || []
   const exam = examName
-    ? exams.find(e => (e.name || '').trim().toLowerCase() === (examName || '').trim().toLowerCase())
-    : [...exams].sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0]
+    ? (allExams || []).find(e =>
+        (e.name || '').trim().toLowerCase() === (examName || '').trim().toLowerCase()
+      )
+    : [...(allExams || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0]
 
   if (!exam) {
     res.status(404).json({ ok: false, error: `Exam not found: ${examName}` })
     return
   }
 
-  // Load student mobiles from normalised students table
+  // ── Load student results from normalised exam_results table ───────────────
+
+  const { data: resultRows, error: resultsErr } = await supabase
+    .from('exam_results')
+    .select('student_name, correct, incorrect, not_attempted')
+    .eq('exam_id', exam.id)
+
+  if (resultsErr) {
+    res.status(500).json({ ok: false, error: 'Could not load exam results' })
+    return
+  }
+
+  // ── Load student contact info ──────────────────────────────────────────────
+
   const { data: studentRows } = await supabase
     .from('students')
     .select('canonical_name, mobile, parent_mobiles, name_variants')
@@ -130,12 +141,20 @@ export default async function handler(req, res) {
     const keys = [name.toLowerCase(), ...(s.name_variants || []).map(v => v.trim().toLowerCase())]
     for (const key of keys) {
       if (!key) continue
-      if (s.mobile)               mobileMap[key] = s.mobile
+      if (s.mobile)                mobileMap[key] = s.mobile
       if (s.parent_mobiles?.length) parentMap[key] = s.parent_mobiles
     }
   }
 
-  let results = exam.students || exam.results || []
+  // ── Apply student filter and send ─────────────────────────────────────────
+
+  let results = (resultRows || []).map(r => ({
+    name:         r.student_name,
+    correct:      r.correct,
+    incorrect:    r.incorrect,
+    notAttempted: r.not_attempted,
+  }))
+
   if (students?.length) {
     const filter = new Set(students.map(n => n.toLowerCase()))
     results = results.filter(r => filter.has((r.name || '').toLowerCase()))
@@ -150,9 +169,9 @@ export default async function handler(req, res) {
     const name = (row.name || '').trim()
     if (!name) continue
 
-    const correct = row.correct || 0
-    const wrong   = row.incorrect || row.wrong || 0
-    const na      = row.notAttempted || row.skipped || 0
+    const correct = row.correct      || 0
+    const wrong   = row.incorrect    || 0
+    const na      = row.notAttempted || 0
     const total   = correct + wrong + na
     const pct     = total ? Math.round(correct / total * 100) : 0
 

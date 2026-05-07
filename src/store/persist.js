@@ -20,12 +20,49 @@ export async function loadFromSupabase() {
   return data?.data ?? null
 }
 
+export async function loadExamsFromSupabase() {
+  if (!supabase) return null
+  const { data: examRows, error: examsErr } = await supabase.from('exams').select('*')
+  if (examsErr) return null
+  const { data: resultRows, error: resultsErr } = await supabase.from('exam_results').select('*')
+  if (resultsErr) return null
+
+  const resultsByExam = {}
+  for (const r of resultRows) {
+    if (!resultsByExam[r.exam_id]) resultsByExam[r.exam_id] = []
+    resultsByExam[r.exam_id].push({
+      name:         r.student_name,
+      rollNo:       r.roll_no       ?? '',
+      totalMarks:   r.total_marks   ?? 0,
+      correct:      r.correct       ?? 0,
+      incorrect:    r.incorrect     ?? 0,
+      notAttempted: r.not_attempted ?? 0,
+      responses:    r.responses     ?? {},
+    })
+  }
+
+  return examRows.map(row => ({
+    id:        row.id,
+    name:      row.name,
+    date:      row.date,
+    subject:   row.subject,
+    batch:     row.batch,
+    branch:    row.branch,
+    marking:   row.marking   ?? { correct: 4, wrong: -1 },
+    questions: row.questions ?? [],
+    createdAt: row.created_at,
+    students:  resultsByExam[row.id] ?? [],
+  }))
+}
+
 export function saveToSupabase(data) {
   if (!supabase) return
   supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (!session) return
+    // exams are stored in normalised tables — exclude from the JSONB blob
+    const { exams: _exams, ...rest } = data
     const { error } = await supabase.from('faculty_state')
-      .update({ data, updated_at: new Date().toISOString() })
+      .update({ data: rest, updated_at: new Date().toISOString() })
       .eq('id', 1)
     if (error) console.error('[persist] Supabase save failed:', error)
   })

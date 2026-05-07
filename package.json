@@ -17,6 +17,7 @@
     "deploy": "gh-pages -d dist",
     "migrate": "node migrate_to_supabase.js",
     "migrate:students": "node migrate_students_to_supabase.js",
+    "migrate:exams": "node migrate_exams_to_supabase.js",
     "sync:students": "node sync_students_from_supabase.js"
   },
   "dependencies": {

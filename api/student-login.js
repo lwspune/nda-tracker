@@ -41,8 +41,8 @@ export default async function handler(req, res) {
   }
 
   const env = readEnvLocal()
-  const supabaseUrl  = env.VITE_SUPABASE_URL          || process.env.VITE_SUPABASE_URL          || ''
-  const serviceKey   = env.SUPABASE_SERVICE_ROLE_KEY   || process.env.SUPABASE_SERVICE_ROLE_KEY   || ''
+  const supabaseUrl = env.VITE_SUPABASE_URL         || process.env.VITE_SUPABASE_URL         || ''
+  const serviceKey  = env.SUPABASE_SERVICE_ROLE_KEY  || process.env.SUPABASE_SERVICE_ROLE_KEY  || ''
 
   if (!supabaseUrl || !serviceKey) {
     res.status(500).json({ error: 'Supabase not configured on server' })
@@ -51,7 +51,8 @@ export default async function handler(req, res) {
 
   const supabase = createClient(supabaseUrl, serviceKey)
 
-  // Load all students (285 rows — fast enough for a direct JS scan)
+  // ── 1. Find student by mobile ────────────────────────────────────────────
+
   const { data: students, error: studentsErr } = await supabase
     .from('students')
     .select('canonical_name, lws_id, mobile, name_variants, parent_mobiles, branch, registration_date, account_status, coming_status, dob, gender, student_batches(batch_name)')
@@ -68,12 +69,72 @@ export default async function handler(req, res) {
   }
 
   const canonicalName = student.canonical_name
-  const allNames = new Set([
-    canonicalName.toLowerCase(),
-    ...(student.name_variants || []).map(v => v.toLowerCase()),
-  ])
+  const allNames = [
+    canonicalName,
+    ...(student.name_variants || []),
+  ]
+  const allNamesLower = new Set(allNames.map(n => n.toLowerCase()))
 
-  // Load exam data from faculty_state
+  // ── 2. Load this student's exam results from normalised table ────────────
+
+  const { data: resultRows, error: resultsErr } = await supabase
+    .from('exam_results')
+    .select('*')
+    .in('student_name', allNames)
+
+  if (resultsErr) {
+    res.status(500).json({ error: 'Could not load exam results' })
+    return
+  }
+
+  // ── 3. Load exam metadata for those exam ids ─────────────────────────────
+
+  const examIds = [...new Set((resultRows || []).map(r => r.exam_id))]
+  let examRows = []
+
+  if (examIds.length > 0) {
+    const { data, error: examsErr } = await supabase
+      .from('exams')
+      .select('*')
+      .in('id', examIds)
+
+    if (examsErr) {
+      res.status(500).json({ error: 'Could not load exams' })
+      return
+    }
+    examRows = data || []
+  }
+
+  // ── 4. Reconstruct exam objects (merge metadata + student result) ─────────
+
+  const resultByExamId = {}
+  for (const r of (resultRows || [])) {
+    // keep first match per exam (handles edge case of duplicate rows)
+    if (!resultByExamId[r.exam_id]) resultByExamId[r.exam_id] = r
+  }
+
+  const exams = examRows
+    .map(exam => {
+      const r = resultByExamId[exam.id]
+      return {
+        ...exam,
+        marking:   exam.marking   || { correct: 4, wrong: -1 },
+        questions: exam.questions || [],
+        students: r ? [{
+          name:          r.student_name,
+          rollNo:        r.roll_no       || '',
+          totalMarks:    r.total_marks,
+          correct:       r.correct,
+          incorrect:     r.incorrect,
+          notAttempted:  r.not_attempted,
+          responses:     r.responses     || {},
+        }] : [],
+      }
+    })
+    .filter(exam => exam.students.length > 0)
+
+  // ── 5. Load ndaFreqBySubject from faculty_state (still needed until 5e) ──
+
   const { data: stateRow, error: stateErr } = await supabase
     .from('faculty_state')
     .select('data')
@@ -81,31 +142,23 @@ export default async function handler(req, res) {
     .single()
 
   if (stateErr || !stateRow) {
-    res.status(500).json({ error: 'Could not load exam data' })
+    res.status(500).json({ error: 'Could not load frequency data' })
     return
   }
-
-  // Filter exams to only this student's records
-  const exams = (stateRow.data?.exams || [])
-    .map(exam => ({
-      ...exam,
-      students: (exam.students || []).filter(s => allNames.has((s.name || '').toLowerCase())),
-    }))
-    .filter(exam => exam.students.length > 0)
 
   const profile = {
     lwsId:         student.lws_id,
     name:          canonicalName,
     mobile:        student.mobile,
-    dob:           student.dob || '',
-    gender:        student.gender || '',
-    branch:        student.branch || '',
+    dob:           student.dob            || '',
+    gender:        student.gender         || '',
+    branch:        student.branch         || '',
     batches:       (student.student_batches || []).map(b => b.batch_name),
     parentMobiles: student.parent_mobiles || [],
     accountStatus: student.account_status || '',
-    comingStatus:  student.coming_status || '',
+    comingStatus:  student.coming_status  || '',
     regDate:       student.registration_date || '',
-    nameVariants:  student.name_variants || [],
+    nameVariants:  student.name_variants  || [],
   }
 
   res.status(200).json({

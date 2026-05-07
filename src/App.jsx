@@ -144,16 +144,22 @@ function OnlineFacultyPortal({ onLogout }) {
 
 // ── Teacher Portal ─────────────────────────────────────────────
 // Loads read-only data from Supabase faculty_state on mount.
+// Syllabus/timetable/settings come from faculty_state JSONB;
+// exams come from normalised tables via loadExamsFromSupabase.
 function TeacherPortal({ onLogout }) {
-  const loadRemoteData = useStore(s => s.loadRemoteData)
-  const activePage     = useStore(s => s.activePage)
-  const [loaded, setLoaded] = useState(false)
+  const loadRemoteData        = useStore(s => s.loadRemoteData)
+  const loadExamsFromSupabase = useStore(s => s.loadExamsFromSupabase)
+  const activePage            = useStore(s => s.activePage)
+  const [loaded, setLoaded]   = useState(false)
 
   useEffect(() => {
-    loadFromSupabase().then(data => {
+    async function loadAll() {
+      const data = await loadFromSupabase()
       if (data) loadRemoteData(data)
+      await loadExamsFromSupabase()
       setLoaded(true)
-    })
+    }
+    loadAll()
   }, [])
 
   const pages = {

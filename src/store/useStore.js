@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { loadFromDisk, saveToStorage, clearStorage } from './persist'
+import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
 import { DEFAULTS, hydrate } from './slices/defaults'
@@ -36,7 +36,8 @@ const useStore = create((set, get) => ({
           set({ hydrated: false })
           const saved = await loadFromDisk()
           if (saved) {
-            const { apiKey: _dropped, ...safeFields } = saved
+            // exams are now in normalised tables — exclude stale JSONB copy
+            const { apiKey: _dropped, exams: _staleExams, ...safeFields } = saved
             set({
               ...DEFAULTS,
               ...safeFields,
@@ -57,12 +58,13 @@ const useStore = create((set, get) => ({
               examSchedules:           saved.examSchedules || [],
               hydrated: true,
             })
-            // Load fresh student profiles from normalised Supabase tables,
-            // overwriting any stale studentProfiles baked into faculty_state.
+            // Load fresh data from normalised Supabase tables.
             get().loadStudentsFromSupabase()
+            get().loadExamsFromSupabase()
           } else {
             set({ hydrated: true })
             get().loadStudentsFromSupabase()
+            get().loadExamsFromSupabase()
           }
           return
         }
@@ -145,7 +147,13 @@ const useStore = create((set, get) => ({
     }
   },
 
-  // ── Load remote data (GitHub Pages read-only mode) ────────
+  // ── Load exams from normalised Supabase tables ───────────
+  async loadExamsFromSupabase() {
+    const exams = await fetchExamsFromSupabase()
+    if (exams !== null) set({ exams })
+  },
+
+  // ── Load remote data (teacher portal) ────────────────────
   loadRemoteData(data) {
     if (!data) return
     set({
