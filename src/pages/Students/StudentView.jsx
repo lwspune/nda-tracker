@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import useStore from '../../store/useStore'
 import { Card, CardTitle, StatCard, EmptyState } from '../../components/ui'
 import { useMode } from '../../context/ModeContext'
+import { supabase } from '../../lib/supabase'
+import AttendanceRings from '../Attendance/AttendanceRings'
 import {
   getStudentExams, filterValidExams,
   computeStudentChapterStats,
@@ -42,6 +44,18 @@ export default function StudentView({ name }) {
         ),
       }))
     : exams
+
+  // Attendance — fetched from Supabase by lwsId; must be before early returns
+  const [attendance, setAttendance] = useState([])
+  useEffect(() => {
+    if (!supabase || !profile?.lwsId) { setAttendance([]); return }
+    let cancelled = false
+    supabase.from('student_attendance')
+      .select('date, status')
+      .eq('lws_id', profile.lwsId)
+      .then(({ data }) => { if (!cancelled) setAttendance(data || []) })
+    return () => { cancelled = true }
+  }, [profile?.lwsId])
 
   // All exam appearances for this student
   const allExamData = getStudentExams(name, normalizedExams)
@@ -272,6 +286,14 @@ export default function StudentView({ name }) {
 
       {/* Improvement plan */}
       <ImprovementPlan savedPlan={savedPlan} />
+
+      {/* Attendance rings — shown when data exists */}
+      {attendance.length > 0 && (
+        <Card>
+          <CardTitle>Attendance</CardTitle>
+          <AttendanceRings attendance={attendance} />
+        </Card>
+      )}
     </div>
   )
 }
