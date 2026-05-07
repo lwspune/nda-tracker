@@ -57,7 +57,7 @@ function buildMonthStats(attendance) {
     else months[month].a++
   }
   return Object.entries(months)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => b.localeCompare(a))
     .map(([month, { p, a }]) => {
       const total = p + a
       const pct   = total > 0 ? Math.round((p / total) * 100) : 0
@@ -74,8 +74,8 @@ export default function AttendanceRings({ attendance = [] }) {
     return (
       <div className="text-center py-16">
         <div className="text-4xl mb-3 opacity-25">📋</div>
-        <div className="text-[14px] font-bold text-white/60">No attendance data</div>
-        <div className="text-[12px] text-white/30 mt-1">Records will appear here once imported.</div>
+        <div className="text-[14px] font-bold text-ink-2">No attendance data</div>
+        <div className="text-[12px] text-ink-3 mt-1">Records will appear here once imported.</div>
       </div>
     )
   }
