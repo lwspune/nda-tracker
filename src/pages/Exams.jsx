@@ -284,7 +284,7 @@ export default function ExamsPage() {
                     {exam.students.length > 0 && exam.questions.length > 0 && (
                       <button
                         onClick={() => toggleInsights(exam.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px]
+                        className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
                                     font-semibold border transition-all flex-shrink-0
                           ${isExpanded
                             ? 'bg-accent text-white border-accent'
@@ -305,7 +305,7 @@ export default function ExamsPage() {
                           setPdfGenerating(null)
                         }}
                         disabled={pdfGenerating === exam.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px]
+                        className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
                                    font-semibold border transition-all flex-shrink-0
                                    bg-surface-2 text-ink-2 border-border
                                    hover:bg-green-50 hover:text-green-700 hover:border-green-300
@@ -325,7 +325,7 @@ export default function ExamsPage() {
                           setReportsGenerating(null)
                         }}
                         disabled={reportsGenerating === exam.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px]
+                        className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
                                    font-semibold border transition-all flex-shrink-0
                                    bg-surface-2 text-ink-2 border-border
                                    hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300
@@ -336,13 +336,13 @@ export default function ExamsPage() {
                     )}
 
                     {mode === 'faculty' && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                         {exam.students.length > 0 && (() => {
                           const history = whatsappSendHistory[exam.id]
                           return (
                             <button
                               onClick={() => setWhatsappPreviewExam(exam)}
-                              className="btn btn-sm btn-secondary text-[11px]
+                              className="btn btn-sm btn-secondary text-[11px] min-h-[44px]
                                          hover:bg-green-50 hover:text-green-700 hover:border-green-300"
                               title={history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp results to students and parents'}
                             >
@@ -354,21 +354,22 @@ export default function ExamsPage() {
                         })()}
                         <button
                           onClick={() => setReuploadResultsExam(exam)}
-                          className="btn btn-sm btn-secondary text-[11px]"
+                          className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
                           title="Re-upload results Excel"
                         >
                           📊 Update Results
                         </button>
                         <button
                           onClick={() => setReuploadTagsExam(exam)}
-                          className="btn btn-sm btn-secondary text-[11px]"
+                          className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
                           title="Re-upload tags Excel"
                         >
                           🏷️ Update Tags
                         </button>
                         <button
                           onClick={() => confirm(`Delete "${exam.name}"?`) && deleteExam(exam.id)}
-                          className="text-ink-3 hover:text-danger text-[18px] transition-colors p-1"
+                          className="text-ink-3 hover:text-danger text-[18px] transition-colors
+                                     min-h-[44px] w-[44px] flex items-center justify-center"
                           title="Delete exam"
                         >
                           ×

@@ -189,7 +189,7 @@ export default function AttendancePage() {
               max={30}
               value={consecutiveDays}
               onChange={e => setConsecutiveDays(Math.max(1, Math.min(30, +e.target.value || 1)))}
-              className="form-input w-14 text-center text-[13px] py-1 px-2"
+              className="form-input w-14 text-center text-[13px] min-h-[44px] px-2"
             />
             <span className="text-[12px] font-mono uppercase tracking-widest text-ink-3">
               consecutive days (excl. Sundays)
