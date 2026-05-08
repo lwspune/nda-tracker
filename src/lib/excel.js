@@ -1,5 +1,14 @@
 import * as XLSX from 'xlsx'
 
+// Detect exam-level subject by *presence* of a known keyword in the name.
+// Returns a value guaranteed to be in the canonical SUBJECTS list.
+export function detectSubjectFromName(name) {
+  if (!name) return 'Maths'
+  if (/\bgat\b/i.test(name)) return 'GAT'
+  if (/\bmaths?\b/i.test(name)) return 'Maths'
+  return 'Maths'
+}
+
 // ============================================================
 // PARSE RESULTS EXCEL
 // Reads the student responses file from Evalbee/similar
@@ -67,10 +76,10 @@ export async function parseExcelFull(file) {
   const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/)
   const examDate = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0]
 
-  // Subject guess
-  const subject = rawExamName
-    .replace(/quiz|test|mock|exam|maths|math|nda/gi, '')
-    .replace(/[-_]/g, ' ').trim()
+  // Detect subject by presence of a known keyword.
+  // (Old logic stripped the keywords and kept the leftover, which produced
+  // garbage like "2" for "NDA Maths Mock 2".)
+  const subject = detectSubjectFromName(rawExamName)
 
   // Parse students
   const students = []

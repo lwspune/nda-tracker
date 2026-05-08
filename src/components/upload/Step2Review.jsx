@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Alert } from '../ui'
 import { getAllBatches } from '../../lib/matchStudents'
 import { SUBJECTS } from '../../lib/ndaFreq'
@@ -10,6 +11,16 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
     detectedBatch, batchConfidence, batchMatchedCount,
     batchTotalCount, batchCounts, batch, branch,
   } = state
+
+  // Guard: if state.subject is set to something not in SUBJECTS (e.g. "2"
+  // from a faulty Step1 detection), the <select> would render the first
+  // option ("Maths") visually while the underlying state stayed wrong —
+  // the user would see the right value and never trigger onChange.
+  useEffect(() => {
+    if (subject && !SUBJECTS.includes(subject)) {
+      onChange({ subject: 'Maths' })
+    }
+  }, [subject, onChange])
 
   const studentProfiles = useStore(s => s.studentProfiles)
   const allBatches      = getAllBatches(studentProfiles)
