@@ -51,6 +51,7 @@ function fmtDate(iso) {
 export default function AttendancePage() {
   const studentProfiles  = useStore(s => s.studentProfiles)
   const importAttendance = useStore(s => s.importAttendance)
+  const setActiveStudent = useStore(s => s.setActiveStudent)
   const mode = useMode()
 
   const [consecutiveDays, setConsecutiveDays] = useState(3)
@@ -205,16 +206,29 @@ export default function AttendancePage() {
             <div className="text-[13px] text-green-500 font-semibold">✓ No consecutive absences</div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {consecutiveAbsent.map(s => (
-                <div
-                  key={s.lwsId}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg
-                             bg-red-400/10 border border-red-400/20"
-                >
-                  <span className="text-[13px] font-semibold text-ink">{s.name}</span>
-                  <span className="text-[11px] font-mono text-red-400">since {fmtDate(s.since)}</span>
-                </div>
-              ))}
+              {consecutiveAbsent.map(s => {
+                const hasProfile = !!studentProfiles[s.name]
+                const content = (
+                  <>
+                    <span className="text-[13px] font-semibold text-ink">{s.name}</span>
+                    <span className="text-[11px] font-mono text-red-400">since {fmtDate(s.since)}</span>
+                  </>
+                )
+                const baseCls = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-red-400/10 border border-red-400/20'
+                return hasProfile ? (
+                  <button
+                    key={s.lwsId}
+                    type="button"
+                    onClick={() => setActiveStudent(s.name)}
+                    className={`${baseCls} hover:bg-red-400/20 focus:outline-none
+                                focus-visible:ring-2 focus-visible:ring-accent/40`}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div key={s.lwsId} className={baseCls}>{content}</div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -275,7 +289,19 @@ export default function AttendancePage() {
                       className={`border-b border-border hover:bg-accent-soft/30 transition-colors
                         ${i % 2 === 0 ? '' : 'bg-surface-2/40'}`}
                     >
-                      <td className="px-4 py-2.5 font-medium text-ink">{s.name}</td>
+                      <td className="px-4 py-2.5 font-medium text-ink">
+                        {studentProfiles[s.name] ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveStudent(s.name)}
+                            className="text-left hover:text-accent hover:underline
+                                       focus:outline-none focus-visible:ring-2
+                                       focus-visible:ring-accent/40 rounded"
+                          >
+                            {s.name}
+                          </button>
+                        ) : s.name}
+                      </td>
                       <td className="px-4 py-2.5 text-right text-green-500 font-mono">{s.p}</td>
                       <td className="px-4 py-2.5 text-right text-red-400 font-mono">{s.a}</td>
                       <td className="px-4 py-2.5 text-right text-ink-3 font-mono">{s.total}</td>
