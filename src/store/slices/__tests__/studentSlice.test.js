@@ -5,7 +5,7 @@ import { createStudentSlice } from '../studentSlice'
 vi.mock('../../../lib/supabase', () => ({ supabase: null }))
 
 function makeStore() {
-  let state = { studentProfiles: {} }
+  let state = { studentProfiles: {}, studentList: [] }
   let slice
   const get = () => ({
     ...state,
@@ -42,6 +42,30 @@ function makeStudent(overrides = {}) {
     ...overrides,
   }
 }
+
+// ── importStudentsDB ──────────────────────────────────────────
+
+describe('importStudentsDB', () => {
+  it('stores the raw snake_case array as studentList', () => {
+    const students = [
+      makeStudent({ lws_id: 'LWS-003', canonical_name: 'Vaidehee Rayrikar', branch: '' }),
+      makeStudent({ lws_id: 'LWS-404', canonical_name: 'Vaidehee Rayrikar', branch: 'LWS' }),
+    ]
+    const { slice, getState } = makeStore()
+    slice.importStudentsDB(students)
+    expect(getState().studentList).toEqual(students)
+  })
+
+  it('studentList includes all rows even when two share the same canonical_name', () => {
+    const students = [
+      makeStudent({ lws_id: 'LWS-003', canonical_name: 'Vaidehee Rayrikar' }),
+      makeStudent({ lws_id: 'LWS-404', canonical_name: 'Vaidehee Rayrikar' }),
+    ]
+    const { slice, getState } = makeStore()
+    slice.importStudentsDB(students)
+    expect(getState().studentList).toHaveLength(2)
+  })
+})
 
 // ── addNameVariant ────────────────────────────────────────────
 

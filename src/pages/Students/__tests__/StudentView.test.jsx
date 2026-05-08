@@ -100,6 +100,24 @@ describe('StudentView — empty state', () => {
   })
 })
 
+// ── Subject dropdown — filtered empty state ───────────────────────────────────
+
+describe('StudentView — subject dropdown when all exams are filtered out', () => {
+  it('shows subject selector when student has only GAT exams and Maths filter is active', () => {
+    setExams([makeExam({ subject: 'GAT' })])
+    renderView()
+    expect(getSubjectSelect()).toBeInTheDocument()
+    expect(screen.getByText(/no data/i)).toBeInTheDocument()
+  })
+
+  it('includes All Subjects option so user can escape the default Maths filter', () => {
+    setExams([makeExam({ subject: 'GAT' })])
+    renderView()
+    const opts = within(getSubjectSelect()).getAllByRole('option').map(o => o.value)
+    expect(opts).toContain('all')
+  })
+})
+
 // ── Subject dropdown — single subject ─────────────────────────────────────────
 
 describe('StudentView — single subject (no multi-subject filtering needed)', () => {

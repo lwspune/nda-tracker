@@ -65,7 +65,7 @@ export const createStudentSlice = (set, get) => ({
         if (v && v !== name) profiles[v] = entry
       })
     })
-    set({ studentProfiles: profiles })
+    set({ studentProfiles: profiles, studentList: students })
     get()._save()
     return Object.keys(profiles).length
   },

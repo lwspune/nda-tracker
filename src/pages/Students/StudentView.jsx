@@ -196,9 +196,27 @@ export default function StudentView({ name, attendance: attendanceProp = null })
     )
   }
 
-  // After subject filtering, nothing to show for this subject
+  // After subject filtering, nothing to show for this subject — but still render the
+  // selector so the user can switch away from the default 'Maths' filter.
   if (!examData.length) {
-    return <EmptyState icon="🔍" title="No data" sub={`No ${subjectFilter} exam records found for "${name}"`} />
+    return (
+      <>
+        {profile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
+        <div>
+          <select
+            aria-label="Subject filter"
+            value={subjectFilter}
+            onChange={e => setSubjectFilter(e.target.value)}
+            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
+            style={{ minWidth: '160px' }}
+          >
+            <option value="all">All Subjects</option>
+            {studentSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <EmptyState icon="🔍" title="No data" sub={`No ${subjectFilter} exam records found for "${name}"`} />
+      </>
+    )
   }
 
   return (

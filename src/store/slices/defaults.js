@@ -5,6 +5,7 @@ import { migrateFreq, migrateMarks } from '../../lib/persistence'
 export const DEFAULTS = {
   exams: [],
   studentProfiles: {},
+  studentList: [],
   savedInsights: { classReport: null, studentPlans: {} },
   ndaFreqBySubject:  buildDefaultFreqBySubject(),
   ndaMarksBySubject: buildDefaultMarksBySubject(),

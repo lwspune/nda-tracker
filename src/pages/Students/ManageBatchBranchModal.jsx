@@ -11,6 +11,7 @@ export default function ManageBatchBranchModal({ onClose }) {
 
   const exams                = useStore(s => s.exams)
   const studentProfiles      = useStore(s => s.studentProfiles)
+  const studentList          = useStore(s => s.studentList)
   const renameBatch          = useStore(s => s.renameBatch)
   const renameBranch         = useStore(s => s.renameBranch)
   const bulkAssignBatch      = useStore(s => s.bulkAssignBatch)
@@ -19,6 +20,20 @@ export default function ManageBatchBranchModal({ onClose }) {
   const addNameVariant       = useStore(s => s.addNameVariant)
 
   const students = useMemo(() => uniqueStudents(studentProfiles), [studentProfiles])
+
+  // For duplicate scanning: use the raw list so two profiles with the same
+  // canonical_name (which studentProfiles collapses to one key) are both visible.
+  const allStudents = useMemo(() =>
+    studentList
+      .map(s => ({
+        lwsId:   s.lws_id,
+        name:    s.canonical_name || s.name || '',
+        branch:  s.branch || '',
+        mobile:  s.mobile || '',
+        batches: s.batches || [],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  , [studentList])
 
   return (
     <div
@@ -70,7 +85,7 @@ export default function ManageBatchBranchModal({ onClose }) {
             />
           ) : (
             <FindDuplicatesTab
-              students={students}
+              students={allStudents}
               studentProfiles={studentProfiles}
               exams={exams}
               mergeStudentProfiles={mergeStudentProfiles}
