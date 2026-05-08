@@ -86,13 +86,15 @@ Three-tab unified login page (Student / Teacher / Faculty):
 **Legacy** — output files (`public/data/index.json`, `public/data/students/*.json`, `public/data/db.json`) are no longer consumed by teacher or student login (both now use Vercel + Supabase). Script still updates `lastDeployedAt` in `faculty-data.json` and can regenerate static files if needed. Removed from `predeploy` — run manually via `npm run split`.
 
 ### Store (`src/store/useStore.js`)
-State keys: `exams`, `studentProfiles`, `savedInsights`, `ndaFreqBySubject`, `ndaMarksBySubject`, `costLog`, `apiKey`, `lastDeployedAt`, `hydrated`, `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `whatsappSendHistory`.
+State keys: `exams`, `studentProfiles`, `studentList`, `savedInsights`, `ndaFreqBySubject`, `ndaMarksBySubject`, `costLog`, `apiKey`, `lastDeployedAt`, `hydrated`, `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `whatsappSendHistory`.
+
+`studentList` is the raw snake_case array set by `importStudentsDB` (alongside the canonical-name-keyed `studentProfiles` map). Not persisted — reloaded from Supabase / `students_db.json` each session. Required by `FindDuplicatesTab` so two profiles sharing the same `canonical_name` are both visible to the scan (the map collapses them to one key).
 Slices under `src/store/slices/`. All mutations call `get()._save()` immediately.
 - `loadStudentData(data)` — student portal; `loadRemoteData(data)` — teacher portal.
 - `loadRemoteData` sets all six syllabus keys (`syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`) from the decrypted payload.
 
 ### Subject filtering
-Subject filter is **local state per page** — not in the store. Dashboard: subject → branch → batch → exam chain. Exams: sort + subject → branch → batch. StudentView: self-contained, shown when student has 2+ subjects. **`StudentView` defaults to `'Maths'`** (not `'all'`) — matches the primary use-case; students with no Maths exams see an empty-state for the filter.
+Subject filter is **local state per page** — not in the store. Dashboard: subject → branch → batch → exam chain. Exams: sort + subject → branch → batch. StudentView: self-contained, shown when student has 2+ subjects. **`StudentView` defaults to `'Maths'`** (not `'all'`) — matches the primary use-case. When the default Maths filter returns zero exams (e.g. a GAT-only student), the `!examData.length` early return still renders the subject selector + ProfileCard so the user can switch to "All Subjects" or "GAT" — without this, GAT-only students hit a dead-end empty state.
 
 ### Batch filtering
 Batch dropdown options and filter logic use **`profile.batches[]` as primary** (app-assigned), with `exam.batch` as fallback only for exams where no student has a profile.
@@ -123,6 +125,8 @@ Six files under `src/lib/merge/`, re-exported as a flat API via `src/lib/mergeSt
 **Link action** (`studentSlice.js`): `addNameVariant(lwsId, variantName)` — appends exam name to `name_variants[]` in `students_db.json` and immediately re-indexes `studentProfiles` in memory.
 
 **UI** (`FindDuplicatesTab.jsx`): combined scan runs both passes. Profile–profile pairs → merge (choose primary). Exam-name–profile pairs → "Link as variant" button (directional, exam name always goes into the profile). `ExamNameCard` uses dashed border + purple "exam name" badge + exam count. `pairKey` for exam pairs: `'exam:' + examName + '|' + lws_id`.
+
+**Data source for the scan** (`ManageBatchBranchModal.jsx`): the `students` prop passed to `FindDuplicatesTab` is built from `studentList` (raw Supabase array), not `Object.values(studentProfiles)`. The map is keyed by `canonical_name` — two students with the same name collapse into one entry, hiding the duplicate. Rename and Bulk Assign tabs still use `uniqueStudents(studentProfiles)` since they don't need to see duplicates.
 
 ### WhatsApp Results flow
 `💬 WhatsApp Results` button (faculty, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).
@@ -279,7 +283,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **543 Vitest tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI). **39 Python tests** in `tests/test_subtopic_merge.py`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **547 Vitest tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI). **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
@@ -361,6 +365,8 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `buildConsecutiveAbsent` uses the last N non-Sunday dates from the **global** dataset | Using per-student "last N" would vary by student and produce incoherent comparisons. Global last-N shared dates means the alert has a consistent meaning: these students were absent on the same N days the rest of the class attended. |
 | `/subtopic-analyse` skill reads from Supabase, not `faculty-data.json` | Tags uploaded on Vercel go to Supabase but don't sync back to the local file. Reading from the local file after a prod upload would produce stale or incomplete analysis results. |
 | Subtopic renames applied via direct MCP SQL, not the migration script | For a known one-time JSONB fixup, a single SQL `UPDATE` with `jsonb_agg(CASE ...)` is atomic and requires no env vars. `migrate_subtopics_supabase.js` is retained for future runs and for team members without MCP access. |
+| `studentList` stored alongside `studentProfiles` (raw vs canonical map) | `studentProfiles` is keyed by `canonical_name` — two profiles sharing a name collapse into one entry. `FindDuplicatesTab` needs both entries to detect identical-name duplicates. Storing the raw Supabase array as `studentList` (not persisted) is cheaper than re-querying Supabase from the modal. |
+| Subject selector rendered in `StudentView`'s filtered-empty-state | The default `'Maths'` filter produces zero exams for GAT-only students. Without the selector in the early-return path, those students hit a dead-end empty state with no way to switch filters. ProfileCard is also rendered for layout consistency with the other two empty states. |
 
 ---
 
@@ -408,3 +414,6 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `buildConsecutiveAbsent` uses the last N non-Sunday dates from the **global** `records` dataset — all students are measured against the same reference dates. Do not switch to per-student date filtering.
 - `StudentView`'s `attendance: attendanceProp = null` prop bypasses the Supabase fetch when provided — required for the student portal because students have no Supabase auth session (RLS blocks unauthenticated reads). Removing the prop bypass breaks attendance rings in the student portal.
 - Attendance page has no batch filter by design — consecutive absence detection is class-wide.
+- `FindDuplicatesTab` must scan `studentList` (raw Supabase array), not `Object.values(studentProfiles)`. The map collapses identical canonical names; the scan needs to see both entries to flag them.
+- `StudentView`'s `!examData.length` early return must render the subject selector + ProfileCard. Removing the selector strands GAT-only students on the default Maths filter with no escape.
+- `importStudentsDB` must call `set({ studentProfiles, studentList: students })` together — the two are kept in sync and both are required (profiles for lookups, list for duplicate scanning).
