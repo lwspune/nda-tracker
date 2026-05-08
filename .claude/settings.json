@@ -5,5 +5,19 @@
       "Bash(npm install:*)",
       "Bash(npm list:*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm run lint --silent 2>&1 | tail -5",
+            "timeout": 30,
+            "statusMessage": "Linting…"
+          }
+        ]
+      }
+    ]
   }
 }
