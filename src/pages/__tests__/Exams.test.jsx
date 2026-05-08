@@ -29,11 +29,6 @@ vi.mock('../../context/ModeContext', () => ({
   ModeContext: { Provider: ({ children }) => children },
 }))
 
-// Mock EmailResultsModal — not under test here
-vi.mock('../Exams/EmailResultsModal', () => ({
-  default: ({ onClose }) => <button onClick={onClose}>close-email-modal</button>,
-}))
-
 // Mock the re-upload modals so Exams.test.jsx doesn't need their deps
 vi.mock('../../components/upload/ReuploadTagsModal', () => ({
   default: ({ exam, onClose }) => (
@@ -52,7 +47,6 @@ vi.mock('../../components/upload/ReuploadResultsModal', () => ({
 }))
 
 import ExamsPage from '../Exams'
-import { useMode } from '../../context/ModeContext'
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
@@ -458,22 +452,3 @@ describe('Exams page — pagination', () => {
   })
 })
 
-// ── Email Results button — mode visibility ────────────────────────────────────
-
-describe('Exams page — Email Results button', () => {
-  beforeEach(() => { useMode.mockReturnValue('faculty') })
-  afterEach(() => { useMode.mockReturnValue('faculty') })
-
-  it('shows Email Results button in faculty mode when exam has results', () => {
-    setExams([makeExam()])   // makeExam always includes 1 student
-    renderExams()
-    expect(screen.getByRole('button', { name: /email results/i })).toBeInTheDocument()
-  })
-
-  it('hides Email Results button in teacher mode', () => {
-    useMode.mockReturnValue('teacher')
-    setExams([makeExam()])
-    renderExams()
-    expect(screen.queryByRole('button', { name: /email results/i })).not.toBeInTheDocument()
-  })
-})

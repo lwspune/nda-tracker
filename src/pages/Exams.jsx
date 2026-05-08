@@ -7,7 +7,6 @@ import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
-import EmailResultsModal      from './Exams/EmailResultsModal'
 import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
 import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
 import { downloadExamPdf }         from '../lib/examPdf'
@@ -35,8 +34,6 @@ export default function ExamsPage() {
   const [expandedExamId, setExpandedExamId]           = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
   const [reportsGenerating, setReportsGenerating]     = useState(null)
-  const [emailSending, setEmailSending]               = useState(null)
-  const [emailResult, setEmailResult]                 = useState(null)
   const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
   const [whatsappSending, setWhatsappSending]         = useState(false)
   const [whatsappResult, setWhatsappResult]           = useState(null)
@@ -89,24 +86,6 @@ export default function ExamsPage() {
       setWhatsappResult({ examName: exam.name, ok: false, error: e.message })
     } finally {
       setWhatsappSending(false)
-    }
-  }
-
-  async function handleEmailResults(exam) {
-    setEmailSending(exam.id)
-    setEmailResult(null)
-    try {
-      const res = await fetch('/api/send-results', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ examName: exam.name }),
-      })
-      const result = await res.json()
-      setEmailResult({ examName: exam.name, ...result })
-    } catch (e) {
-      setEmailResult({ examName: exam.name, ok: false, error: e.message })
-    } finally {
-      setEmailSending(null)
     }
   }
 
@@ -425,12 +404,6 @@ export default function ExamsPage() {
         />
       )}
 
-      {emailResult && (
-        <EmailResultsModal
-          result={emailResult}
-          onClose={() => setEmailResult(null)}
-        />
-      )}
       {whatsappPreviewExam && (
         <WhatsAppPreviewModal
           exam={whatsappPreviewExam}

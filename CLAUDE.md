@@ -34,8 +34,6 @@ npm run test            # Vitest
 npm run test:watch
 npm run split           # python -X utf8 split_students.py (manual only — updates lastDeployedAt)
 npm run deploy          # build + gh-pages push (split no longer runs automatically)
-npm run results:preview # dry-run email — writes preview_<name>.html (gitignored; delete after review)
-npm run results:email   # send result emails via Gmail
 npm run migrate         # one-time: seed data/faculty-data.json → Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:students  # seed students_db.json → Supabase students tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY; --cleanup prints cleanup SQL)
@@ -191,7 +189,6 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 |---|---|---|---|
 | Add/delete exams, re-upload, edit questions | ✓ | — | — |
 | WhatsApp Results button | ✓ | — | — |
-| Email Results button | hidden | — | — |
 | Edit student branch/batch | ✓ | — | — |
 | Attendance page (import XLS + class metrics table) | ✓ | ✓ | — |
 | Attendance rings (student monthly % view) | ✓ (StudentView) | ✓ (StudentView) | ✓ (portal, inline scroll) |
@@ -267,7 +264,6 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/pages/Students/batchBranch/FindDuplicatesTab.jsx` | Combined profile–profile + exam-name scan; merge and link-as-variant actions |
 | `src/pages/Syllabus/` | SyllabusPage, SubjectAccordion, Manage*Modal, AssignProgramsModal |
 | `split_students.py` | Pre-deploy: per-student files + encrypted db.json |
-| `send_results.py` | Gmail SMTP result emails. `--dry-run` / `--to <addr>`. Reads `students_db.json` + `faculty-data.json`. |
 | `send_results_whatsapp.py` | Wabridge WhatsApp result messages to students + parents. `--exam` / `--dry-run` / `--to` / `--redirect-to` / `--students "Name1,Name2"`. Payload: top-level `variables` array. Logs to `whatsapp_send_log.jsonl` (capped 500 entries). Triggered via `POST /api/send-whatsapp` in `vite.config.js`. |
 | `send_schedule.py` | Gmail SMTP teacher schedule + exam reminder emails. `--weekly` / `--daily` / `--exam-reminder N` / `--dry-run` / `--to` / `--teacher-id`. Requires `tzdata`. |
 | `generate_syllabus_seed.py` | Excel → `src/lib/syllabusSeed.js` |
@@ -283,8 +279,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **547 Vitest tests passing** (1 pre-existing failure in `Exams.test.jsx` — Email Results button hidden from UI). **39 Python tests** in `tests/test_subtopic_merge.py`.
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split/send_results scripts, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), subtopic rename (39 Python tests).
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **546 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -298,7 +294,7 @@ Key coverage: analytics filters, GAT routing, tag validation, dashboard filters,
 
 ## Lint
 
-`npm run lint` — `eslint.config.js` (flat config). Current state: **2 errors** (unused vars in `Exams.jsx` from hidden Email Results button — pre-existing), **13 warnings** (all `react-hooks/exhaustive-deps` — intentional).
+`npm run lint` — `eslint.config.js` (flat config). Current state: **11 errors** (all pre-existing — `'global' is not defined` in test files using `global.fetch`, plus 3 intentional `setState in effect` rule violations in `Sidebar.jsx` / `LoginPage.jsx`), **13 warnings** (all `react-hooks/exhaustive-deps` — intentional). Node-only scripts (`api/*`, `migrate_*.js`, `sync_*.js`) additionally report `'process' is not defined`; environment-level, not code issues.
 
 **Config structure:**
 - Browser globals + React/react-hooks/react-refresh plugins for all source files.
@@ -345,7 +341,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `faculty_state` JSONB for non-exam data; normalised tables for exams + students | Exams normalised in Phase 5: 2.3 MB → 224 KB JSONB. Syllabus/timetable/insights stay in JSONB — no mutation gap and no `api/` endpoint reads them by ID. Student mutations were no-ops on Vercel (Vite-only dev plugin) — normalised tables fix this. Exam mutations (`addExam`, `replaceExam`, `deleteExam`, `updateQuestion`) now write to `exams`/`exam_results` via `examSupabase.js` in addition to the JSONB-free `_save()`. |
 | Students use normalised tables; exams now normalised too (Phase 5) | Student mutations (batch assign, name variants, profile edits) were no-ops on Vercel because `/api/students-db` is a Vite-only dev plugin. Exam mutations had the same gap — reads came from JSONB but writes landed only in local JSON. Both are now dual-path: Supabase table write if session active, else dev-server fetch. |
 | `studentSlice.js` mutations use dual-path (Supabase if session, fetch if not) | Keeps dev workflow (local `students_db.json`) unchanged. No Vite config changes needed. The `getSession()` check is cheap — single Supabase client call. |
-| `sync:students` as a manual step for Python scripts | Python scripts (`send_results.py`, `send_results_whatsapp.py`) read `students_db.json`. Rather than rewriting them to query Supabase, a one-command sync keeps the Python side unchanged. Only needed before sends when student profile data changed online. |
+| `sync:students` as a manual step for Python scripts | `send_results_whatsapp.py` reads `students_db.json`. Rather than rewriting it to query Supabase, a one-command sync keeps the Python side unchanged. Only needed before sends when student profile data changed online. |
 | `saveToSupabase` is fire-and-forget (no await) | Blocking the UI on every Zustand mutation would degrade responsiveness. Supabase writes are idempotent (last-write-wins on a single row); a dropped write is recovered on next mutation or reload. |
 | Supabase query chains use `async/await`, not `.catch()` | `PostgrestFilterBuilder` (Supabase JS v2) is a thenable but NOT a full Promise — `.catch` is `undefined` on it. Calling `.catch()` throws `TypeError` silently (inside `.then()`), blocking all saves. Every Supabase query must be `await`-ed inside an `async` callback with `{ error }` destructuring. |
 | `api/send-whatsapp.js` uses same URL as Vite dev endpoint | The Vite dev server intercepts `/api/send-whatsapp` before Vercel sees it. On Vercel, the serverless function handles it. No client-side URL switching needed — `fetch('/api/send-whatsapp', ...)` works identically in both environments. |

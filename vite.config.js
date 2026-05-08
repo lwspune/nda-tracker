@@ -173,54 +173,6 @@ function localDataPlugin() {
           }
         })
       })
-
-      // POST /api/send-results  { examName? }
-      // Spawns send_results.py and returns { ok, sent, skipped, lines[] }
-      server.middlewares.use('/api/send-results', (req, res) => {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
-
-        let body = ''
-        req.on('data', chunk => { body += chunk })
-        req.on('end', () => {
-          try {
-            const { examName } = JSON.parse(body || '{}')
-            const sender = readEnvLocal().GMAIL_SENDER || process.env.GMAIL_SENDER
-
-            if (!sender) {
-              res.statusCode = 400
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ error: 'GMAIL_SENDER not set. Add GMAIL_SENDER=you@gmail.com to .env.local' }))
-              return
-            }
-
-            const args = ['-X', 'utf8', 'send_results.py']
-            if (examName) args.push('--exam', examName)
-
-            const child = spawn('python', args, {
-              env: { ...process.env, GMAIL_SENDER: sender },
-            })
-
-            const lines = []
-            child.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => lines.push(l)))
-            child.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => lines.push('ERR: ' + l)))
-
-            child.on('close', code => {
-              let sent = 0, skipped = 0
-              const summary = lines.find(l => l.startsWith('Done.'))
-              if (summary) {
-                const sm = summary.match(/Sent:\s*(\d+)/);    if (sm) sent    = +sm[1]
-                const sk = summary.match(/Skipped:\s*(\d+)/); if (sk) skipped = +sk[1]
-              }
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ ok: code === 0, sent, skipped, lines }))
-            })
-          } catch (e) {
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: e.message }))
-          }
-        })
-      })
     },
   }
 }
