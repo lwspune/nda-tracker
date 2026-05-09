@@ -47,11 +47,12 @@ export async function parseExcelFull(file) {
     throw new Error(`Missing required columns: ${missing.join(', ')}. Check your Excel headers.`)
   }
 
-  // Q columns: "Q N Marks" and "Q N Options"
-  const qm = {}, qo = {}
+  // Q columns: "Q N Marks", "Q N Options", "Q N Key"
+  const qm = {}, qo = {}, qk = {}
   headers.forEach((h, i) => {
     const m = h.match(/^Q\s+(\d+)\s+Marks$/i);   if (m) qm[parseInt(m[1])] = i
     const o = h.match(/^Q\s+(\d+)\s+Options$/i);  if (o) qo[parseInt(o[1])] = i
+    const k = h.match(/^Q\s+(\d+)\s+Key$/i);      if (k) qk[parseInt(k[1])] = i
   })
   const totalQs = Object.keys(qm).length
 
@@ -81,6 +82,16 @@ export async function parseExcelFull(file) {
   // garbage like "2" for "NDA Maths Mock 2".)
   const subject = detectSubjectFromName(rawExamName)
 
+  // Answer key per question — sample any data row (key is identical for every student).
+  const answerKeys = {}
+  const sampleRow = raw.slice(hi + 1).find(r => r && r[ni])
+  if (sampleRow) {
+    Object.entries(qk).forEach(([qn, ci2]) => {
+      const v = String(sampleRow[ci2] ?? '').trim().toUpperCase()
+      if (/^[ABCD]$/.test(v)) answerKeys[parseInt(qn)] = v
+    })
+  }
+
   // Parse students
   const students = []
   for (let r = hi + 1; r < raw.length; r++) {
@@ -106,7 +117,7 @@ export async function parseExcelFull(file) {
   return {
     examName: rawExamName, examDate, subject,
     markCorrect, markWrong: hasNegative ? markWrong : 0,
-    hasNegative, totalQs, students,
+    hasNegative, totalQs, students, answerKeys,
   }
 }
 

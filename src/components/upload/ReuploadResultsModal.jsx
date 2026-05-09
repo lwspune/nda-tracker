@@ -12,6 +12,7 @@ export default function ReuploadResultsModal({ exam, onClose }) {
   const [error, setError]                 = useState(null)
   const [newStudents, setNewStudents]     = useState(null)
   const [newQuestionCount, setNewQuestionCount] = useState(null)
+  const [newAnswerKeys, setNewAnswerKeys] = useState({})
   const fileRef = useRef()
 
   const oldStudentCount  = exam.students.length
@@ -24,6 +25,7 @@ export default function ReuploadResultsModal({ exam, onClose }) {
     setResultsFile(file)
     setNewStudents(null)
     setNewQuestionCount(null)
+    setNewAnswerKeys({})
     setError(null)
     if (!file) return
 
@@ -32,14 +34,22 @@ export default function ReuploadResultsModal({ exam, onClose }) {
       const extracted = await parseExcelFull(file)
       setNewStudents(extracted.students)
       setNewQuestionCount(extracted.totalQs)
+      setNewAnswerKeys(extracted.answerKeys || {})
     } catch (e) {
       setError('Error reading Excel: ' + e.message)
     }
     setLoading(false)
   }
 
+  // Results-Excel "Q N Key" wins over any prior tags-file Answer.
+  // Only overwrite when the new file has a key for that question.
+  const newQuestions = exam.questions.map(q =>
+    newAnswerKeys[q.q] ? { ...q, answer: newAnswerKeys[q.q] } : q
+  )
+  const hasAnswerKeys = Object.keys(newAnswerKeys).length > 0
+
   function handleSave() {
-    replaceExam(exam.id, { ...exam, students: newStudents })
+    replaceExam(exam.id, { ...exam, students: newStudents, questions: newQuestions })
     onClose()
   }
 
@@ -137,6 +147,18 @@ export default function ReuploadResultsModal({ exam, onClose }) {
                 <strong>Question count mismatch:</strong> this exam has {oldQuestionCount} tagged
                 questions but the new file has {newQuestionCount}. Tags for extra questions will
                 default to the first chapter. Consider re-uploading tags after saving.
+              </span>
+            </Alert>
+          )}
+
+          {/* Destructive answer-key overwrite warning */}
+          {hasAnswerKeys && (
+            <Alert type="warning">
+              <span>⚠️</span>
+              <span>
+                <strong>Answer keys will be refreshed</strong> from this file&rsquo;s
+                {' '}<code>Q N Key</code> columns ({Object.keys(newAnswerKeys).length} keys).
+                Any answers previously set from a tags file will be overwritten.
               </span>
             </Alert>
           )}

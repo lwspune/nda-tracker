@@ -35,8 +35,8 @@ function makeExam(overrides = {}) {
     subject: 'Maths',
     marking: { correct: 4, wrong: -1 },
     questions: [
-      { q: 1, chapter: 'Algebra',      subtopic: 'Equations' },
-      { q: 2, chapter: 'Trigonometry', subtopic: 'Ratios'    },
+      { q: 1, chapter: 'Algebra',      subtopic: 'Equations', answer: null },
+      { q: 2, chapter: 'Trigonometry', subtopic: 'Ratios',    answer: null },
     ],
     students: [
       { name: 'Alice', totalMarks: 20, correct: 5, incorrect: 0, notAttempted: 0 },
@@ -61,6 +61,7 @@ function makeParsedResult(overrides = {}) {
       { name: 'Bob',   totalMarks: 20, correct: 5, incorrect: 0, notAttempted: 0 },
       { name: 'Carol', totalMarks: 12, correct: 3, incorrect: 0, notAttempted: 0 },
     ],
+    answerKeys:  {},
     ...overrides,
   }
 }
@@ -195,7 +196,7 @@ describe('ReuploadResultsModal — save', () => {
     await user.click(screen.getByRole('button', { name: /replace results/i }))
   }
 
-  it('calls replaceExam with new students and existing questions', async () => {
+  it('calls replaceExam with new students and questions preserved when no answer keys', async () => {
     const user = userEvent.setup()
     const exam = makeExam()
     const { container } = renderModal(exam)
@@ -207,8 +208,64 @@ describe('ReuploadResultsModal — save', () => {
     expect(calledExam.students).toHaveLength(3)
     expect(calledExam.students[0].name).toBe('Alice')
     expect(calledExam.students[2].name).toBe('Carol')
-    // Questions unchanged
+    // Questions preserved when answerKeys is empty
     expect(calledExam.questions).toEqual(exam.questions)
+  })
+
+  it('overwrites question.answer with results-Excel answerKeys (results > tags precedence)', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ answerKeys: { 1: 'B', 2: 'D' } }))
+    const user = userEvent.setup()
+    // Existing exam already has hand-set answers from a previous tags upload
+    const exam = makeExam({
+      questions: [
+        { q: 1, chapter: 'Algebra',      subtopic: 'Equations', answer: 'A' },
+        { q: 2, chapter: 'Trigonometry', subtopic: 'Ratios',    answer: 'C' },
+      ],
+    })
+    const { container } = renderModal(exam)
+    await uploadAndSave(container, user)
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.questions[0].answer).toBe('B')   // overwritten
+    expect(calledExam.questions[1].answer).toBe('D')   // overwritten
+    // Other fields untouched
+    expect(calledExam.questions[0].chapter).toBe('Algebra')
+    expect(calledExam.questions[1].subtopic).toBe('Ratios')
+  })
+
+  it('leaves question.answer alone when answerKeys lacks an entry for that q', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ answerKeys: { 1: 'B' } }))   // Q2 omitted
+    const user = userEvent.setup()
+    const exam = makeExam({
+      questions: [
+        { q: 1, chapter: 'Algebra',      subtopic: 'Equations', answer: null },
+        { q: 2, chapter: 'Trigonometry', subtopic: 'Ratios',    answer: 'C'  },
+      ],
+    })
+    const { container } = renderModal(exam)
+    await uploadAndSave(container, user)
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.questions[0].answer).toBe('B')   // filled from key
+    expect(calledExam.questions[1].answer).toBe('C')   // tags-file value preserved (no key for Q2)
+  })
+
+  it('shows the destructive-warning banner when answerKeys are present', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ answerKeys: { 1: 'B', 2: 'D' } }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await user.upload(getFileInput(container), makeFakeFile())
+    await waitFor(() => {
+      expect(screen.getByText(/answer key/i)).toBeInTheDocument()
+    })
+  })
+
+  it('does NOT show the destructive-warning banner when answerKeys is empty', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await user.upload(getFileInput(container), makeFakeFile())
+    await waitFor(() => {
+      expect(mockParseExcelFull).toHaveBeenCalledOnce()
+    })
+    expect(screen.queryByText(/answer key/i)).not.toBeInTheDocument()
   })
 
   it('calls onClose after saving', async () => {

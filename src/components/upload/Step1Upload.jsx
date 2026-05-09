@@ -127,6 +127,13 @@ export default function Step1Upload({ onNext, onCancel }) {
         }
       }
 
+      // Results-Excel "Q N Key" wins over tags-file "Answer".
+      // (Evalbee key is the source of truth; tags file is a fallback when Key is blank.)
+      const answerKeys = extracted.answerKeys || {}
+      if (tags) {
+        tags = tags.map(t => answerKeys[t.q] ? { ...t, answer: answerKeys[t.q] } : t)
+      }
+
       // Re-validate with the resolved subject (handles edge case where tags were
       // initially validated against a different subject before Excel was parsed).
       if (tags) {
@@ -155,6 +162,7 @@ export default function Step1Upload({ onNext, onCancel }) {
         students:    extracted.students,
         tags,
         tagsSource,
+        answerKeys,
         // Batch detection
         detectedBatch:      batchResult.batch,
         batchConfidence:    batchResult.confidence,

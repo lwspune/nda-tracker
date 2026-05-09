@@ -7,7 +7,7 @@ import { SUBJECTS } from '../../lib/ndaFreq'
 const QUESTION_SUBJECTS = SUBJECTS.filter(s => s !== 'GAT')
 
 export default function Step3Tags({ state, onChange, onNext, onBack }) {
-  const { tags, tagsSource, totalQs, subject } = state
+  const { tags, tagsSource, totalQs, subject, answerKeys } = state
 
   const isGAT = subject === 'GAT'
 
@@ -16,12 +16,12 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
   const hasChapterList = validChapters.length > 0
 
   // Build working tags list
-  const [workingTags, setWorkingTags] = useState(() => buildTags(tags, totalQs, subject))
+  const [workingTags, setWorkingTags] = useState(() => buildTags(tags, totalQs, subject, answerKeys))
   const [filter, setFilter] = useState('all') // 'all' | 'untagged'
 
   useEffect(() => {
-    setWorkingTags(buildTags(tags, totalQs, subject))
-  }, [tags, totalQs, subject])
+    setWorkingTags(buildTags(tags, totalQs, subject, answerKeys))
+  }, [tags, totalQs, subject, answerKeys])
 
   function updateTag(i, field, value) {
     setWorkingTags(prev => {
@@ -195,8 +195,10 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
   )
 }
 
-// Build working tags — merges tags file data with defaults for missing questions
-function buildTags(tags, totalQs, subject) {
+// Build working tags — merges tags file data with defaults for missing questions.
+// Results-Excel `answerKeys` (when provided) takes precedence: it overrides any
+// existing tag.answer and pre-fills the default answer for untagged questions.
+function buildTags(tags, totalQs, subject, answerKeys) {
   const isGAT = subject === 'GAT'
   // For GAT: no default chapter (user must assign subject first); for others use first chapter
   const subjectChapters = isGAT ? [] : getValidChapters(subject || 'Maths')
@@ -207,7 +209,7 @@ function buildTags(tags, totalQs, subject) {
 
   return Array.from({ length: totalQs }, (_, i) => {
     const q = i + 1
-    return tagMap[q] || {
+    const base = tagMap[q] || {
       q,
       subject: null,
       chapter: ch,
@@ -215,5 +217,6 @@ function buildTags(tags, totalQs, subject) {
       question: null, optionA: null, optionB: null,
       optionC: null, optionD: null, answer: null, solution: null,
     }
+    return answerKeys?.[q] ? { ...base, answer: answerKeys[q] } : base
   })
 }
