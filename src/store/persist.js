@@ -7,8 +7,7 @@
 
 import { supabase } from '../lib/supabase'
 
-const IS_DEV = import.meta.env.DEV
-const API    = '/api/data'
+const API = '/api/data'
 
 // ── Supabase helpers (prod faculty mode) ─────────────────────
 
@@ -114,7 +113,7 @@ export function saveToSupabase(data) {
 
 // ── Sync load (unused in prod — kept for legacy LS migration guard) ──────────
 export function loadFromStorage() {
-  if (IS_DEV) return null
+  if (import.meta.env.DEV) return null
   try {
     const raw = localStorage.getItem('nda_tracker_v2')
     return raw ? JSON.parse(raw) : null
@@ -125,7 +124,7 @@ export function loadFromStorage() {
 
 // ── Async load (dev: file plugin, prod: Supabase) ─────────────
 export async function loadFromDisk() {
-  if (IS_DEV) {
+  if (import.meta.env.DEV) {
     try {
       const r = await fetch(API)
       if (!r.ok) return null
@@ -156,7 +155,7 @@ export function saveToStorage(state) {
     whatsappSendHistory,
   }
 
-  if (IS_DEV) {
+  if (import.meta.env.DEV) {
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -170,7 +169,7 @@ export function saveToStorage(state) {
 
 // ── Clear ─────────────────────────────────────────────────────
 export function clearStorage() {
-  if (IS_DEV) {
+  if (import.meta.env.DEV) {
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
