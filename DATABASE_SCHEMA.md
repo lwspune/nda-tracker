@@ -64,6 +64,8 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 
 **FKs in:** `student_batches`, `student_attendance`, `student_logins`, `student_plans`.
 
+**Import matching:** the student-import flow (`mergeStudents` in `src/lib/merge/mergeLogic.js`) tries `eis_reg_no` first, falls back to `mobile` (unique-hit only), then to `canonical_name` + `branch` (both non-empty, unique-hit only). Blank-EIS rows that find no match are skipped — never inserted as new — so the canonical identifier contract is preserved. See the import section in [`CLAUDE.md`](./CLAUDE.md).
+
 ### `student_batches` — many-to-many junction
 
 | Column | Type | Notes |

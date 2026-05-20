@@ -69,6 +69,8 @@ A concrete trace that touches every layer.
 
 The same `StudentView` component is used in all three portals — the data it receives is filtered by the mode-detection logic upstream.
 
+**Student import follows the same dual-path shape.** Faculty drops a Student Search List Excel; `useImportFlow.handleStudentFile` calls [`loadExistingStudents()`](src/lib/students/loadExistingStudents.js) (Supabase tables when a session is active, dev `/api/students-db` fetch otherwise) to obtain the baseline, runs [`mergeStudents`](src/lib/merge/mergeLogic.js) with the tiered match (EIS → mobile → name+branch), and renders a Step 3 preview that includes any `conflicts[]` for the faculty to review before confirming. Confirm calls `importStudentsFromExcel` on the store, which upserts into `students` + `student_batches`.
+
 ---
 
 ## 4. The four runtime modes
@@ -134,7 +136,8 @@ src/
     supabase.js            → Null-guarded Supabase client
     excel.js               → All Excel parsing (results, tags, students, attendance)
     analytics/             → Pure functions: getAtRisk, computeChapterStats, etc.
-    merge/                 → Student deduplication and name-variant linking
+    merge/                 → Student deduplication, name-variant linking, and the import tiered match
+    students/              → loadExistingStudents — dual-path (Supabase / dev fetch) baseline for the import flow
     examPdf.js             → jsPDF exam reports (WinAnsi-safe)
   store/
     useStore.js            → Zustand store assembler

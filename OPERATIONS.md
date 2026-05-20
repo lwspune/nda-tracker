@@ -164,14 +164,45 @@ There is currently no CI gate; Vercel builds from `main` directly. To prevent a 
 
 ```bash
 npm run lint                              # 11 expected errors + 13 warnings — see CLAUDE.md lint section
-npm run test                              # 601 tests; 0 expected failures
+npm run test                              # 653 tests; 0 expected failures
 ```
 
 If lint reports more than the 11 expected errors, the new errors are real. If tests fail, do not push.
 
 ---
 
-## Scenario 10 — Migration script "no-op" or "0 inserted, 0 skipped"
+## Scenario 10 — Student re-import shows every row as "new" (or duplicates were created)
+
+**Symptoms:** Faculty re-imports the same `Student Search List` Excel and the modal says "N students loaded — N new, 0 unchanged". Or: after a confirmed import, Supabase has two rows for the same person with different `lws_id`s.
+
+**Most likely cause:** the pre-merge baseline didn't load. `useImportFlow.handleStudentFile` must call [`loadExistingStudents()`](src/lib/students/loadExistingStudents.js), not a bare `fetch('/api/students-db')` — the bare fetch 404s on Vercel (no dev plugin in prod) and `existingStudents = []` makes every row look new. Fix landed in commits `86e0fcd` + `d67f34f` (2026-05-20). If the symptom returns, suspect a regression in `useImportFlow` or `loadExistingStudents`.
+
+**Triage:**
+1. Check Supabase for duplicates by stable identifier:
+   ```sql
+   select mobile, array_agg(lws_id || ':' || canonical_name) as rows, count(*)
+   from students where mobile <> '' group by mobile having count(*) > 1;
+
+   select eis_reg_no, array_agg(lws_id || ':' || canonical_name) as rows, count(*)
+   from students where eis_reg_no <> '' group by eis_reg_no having count(*) > 1;
+   ```
+   Empty result → no duplicates exist. Non-empty → resolve via Faculty → Students → Manage Batch/Branch → Find Duplicates → Merge.
+
+2. If the modal still shows "all new" on a freshly deployed build, verify the import baseline actually loads. In the browser console on the import page:
+   ```js
+   // After picking the file, before clicking Next:
+   //   mergeResult is set in useImportFlow. If existingStudents.length was 0,
+   //   added === number of file rows.
+   ```
+   If `loadExistingStudents` is taking the Supabase branch it should log nothing; if it's taking the dev fetch branch on Vercel it'll log a 404 in the Network tab for `/api/students-db`.
+
+3. When the matcher does have a baseline but a specific row still inserts new, check `conflicts[]` in the Step 3 preview — `ambiguous_mobile` or `ambiguous_name_branch` means the row hit 2+ candidates and was deliberately not auto-merged. Resolve manually post-import via Find Duplicates.
+
+**Recovery:** Merge any duplicates that were created (Find Duplicates tab). Don't re-import to "fix" the count — that creates the next round of duplicates if the underlying bug is still present.
+
+---
+
+## Scenario 11 — Migration script "no-op" or "0 inserted, 0 skipped"
 
 **Most likely:** the source file (`data/faculty-data.json` or `students_db.json`) is empty on the dev machine that ran the script. Production data lives in Supabase; the local file may not have been synced.
 
