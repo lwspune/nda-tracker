@@ -49,7 +49,7 @@ export default function App() {
           <div className="text-[28px] mb-3">📊</div>
           <div className="text-[14px] font-semibold text-ink-2">Loading data…</div>
           <div className="text-[11px] text-ink-3 mt-1 font-mono">
-            {import.meta.env.DEV ? 'reading faculty-data.json' : 'connecting…'}
+            {!IS_READ_ONLY ? 'reading faculty-data.json' : 'connecting…'}
           </div>
         </div>
       </div>

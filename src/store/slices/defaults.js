@@ -1,4 +1,5 @@
 import { loadFromStorage } from '../persist'
+import { IS_READ_ONLY } from '../../config'
 import { buildDefaultFreqBySubject, buildDefaultMarksBySubject } from '../../lib/ndaFreq'
 import { migrateFreq, migrateMarks } from '../../lib/persistence'
 
@@ -12,7 +13,7 @@ export const DEFAULTS = {
   costLog: [],
   apiKey: '',
   lastDeployedAt: null,
-  hydrated: !import.meta.env.DEV,
+  hydrated: IS_READ_ONLY,
   syllabusPrograms: [],
   syllabusBatches: [],
   syllabusBatchBranches: {},

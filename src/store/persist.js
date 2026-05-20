@@ -6,7 +6,14 @@
 // ──────────────────────────────────────────────────────────────
 
 import { supabase } from '../lib/supabase'
+import { IS_READ_ONLY } from '../config'
 
+// `IS_READ_ONLY` is a runtime hostname check — `true` on Vercel/GitHub Pages, `false` on localhost.
+// We deliberately avoid `import.meta.env.DEV` here because Vite 8.0.3 + Rolldown on Vercel was
+// observed to substitute it with `true` in production builds (DCE inverted the dev/prod branches),
+// causing the prod app to fetch the dev-only `/api/data` endpoint and 404. The runtime check is
+// evaluated each load and can't be miscompiled.
+const IS_DEV = !IS_READ_ONLY
 const API = '/api/data'
 
 // ── Supabase helpers (prod faculty mode) ─────────────────────
@@ -113,7 +120,7 @@ export function saveToSupabase(data) {
 
 // ── Sync load (unused in prod — kept for legacy LS migration guard) ──────────
 export function loadFromStorage() {
-  if (import.meta.env.DEV) return null
+  if (IS_DEV) return null
   try {
     const raw = localStorage.getItem('nda_tracker_v2')
     return raw ? JSON.parse(raw) : null
@@ -124,7 +131,7 @@ export function loadFromStorage() {
 
 // ── Async load (dev: file plugin, prod: Supabase) ─────────────
 export async function loadFromDisk() {
-  if (import.meta.env.DEV) {
+  if (IS_DEV) {
     try {
       const r = await fetch(API)
       if (!r.ok) return null
@@ -155,7 +162,7 @@ export function saveToStorage(state) {
     whatsappSendHistory,
   }
 
-  if (import.meta.env.DEV) {
+  if (IS_DEV) {
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -169,7 +176,7 @@ export function saveToStorage(state) {
 
 // ── Clear ─────────────────────────────────────────────────────
 export function clearStorage() {
-  if (import.meta.env.DEV) {
+  if (IS_DEV) {
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

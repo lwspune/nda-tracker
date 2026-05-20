@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
+import { IS_READ_ONLY } from '../config'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
 import { DEFAULTS, hydrate } from './slices/defaults'
 import { createExamsSlice } from './slices/examsSlice'
@@ -30,7 +31,8 @@ const useStore = create((set, get) => ({
   // Prod (faculty): Supabase session detected → loads from faculty_state table.
   // Prod (teacher/student): no session → sets hydrated immediately.
   async initStore() {
-    if (!import.meta.env.DEV) {
+    // Runtime hostname check — see persist.js for why we avoid import.meta.env.DEV here
+    if (IS_READ_ONLY) {
       if (supabase) {
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
