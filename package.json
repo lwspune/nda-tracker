@@ -16,6 +16,7 @@
     "migrate": "node migrate_to_supabase.js",
     "migrate:students": "node migrate_students_to_supabase.js",
     "migrate:exams": "node migrate_exams_to_supabase.js",
+    "migrate:insights": "node migrate_insights_to_supabase.js",
     "sync:students": "node sync_students_from_supabase.js",
     "merge:subtopics": "python -X utf8 merge_subtopics.py",
     "merge:subtopics:sync": "node migrate_subtopics_supabase.js"

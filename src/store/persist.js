@@ -35,6 +35,34 @@ async function fetchAllRows(table) {
   return { data: rows, error: null }
 }
 
+// Loads class_reports + student_plans, collapses to "latest per scope" — matches the existing
+// in-memory shape: { classReport: { text, generatedAt } | null, studentPlans: { [name]: { text, generatedAt } } }.
+// History rows stay in the DB for future surfaces (timeline, audit, etc.) but the store only holds the latest.
+export async function loadInsightsFromSupabase() {
+  if (!supabase) return null
+
+  const { data: reportRows, error: reportsErr } = await supabase
+    .from('class_reports').select('text, generated_at').order('generated_at', { ascending: false }).limit(1)
+  if (reportsErr) return null
+
+  const { data: planRows, error: plansErr } = await supabase
+    .from('student_plans').select('student_name, text, generated_at').order('generated_at', { ascending: false })
+  if (plansErr) return null
+
+  const classReport = reportRows?.[0]
+    ? { text: reportRows[0].text, generatedAt: reportRows[0].generated_at }
+    : null
+
+  const studentPlans = {}
+  for (const p of planRows ?? []) {
+    if (!studentPlans[p.student_name]) {
+      studentPlans[p.student_name] = { text: p.text, generatedAt: p.generated_at }
+    }
+  }
+
+  return { classReport, studentPlans }
+}
+
 export async function loadExamsFromSupabase() {
   if (!supabase) return null
 
@@ -75,8 +103,8 @@ export function saveToSupabase(data) {
   if (!supabase) return
   supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (!session) return
-    // exams are stored in normalised tables — exclude from the JSONB blob
-    const { exams: _exams, ...rest } = data
+    // exams + savedInsights live in normalised tables — exclude from the JSONB blob
+    const { exams: _exams, savedInsights: _insights, ...rest } = data
     const { error } = await supabase.from('faculty_state')
       .update({ data: rest, updated_at: new Date().toISOString() })
       .eq('id', 1)

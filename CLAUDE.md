@@ -23,7 +23,7 @@ Four runtime modes:
 | Excel export (styled) | xlsx-js-style (`src/pages/Timetable/TimetablePage.jsx`) |
 | Math rendering | KaTeX |
 | Deploy | Vercel for all three portals (faculty, teacher, student); GitHub Pages legacy static build via `npm run deploy` |
-| Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `student_logins`, `students_meta` tables) |
+| Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `student_logins`, `students_meta`, `class_reports`, `student_plans` tables) |
 | Python deps | `tzdata` (`pip install tzdata`) for `send_schedule.py`; `cryptography` only if regenerating `split_students.py` output |
 
 ## Key commands
@@ -37,6 +37,7 @@ npm run deploy          # build + gh-pages push (split no longer runs automatica
 npm run migrate         # one-time: seed data/faculty-data.json → Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:students  # seed students_db.json → Supabase students tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY; --cleanup prints cleanup SQL)
+npm run migrate:insights  # seed savedInsights → class_reports + student_plans tables (re-runnable, needs SUPABASE_SERVICE_ROLE_KEY; --cleanup prints cleanup SQL)
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run merge:subtopics       # python -X utf8 merge_subtopics.py — apply subtopic renames to data/faculty-data.json
 npm run merge:subtopics:sync  # node migrate_subtopics_supabase.js — push renames to Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
@@ -55,13 +56,14 @@ npm run lint
 
 ### Data persistence
 - **Dev**: `data/faculty-data.json` via `POST /api/data` (Vite `localDataPlugin`). Bypasses 5 MB localStorage limit.
-- **Prod online faculty** (Vercel): Three Supabase stores:
-  - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, insights, cost log, etc. (exams removed as of Phase 5). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips `exams` before writing.
+- **Prod online faculty** (Vercel): Four Supabase stores:
+  - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, cost log, etc. (exams removed Phase 5; savedInsights removed Phase 6). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips both `exams` and `savedInsights` before writing.
   - Normalised exam tables — `exams` (id, name, date, subject, batch, branch, marking JSONB, questions JSONB, created_at) + `exam_results` (exam_id FK ON DELETE CASCADE, student_name, roll_no, total_marks, correct, incorrect, not_attempted, responses JSONB). Written by `examsSlice.js` via `src/store/slices/examSupabase.js` helpers. Read via `loadExamsFromSupabase()` (paginated, 1000-row pages).
   - Normalised student tables — `students`, `student_batches`, `student_attendance`, `students_meta`. Each mutation in `studentSlice.js` writes targeted rows; `loadStudentsFromSupabase()` is called on faculty login to populate `studentProfiles` in-store. Teacher/student portals never touch these tables (RLS: authenticated only).
+  - Normalised insights tables (Phase 6) — `class_reports` (id, exam_id text FK ON DELETE SET NULL, text, generated_at, generated_by) + `student_plans` (id, lws_id FK ON DELETE SET NULL, student_name NOT NULL, text, generated_at, generated_by). Insert-only (history preserved by never updating in place). Written by `insightsSlice.js` via `src/store/slices/insightsSupabase.js` helpers. Read via `loadInsightsFromSupabase()` which collapses to "latest per scope" — `{ classReport, studentPlans }` shape matches the legacy store. RLS: authenticated only.
   - `student_logins (id, lws_id, logged_in_at)` — one row per student login event. Written fire-and-forget by `api/student-login.js` after successful mobile auth. Read by `StudentView` (faculty/teacher only) to show last-login and login count in `ProfileCard`.
   - `students_db.exams[]` is dead data — not mapped by any code path; dropped from Supabase schema.
-- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders.
+- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders. (Teacher UI does not link to Insights — `loadInsightsFromSupabase()` is faculty-only.)
 - **Prod student**: localStorage — session token only (`SESSION_KEY`, contains `lwsId`, `name`, `mobile`), expires after `SESSION_DAYS`.
 - `apiKey` is **never** persisted to disk or localStorage — memory only.
 
@@ -237,6 +239,9 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `migrate_students_to_supabase.js` | Re-runnable seed: `students_db.json` → 4 Supabase tables (upsert; drops dead `exams[]`) |
 | `sync_students_from_supabase.js` | Reverse sync: Supabase tables → `students_db.json` (for Python scripts) |
 | `src/store/slices/examSupabase.js` | Supabase helpers for exam mutations: `upsertExam`, `deleteExamById`, `updateExamQuestions`, `buildExamRow`, `buildResultRows` |
+| `src/store/slices/insightsSupabase.js` | Supabase helpers for insights mutations: `insertClassReport`, `insertStudentPlan`, `deleteAllClassReports`, `deleteStudentPlansByName` |
+| `src/store/slices/insightsSlice.js` | Insights CRUD — dual-path: state always updated; if `getSession()` returns a session, also inserts into `class_reports` / `student_plans`. Inserts are append-only (history preserved). |
+| `migrate_insights_to_supabase.js` | Re-runnable seed: `savedInsights` → `class_reports` + `student_plans`. Resolves `lws_id` from `students_db.json` by canonical name + name variants. Tags rows with `generated_by='legacy-import'`. `--cleanup` prints SQL to drop `savedInsights` from `faculty_state.data`. |
 | `src/store/slices/syllabusSlice.js` | Syllabus CRUD + progress cycle |
 | `src/store/slices/timetableSlice.js` | Timetable, slot, mapping, teacher CRUD |
 | `src/pages/Timetable/` | TimetablePage, TimetableGrid, ExamScheduleView, AddExamScheduleModal, Edit/Add modals, SendScheduleModal |
@@ -280,7 +285,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
 Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **546 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), subtopic rename (39 Python tests).
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -338,7 +343,11 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Subject filter is local component state, not in the store | Filters reset naturally on navigation (correct UX). No cross-page filter persistence was ever requested. Lifting to the store would add complexity with no benefit. |
 | `failedNames` defaults to `null` (not `[]`) on first send | `null` means "no history" — the preview modal uses this to decide whether to show the resend scope toggle. An empty `[]` would show the toggle but with 0 students, which is confusing. |
 | `stripLatex` in `examPdf.js` outputs ASCII only (not Unicode math symbols) | jsPDF's built-in Helvetica is WinAnsi-encoded — every Unicode symbol above U+00FF (Greek letters, set operators, arrows, `≤≥≠`, `∈∪∩`, `∞`, `ℝ`, etc.) renders as garbage bytes. `×` `÷` `±` `·` (U+00D7/F7/B1/B7) are within WinAnsi and are kept. Embedding a custom Unicode font would significantly inflate the bundle; ASCII equivalents (`in`, `U`, `->`, `<=`, `alpha`, `inf`, etc.) are readable for NDA students. |
-| `faculty_state` JSONB for non-exam data; normalised tables for exams + students | Exams normalised in Phase 5: 2.3 MB → 224 KB JSONB. Syllabus/timetable/insights stay in JSONB — no mutation gap and no `api/` endpoint reads them by ID. Student mutations were no-ops on Vercel (Vite-only dev plugin) — normalised tables fix this. Exam mutations (`addExam`, `replaceExam`, `deleteExam`, `updateQuestion`) now write to `exams`/`exam_results` via `examSupabase.js` in addition to the JSONB-free `_save()`. |
+| `faculty_state` JSONB for non-exam/non-insights data; normalised tables for exams + students + insights | Exams normalised in Phase 5: 2.3 MB → 224 KB JSONB. Insights normalised in Phase 6 to enable history (multiple rows per student/class), per-row updates without rewriting the blob, and an FK path for future student-portal surfaces. Syllabus/timetable stay in JSONB — no mutation gap and no `api/` endpoint reads them by ID. |
+| Insights tables are insert-only — `saveClassReport` / `saveStudentPlan` append a new row each time; the store only holds the latest | History was free with the new schema and "latest-only" would have wasted the upgrade. The Insights page reads the latest per scope via `loadInsightsFromSupabase()` to preserve the existing UI shape; full history surfaces (timeline, audit log) can be added later without schema changes. |
+| `student_plans` keeps both `lws_id` (nullable FK) and `student_name` (NOT NULL) | The legacy JSONB shape was keyed by `student_name`; mapping names → `lws_id` at write time can fail (unresolved variants, deleted students). Keeping `student_name` always-present means a plan can be saved even when the name doesn't resolve, while `lws_id` (when populated) gives proper relational integrity. `ON DELETE SET NULL` preserves historical plans if a student is deleted. |
+| `class_reports.exam_id` is nullable | Legacy reports had no exam scope; nullable column allows migrating them with `exam_id = null`. New reports written by the chat-driven flow will populate it. Schema stays permissive so we never have to backfill. |
+| `migrate_insights_to_supabase.js` resolves `lws_id` from `students_db.json` (canonical name + name variants), not by querying the `students` table at runtime | The migration runs against a stable snapshot of the student data; querying Supabase per row would add hundreds of round-trips for no gain. Unresolved names are logged and inserted with `lws_id = null` so the caller can fix the variants and re-run idempotently. |
 | Students use normalised tables; exams now normalised too (Phase 5) | Student mutations (batch assign, name variants, profile edits) were no-ops on Vercel because `/api/students-db` is a Vite-only dev plugin. Exam mutations had the same gap — reads came from JSONB but writes landed only in local JSON. Both are now dual-path: Supabase table write if session active, else dev-server fetch. |
 | `studentSlice.js` mutations use dual-path (Supabase if session, fetch if not) | Keeps dev workflow (local `students_db.json`) unchanged. No Vite config changes needed. The `getSession()` check is cheap — single Supabase client call. |
 | `sync:students` as a manual step for Python scripts | `send_results_whatsapp.py` reads `students_db.json`. Rather than rewriting it to query Supabase, a one-command sync keeps the Python side unchanged. Only needed before sends when student profile data changed online. |
@@ -395,6 +404,10 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - Do not use `.catch()` on Supabase query builder chains — `PostgrestFilterBuilder` is a thenable, not a full Promise; `.catch` is `undefined` and throws silently. Always use `async/await` with `{ error }` destructuring inside the `.then()` callback.
 - `studentSlice.js` mutations must check `getSession()` before choosing Supabase vs fetch path — do not remove this dual-path logic. Dev mode depends on the fetch path; Vercel depends on the Supabase path.
 - `loadStudentsFromSupabase()` must be called after `faculty_state` loads in `initStore()` — it overwrites the stale `studentProfiles` baked into `faculty_state` with fresh data from the normalised tables. Do not remove this call.
+- `loadInsightsFromSupabase()` must be called in `initStore()` after `faculty_state` loads (faculty path only) — same reason as `loadStudentsFromSupabase`: it overwrites the stale `savedInsights` baked into the JSONB blob with fresh data from `class_reports` / `student_plans`. Do not remove this call.
+- `saveToSupabase` strips both `exams` AND `savedInsights` from the JSONB blob before writing — do not remove either field from the destructure. Re-introducing them would double-write the data and let the JSONB drift out of sync with the normalised tables on faculty mutations.
+- `insightsSlice.js` mutations are append-only — `saveClassReport` / `saveStudentPlan` insert new rows each time, never update in place. Do not change to upsert; history would be lost.
+- `class_reports` and `student_plans` are read by `loadInsightsFromSupabase()` which collapses to "latest per scope" — preserves the legacy `{ classReport, studentPlans }` store shape. Do not change the in-store shape; the Insights page depends on it.
 - `loadExamsFromSupabase()` is called in `initStore()` (faculty) and in `TeacherPortal` mount (teacher) — both paths must await it; removing it leaves the store with stale JSONB data (or no data).
 - `fetchAllRows` pagination in `persist.js` is required for all Supabase tables that can exceed 1000 rows (`exam_results` already at 1472+). Do not replace with a bare `.select('*')` — it silently truncates.
 - `migrate_exams_to_supabase.js --cleanup` only prints the cleanup SQL; it does not execute it. Run the SQL manually in Supabase SQL editor only after confirming exam counts match and the live app shows correct data. Never run cleanup before seeding.

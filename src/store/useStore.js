@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase } from './persist'
+import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
 import { DEFAULTS, hydrate } from './slices/defaults'
@@ -62,10 +62,12 @@ const useStore = create((set, get) => ({
             // Load fresh data from normalised Supabase tables.
             get().loadStudentsFromSupabase()
             get().loadExamsFromSupabase()
+            get().loadInsightsFromSupabase()
           } else {
             set({ hydrated: true })
             get().loadStudentsFromSupabase()
             get().loadExamsFromSupabase()
+            get().loadInsightsFromSupabase()
           }
           return
         }
@@ -152,6 +154,12 @@ const useStore = create((set, get) => ({
   async loadExamsFromSupabase() {
     const exams = await fetchExamsFromSupabase()
     if (exams !== null) set({ exams })
+  },
+
+  // ── Load insights from normalised Supabase tables ─────────
+  async loadInsightsFromSupabase() {
+    const insights = await fetchInsightsFromSupabase()
+    if (insights !== null) set({ savedInsights: insights })
   },
 
   // ── Load remote data (teacher portal) ────────────────────
