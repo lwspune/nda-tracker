@@ -111,6 +111,27 @@ export const createTimetableSlice = (set, get) => ({
     get()._save()
   },
 
+  // Rename a batchName across all timetables AND cascade to examSchedules.
+  // Use this (not updateTimetable) when changing batchName; updateTimetable
+  // does not cascade and leaves examSchedules pointing at a stale name.
+  renameTimetableBatch(oldName, newName) {
+    const trimmed = (newName ?? '').trim()
+    if (!trimmed || oldName === trimmed) return
+    let changed = false
+    set(s => {
+      const timetables = s.timetables.map(tt => {
+        if (tt.batchName !== oldName) return tt
+        changed = true
+        return { ...tt, batchName: trimmed }
+      })
+      const examSchedules = s.examSchedules.map(e =>
+        e.batchName === oldName ? { ...e, batchName: trimmed } : e
+      )
+      return { timetables, examSchedules }
+    })
+    if (changed) get()._save()
+  },
+
   deleteTimetable(id) {
     set(s => ({ timetables: s.timetables.filter(tt => tt.id !== id) }))
     get()._save()

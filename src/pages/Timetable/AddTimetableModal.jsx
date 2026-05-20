@@ -5,10 +5,11 @@ import ModalShell from './ModalShell'
 const PRESET_BRANCHES = ['APJ', 'LWS Pune']
 
 export default function AddTimetableModal({ timetable, onClose }) {
-  const timetables        = useStore(s => s.timetables)
-  const addTimetable      = useStore(s => s.addTimetable)
-  const updateTimetable   = useStore(s => s.updateTimetable)
-  const deleteTimetable   = useStore(s => s.deleteTimetable)
+  const timetables          = useStore(s => s.timetables)
+  const addTimetable        = useStore(s => s.addTimetable)
+  const updateTimetable     = useStore(s => s.updateTimetable)
+  const renameTimetableBatch = useStore(s => s.renameTimetableBatch)
+  const deleteTimetable     = useStore(s => s.deleteTimetable)
 
   // Collect branches already in use
   const existingBranches = [...new Set(timetables.map(t => t.branch))]
@@ -28,11 +29,17 @@ export default function AddTimetableModal({ timetable, onClose }) {
   const effectiveBranch = useCustom ? customBranch.trim() : branch
 
   function handleSave() {
-    if (!effectiveBranch || !batchName.trim()) return
+    const trimmedBatch = batchName.trim()
+    if (!effectiveBranch || !trimmedBatch) return
     if (isEdit) {
-      updateTimetable(timetable.id, { branch: effectiveBranch, batchName: batchName.trim() })
+      if (effectiveBranch !== timetable.branch) {
+        updateTimetable(timetable.id, { branch: effectiveBranch })
+      }
+      if (trimmedBatch !== timetable.batchName) {
+        renameTimetableBatch(timetable.batchName, trimmedBatch)
+      }
     } else {
-      addTimetable(effectiveBranch, batchName.trim())
+      addTimetable(effectiveBranch, trimmedBatch)
     }
     onClose()
   }

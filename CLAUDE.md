@@ -43,6 +43,7 @@ npm run migrate:insights  # seed savedInsights → class_reports + student_plans
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs SUPABASE_SERVICE_ROLE_KEY)
 npm run merge:subtopics       # python -X utf8 merge_subtopics.py — apply subtopic renames to data/faculty-data.json
 npm run merge:subtopics:sync  # node migrate_subtopics_supabase.js — push renames to Supabase (needs SUPABASE_SERVICE_ROLE_KEY)
+# one-off: node migrate_unify_batches.js [--local] [--dry-run] — applied 2026-05-20; idempotent; aligns syllabus + timetable batch names
 npm run lint
 ```
 
@@ -198,6 +199,11 @@ Tracks teaching progress per batch, independent of exam data.
 
 Syllabus batch mutations: `addSyllabusBatch`, `renameSyllabusBatch` (cascades to assignments + progress + `syllabusBatchBranches` + `batchChapterTimelines` keys), `deleteSyllabusBatch` (cascades all four) — all in `syllabusSlice.js`. `deleteProgram`, `deleteSubject`, `deleteChapter` also cascade to `batchChapterTimelines`.
 
+### Syllabus + timetable batch unification (2026-05-20)
+`syllabusBatches[]` and `timetables[].batchName` now use a single shared naming scheme. 10 batches total: 7 with existing timetables, 3 pre-created syllabus-only B sections waiting on timetables, and `APJ_9th_Std` (new, split from the old combined `9th & 10th Std` timetable). The migration is in `migrate_unify_batches.js` (idempotent; supports `--local` for `data/faculty-data.json`).
+
+`profile.batches[]` (student records) is **not** aligned yet — that's a later phase. The student-portal join key (Phase 3 of the branch-batch plan) will require either renaming profile batches or building a profile→unified map; deferred.
+
 ### Timetable (`src/pages/Timetable/`)
 CRUD for branch/batch timetables: time slots, a Mon–Sat grid of cells (class, break, or full-row span), subject-teacher mappings, and a batchwise exam schedule.
 
@@ -208,6 +214,8 @@ CRUD for branch/batch timetables: time slots, a Mon–Sat grid of cells (class, 
 - `examSchedules` — `{ id, date, startTime, endTime, subject, chapter, teacherId, branch, batchName, status }`. `status` cycles `Planned → Completed → Cancelled → Planned` (admin only). `branch`/`batchName` come from existing `timetables[]` entries — not from syllabus batches or exam batches.
 
 **Teacher email**: stored on `timetableTeachers[].email`. `updateTimetableTeacher(id, patch)` accepts `{ name?, email? }` — not a bare string. Teachers without email are skipped by `send_schedule.py`. Deleting a teacher cascades: nulls `teacherId` on both `timetableMappings` and `examSchedules`.
+
+**Batch rename**: to rename a timetable's `batchName`, use `renameTimetableBatch(oldName, newName)` — it cascades to `examSchedules[].batchName`. `updateTimetable(id, { batchName })` is a bare patch that does NOT cascade and will leave exam schedules pointing at a stale name. `AddTimetableModal` routes the edit through `renameTimetableBatch` when the batchName changes and only uses `updateTimetable` for branch-only edits.
 
 **Schedule emails**: `send_schedule.py` reads `faculty-data.json` and sends HTML email via Gmail SMTP. Modes: `--weekly` (next Mon–Sat, appends "Upcoming Exams This Week" section); `--daily` (tomorrow, Sat → Mon); `--exam-reminder N` (exams N days from today, N=1 or 2). Triggered from the UI via `POST /api/send-schedule` (`vite.config.js`). `SendScheduleModal` handles all three modes.
 
@@ -309,6 +317,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `generate_syllabus_seed.py` | Excel → `src/lib/syllabusSeed.js` |
 | `merge_subtopics.py` | One-time subtopic rename script: 28-entry `SUBTOPIC_RENAMES` map + `apply_renames(exams, map)` — updates `data/faculty-data.json`; run `merge:subtopics:sync` after to push to Supabase |
 | `migrate_subtopics_supabase.js` | Patches `exams.questions` JSONB in Supabase with the same 28-entry rename map (needs `SUPABASE_SERVICE_ROLE_KEY`); idempotent |
+| `migrate_unify_batches.js` | One-off (applied 2026-05-20): unifies `syllabusBatches[]` and `timetables[].batchName` to the same 10-name scheme; splits LWS/APJ 2Y cohorts into `_A`/`_B`; pre-creates B sections and `APJ_9th_Std`. `--local` targets `data/faculty-data.json`; default targets Supabase. Idempotent on re-run. |
 | `tests/test_subtopic_merge.py` | 39 pytest tests for `merge_subtopics.py` rename logic |
 | `data/faculty-data.json` | Primary dev data store (gitignored) |
 | `students_db.json` | Student roster with mobiles (gitignored) |
@@ -319,8 +328,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'admin'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **661 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
-Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **670 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (44 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
 - Mock stores for pages using batch filtering must include `studentProfiles: {}`.
@@ -417,6 +426,8 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Tiered match auto-merges only when ambiguity is zero — ambiguous matches always fall through to insert + conflict report | Auto-picking the first ambiguous candidate would silently attach exam history / attendance / fees to the wrong student. The cost of a wrong-merge is high (data corruption that's hard to undo); cost of a "Possible conflict" preview entry is one human glance. The conservative path is correct here. |
 | Tiered match keeps the "don't insert without EIS" safety net | Allowing inserts without EIS would let blank-EIS Excel rows create permanent records that lack the canonical identifier, making future re-imports impossible to match. Blank-EIS rows can still UPDATE existing students (via mobile or name+branch) — they just can't CREATE new ones. |
 | `mobile_conflict_on_eis_match` is non-blocking | The EIS match contract is "EIS wins" — overriding it on every mobile difference would block legitimate phone-number changes. Surfacing as a conflict (rather than skipping the update) lets admin notice the rare case where two students share an EIS due to a data-entry error, without breaking the common case of a student changing their number. |
+| Syllabus + timetable batch names unified by alignment, not an alias map | Two independent stores (`syllabusBatches[]` and `timetables[].batchName`) used divergent names for the same cohorts, blocking any future "filter X by student's batch" feature. Considered a `timetableBatchAliases` map and rejected — mapping tables drift and require maintenance forever. Renaming once is a one-time cost. Direction of rename was timetable → syllabus (`12th Std` → `APJ_12th_NDA_(2026-27)` etc.) because syllabus names match the LWS/APJ-prefixed cohort convention `profile.batches[]` also uses, putting the eventual three-way join one step closer. A/B sections split on the syllabus side (`_A` / `_B` suffix) so the 1:1 mapping with timetables is preserved when both sections exist. Existing progress + timelines copied from the pre-rename cohort to both `_A` and `_B` so neither section starts blank. |
+| `renameTimetableBatch` is a separate action (not part of `updateTimetable`) | The original `updateTimetable(id, patch)` does a bare patch. A bare patch is fine for changing `branch`, but a `batchName` change must cascade to `examSchedules[].batchName` (which references the timetable by name, not id). Adding the cascade to `updateTimetable` would silently broaden its semantics; a dedicated action keeps the caller's intent explicit and means the cascade can't be forgotten. |
 
 ---
 
@@ -429,8 +440,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `ModeContext` default is `'admin'` — changing it breaks tests.
 - All hooks must be called **before** any early returns in page components.
 - Do not filter batch dropdowns or exam lists on `exam.batch` directly — always use `getBatchOptions` / `getExamsForBatch` from `src/lib/analytics`.
-- Syllabus Tracker batch names are independent of exam/student-profile batch names — do not derive them from `exams` or `studentProfiles`. Manage via `addSyllabusBatch` / `renameSyllabusBatch` / `deleteSyllabusBatch`.
+- Syllabus Tracker batch names are independent of **student-profile** batch names (`profile.batches[]`) — do not derive them from `studentProfiles`. As of 2026-05-20 syllabus batch names DO match `timetables[].batchName` 1:1 (unified scheme); both are still owned by their own slices and edited through their own UIs (`addSyllabusBatch` / `renameSyllabusBatch` / `deleteSyllabusBatch` on the syllabus side; `addTimetable` / `renameTimetableBatch` on the timetable side). Renames on one side do not auto-propagate to the other — keep them in sync manually for now.
 - Syllabus branch filter branches are sourced from `timetables[].branch` — do not create a separate branch list for the Syllabus Tracker. `syllabusBatchBranches` cascades on batch rename/delete.
+- To rename a timetable's `batchName`, use `renameTimetableBatch(oldName, newName)` — it cascades to `examSchedules[].batchName`. Do not use `updateTimetable(id, { batchName })` for renames; that's a bare patch that leaves exam schedules pointing at a stale name.
 - `updateTimetableTeacher(id, patch)` takes `{ name?, email? }` — do not pass a bare string (breaking change from original signature).
 - Exam Schedule `branch`/`batchName` must come from `timetables[]` entries — do not derive from `syllabusBatches` or `exams[].batch`.
 - `guardian_mobile` from Excel merges (appends if absent) into `parent_mobiles[]` — do not change to overwrite semantics; manually-added parent numbers must survive re-import.

@@ -149,6 +149,80 @@ describe('updateTimetable', () => {
   })
 })
 
+describe('renameTimetableBatch', () => {
+  it('renames batchName on the matching timetable', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', '12th Std')
+    slice.renameTimetableBatch('12th Std', 'APJ_12th_NDA_(2026-27)')
+    expect(get().timetables[0].batchName).toBe('APJ_12th_NDA_(2026-27)')
+  })
+
+  it('cascades to examSchedules with the same batchName', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', '12th Std')
+    slice.addExamSchedule({ ...EXAM_BASE, branch: 'APJ', batchName: '12th Std', teacherId: null })
+    slice.addExamSchedule({ ...EXAM_BASE, branch: 'APJ', batchName: '12th Std', teacherId: null })
+    slice.renameTimetableBatch('12th Std', 'APJ_12th_NDA_(2026-27)')
+    expect(get().examSchedules.every(e => e.batchName === 'APJ_12th_NDA_(2026-27)')).toBe(true)
+  })
+
+  it('leaves examSchedules with a different batchName untouched', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', '12th Std')
+    slice.addExamSchedule({ ...EXAM_BASE, branch: 'APJ', batchName: '12th Std', teacherId: null })
+    slice.addExamSchedule({ ...EXAM_BASE, branch: 'APJ', batchName: '11th Std', teacherId: null })
+    slice.renameTimetableBatch('12th Std', 'APJ_12th_NDA_(2026-27)')
+    const names = get().examSchedules.map(e => e.batchName).sort()
+    expect(names).toEqual(['11th Std', 'APJ_12th_NDA_(2026-27)'])
+  })
+
+  it('renames all timetables sharing the same old batchName', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', 'Shared')
+    slice.addTimetable('LWS Pune', 'Shared')
+    slice.renameTimetableBatch('Shared', 'Renamed')
+    expect(get().timetables.every(t => t.batchName === 'Renamed')).toBe(true)
+  })
+
+  it('is a no-op when oldName equals newName', () => {
+    const { saves, slice } = makeStore()
+    slice.addTimetable('APJ', 'Same')
+    const before = saves.length
+    slice.renameTimetableBatch('Same', 'Same')
+    expect(saves.length).toBe(before)
+  })
+
+  it('trims newName whitespace', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', 'Old')
+    slice.renameTimetableBatch('Old', '  New  ')
+    expect(get().timetables[0].batchName).toBe('New')
+  })
+
+  it('is a no-op when newName is blank', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', 'Old')
+    slice.renameTimetableBatch('Old', '   ')
+    expect(get().timetables[0].batchName).toBe('Old')
+  })
+
+  it('is a no-op when no timetable matches oldName', () => {
+    const { saves, slice } = makeStore()
+    slice.addTimetable('APJ', 'Existing')
+    const before = saves.length
+    slice.renameTimetableBatch('Missing', 'Something')
+    expect(saves.length).toBe(before)
+  })
+
+  it('saves once after a successful rename', () => {
+    const { saves, slice } = makeStore()
+    slice.addTimetable('APJ', 'Old')
+    const before = saves.length
+    slice.renameTimetableBatch('Old', 'New')
+    expect(saves.length).toBe(before + 1)
+  })
+})
+
 describe('deleteTimetable', () => {
   it('removes the timetable', () => {
     const { get, slice } = makeStore()
