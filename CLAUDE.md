@@ -112,8 +112,16 @@ Batch dropdown options and filter logic use **`profile.batches[]` as primary** (
 Valid student = `studentProfiles` entry with non-empty `regDate`. Valid exam = `exam.date >= profile.regDate`. Students without `regDate` are excluded from class-level analytics. `accountStatus` is display-only.
 Analytics functions (`getAllStudents`, `computeChapterStats`, `getAtRisk`, `getHardestQuestions`, `getToppers`) accept optional `validNames: Set | null` (`null` = no filter).
 
-### Students page search
-`src/pages/Students/index.jsx` builds the search list as a union of exam-appearing names **and** all `studentProfiles` names — so all 309+ registered students are searchable even if they have no exam records. **Only canonical (primary) names appear in search** — variant names (keys in `studentProfiles` where key ≠ `profile.name`) are filtered out before building the list. `StudentView` shows a profile card for students with no exams (early-return at `!allExamData.length` renders `<ProfileCard>` + empty state, not a blank screen).
+### Students page browser
+`src/pages/Students/index.jsx` renders a paginated, filterable **table** (`StudentsTable`) above the optional `StudentView` detail. Pattern X — when a row is clicked the table stays visible and `StudentView` expands below.
+
+**Table** (`StudentsTable.jsx`): 8 columns (Name, LWS ID, Branch, Batch(es), Mobile, Status, Exams count, Last activity). Filters: search (canonical name + LWS ID + name variants), branch, batch, status. PAGE_SIZE = 25. Page resets to 1 on any filter change. Exam count and last-activity are derived per render from `exams` keyed on canonical name + variants.
+
+**Source list:** prefers `studentList` (raw Supabase array — one row per record); falls back to canonical-only `studentProfiles` entries when `studentList` is empty. Variants are excluded.
+
+**Inline editor** (`StudentRowEditor.jsx`): faculty-only. Per-row Edit button toggles a sub-row with branch select + batches editor (remove chips, add from dropdown) + Save/Cancel. Save calls `updateStudentBranchBatch(lwsId, name, { branch, batches })`. Editing other fields (mobile, parent mobiles, name variants) stays in `ProfileCard` inside the detail view below.
+
+`StudentView` still shows a profile card for students with no exams (early-return at `!allExamData.length` renders `<ProfileCard>` + empty state, not a blank screen).
 
 **Name variant normalization in `StudentView`**: after the profile lookup, builds `allNames = Set([name, ...(profile?.nameVariants || [])])` and creates `normalizedExams` — a shallow in-memory copy where any student entry whose name is a known variant is renamed to the canonical name. All analytics (`getStudentExams`, `computeStudentChapterStats`, audits, etc.) then operate on the canonical name and find records regardless of which spelling appeared in the uploaded results. No-op when the student has no variants.
 
@@ -270,6 +278,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/lib/merge/deduplication.js` | `findDuplicateCandidates`, `getUnmatchedExamNames`, `findExamNameCandidates` |
 | `src/lib/merge/recordMerge.js` | `mergeStudentRecords` — merges two profile records, primary wins on conflicts |
 | `src/store/slices/studentSlice.js` | `importStudentsDB`, `addNameVariant`, `mergeStudentProfiles`, `bulkUpdateStudentContacts`, branch/batch/mobile updates |
+| `src/pages/Students/StudentsTable.jsx` | Filterable + paginated student table (Name / LWS ID / Branch / Batches / Mobile / Status / Exams / Last activity). PAGE_SIZE=25. Click name → activates Pattern X (table stays + StudentView below). |
+| `src/pages/Students/StudentRowEditor.jsx` | Inline expand-in-place editor for branch + batches per row (faculty only). Save calls `updateStudentBranchBatch`. |
 | `src/pages/Students/ManageBatchBranchModal.jsx` | Rename / Bulk Assign / Find Duplicates tabs |
 | `src/pages/Students/batchBranch/FindDuplicatesTab.jsx` | Combined profile–profile + exam-name scan; merge and link-as-variant actions |
 | `src/pages/Syllabus/` | SyllabusPage, SubjectAccordion, Manage*Modal, AssignProgramsModal |
@@ -289,7 +299,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **601 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **634 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):

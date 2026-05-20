@@ -1,43 +1,64 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getAllStudents } from '../../lib/analytics'
 import { useMode } from '../../context/ModeContext'
+import StudentsTable from './StudentsTable'
 import StudentView from './StudentView'
 import ImportStudentsModal from '../../components/students/ImportStudentsModal'
 import ManageBatchBranchModal from './ManageBatchBranchModal'
 
 export default function StudentsPage() {
-  const exams = useStore(s => s.exams)
-  const studentProfiles = useStore(s => s.studentProfiles)
-  const activeStudent = useStore(s => s.activeStudent)
-  const setActiveStudent = useStore(s => s.setActiveStudent)
-  const mode = useMode()
+  const exams              = useStore(s => s.exams)
+  const studentList        = useStore(s => s.studentList)
+  const studentProfiles    = useStore(s => s.studentProfiles)
+  const activeStudent      = useStore(s => s.activeStudent)
+  const setActiveStudent   = useStore(s => s.setActiveStudent)
+  const updateBranchBatch  = useStore(s => s.updateStudentBranchBatch)
 
-  const [query, setQuery] = useState('')
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const mode = useMode()
+  const isFaculty = mode === 'faculty'
+
   const [importOpen, setImportOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
 
-  const variantNames = new Set(
-    Object.entries(studentProfiles)
-      .filter(([key, p]) => p.name !== key)
-      .map(([key]) => key)
-  )
-  const examNames = new Set(getAllStudents(exams).filter(n => !variantNames.has(n)))
-  const profileNames = [...new Set(Object.values(studentProfiles).map(p => p.name).filter(Boolean))]
-  const allStudents = [...new Set([...examNames, ...profileNames])].sort((a, b) => a.localeCompare(b))
-
-  const filtered = query.trim()
-    ? allStudents.filter(n => n.toLowerCase().includes(query.toLowerCase()))
-    : []
+  // Build the table-friendly student list. Prefer the raw `studentList` (one row per
+  // record, no canonical-name collapse), and fall back to `studentProfiles` values
+  // for installs that haven't loaded the raw list yet.
+  const students = useMemo(() => {
+    if (studentList && studentList.length) {
+      return studentList
+        .map(s => ({
+          lwsId:         s.lws_id,
+          name:          s.canonical_name || s.name || '',
+          branch:        s.branch || '',
+          batches:       s.batches || [],
+          mobile:        s.mobile || '',
+          accountStatus: s.account_status || '',
+          nameVariants:  s.name_variants || [],
+        }))
+        .filter(s => s.name)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }
+    return Object.entries(studentProfiles)
+      .filter(([key, p]) => p.name === key) // canonical entries only
+      .map(([, p]) => ({
+        lwsId:         p.lwsId || '',
+        name:          p.name,
+        branch:        p.branch || '',
+        batches:       p.batches || [],
+        mobile:        p.mobile || '',
+        accountStatus: p.accountStatus || '',
+        nameVariants:  p.nameVariants || [],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [studentList, studentProfiles])
 
   return (
     <div>
       <PageHeader
         title="Students"
-        sub="Search a student to view their performance"
-        actions={mode === 'faculty' && (
+        sub={`${students.length} students · click a name to drill in`}
+        actions={isFaculty && (
           <div className="flex gap-2">
             <button
               onClick={() => setManageOpen(true)}
@@ -55,48 +76,25 @@ export default function StudentsPage() {
         )}
       />
 
-      {/* Search */}
-      <div className="relative mb-6 max-w-md">
-        <input
-          className="form-input pr-10"
-          placeholder="Search student name…"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setDropdownOpen(true) }}
-          onFocus={() => setDropdownOpen(true)}
-          onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
+      {students.length === 0 ? (
+        <EmptyState
+          icon="👤"
+          title="No students yet"
+          sub="Import students or add an exam to get started"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3">🔍</span>
-
-        {dropdownOpen && filtered.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-surface border-[1.5px] border-accent
-                          rounded-xl shadow-lg z-50 max-h-56 overflow-y-auto">
-            {filtered.slice(0, 10).map(name => (
-              <button
-                key={name}
-                onMouseDown={() => {
-                  setActiveStudent(name)
-                  setQuery(name)
-                  setDropdownOpen(false)
-                }}
-                className="w-full text-left px-4 py-2.5 text-[13px] font-medium
-                           hover:bg-accent-soft hover:text-accent border-b border-border
-                           last:border-0 transition-colors"
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Student view */}
-      {activeStudent ? (
-        <StudentView name={activeStudent} />
       ) : (
-        exams.length === 0
-          ? <EmptyState icon="👤" title="No exams yet" sub="Add exams first to see student data" />
-          : <EmptyState icon="🔍" title="Search for a student" sub={`${allStudents.length} students · ${examNames.size} with exam records`} />
+        <StudentsTable
+          students={students}
+          exams={exams}
+          activeStudent={activeStudent}
+          onSelect={setActiveStudent}
+          onEdit={(lwsId, name, patch) => updateBranchBatch(lwsId, name, patch)}
+          isFaculty={isFaculty}
+        />
       )}
+
+      {/* Detail view appears below the table — Pattern X */}
+      {activeStudent && <StudentView name={activeStudent} />}
 
       {importOpen && <ImportStudentsModal onClose={() => setImportOpen(false)} />}
       {manageOpen && <ManageBatchBranchModal onClose={() => setManageOpen(false)} />}
