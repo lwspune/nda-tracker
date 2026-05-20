@@ -11,7 +11,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 
 | Domain | Tables | Rows |
 |---|---|---|
-| Faculty workspace | `faculty_state` | 1 |
+| Admin workspace | `faculty_state` (kept for compatibility) | 1 |
 | Students | `students`, `student_batches`, `students_meta` | 281 + 493 + 1 |
 | Activity logs | `student_attendance`, `student_logins` | 2402 + 193 |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
@@ -21,7 +21,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 
 ---
 
-## 1. Faculty workspace
+## 1. Admin workspace
 
 ### `faculty_state` — single-row JSONB blob
 
@@ -110,7 +110,7 @@ Original schema had `batch` + `eis_reg_no`; dropped 2026-05-07. UNIQUE was `(lws
 | `logged_in_at` | timestamptz | `now()` | |
 
 Index: `(lws_id, logged_in_at DESC)`.
-Written fire-and-forget by `api/student-login.js`. Read by `StudentView` (faculty/teacher only).
+Written fire-and-forget by `api/student-login.js`. Read by `StudentView` (admin/teacher only).
 
 ---
 
@@ -208,7 +208,7 @@ Indexes: `(lws_id, generated_at DESC)`, `(student_name, generated_at DESC)`.
 | Table | RLS | Policy |
 |---|---|---|
 | `faculty_state` | ✓ | Authenticated only |
-| `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (`faculty_rw`) |
+| `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
 | **`student_logins`** | **✗ DISABLED** | **Exposed to `anon` + `authenticated`** |
@@ -233,7 +233,7 @@ CREATE POLICY "authenticated can read"
   USING (true);
 ```
 
-This matches the existing behaviour (`api/student-login.js` insert succeeds; `StudentView` faculty/teacher read succeeds) while blocking unauthenticated reads.
+This matches the existing behaviour (`api/student-login.js` insert succeeds; `StudentView` admin/teacher read succeeds) while blocking unauthenticated reads.
 
 ---
 

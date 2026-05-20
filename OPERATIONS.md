@@ -18,15 +18,15 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
 
 ---
 
-## Scenario 1 — A faculty mutation isn't appearing in production
+## Scenario 1 — An admin mutation isn't appearing in production
 
-**Symptoms:** Faculty adds an exam, assigns a batch, or saves an insight. Refresh shows the change is gone, or another user doesn't see it.
+**Symptoms:** Admin adds an exam, assigns a batch, or saves an insight. Refresh shows the change is gone, or another user doesn't see it.
 
-**Most likely cause:** The dual-path Supabase write failed silently. The state update succeeded (so the faculty sees it in their own session) but the database write didn't.
+**Most likely cause:** The dual-path Supabase write failed silently. The state update succeeded (so the admin sees it in their own session) but the database write didn't.
 
 **Triage:**
-1. Open the browser console on the faculty session and look for `[persist] Supabase save failed:` or `[insightsSlice]` / `[studentSlice]` Supabase errors.
-2. If you see a `PostgrestError` with code `42501`, it's an RLS policy block — verify the session is authenticated faculty (not anon).
+1. Open the browser console on the admin session and look for `[persist] Supabase save failed:` or `[insightsSlice]` / `[studentSlice]` Supabase errors.
+2. If you see a `PostgrestError` with code `42501`, it's an RLS policy block — verify the session is authenticated admin (not anon).
 3. If you see a `TypeError: ...catch is not a function` anywhere near a Supabase call, it's the thenable-vs-Promise trap. Every Supabase query chain must use `async/await` with `{ error }` destructuring, never `.catch()`. See decisions log in `CLAUDE.md`.
 4. Confirm the data in Supabase:
    ```sql
@@ -55,7 +55,7 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
    ```sql
    select canonical_name, name_variants from students where lws_id = '<lws_id>';
    ```
-   Their exam papers may use a variant spelling that hasn't been linked. Fix via the Find Duplicates tab (faculty → Students → Manage Batch/Branch → Find Duplicates).
+   Their exam papers may use a variant spelling that hasn't been linked. Fix via the Find Duplicates tab (admin → Students → Manage Batch/Branch → Find Duplicates).
 3. Check the Vercel function log for `api/student-login.js` — surfaces 500 errors or unexpected payload shape.
 4. Verify `account_status` is not `Quit` (the API does not currently filter on this, so the student would log in successfully — but no recent exam data would be expected).
 
@@ -65,7 +65,7 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
 
 ## Scenario 3 — Exam upload completes but exam is missing or shows 0 students
 
-**Symptoms:** Faculty uploads results + tags, modal closes successfully, exam doesn't appear in the list — or appears with 0 students despite a populated Excel file.
+**Symptoms:** Admin uploads results + tags, modal closes successfully, exam doesn't appear in the list — or appears with 0 students despite a populated Excel file.
 
 **Most likely cause:** A silent pagination cutoff during the next read of `exam_results`, OR the upload itself failed at the Supabase write step.
 
@@ -105,7 +105,7 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
 
 ## Scenario 5 — Insights page is blank or shows stale plans
 
-**Symptoms:** Faculty opens Insights, sees the empty state instead of a saved plan, or sees an older plan than expected.
+**Symptoms:** Admin opens Insights, sees the empty state instead of a saved plan, or sees an older plan than expected.
 
 **Triage:**
 1. Confirm the plan was saved:
@@ -133,7 +133,7 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
    select count(distinct lws_id) from student_attendance;         -- unique students
    ```
 2. `student_attendance` exceeds 1000 rows — confirms pagination is required. The page fetches via `.range()` loop; if this is bypassed, rows are silently truncated.
-3. If a specific student is missing from the table but is enrolled, the XLS import probably failed mobile → lws_id matching. Re-import; faculty can check the log lines in the import flow.
+3. If a specific student is missing from the table but is enrolled, the XLS import probably failed mobile → lws_id matching. Re-import; admin can check the log lines in the import flow.
 4. `student_attendance.date` is stored as `text` in `DD-MM-YYYY` format (matches the XLS header). Lexical sort is correct because all rows use the same format, but never compare across format styles.
 
 ---
@@ -144,7 +144,7 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For de
 1. Pull the latest `main` and re-run `npm install` — a forgotten `package.json` change is a common cause.
 2. Vitest under heavy parallel load on jsdom can flake (5s default timeout). If failures are all `Test timed out`, re-run; if they reproduce, debug.
 3. Check `data/faculty-data.json` is gitignored — a corrupted local file used to leak into tests via the persist layer. The current setup mocks the persist layer, but worth checking if tests touch it.
-4. Mode tests fail if `ModeContext` default isn't `'faculty'`. Do not change the default — multiple tests depend on it.
+4. Mode tests fail if `ModeContext` default isn't `'admin'`. Do not change the default — multiple tests depend on it.
 
 ---
 
@@ -173,7 +173,7 @@ If lint reports more than the 11 expected errors, the new errors are real. If te
 
 ## Scenario 10 — Student re-import shows every row as "new" (or duplicates were created)
 
-**Symptoms:** Faculty re-imports the same `Student Search List` Excel and the modal says "N students loaded — N new, 0 unchanged". Or: after a confirmed import, Supabase has two rows for the same person with different `lws_id`s.
+**Symptoms:** Admin re-imports the same `Student Search List` Excel and the modal says "N students loaded — N new, 0 unchanged". Or: after a confirmed import, Supabase has two rows for the same person with different `lws_id`s.
 
 **Most likely cause:** the pre-merge baseline didn't load. `useImportFlow.handleStudentFile` must call [`loadExistingStudents()`](src/lib/students/loadExistingStudents.js), not a bare `fetch('/api/students-db')` — the bare fetch 404s on Vercel (no dev plugin in prod) and `existingStudents = []` makes every row look new. Fix landed in commits `86e0fcd` + `d67f34f` (2026-05-20). If the symptom returns, suspect a regression in `useImportFlow` or `loadExistingStudents`.
 
@@ -186,7 +186,7 @@ If lint reports more than the 11 expected errors, the new errors are real. If te
    select eis_reg_no, array_agg(lws_id || ':' || canonical_name) as rows, count(*)
    from students where eis_reg_no <> '' group by eis_reg_no having count(*) > 1;
    ```
-   Empty result → no duplicates exist. Non-empty → resolve via Faculty → Students → Manage Batch/Branch → Find Duplicates → Merge.
+   Empty result → no duplicates exist. Non-empty → resolve via Admin → Students → Manage Batch/Branch → Find Duplicates → Merge.
 
 2. If the modal still shows "all new" on a freshly deployed build, verify the import baseline actually loads. In the browser console on the import page:
    ```js

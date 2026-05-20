@@ -9,10 +9,10 @@ function formatTimeline(val) {
   return new Date(year, month - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-function TimelineCell({ value, onSave, isFaculty }) {
+function TimelineCell({ value, onSave, isAdmin }) {
   const [editing, setEditing] = useState(false)
 
-  if (!isFaculty) {
+  if (!isAdmin) {
     return (
       <td className="px-2 py-1.5 text-center">
         <span className="text-[10.5px] text-ink-2">{formatTimeline(value) ?? '—'}</span>
@@ -52,16 +52,16 @@ const STATUS_STYLES = {
 }
 const STATUS_LABELS = { null: '—', 'In Progress': 'In Progress', 'Done': 'Done' }
 
-function StatusCell({ status, onClick, isFaculty }) {
+function StatusCell({ status, onClick, isAdmin }) {
   return (
     <td className="px-2 py-1.5 text-center">
       <button
-        disabled={!isFaculty}
+        disabled={!isAdmin}
         onClick={onClick}
         className={`
           text-[10.5px] rounded px-2 py-1 min-w-[72px] transition-colors
           ${STATUS_STYLES[status] ?? STATUS_STYLES[null]}
-          ${isFaculty ? 'cursor-pointer hover:opacity-80 active:scale-95' : 'cursor-default'}
+          ${isAdmin ? 'cursor-pointer hover:opacity-80 active:scale-95' : 'cursor-default'}
         `}
       >
         {STATUS_LABELS[status] ?? '—'}
@@ -95,7 +95,7 @@ function ProgressPill({ done, inProgress, total }) {
 export default function SubjectAccordion({ subject, program, batchName, onEdit }) {
   const [open, setOpen] = useState(false)
   const mode = useMode()
-  const isFaculty = mode === 'faculty'
+  const isAdmin = mode === 'admin'
 
   const cycleChapterStatus    = useStore(s => s.cycleChapterStatus)
   const getChapterStatus      = useStore(s => s.getChapterStatus)
@@ -138,7 +138,7 @@ export default function SubjectAccordion({ subject, program, batchName, onEdit }
         </div>
         <div className="flex items-center gap-2">
           <ProgressPill {...progress} />
-          {isFaculty && (
+          {isAdmin && (
             <>
               <button
                 className="p-1.5 rounded-lg text-ink-3 hover:bg-red-50 hover:text-red-500 transition-colors text-[11px]"
@@ -165,7 +165,7 @@ export default function SubjectAccordion({ subject, program, batchName, onEdit }
         <div className="overflow-x-auto border-t border-border">
           {subject.chapters.length === 0 ? (
             <div className="px-4 py-6 text-center text-[12px] text-ink-3">
-              No chapters yet.{isFaculty && ' Click ✎ to add chapters.'}
+              No chapters yet.{isAdmin && ' Click ✎ to add chapters.'}
             </div>
           ) : (
             <table className="w-full text-[12px]">
@@ -199,14 +199,14 @@ export default function SubjectAccordion({ subject, program, batchName, onEdit }
                         <TimelineCell
                           value={getChapterTimeline(batchName, program.id, subject.id, ch.id)}
                           onSave={val => setChapterTimeline(batchName, program.id, subject.id, ch.id, val)}
-                          isFaculty={isFaculty}
+                          isAdmin={isAdmin}
                         />
                         {cols.map(col => (
                           <StatusCell
                             key={col}
                             status={getChapterStatus(batchName, program.id, subject.id, ch.id, col)}
                             onClick={() => cycleChapterStatus(batchName, program.id, subject.id, ch.id, col)}
-                            isFaculty={isFaculty}
+                            isAdmin={isAdmin}
                           />
                         ))}
                       </tr>

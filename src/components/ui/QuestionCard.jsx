@@ -22,7 +22,7 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult }
 
   const mode       = useMode()
   const hasContent = q.question || q.optionA
-  const canEdit    = mode === 'faculty' && !!examId
+  const canEdit    = mode === 'admin' && !!examId
 
   const OPTIONS    = ['A', 'B', 'C', 'D']
   const optionText = { A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD }

@@ -103,7 +103,7 @@ export function ProfileCard({ name, profile, loginStats = null }) {
     setIsEditing(false)
   }
 
-  const canEdit = mode === 'faculty'
+  const canEdit = mode === 'admin'
 
   return (
     <Card className="flex items-start gap-5 flex-wrap relative">

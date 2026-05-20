@@ -41,104 +41,46 @@ function mockFetchError(status = 404, error = 'Not found') {
   return { ok: false, status, json: () => Promise.resolve({ error }) }
 }
 
-describe('LoginPage — Faculty tab', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('shows Faculty tab button', async () => {
-    renderLoginPage()
-    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Faculty' })).toBeInTheDocument()
-  })
-
-  it('shows email and password inputs when Faculty tab is active', async () => {
-    renderLoginPage()
-    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Faculty' }))
-
-    expect(screen.getByPlaceholderText('official@example.com')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument()
-  })
-
-  it('calls signInWithPassword with entered credentials', async () => {
-    supabase.auth.signInWithPassword.mockResolvedValue({ data: { session: {} }, error: null })
-
-    renderLoginPage()
-    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Faculty' }))
-    fireEvent.change(screen.getByPlaceholderText('official@example.com'), {
-      target: { value: 'official.lwspune@gmail.com' },
-    })
-    fireEvent.change(screen.getByPlaceholderText('••••••••'), {
-      target: { value: 'LWSPune@123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /Faculty Login/i }))
-
-    await waitFor(() =>
-      expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
-        email: 'official.lwspune@gmail.com',
-        password: 'LWSPune@123',
-      })
-    )
-  })
-
-  it('shows error message on login failure', async () => {
-    supabase.auth.signInWithPassword.mockResolvedValue({
-      data: { session: null },
-      error: { message: 'Invalid login credentials' },
-    })
-
-    renderLoginPage()
-    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Faculty' }))
-    fireEvent.change(screen.getByPlaceholderText('official@example.com'), {
-      target: { value: 'wrong@example.com' },
-    })
-    fireEvent.change(screen.getByPlaceholderText('••••••••'), {
-      target: { value: 'wrongpass' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /Faculty Login/i }))
-
-    await waitFor(() =>
-      expect(screen.getByText('Invalid login credentials')).toBeInTheDocument()
-    )
-  })
-})
-
-describe('LoginPage — Teacher tab', () => {
+describe('LoginPage — Admin / Teacher tab (unified)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
     global.fetch.mockRejectedValue(new Error('no network in tests'))
   })
 
-  async function openTeacherTab() {
+  async function openStaffTab() {
     renderLoginPage()
     await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Teacher' }))
+    fireEvent.click(screen.getByRole('button', { name: /admin.*teacher/i }))
   }
 
-  it('shows email and password inputs in Teacher tab', async () => {
-    await openTeacherTab()
-    expect(screen.getByPlaceholderText('teacher@example.com')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument()
+  it('shows a single "Admin / Teacher" tab (no separate Faculty tab)', async () => {
+    renderLoginPage()
+    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /admin.*teacher/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Faculty$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Teacher$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows email and password inputs in the staff tab', async () => {
+    await openStaffTab()
+    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
   })
 
   it('submit button is disabled when email or password is empty', async () => {
-    await openTeacherTab()
-    expect(screen.getByRole('button', { name: /Teacher Login/i })).toBeDisabled()
+    await openStaffTab()
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeDisabled()
   })
 
-  it('calls signInWithPassword with teacher email and password', async () => {
+  it('calls signInWithPassword with the entered credentials', async () => {
     supabase.auth.signInWithPassword.mockResolvedValue({ data: { session: {} }, error: null })
-    await openTeacherTab()
-    fireEvent.change(screen.getByPlaceholderText('teacher@example.com'), { target: { value: 'teacher@lwspune.com' } })
-    fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'pass123' } })
-    fireEvent.click(screen.getByRole('button', { name: /Teacher Login/i }))
+    await openStaffTab()
+    fireEvent.change(screen.getByLabelText(/email/i),    { target: { value: 'someone@lwspune.com' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'pass123' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
-      email: 'teacher@lwspune.com',
+      email: 'someone@lwspune.com',
       password: 'pass123',
     }))
   })
@@ -148,16 +90,11 @@ describe('LoginPage — Teacher tab', () => {
       data: { session: null },
       error: { message: 'Invalid login credentials' },
     })
-    await openTeacherTab()
-    fireEvent.change(screen.getByPlaceholderText('teacher@example.com'), { target: { value: 'wrong@example.com' } })
-    fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'wrongpass' } })
-    fireEvent.click(screen.getByRole('button', { name: /Teacher Login/i }))
+    await openStaffTab()
+    fireEvent.change(screen.getByLabelText(/email/i),    { target: { value: 'wrong@example.com' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'wrongpass' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(screen.getByText('Invalid login credentials')).toBeInTheDocument())
-  })
-
-  it('does not show the old password-only "Enter Teacher View" button', async () => {
-    await openTeacherTab()
-    expect(screen.queryByRole('button', { name: /Enter Teacher View/i })).not.toBeInTheDocument()
   })
 })
 

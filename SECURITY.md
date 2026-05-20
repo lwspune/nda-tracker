@@ -17,7 +17,7 @@ This is a private internal application. To report a security issue, contact the 
 **Assets:**
 - Student PII: full names, mobile numbers, dates of birth, parent mobile numbers, registration dates, branch and batch assignments
 - Exam results: per-student scores, per-question responses
-- Faculty access: write access to all of the above
+- Admin access: write access to all of the above
 - Third-party message-sending credentials (Wabridge WhatsApp, Gmail SMTP)
 
 **Adversaries we plan for:**
@@ -27,7 +27,7 @@ This is a private internal application. To report a security issue, contact the 
 
 **Out of scope:**
 - An adversary with the Supabase service role key (treated as an admin)
-- Browser-side malware on a faculty machine
+- Browser-side malware on an admin machine
 
 ---
 
@@ -37,7 +37,7 @@ Three distinct auth paths, each with different trust assumptions.
 
 | Mode | Auth mechanism | What it proves |
 |---|---|---|
-| Faculty | Supabase Auth — email + password, JWT | The session holder is a designated faculty user. Single shared account. |
+| Admin | Supabase Auth — email + password, JWT, no `user_metadata.role` | The session holder is a designated admin. Single shared account today. |
 | Teacher | Supabase Auth — email + password, JWT, `user_metadata.role = 'teacher'` | The session holder is a designated teacher with read-only intent. Individual accounts. |
 | Student | `POST /api/student-login` with mobile number, returns a session token stored in `localStorage` | The caller knows a mobile number that exists in `students.mobile`. No Supabase Auth session. |
 
@@ -49,13 +49,13 @@ The student "auth" is mobile-number-only — there is no password and no OTP. An
 
 | Table | RLS | Policy |
 |---|---|---|
-| `faculty_state` | Enabled | Authenticated users only (faculty + teacher) |
+| `faculty_state` | Enabled | Authenticated users only (admin + teacher) |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | Enabled | Authenticated users only |
 | `exams`, `exam_results` | Enabled | Authenticated users only |
 | `class_reports`, `student_plans` | Enabled | Authenticated read / insert / delete |
 | **`student_logins`** | **Disabled** | **Exposed to anon + authenticated** (see Known gaps) |
 
-Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the faculty data — it can read everything authenticated users can read; the teacher mode is read-only by UI convention, not by RLS.
+Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the admin data — it can read everything authenticated users can read; the teacher mode is read-only by UI convention, not by RLS.
 
 ---
 
@@ -119,14 +119,14 @@ CREATE POLICY "anon + auth can insert"
   TO anon, authenticated
   WITH CHECK (true);
 
--- Reads restricted to faculty/teacher.
+-- Reads restricted to admin/teacher.
 CREATE POLICY "authenticated can read"
   ON student_logins FOR SELECT
   TO authenticated
   USING (true);
 ```
 
-After running, verify the student-portal login flow still works (the audit insert should still succeed via service role) and that the faculty view of `student_logins` (Student profile page → "Last login" badge) still renders.
+After running, verify the student-portal login flow still works (the audit insert should still succeed via service role) and that the admin view of `student_logins` (Student profile page → "Last login" badge) still renders.
 
 ---
 
@@ -142,14 +142,14 @@ For an audit or a data-subject request, the following tables hold student PII:
 | `student_logins` | `lws_id`, `logged_in_at` |
 | `exam_results` | `student_name`, `roll_no`, scores, per-question responses |
 | `class_reports`, `student_plans` | `student_name`, free-text plan body (may contain quoted PII) |
-| `faculty_state.data.studentProfiles` | Cached subset of `students` (re-overwritten on each faculty load). Should be considered stale-PII. |
+| `faculty_state.data.studentProfiles` | Cached subset of `students` (re-overwritten on each admin load). Should be considered stale-PII. |
 
 **Data flow for a student delete request:**
 
 1. `DELETE FROM students WHERE lws_id = '<id>'` — cascades clear `student_batches`, `student_attendance`, `student_logins`. `student_plans.lws_id` is `ON DELETE SET NULL` so plan history persists with the student's name retained in `student_name`. Decide explicitly whether to also delete plan history.
 2. `DELETE FROM exam_results WHERE student_name IN (canonical + variants)`. This is the only manual step — there is no FK from exam_results to students.
 3. Manually scrub `class_reports.text` and `student_plans.text` if either contains the student's name in narrative.
-4. Faculty must log out and back in for the in-memory `studentProfiles` cache to refresh.
+4. Admin must log out and back in for the in-memory `studentProfiles` cache to refresh.
 
 There is no automated "right-to-be-forgotten" tool today. If this becomes a recurring need, add a script under the `migrate_*` pattern.
 
@@ -161,11 +161,11 @@ There is no automated "right-to-be-forgotten" tool today. If this becomes a recu
 |---|---|---|
 | `student_logins` RLS disabled | High | Fix proposed above. Risk window: as long as the anon key works against this table. |
 | Student auth is mobile-only (no OTP, no password) | Medium | Accepted. Mobile numbers are not secret. The coaching context tolerates this; anonymity is not the goal. |
-| The faculty account is a single shared login | Medium | Accepted today (one institute, two faculty members who trust each other). Becomes a problem if expanded. |
+| The admin account is a single shared login | Medium | Accepted today (one institute, two staff members who trust each other). Becomes a problem if expanded. |
 | The Supabase anon key is in the browser bundle | Low | Inherent to Supabase architecture. RLS is the enforcement layer; the anon key is not a secret. |
 | No CI gate on lint/tests before deploy | Low | Vercel auto-deploys from `main`. Discipline is to run `npm test && npm run lint` locally before pushing. |
 | Wabridge auth tokens are long-lived | Low | Rotate in both Vercel env and `.env.local` when needed. No automated rotation. |
-| No audit trail for faculty mutations | Medium | Decisions log is human-maintained in CLAUDE.md. A real audit would require triggers writing to a log table — not implemented. |
+| No audit trail for admin mutations | Medium | Decisions log is human-maintained in CLAUDE.md. A real audit would require triggers writing to a log table — not implemented. |
 
 ---
 
@@ -175,5 +175,5 @@ There is no automated "right-to-be-forgotten" tool today. If this becomes a recu
 - [ ] They have read `ARCHITECTURE.md`, `SECURITY.md`, and the global CLAUDE.md preferences.
 - [ ] They understand the difference between the anon key (safe in bundle) and the service role key (never in bundle).
 - [ ] They know to never run destructive SQL or `--cleanup` flags before verifying row counts.
-- [ ] If they are taking on a teacher role, their `user_metadata.role` is set to `'teacher'` via `create_teacher_account.js` rather than promoted to faculty.
+- [ ] If they are taking on a teacher role, their `user_metadata.role` is set to `'teacher'` via `create_teacher_account.js` rather than promoted to admin.
 - [ ] They have their own copy of `.env.local` — never share by email or chat.

@@ -20,12 +20,12 @@ vi.mock('../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
 }))
 
-// Faculty mode so the "+ Add Exam" button and subject dropdown are both visible
+// Admin mode so the "+ Add Exam" button and subject dropdown are both visible
 vi.mock('../../config', () => ({ IS_READ_ONLY: false }))
 
 // Mock ModeContext so individual tests can override the mode
 vi.mock('../../context/ModeContext', () => ({
-  useMode: vi.fn(() => 'faculty'),
+  useMode: vi.fn(() => 'admin'),
   ModeContext: { Provider: ({ children }) => children },
 }))
 

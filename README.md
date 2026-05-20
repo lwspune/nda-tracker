@@ -1,6 +1,6 @@
 # NDA Tracker
 
-An internal faculty tool for tracking NDA (National Defence Academy entrance exam) coaching performance. Faculty upload OMR-scanned exam results, tag questions with chapter and subtopic metadata, and analyse student performance across exams, chapters, and time. Teachers and students access read-only views of the same data through dedicated portals.
+An internal tool used by LWS Pune teaching staff for tracking NDA (National Defence Academy entrance exam) coaching performance. Admins upload OMR-scanned exam results, tag questions with chapter and subtopic metadata, and analyse student performance across exams, chapters, and time. Teachers and students access read-only views of the same data through dedicated portals.
 
 Production: `nda-tracker.vercel.app`.
 
@@ -22,13 +22,13 @@ Production: `nda-tracker.vercel.app`.
 
 ```bash
 npm install
-npm run dev          # Vite dev server on localhost:5173 (faculty mode, writes to data/faculty-data.json)
+npm run dev          # Vite dev server on localhost:5173 (admin mode, writes to data/faculty-data.json)
 npm run test         # Vitest single pass
 npm run test:watch
 npm run lint
 ```
 
-The dev server is faculty mode by default. Mock data lives in `data/faculty-data.json` (gitignored). To work against production Supabase, set the env vars listed below and visit the deployed URL.
+The dev server is admin mode by default. Mock data lives in `data/faculty-data.json` (gitignored — keeps its historical name even though the role is now "admin"). To work against production Supabase, set the env vars listed below and visit the deployed URL.
 
 ---
 

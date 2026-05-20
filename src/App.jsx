@@ -28,7 +28,7 @@ export default function App() {
   const [supabaseSession, setSupabaseSession] = useState(null)
   const [sessionChecked, setSessionChecked]   = useState(!IS_READ_ONLY) // dev = already known
 
-  // Supabase auth listener — online faculty mode
+  // Supabase auth listener — online staff (admin or teacher) mode
   useEffect(() => {
     if (!supabase) { setSessionChecked(true); return }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -38,7 +38,7 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load data: dev = from disk, prod faculty = from Supabase, prod teacher/student = no-op
+  // Load data: dev = from disk, prod admin = from Supabase, prod teacher/student = no-op
   useEffect(() => { initStore() }, [])
 
   // Block render until data is loaded AND (for IS_READ_ONLY) auth state is known
@@ -63,9 +63,9 @@ export default function App() {
       return <TeacherPortal onLogout={() => supabase.auth.signOut()} />
     }
 
-    // Online faculty — Supabase session without teacher role
+    // Online admin — Supabase session without teacher role metadata
     if (supabaseSession) {
-      return <OnlineFacultyPortal onLogout={() => supabase.auth.signOut()} />
+      return <OnlineAdminPortal onLogout={() => supabase.auth.signOut()} />
     }
 
     // Student portal
@@ -82,7 +82,7 @@ export default function App() {
     return <LoginPage onStudentLogin={setStudentData} />
   }
 
-  // ── Faculty mode (localhost) ────────────────────────────────
+  // ── Dev admin mode (localhost) ──────────────────────────────
   const pages = {
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
@@ -96,7 +96,7 @@ export default function App() {
   }
 
   return (
-    <ModeContext.Provider value="faculty">
+    <ModeContext.Provider value="admin">
       <div className="flex min-h-screen bg-bg">
         <Sidebar />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
@@ -111,9 +111,9 @@ export default function App() {
   )
 }
 
-// ── Online Faculty Portal ──────────────────────────────────────
-// Vercel + Supabase auth session. Same layout as dev faculty mode.
-function OnlineFacultyPortal({ onLogout }) {
+// ── Online Admin Portal ────────────────────────────────────────
+// Vercel + Supabase auth session, no teacher role metadata. Same layout as dev admin mode.
+function OnlineAdminPortal({ onLogout }) {
   const activePage = useStore(s => s.activePage)
 
   const pages = {
@@ -129,7 +129,7 @@ function OnlineFacultyPortal({ onLogout }) {
   }
 
   return (
-    <ModeContext.Provider value="faculty">
+    <ModeContext.Provider value="admin">
       <div className="flex min-h-screen bg-bg">
         <Sidebar onLogout={onLogout} />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">

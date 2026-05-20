@@ -185,7 +185,7 @@ export default function ExamsPage() {
                 ))}
               </select>
             )}
-            {mode === 'faculty' && (
+            {mode === 'admin' && (
               <button onClick={openUploadModal} className="btn btn-primary">
                 + Add Exam
               </button>
@@ -314,7 +314,7 @@ export default function ExamsPage() {
                       </button>
                     )}
 
-                    {mode === 'faculty' && (
+                    {mode === 'admin' && (
                       <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                         {exam.students.length > 0 && (() => {
                           const history = whatsappSendHistory[exam.id]

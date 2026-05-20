@@ -16,7 +16,7 @@ import { IS_READ_ONLY } from '../config'
 const IS_DEV = !IS_READ_ONLY
 const API = '/api/data'
 
-// ── Supabase helpers (prod faculty mode) ─────────────────────
+// ── Supabase helpers (prod admin mode) ───────────────────────
 
 export async function loadFromSupabase() {
   if (!supabase) return null

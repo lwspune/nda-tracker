@@ -31,7 +31,7 @@ describe('loadExistingStudents', () => {
 
   it('reads from Supabase when a faculty session is active', async () => {
     supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'faculty' } } },
+      data: { session: { user: { id: 'admin' } } },
     })
     mockSupabaseSelect([
       {
@@ -59,7 +59,7 @@ describe('loadExistingStudents', () => {
 
   it('does NOT fall through to fetch when Supabase returns an empty array', async () => {
     supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'faculty' } } },
+      data: { session: { user: { id: 'admin' } } },
     })
     mockSupabaseSelect([])
     const fetchSpy = vi.fn()
@@ -86,7 +86,7 @@ describe('loadExistingStudents', () => {
 
   it('falls back to /api/students-db when Supabase query errors', async () => {
     supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'faculty' } } },
+      data: { session: { user: { id: 'admin' } } },
     })
     mockSupabaseSelectError()
     const fetchSpy = vi.fn().mockResolvedValue({

@@ -22,7 +22,7 @@ vi.mock('../../../store/useStore', () => ({
 }))
 
 vi.mock('../../../context/ModeContext', () => ({
-  useMode: () => 'faculty',
+  useMode: () => 'admin',
 }))
 
 import { supabase } from '../../../lib/supabase'

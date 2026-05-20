@@ -35,7 +35,7 @@ export default function StudentsTable({
   onSelect,
   onEdit,
   onDelete,
-  isFaculty = false,
+  isAdmin = false,
 }) {
   const [search, setSearch]         = useState('')
   const [branchFilter, setBranch]   = useState('all')
@@ -154,7 +154,7 @@ export default function StudentsTable({
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2 hidden md:table-cell text-right">Exams</th>
               <th className="px-3 py-2 hidden md:table-cell">Last activity</th>
-              {isFaculty && <th className="px-3 py-2"></th>}
+              {isAdmin && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -210,7 +210,7 @@ export default function StudentsTable({
                     </td>
                     <td className="px-3 py-2 font-mono text-ink-2 text-right hidden md:table-cell">{examCount}</td>
                     <td className="px-3 py-2 font-mono text-ink-3 hidden md:table-cell">{lastDate || '—'}</td>
-                    {isFaculty && (
+                    {isAdmin && (
                       <td className="px-3 py-2">
                         <button
                           onClick={() => setEditingId(isEditing ? null : s.lwsId)}

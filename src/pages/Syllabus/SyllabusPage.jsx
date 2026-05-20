@@ -9,7 +9,7 @@ import AssignProgramsModal from './AssignProgramsModal'
 
 export default function SyllabusPage() {
   const mode      = useMode()
-  const isFaculty = mode === 'faculty'
+  const isAdmin = mode === 'admin'
 
   const syllabusPrograms        = useStore(s => s.syllabusPrograms)
   const batchProgramAssignments = useStore(s => s.batchProgramAssignments)
@@ -122,7 +122,7 @@ export default function SyllabusPage() {
       <PageHeader
         title="Syllabus Tracker"
         sub={selectedBatch ? `Tracking progress for batch: ${selectedBatch}` : 'Select a batch to begin'}
-        actions={isFaculty && (
+        actions={isAdmin && (
           <button
             className="btn btn-primary text-[13px] px-3 py-1.5"
             onClick={() => setAssignOpen(true)}
@@ -169,7 +169,7 @@ export default function SyllabusPage() {
         {visibleBatches.length === 0 && !addingBatch ? (
           <span className="text-[12px] text-ink-3 italic">
             {selectedBranch ? `No batches for ${selectedBranch}.` : 'No batches yet.'}
-            {isFaculty && ' Add one below.'}
+            {isAdmin && ' Add one below.'}
           </span>
         ) : (
           <div className="flex flex-wrap gap-2 items-center">
@@ -212,7 +212,7 @@ export default function SyllabusPage() {
                     >
                       {b}
                     </button>
-                    {isFaculty && (
+                    {isAdmin && (
                       <button
                         className="p-0.5 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[11px] leading-none transition-colors"
                         onClick={() => setBatchMenuOpen(batchMenuOpen === b ? null : b)}
@@ -221,7 +221,7 @@ export default function SyllabusPage() {
                     )}
 
                     {/* Batch ⋯ menu */}
-                    {isFaculty && batchMenuOpen === b && (
+                    {isAdmin && batchMenuOpen === b && (
                       <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 min-w-[130px]">
                         <button
                           className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-2 transition-colors"
@@ -241,7 +241,7 @@ export default function SyllabusPage() {
                     )}
 
                     {/* Branch picker popover */}
-                    {isFaculty && settingBranchFor === b && (
+                    {isAdmin && settingBranchFor === b && (
                       <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 min-w-[130px]">
                         <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-3 border-b border-border mb-1">Set branch</div>
                         {branches.map(br => (
@@ -272,7 +272,7 @@ export default function SyllabusPage() {
             ))}
 
             {/* Add batch */}
-            {isFaculty && !addingBatch && (
+            {isAdmin && !addingBatch && (
               <button
                 className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
                 onClick={() => setAddingBatch(true)}
@@ -281,14 +281,14 @@ export default function SyllabusPage() {
           </div>
         )}
 
-        {isFaculty && !addingBatch && visibleBatches.length === 0 && (
+        {isAdmin && !addingBatch && visibleBatches.length === 0 && (
           <button
             className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
             onClick={() => setAddingBatch(true)}
           >+ Add batch</button>
         )}
 
-        {isFaculty && addingBatch && (
+        {isAdmin && addingBatch && (
           <div className="flex items-center gap-1 flex-wrap">
             <input
               autoFocus
@@ -338,7 +338,7 @@ export default function SyllabusPage() {
           <div className="text-[13px] text-ink-3 mb-5">
             Assign one or more programs to <strong>{selectedBatch}</strong> to start tracking.
           </div>
-          {isFaculty && (
+          {isAdmin && (
             <button className="btn btn-primary" onClick={() => setAssignOpen(true)}>
               Assign Programs
             </button>
@@ -363,7 +363,7 @@ export default function SyllabusPage() {
                 >
                   {prog.name}
                 </button>
-                {isFaculty && prog.id === activeProgramId && (
+                {isAdmin && prog.id === activeProgramId && (
                   <button
                     className="ml-0.5 mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
                     onClick={() => setManageProgramId(prog.id)}
@@ -380,7 +380,7 @@ export default function SyllabusPage() {
               {activeProgram.subjects.length === 0 ? (
                 <div className="card text-center py-10">
                   <div className="text-[13px] text-ink-3">
-                    No subjects yet.{isFaculty && ' Click ⚙ on the program tab to add subjects.'}
+                    No subjects yet.{isAdmin && ' Click ⚙ on the program tab to add subjects.'}
                   </div>
                 </div>
               ) : (

@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase'
 import { mergeStudentRecords } from '../../lib/mergeStudents'
 import { loadExistingStudents } from '../../lib/students/loadExistingStudents'
 
-// ── Supabase helpers (online faculty mode only) ────────────────
+// ── Supabase helpers (online admin mode only) ──────────────────
 
 async function getSession() {
   if (!supabase) return null

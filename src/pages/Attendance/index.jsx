@@ -141,7 +141,7 @@ export default function AttendancePage() {
         title="Attendance"
         sub={dateRange ? `Data: ${dateRange}` : 'No attendance data imported yet'}
         actions={
-          mode === 'faculty' && (
+          mode === 'admin' && (
             <>
               <input
                 ref={fileInputRef}
@@ -265,7 +265,7 @@ export default function AttendancePage() {
             <EmptyState
               icon="📋"
               title="No attendance data"
-              sub={mode === 'faculty'
+              sub={mode === 'admin'
                 ? 'Import an attendance XLS file to get started.'
                 : 'No attendance records available.'}
             />

@@ -1,5 +1,5 @@
 // Tests for StudentRowEditor — inline editor for branch + batches in the StudentsTable.
-// Faculty-only UI; teacher mode never mounts this component.
+// Admin-only UI; teacher mode never mounts this component.
 
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

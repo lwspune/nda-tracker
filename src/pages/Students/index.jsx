@@ -17,7 +17,7 @@ export default function StudentsPage() {
   const deleteStudent      = useStore(s => s.deleteStudent)
 
   const mode = useMode()
-  const isFaculty = mode === 'faculty'
+  const isAdmin = mode === 'admin'
 
   const [importOpen, setImportOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
@@ -59,7 +59,7 @@ export default function StudentsPage() {
       <PageHeader
         title="Students"
         sub={`${students.length} students · click a name to drill in`}
-        actions={isFaculty && (
+        actions={isAdmin && (
           <div className="flex gap-2">
             <button
               onClick={() => setManageOpen(true)}
@@ -102,8 +102,8 @@ export default function StudentsPage() {
           activeStudent={activeStudent}
           onSelect={setActiveStudent}
           onEdit={(lwsId, name, patch) => updateBranchBatch(lwsId, name, patch)}
-          onDelete={isFaculty ? (lwsId) => deleteStudent(lwsId) : undefined}
-          isFaculty={isFaculty}
+          onDelete={isAdmin ? (lwsId) => deleteStudent(lwsId) : undefined}
+          isAdmin={isAdmin}
         />
       )}
 

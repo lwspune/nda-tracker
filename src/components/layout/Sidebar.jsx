@@ -11,8 +11,8 @@ const NAV = [
   { id: 'toppers',    icon: '🏆', label: 'Toppers' },
   { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
-  { id: 'insights',  icon: '🧠', label: 'Insights', facultyOnly: true },
-  { id: 'costs',     icon: '💰', label: 'API Costs', facultyOnly: true },
+  { id: 'insights',  icon: '🧠', label: 'Insights', adminOnly: true },
+  { id: 'costs',     icon: '💰', label: 'API Costs', adminOnly: true },
 ]
 
 // Returns true if exams exist that post-date the last deploy run.
@@ -32,7 +32,7 @@ export default function Sidebar({ onLogout }) {
     .filter((v, i, arr) => arr.findIndex(x => x.lwsId === v.lwsId) === i && v.lwsId)
     .length
 
-  const visibleNav = NAV.filter(n => !(mode !== 'faculty' && n.facultyOnly))
+  const visibleNav = NAV.filter(n => !(mode !== 'admin' && n.adminOnly))
 
   function navigate(id) {
     setActivePage(id)
@@ -137,7 +137,7 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
         <div className="text-[10px] font-mono text-indigo-300/30 tracking-[1.5px] uppercase mt-1">
           {APP_SUB}
         </div>
-        {mode !== 'faculty' && (
+        {mode !== 'admin' && (
           <span className="inline-block mt-2 text-[9px] font-mono font-bold uppercase
                            tracking-widest text-indigo-300/50 border border-indigo-300/20
                            px-2 py-0.5 rounded-full">

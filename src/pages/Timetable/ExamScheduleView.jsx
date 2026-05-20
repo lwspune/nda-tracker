@@ -19,7 +19,7 @@ function fmtDate(iso) {
 
 export default function ExamScheduleView() {
   const mode      = useMode()
-  const isFaculty = mode === 'faculty'
+  const isAdmin = mode === 'admin'
 
   const timetables     = useStore(s => s.timetables)
   const teachers       = useStore(s => s.timetableTeachers)
@@ -115,7 +115,7 @@ export default function ExamScheduleView() {
 
           {/* Action bar */}
           <div className="flex flex-wrap gap-2 items-center">
-            {isFaculty && (
+            {isAdmin && (
               <button
                 onClick={() => setAddModal(true)}
                 className="btn btn-primary text-[12px] px-3 py-1.5"
@@ -124,7 +124,7 @@ export default function ExamScheduleView() {
               </button>
             )}
             <div className="ml-auto flex gap-2">
-              {isFaculty && (
+              {isAdmin && (
                 <>
                   <button
                     onClick={() => setSendReminder({ daysAhead: 2 })}
@@ -151,7 +151,7 @@ export default function ExamScheduleView() {
               <div className="text-2xl mb-2 opacity-30">📅</div>
               <div className="text-[14px] font-bold mb-1">No exams scheduled</div>
               <div className="text-[12px] text-ink-3">
-                {isFaculty ? 'Click "+ Add Exam" to schedule one.' : 'No exams have been scheduled yet.'}
+                {isAdmin ? 'Click "+ Add Exam" to schedule one.' : 'No exams have been scheduled yet.'}
               </div>
             </div>
           ) : (
@@ -164,7 +164,7 @@ export default function ExamScheduleView() {
                         {h}
                       </th>
                     ))}
-                    {isFaculty && <th className="border border-border bg-surface-2 px-2 py-2.5 w-8" />}
+                    {isAdmin && <th className="border border-border bg-surface-2 px-2 py-2.5 w-8" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -183,15 +183,15 @@ export default function ExamScheduleView() {
                       <td className="border border-border px-3 py-2.5 text-ink-2">{teacherName(e.teacherId)}</td>
                       <td className="border border-border px-3 py-2.5">
                         <button
-                          onClick={() => isFaculty && cycleExamStatus(e.id)}
-                          disabled={!isFaculty}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLOUR[e.status] ?? 'bg-surface text-ink-3'} ${isFaculty ? 'cursor-pointer' : 'cursor-default'}`}
-                          title={isFaculty ? 'Click to change status' : undefined}
+                          onClick={() => isAdmin && cycleExamStatus(e.id)}
+                          disabled={!isAdmin}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLOUR[e.status] ?? 'bg-surface text-ink-3'} ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+                          title={isAdmin ? 'Click to change status' : undefined}
                         >
                           {e.status}
                         </button>
                       </td>
-                      {isFaculty && (
+                      {isAdmin && (
                         <td className="border border-border px-2 py-2.5 text-center">
                           <button
                             onClick={() => setEditExam(e)}

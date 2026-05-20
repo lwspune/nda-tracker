@@ -187,7 +187,7 @@ function downloadTimetableExcel(timetable, mappings) {
 
 export default function TimetablePage() {
   const mode      = useMode()
-  const isFaculty = mode === 'faculty'
+  const isAdmin = mode === 'admin'
 
   const timetables = useStore(s => s.timetables)
   const teachers   = useStore(s => s.timetableTeachers)
@@ -330,7 +330,7 @@ export default function TimetablePage() {
   }
 
   function handleCellClick(slotId, day, currentCell) {
-    if (!isFaculty || !activeTT) return
+    if (!isAdmin || !activeTT) return
     setEditCell({ timetableId: activeTT.id, slotId, day, cell: currentCell ?? null })
   }
 
@@ -343,7 +343,7 @@ export default function TimetablePage() {
           : view === 'teacher' ? 'Teacher Schedule'
           : 'Exam Schedule'
         }
-        actions={isFaculty && (
+        actions={isAdmin && (
           <div className="flex gap-2 flex-wrap">
             <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={() => setTeachersModalOpen(true)}>
               Teachers
@@ -386,7 +386,7 @@ export default function TimetablePage() {
             <EmptyState
               icon="🗓"
               title="No timetables yet"
-              sub={isFaculty ? 'Click "+ Timetable" to create your first timetable.' : 'No timetables have been set up yet.'}
+              sub={isAdmin ? 'Click "+ Timetable" to create your first timetable.' : 'No timetables have been set up yet.'}
             />
           ) : (
             <>
@@ -419,7 +419,7 @@ export default function TimetablePage() {
                             : 'border-transparent text-ink-3 hover:text-ink'
                         }`}
                       >{tt.batchName}</button>
-                      {isFaculty && tt.id === selectedTTId && (
+                      {isAdmin && tt.id === selectedTTId && (
                         <button
                           className="ml-0.5 mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
                           onClick={() => setAddTTModal(tt)}
@@ -437,13 +437,13 @@ export default function TimetablePage() {
                     <TimetableGrid
                       timetable={activeTT}
                       mappings={mappings}
-                      onCellClick={isFaculty ? handleCellClick : undefined}
-                      readOnly={!isFaculty}
+                      onCellClick={isAdmin ? handleCellClick : undefined}
+                      readOnly={!isAdmin}
                     />
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 items-center">
-                    {isFaculty && (
+                    {isAdmin && (
                       <>
                         <button
                           className="btn text-[12px] px-3 py-1.5 border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
@@ -473,7 +473,7 @@ export default function TimetablePage() {
                     )}
                   </div>
 
-                  {isFaculty && activeTT.timeSlots.length > 0 && (
+                  {isAdmin && activeTT.timeSlots.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {activeTT.timeSlots.map(slot => (
                         <button
@@ -502,7 +502,7 @@ export default function TimetablePage() {
               <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wide">
                 Select Teacher
               </label>
-              {isFaculty && teachers.length > 0 && (
+              {isAdmin && teachers.length > 0 && (
                 <button
                   className="ml-auto btn text-[11px] px-3 py-1 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
                   onClick={() => setSendSchedule({ teacherId: null })}
@@ -513,7 +513,7 @@ export default function TimetablePage() {
             </div>
             {teachers.length === 0 ? (
               <p className="text-[13px] text-ink-3 italic">
-                No teachers yet.{isFaculty && ' Add teachers via the Teachers button.'}
+                No teachers yet.{isAdmin && ' Add teachers via the Teachers button.'}
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -545,7 +545,7 @@ export default function TimetablePage() {
               <div className="space-y-3">
 
                 {/* Summary bar — faculty only */}
-                {isFaculty && (
+                {isAdmin && (
                   <div className="flex flex-wrap items-center gap-6 px-5 py-3 rounded-lg bg-surface-2 border border-border">
                     <div>
                       <div className="text-[10px] font-bold text-ink-3 uppercase tracking-wide mb-1">Classes / Week</div>

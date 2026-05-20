@@ -27,7 +27,7 @@ function makeStore(profileOverrides = {}) {
 
 function mockSupabase({ sessionActive = true, upsertError = null } = {}) {
   supabase.auth.getSession.mockResolvedValue({
-    data: { session: sessionActive ? { user: { id: 'faculty' } } : null },
+    data: { session: sessionActive ? { user: { id: 'admin' } } : null },
   })
   const mockUpsert = vi.fn().mockResolvedValue({ error: upsertError })
   supabase.from.mockReturnValue({ upsert: mockUpsert })

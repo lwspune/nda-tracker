@@ -7,9 +7,9 @@
 A React + Vite faculty tool for LWS Pune to track NDA Maths exam performance.
 Four runtime modes:
 
-- **Faculty** (`localhost` / LAN): full read-write. Data in `data/faculty-data.json` via Vite plugin.
-- **Online Faculty** (Vercel + Supabase): full read-write. Data in Supabase `faculty_state` JSONB row. Login via Supabase Auth (email/password). Live at `nda-tracker.vercel.app`.
-- **Teacher** (Vercel + Supabase): read-only. Individual Supabase account with `role='teacher'` in `user_metadata`. Loads data via `loadFromSupabase()` on mount.
+- **Admin** (`localhost` / LAN): full read-write. Data in `data/faculty-data.json` via Vite plugin.
+- **Online Admin** (Vercel + Supabase): full read-write. Data in Supabase `faculty_state` JSONB row. Login via Supabase Auth (email/password); no `role` metadata on the user. Live at `nda-tracker.vercel.app`.
+- **Teacher** (Vercel + Supabase): read-only. Individual Supabase account with `user_metadata.role='teacher'`. Loads data via `loadFromSupabase()` on mount. Same login form as Admin — the role distinction is server-side metadata, not a UI choice.
 - **Student** (Vercel): read-only, mobile-number login via `/api/student-login` serverless function, own data only.
 - **Demo** (`?demo=true`): NOT YET IMPLEMENTED — see memory `project_demo_mode.md`.
 
@@ -24,14 +24,14 @@ Four runtime modes:
 | Excel parsing | xlsx (`src/lib/excel.js`) |
 | Excel export (styled) | xlsx-js-style (`src/pages/Timetable/TimetablePage.jsx`) |
 | Math rendering | KaTeX |
-| Deploy | Vercel for all three portals (faculty, teacher, student); GitHub Pages legacy static build via `npm run deploy` |
+| Deploy | Vercel for all three portals (admin, teacher, student); GitHub Pages legacy static build via `npm run deploy` |
 | Backend | Supabase (Auth + `faculty_state` JSONB table + `exams`, `exam_results`, `students`, `student_batches`, `student_attendance`, `student_logins`, `students_meta`, `class_reports`, `student_plans` tables) |
 | Python deps | `tzdata` (`pip install tzdata`) for `send_schedule.py`; `cryptography` only if regenerating `split_students.py` output |
 
 ## Key commands
 
 ```bash
-npm run dev             # faculty mode, data saved to disk
+npm run dev             # admin mode, data saved to disk
 npm run test            # Vitest
 npm run test:watch
 npm run split           # python -X utf8 split_students.py (manual only — updates lastDeployedAt)
@@ -61,32 +61,31 @@ npm run lint
 > **Column-level schema reference:** see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). This section covers *behaviour* (load/save paths, what's normalised); the schema file covers *shape* (types, defaults, constraints, RLS).
 
 - **Dev**: `data/faculty-data.json` via `POST /api/data` (Vite `localDataPlugin`). Bypasses 5 MB localStorage limit.
-- **Prod online faculty** (Vercel): Four Supabase stores:
+- **Prod online admin** (Vercel): Four Supabase stores:
   - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, cost log, etc. (exams removed Phase 5; savedInsights removed Phase 6). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips both `exams` and `savedInsights` before writing.
   - Normalised exam tables — `exams` (id, name, date, subject, batch, branch, marking JSONB, questions JSONB, created_at) + `exam_results` (exam_id FK ON DELETE CASCADE, student_name, roll_no, total_marks, correct, incorrect, not_attempted, responses JSONB). Written by `examsSlice.js` via `src/store/slices/examSupabase.js` helpers. Read via `loadExamsFromSupabase()` (paginated, 1000-row pages).
-  - Normalised student tables — `students`, `student_batches`, `student_attendance`, `students_meta`. Each mutation in `studentSlice.js` writes targeted rows; `loadStudentsFromSupabase()` is called on faculty login to populate `studentProfiles` in-store. Teacher/student portals never touch these tables (RLS: authenticated only).
+  - Normalised student tables — `students`, `student_batches`, `student_attendance`, `students_meta`. Each mutation in `studentSlice.js` writes targeted rows; `loadStudentsFromSupabase()` is called on admin login to populate `studentProfiles` in-store. Teacher/student portals never touch these tables (RLS: authenticated only).
   - Normalised insights tables (Phase 6) — `class_reports` (id, exam_id text FK ON DELETE SET NULL, text, generated_at, generated_by) + `student_plans` (id, lws_id FK ON DELETE SET NULL, student_name NOT NULL, text, generated_at, generated_by). Insert-only (history preserved by never updating in place). Written by `insightsSlice.js` via `src/store/slices/insightsSupabase.js` helpers. Read via `loadInsightsFromSupabase()` which collapses to "latest per scope" — `{ classReport, studentPlans }` shape matches the legacy store. RLS: authenticated only.
-  - `student_logins (id, lws_id, logged_in_at)` — one row per student login event. Written fire-and-forget by `api/student-login.js` after successful mobile auth. Read by `StudentView` (faculty/teacher only) to show last-login and login count in `ProfileCard`.
+  - `student_logins (id, lws_id, logged_in_at)` — one row per student login event. Written fire-and-forget by `api/student-login.js` after successful mobile auth. Read by `StudentView` (admin/teacher only) to show last-login and login count in `ProfileCard`.
   - `students_db.exams[]` is dead data — not mapped by any code path; dropped from Supabase schema.
-- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders. (Teacher UI does not link to Insights — `loadInsightsFromSupabase()` is faculty-only.)
+- **Prod teacher**: no local storage — Supabase session only. `TeacherPortal` calls `loadFromSupabase()` then `loadExamsFromSupabase()` on mount; both must complete before content renders. (Teacher UI does not link to Insights — `loadInsightsFromSupabase()` is admin-only.)
 - **Prod student**: localStorage — session token only (`SESSION_KEY`, contains `lwsId`, `name`, `mobile`), expires after `SESSION_DAYS`.
 - `apiKey` is **never** persisted to disk or localStorage — memory only.
 
 ### Mode detection & routing
 `src/config.js`: non-localhost hostname → `IS_READ_ONLY = true`. Two distinct uses:
-- **Component visibility:** never use `IS_READ_ONLY` for this — use `useMode()` (faculty/teacher/student).
+- **Component visibility:** never use `IS_READ_ONLY` for this — use `useMode()` (admin/teacher/student).
 - **Dev-vs-prod data-path branching** (e.g. fetch `/api/data` vs `loadFromSupabase`): use `IS_READ_ONLY` directly (or `IS_DEV = !IS_READ_ONLY` in `persist.js`). Do NOT use `import.meta.env.DEV` — Vercel's Vite 8.0.3 substitutes it incorrectly. See decisions log + memory `project_vite_dev_substitution_bug`.
 
-`ModeContext` (`src/context/ModeContext.jsx`) propagates `'faculty' | 'teacher' | 'student'` app-wide. Default is `'faculty'` so tests work without a Provider. Always use `useMode()` in components.
+`ModeContext` (`src/context/ModeContext.jsx`) propagates `'admin' | 'teacher' | 'student'` app-wide. Default is `'admin'` so tests work without a Provider. Always use `useMode()` in components.
 
-`src/App.jsx`: `supabaseSession.user.user_metadata.role === 'teacher'` → `<TeacherPortal>`, other `supabaseSession` → `<OnlineFacultyPortal>`, `studentData` → `<StudentPortal>`, neither → `<LoginPage>`. Each portal sets `ModeContext`. `sessionChecked` state prevents flash of login before `onAuthStateChange` fires.
+`src/App.jsx`: `supabaseSession.user.user_metadata.role === 'teacher'` → `<TeacherPortal>`, other `supabaseSession` → `<OnlineAdminPortal>`, `studentData` → `<StudentPortal>`, neither → `<LoginPage>`. Each portal sets `ModeContext`. `sessionChecked` state prevents flash of login before `onAuthStateChange` fires.
 
 **Hooks must be called before any early returns** — store is empty at first render in teacher mode; `loadRemoteData` fires after mount. All `useMemo` in Dashboard/Toppers is placed before early returns to prevent React error #310.
 
 ### Login (`src/components/auth/LoginPage.jsx`)
-Three-tab unified login page (Student / Teacher / Faculty):
-- **Faculty**: email + password → `supabase.auth.signInWithPassword()` → `onAuthStateChange` fires → `OnlineFacultyPortal` renders.
-- **Teacher**: email + password → `supabase.auth.signInWithPassword()` → role check in `onAuthStateChange` → `TeacherPortal` renders. Teacher accounts have `user_metadata.role = 'teacher'` (set via `create_teacher_account.js`).
+Two-tab login page (Student / Admin · Teacher):
+- **Admin · Teacher** (single form): email + password → `supabase.auth.signInWithPassword()` → `onAuthStateChange` fires → App.jsx routes by `user_metadata.role` — `'teacher'` → `<TeacherPortal>`, anything else → `<OnlineAdminPortal>`. Admin and teacher accounts are both Supabase users; the role is server-side metadata, never a UI choice. Teacher accounts are created with `user_metadata.role = 'teacher'` (via `create_teacher_account.js`); admin accounts have no `role` metadata.
 - **Student**: mobile → `POST /api/student-login` → on success saves session to localStorage → `onStudentLogin(data)`. Session restore on mount re-calls the same endpoint with stored mobile.
 - `?mobile=XXXXXXXXXX` param pre-fills mobile input (used in result emails for one-click login).
 
@@ -122,7 +121,7 @@ Analytics functions (`getAllStudents`, `computeChapterStats`, `getAtRisk`, `getH
 
 **Source list:** prefers `studentList` (raw Supabase array — one row per record); falls back to canonical-only `studentProfiles` entries when `studentList` is empty. Variants are excluded.
 
-**Inline editor** (`StudentRowEditor.jsx`): faculty-only. Per-row Edit button toggles a sub-row with branch select + batches editor (remove chips, add from dropdown) + Save/Cancel/Delete. Save calls `updateStudentBranchBatch(lwsId, name, { branch, batches })`. Editing other fields (mobile, parent mobiles, name variants) stays in `ProfileCard` inside the detail view. **Delete** (faculty only, behind a `window.confirm`) calls `deleteStudent(lwsId)` — see "Student deletion" below.
+**Inline editor** (`StudentRowEditor.jsx`): admin-only. Per-row Edit button toggles a sub-row with branch select + batches editor (remove chips, add from dropdown) + Save/Cancel/Delete. Save calls `updateStudentBranchBatch(lwsId, name, { branch, batches })`. Editing other fields (mobile, parent mobiles, name variants) stays in `ProfileCard` inside the detail view. **Delete** (admin only, behind a `window.confirm`) calls `deleteStudent(lwsId)` — see "Student deletion" below.
 
 **Student deletion** (`studentSlice.deleteStudent`): hard-delete dual-path. On Supabase the row is removed via `delete().eq('lws_id', lwsId)` — `student_batches`, `student_attendance`, `student_logins` cascade-delete; `student_plans` SET NULL (history preserved by `student_name` text column); `exam_results` are not FK-linked so the student's scores remain in the DB as orphaned rows under their name. After deletion, if `activeStudent` referenced the deleted student, it is cleared.
 
@@ -142,7 +141,7 @@ If still no match: insert as new **only when EIS is non-empty** (preserves the s
 
 Returns `{ students, added, updated, unchanged, conflicts }`. `conflicts[]` shape: `{ row, reason, candidates: [{ lws_id, canonical_name, mobile, branch }] }`. Surfaced in the Step 3 preview in `ImportStudentsModal.jsx` (amber section). Reasons:
 - `ambiguous_mobile` / `ambiguous_name_branch` — non-blocking; the row was inserted as new because no unique match could be found.
-- `mobile_conflict_on_eis_match` — non-blocking; EIS matched but the existing student's non-empty mobile differs from the import row's. The update still proceeds (EIS wins) — the conflict lets faculty notice when an EIS might be shared by different people.
+- `mobile_conflict_on_eis_match` — non-blocking; EIS matched but the existing student's non-empty mobile differs from the import row's. The update still proceeds (EIS wins) — the conflict lets admin notice when an EIS might be shared by different people.
 
 ### Duplicate detection & name-variant linking (`src/lib/merge/`)
 
@@ -161,7 +160,7 @@ Six files under `src/lib/merge/`, re-exported as a flat API via `src/lib/mergeSt
 **Data source for the scan** (`ManageBatchBranchModal.jsx`): the `students` prop passed to `FindDuplicatesTab` is built from `studentList` (raw Supabase array), not `Object.values(studentProfiles)`. The map is keyed by `canonical_name` — two students with the same name collapse into one entry, hiding the duplicate. Rename and Bulk Assign tabs still use `uniqueStudents(studentProfiles)` since they don't need to see duplicates.
 
 ### WhatsApp Results flow
-`💬 WhatsApp Results` button (faculty, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).
+`💬 WhatsApp Results` button (admin, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).
 
 **Pre-send modal** (`WhatsAppPreviewModal.jsx`): rows built from `exam.students` + `studentProfiles`; branch dropdown (derived from `studentProfiles`), mobile + parent mobiles editable inline. Footer has optional "redirect all to" test field. On "Confirm Send": calls `bulkUpdateStudentContacts(edits)` (single fetch→patch→write to `students_db.json`), then POSTs `{ examName, redirectTo?, students? }` to `/api/send-whatsapp`.
 
@@ -176,7 +175,7 @@ Six files under `src/lib/merge/`, re-exported as a flat API via `src/lib/mergeSt
 
 **Population**: Student import XLS `Guardian No.` column is parsed as `guardian_mobile` in `parseStudentsExcel`. `mergeStudents` appends it to `parent_mobiles[]` if not already present — merge never overwrites, so manually-added numbers survive re-import. New students get `parent_mobiles: [guardian_mobile]` on first import.
 
-**Edit UI**: `ProfileCard` (`studentViewComponents.jsx`) shows parent mobiles as pills and lets faculty add/remove numbers (digits-only normalisation on input). Saved via `updateStudentParentMobiles(lwsId, name, parentMobiles)` in `studentSlice.js`, alongside branch/batch in one Save action.
+**Edit UI**: `ProfileCard` (`studentViewComponents.jsx`) shows parent mobiles as pills and lets admin add/remove numbers (digits-only normalisation on input). Saved via `updateStudentParentMobiles(lwsId, name, parentMobiles)` in `studentSlice.js`, alongside branch/batch in one Save action.
 
 `split_students.py`'s `lws_to_info` carries `parent_mobiles` for use by `send_results_whatsapp.py`.
 
@@ -189,11 +188,11 @@ Tracks teaching progress per batch, independent of exam data.
 
 **Data model**: `syllabusPrograms` — `{ id, name, trackingColumns[], subjects[{ id, name, chapters[{ id, name, group }] }] }`. `syllabusBatches` — `string[]` (user-managed, independent of exam batches). `syllabusBatchBranches` — `{ batchName: branchName }` (optional per-batch branch tag). `batchProgramAssignments` — `{ batchName: [programId] }`. `batchSyllabusProgress` — `{ batchName: { programId: { subjectId: { chapterId: { col: status } } } } }`. `batchChapterTimelines` — `{ batchName: { programId: { subjectId: { chapterId: "YYYY-MM" } } } }` — per-batch scheduled month for each chapter.
 
-**Status cycle**: `null → 'In Progress' → 'Done' → null` (faculty only). Seed data in `src/lib/syllabusSeed.js` (generated by `generate_syllabus_seed.py`) auto-loaded when `syllabusPrograms` is empty.
+**Status cycle**: `null → 'In Progress' → 'Done' → null` (admin only). Seed data in `src/lib/syllabusSeed.js` (generated by `generate_syllabus_seed.py`) auto-loaded when `syllabusPrograms` is empty.
 
 **Chapter timeline**: `setChapterTimeline(batchName, programId, subjectId, chapterId, "YYYY-MM")` / `getChapterTimeline(...)` in `syllabusSlice.js`. Displayed in `SubjectAccordion` as a fixed "Timeline" column (before tracking columns) showing `"Jun 2026"` format. Faculty clicks cell → inline `<input type="month">`; teacher sees read-only. `clearSubjectProgress` does NOT clear timelines — resetting tracking status keeps the planned schedule. Timeline is batch-level (different batches may have different schedules for the same chapter).
 
-**Batch tabs** come from `syllabusBatches` — standalone list independent of `exams[].batch` or `studentProfiles[].batches`. Faculty can add, rename, and delete batches from the tab bar. `AssignProgramsModal` selects from this list only (no inline batch creation). Migration: on first load, if `syllabusBatches` is empty, seeded from `Object.keys(batchProgramAssignments)`. Chapters support optional `group` string for section headers.
+**Batch tabs** come from `syllabusBatches` — standalone list independent of `exams[].batch` or `studentProfiles[].batches`. Admin can add, rename, and delete batches from the tab bar. `AssignProgramsModal` selects from this list only (no inline batch creation). Migration: on first load, if `syllabusBatches` is empty, seeded from `Object.keys(batchProgramAssignments)`. Chapters support optional `group` string for section headers.
 
 **Branch filter**: branch pills above batch tabs are sourced from `timetables[].branch` (same source as TimetablePage/ExamScheduleView). `syllabusBatchBranches` maps batch names to branches — set via `setSyllabusBatchBranch(batchName, branch)` or the ⋯ menu "Set branch" option. When adding a batch with a branch filter active, the batch is auto-tagged to that branch.
 
@@ -206,7 +205,7 @@ CRUD for branch/batch timetables: time slots, a Mon–Sat grid of cells (class, 
 - `timetableTeachers` — `{ id, name, email }`
 - `timetableMappings` — `{ id, label, subject, teacherId }`
 - `timetables` — `{ id, branch, batchName, timeSlots[{ id, startTime, endTime }], grid: { [slotId]: { [day]: { type, mappingId|label } | null, __span? } } }`
-- `examSchedules` — `{ id, date, startTime, endTime, subject, chapter, teacherId, branch, batchName, status }`. `status` cycles `Planned → Completed → Cancelled → Planned` (faculty only). `branch`/`batchName` come from existing `timetables[]` entries — not from syllabus batches or exam batches.
+- `examSchedules` — `{ id, date, startTime, endTime, subject, chapter, teacherId, branch, batchName, status }`. `status` cycles `Planned → Completed → Cancelled → Planned` (admin only). `branch`/`batchName` come from existing `timetables[]` entries — not from syllabus batches or exam batches.
 
 **Teacher email**: stored on `timetableTeachers[].email`. `updateTimetableTeacher(id, patch)` accepts `{ name?, email? }` — not a bare string. Teachers without email are skipped by `send_schedule.py`. Deleting a teacher cascades: nulls `teacherId` on both `timetableMappings` and `examSchedules`.
 
@@ -219,7 +218,7 @@ CRUD for branch/batch timetables: time slots, a Mon–Sat grid of cells (class, 
 ### Mode-conditional visibility
 Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 
-| Feature | Faculty | Teacher | Student |
+| Feature | Admin | Teacher | Student |
 |---|---|---|---|
 | Add/delete exams, re-upload, edit questions | ✓ | — | — |
 | WhatsApp Results button | ✓ | — | — |
@@ -262,11 +261,11 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `create_teacher_account.js` | Admin script — creates/updates Supabase auth user with `role='teacher'` metadata. Usage: `node create_teacher_account.js <email> <password>` |
 | `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler |
-| `src/store/persist.js` | Dev: disk via Vite plugin. Prod faculty: Supabase `faculty_state`. Teacher/student: no-op. |
+| `src/store/persist.js` | Dev: disk via Vite plugin. Prod admin: Supabase `faculty_state`. Teacher/student: no-op. |
 | `src/lib/supabase.js` | Null-guarded Supabase client (returns `null` if env vars absent) |
 | `src/stubs/empty.js` | One-line `export default {}` — aliased from `stream` in `vite.config.js` so xlsx's optional `require('stream')` short-circuits cleanly instead of throwing on Vite's externalised-module stub. |
 | `vercel.json` | SPA rewrite rule — all non-`/data/|api/` paths → `index.html` |
-| `api/send-whatsapp.js` | Vercel serverless function — verifies faculty JWT, loads exam from `exams` table + results from `exam_results`, builds Wabridge payloads; mirrors the Vite dev endpoint at the same `/api/send-whatsapp` URL |
+| `api/send-whatsapp.js` | Vercel serverless function — verifies admin JWT, loads exam from `exams` table + results from `exam_results`, builds Wabridge payloads; mirrors the Vite dev endpoint at the same `/api/send-whatsapp` URL |
 | `migrate_to_supabase.js` | One-time seed script: `faculty-data.json` → Supabase (needs `SUPABASE_SERVICE_ROLE_KEY`) |
 | `migrate_exams_to_supabase.js` | Re-runnable seed: exams + results → `exams`/`exam_results` tables. Falls back to Supabase JSONB if local file has 0 exams. Verifies row count after seed; `--cleanup` prints SQL only (run manually after verification) |
 | `migrate_students_to_supabase.js` | Re-runnable seed: `students_db.json` → 4 Supabase tables (upsert; drops dead `exams[]`) |
@@ -280,11 +279,11 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/pages/Timetable/` | TimetablePage, TimetableGrid, ExamScheduleView, AddExamScheduleModal, Edit/Add modals, SendScheduleModal |
 | `src/pages/Exams/WhatsAppPreviewModal.jsx` | Pre-send review modal: editable student table (branch dropdown, mobile, parent mobiles), scope toggle for resend, test redirect-to field |
 | `src/pages/Exams/WhatsAppResultsModal.jsx` | Post-send log modal — sent/skipped counts + per-line colour-coded log |
-| `src/components/auth/LoginPage.jsx` | Three-tab login (Faculty/Teacher/Student); Faculty + Teacher via Supabase auth; Student via `/api/student-login` |
+| `src/components/auth/LoginPage.jsx` | Two-tab login (Admin·Teacher / Student); Admin + Teacher share one Supabase auth form, routed by `user_metadata.role`; Student via `/api/student-login` |
 | `src/components/upload/UploadModal.jsx` | 4-step add-exam modal |
 | `src/lib/excel.js` | Excel parsing (results, tags, student import, attendance import) |
 | `src/store/slices/attendanceSlice.js` | `importAttendance(parsed)` — mobile→lwsId matching, upsert to `student_attendance` |
-| `src/pages/Attendance/index.jsx` | Faculty/teacher page: consecutive absences alert (editable N days, ignores Sundays), paginated Supabase fetch, class avg/at-risk metrics, student table with % badges, Import XLS button |
+| `src/pages/Attendance/index.jsx` | Admin/teacher page: consecutive absences alert (editable N days, ignores Sundays), paginated Supabase fetch, class avg/at-risk metrics, student table with % badges, Import XLS button |
 | `src/pages/Attendance/consecutiveAbsent.js` | Pure fn `buildConsecutiveAbsent(records, lwsIdToName, n)` — uses last N non-Sunday global dates; students absent on all N are flagged with `{ lwsId, name, since }` |
 | `src/pages/Attendance/AttendanceRings.jsx` | SVG donut rings per calendar month (R=40, stroke-dasharray arc); sorted latest-first; rendered inside `StudentView` (below exam data), visible in all three portals |
 | `src/lib/analytics.js` | Analytics facade |
@@ -297,10 +296,10 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/lib/mergeStudents.js` | Re-export barrel for `src/lib/merge/` (dedup, record merge, roll enrichment) |
 | `src/lib/merge/deduplication.js` | `findDuplicateCandidates`, `getUnmatchedExamNames`, `findExamNameCandidates` |
 | `src/lib/merge/recordMerge.js` | `mergeStudentRecords` — merges two profile records, primary wins on conflicts |
-| `src/lib/students/loadExistingStudents.js` | Dual-path loader returning the existing snake_case students array: Supabase tables when faculty session active, `/api/students-db` fetch otherwise, `[]` on any failure. Used by `useImportFlow` (pre-merge baseline) and `studentSlice.refreshStudents` (post-merge re-read). |
+| `src/lib/students/loadExistingStudents.js` | Dual-path loader returning the existing snake_case students array: Supabase tables when admin session active, `/api/students-db` fetch otherwise, `[]` on any failure. Used by `useImportFlow` (pre-merge baseline) and `studentSlice.refreshStudents` (post-merge re-read). |
 | `src/store/slices/studentSlice.js` | `importStudentsDB`, `addNameVariant`, `mergeStudentProfiles`, `deleteStudent`, `bulkUpdateStudentContacts`, branch/batch/mobile updates |
 | `src/pages/Students/StudentsTable.jsx` | Filterable + paginated student table (Name / LWS ID / Branch / Batches / Mobile / Status / Exams / Last activity). PAGE_SIZE=25. Click name → replaces the table with `StudentView` (Back-to-list button restores). |
-| `src/pages/Students/StudentRowEditor.jsx` | Inline expand-in-place editor for branch + batches per row (faculty only). Save calls `updateStudentBranchBatch`; Delete calls `deleteStudent` after `window.confirm`. |
+| `src/pages/Students/StudentRowEditor.jsx` | Inline expand-in-place editor for branch + batches per row (admin only). Save calls `updateStudentBranchBatch`; Delete calls `deleteStudent` after `window.confirm`. |
 | `src/pages/Students/ManageBatchBranchModal.jsx` | Rename / Bulk Assign / Find Duplicates tabs |
 | `src/pages/Students/batchBranch/FindDuplicatesTab.jsx` | Combined profile–profile + exam-name scan; merge and link-as-variant actions |
 | `src/pages/Syllabus/` | SyllabusPage, SubjectAccordion, Manage*Modal, AssignProgramsModal |
@@ -319,8 +318,8 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 
 ## Tests
 
-Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **665 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Setup: `src/test/setup.js`. `ModeContext` defaults to `'admin'` — no Provider needed in tests.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **661 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
@@ -357,7 +356,7 @@ Key coverage: analytics filters, GAT routing, tag validation, dashboard filters,
 
 `BASE_URL` is derived from `import.meta.env.BASE_URL` in `src/config.js` — no hardcoded `REPO_NAME`.
 
-### Vercel (online faculty portal)
+### Vercel (online admin portal)
 - Repo is connected to Vercel; every push to `main` triggers a production deploy.
 - Required env vars in Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - Supabase project: `exjnzrrlzcrsoxfoojcq`. Auth user: `official.lwspune@gmail.com`.
@@ -373,7 +372,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 |---|---|
 | `whatsappSendHistory` lives in Zustand (persisted to `faculty-data.json`), not on the exam record | It's operational state (last-sent timestamp, fail list) that must survive page refresh but is not educational data. Keeping it separate from the exam record avoids bloating exam objects and makes it easy to clear independently. |
 | `failedNames` parsed client-side from script log lines (`SKIP Name —` / `FAIL → Name (student`) | Simpler than changing the Python script's stdout format. Log line format is stable; parsing it in JS avoids adding a structured JSON output path that would need to stay in sync across both ends. |
-| `bulkUpdateStudentContacts` does a single fetch→patch→write for all edited rows | Avoids N sequential round-trips when the faculty edits many students in the preview modal before sending. One read, one map, one write. |
+| `bulkUpdateStudentContacts` does a single fetch→patch→write for all edited rows | Avoids N sequential round-trips when the admin edits many students in the preview modal before sending. One read, one map, one write. |
 | `db.json` is always valid JSON (encrypted or not) — checking `json.load()` success does not confirm it is plain | Encrypted `db.json` is `{ encrypted: true, salt, iv, data }` — all valid JSON. Always check for the `encrypted: true` key explicitly, not whether `json.load()` succeeds. |
 | Batch name `LWS_NDA_2Y_(26-28)` has no space before `(` | Normalised 2026-05-04. The stray-space variant (`LWS_NDA_2Y_ (26-28)`) caused exam-filter mismatches in teacher mode. All three data sources (`students_db.json`, `faculty-data.json` exams, `faculty-data.json` profiles) were patched. The correct form matches the `(25-27)` cohort pattern. |
 | Subject filter is local component state, not in the store | Filters reset naturally on navigation (correct UX). No cross-page filter persistence was ever requested. Lifting to the store would add complexity with no benefit. |
@@ -400,9 +399,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Attendance not stored in Zustand — fetched on demand from Supabase | Attendance data is large (many rows per student, many students) and is read-only in the app (no client-side mutations after import). Fetching per-page avoids bloating the store and makes RLS enforcement natural. |
 | `student_logins` insert is fire-and-forget (`.then(() => {})`) | Blocking the student login response on an audit write would degrade perceived performance and punish students for Supabase latency spikes. A missed login record is tolerable; a slow login is not. |
 | `student_logins` table separate from `students` | Login events are operational audit data, not student profile data. Separate table keeps the `students` row small and allows efficient "last login per student" queries via the `(lws_id, logged_in_at desc)` index. |
-| `StudentView` subject filter defaults to `'Maths'` | Nearly all NDA students at LWS sit Maths exams; defaulting to `'all'` caused GAT students' exams to appear alongside Maths in the default view, diluting the Maths analytics. Faculty can still select `'All Subjects'`. |
+| `StudentView` subject filter defaults to `'Maths'` | Nearly all NDA students at LWS sit Maths exams; defaulting to `'all'` caused GAT students' exams to appear alongside Maths in the default view, diluting the Maths analytics. Admin can still select `'All Subjects'`. |
 | WhatsApp TRACKER_BASE hardcoded in `api/send-whatsapp.js` (not an env var) | The tracker URL is stable and public — it's the same Vercel deployment the file lives on. Making it an env var adds a config step for no benefit. If the domain ever changes, update the constant in both `api/send-whatsapp.js` and `send_results_whatsapp.py`. |
-| Attendance page has no batch filter | Consecutive absence detection is meaningful class-wide: if a student missed every class in the last N days, faculty needs to know regardless of batch. A batch filter would require joining across tables or client-side filtering of a large paginated dataset. |
+| Attendance page has no batch filter | Consecutive absence detection is meaningful class-wide: if a student missed every class in the last N days, admin needs to know regardless of batch. A batch filter would require joining across tables or client-side filtering of a large paginated dataset. |
 | `buildConsecutiveAbsent` uses the last N non-Sunday dates from the **global** dataset | Using per-student "last N" would vary by student and produce incoherent comparisons. Global last-N shared dates means the alert has a consistent meaning: these students were absent on the same N days the rest of the class attended. |
 | `/subtopic-analyse` skill reads from Supabase, not `faculty-data.json` | Tags uploaded on Vercel go to Supabase but don't sync back to the local file. Reading from the local file after a prod upload would produce stale or incomplete analysis results. |
 | Subtopic renames applied via direct MCP SQL, not the migration script | For a known one-time JSONB fixup, a single SQL `UPDATE` with `jsonb_agg(CASE ...)` is atomic and requires no env vars. `migrate_subtopics_supabase.js` is retained for future runs and for team members without MCP access. |
@@ -414,9 +413,10 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `mergeStudents` matches Excel rows via tiered match (EIS → mobile → name+branch), not EIS alone | EIS-only matching meant re-registrations (new EIS issued) or EIS typos created duplicate rows for existing students. Mobile is the secondary key because it's typically stable across years. Name+branch is the tertiary because students who keep both rarely move records. Each step requires "exactly one" hit — 2+ candidates fall through with a conflict entry so faculty can resolve manually. Step 3 requires non-empty branch to avoid false-positive matches on common single-token surnames. |
 | Students page replaces (not stacks) the table with the detail view when a student is selected | Previous "Pattern X" (table + view both visible) was the original design but the user found it cluttered — too easy to lose focus on the selected student among other names. Replaced 2026-05-20 with a single-active-view + "Back to list" button. Trade-off: filter/page state resets on return; revisit only if it becomes a friction point. |
 | `deleteStudent` is hard-delete, not soft-delete | Matches the existing `mergeStudentProfiles` pattern (which hard-deletes the secondary record). Soft-delete would require `account_status='Deleted'` filtering throughout analytics, attendance, exam analytics, etc. The blast radius is guarded at the UI (`window.confirm`) and the cascade behaviour is well-defined: `student_plans` retain history via the `student_name` text column; `exam_results` (unlinked) keep the student's scores under their name string. Attendance and login audit are the only data permanently lost. |
+| Role renamed `'faculty'` → `'admin'`; login UI unified to two tabs (Student / Admin · Teacher) | "Faculty" and "Teacher" were both teaching staff in real life — the previous 3-tab login was confusing about which to pick when both tabs submitted identical Supabase email+password. Renaming the privileged role to "admin" makes the distinction privilege-based (admin = read-write, teacher = read-only), and unifying the form removes the meaningless choice — the role is decided server-side from `user_metadata.role`. The internal storage name `faculty_state` and the dev file `data/faculty-data.json` were deliberately left unchanged (no UI exposure; rename would require a Supabase migration with no benefit). The user-facing copy "LWS Pune faculty" is also retained — it refers to the real-world teaching staff, not the app role. |
 | Tiered match auto-merges only when ambiguity is zero — ambiguous matches always fall through to insert + conflict report | Auto-picking the first ambiguous candidate would silently attach exam history / attendance / fees to the wrong student. The cost of a wrong-merge is high (data corruption that's hard to undo); cost of a "Possible conflict" preview entry is one human glance. The conservative path is correct here. |
 | Tiered match keeps the "don't insert without EIS" safety net | Allowing inserts without EIS would let blank-EIS Excel rows create permanent records that lack the canonical identifier, making future re-imports impossible to match. Blank-EIS rows can still UPDATE existing students (via mobile or name+branch) — they just can't CREATE new ones. |
-| `mobile_conflict_on_eis_match` is non-blocking | The EIS match contract is "EIS wins" — overriding it on every mobile difference would block legitimate phone-number changes. Surfacing as a conflict (rather than skipping the update) lets faculty notice the rare case where two students share an EIS due to a data-entry error, without breaking the common case of a student changing their number. |
+| `mobile_conflict_on_eis_match` is non-blocking | The EIS match contract is "EIS wins" — overriding it on every mobile difference would block legitimate phone-number changes. Surfacing as a conflict (rather than skipping the update) lets admin notice the rare case where two students share an EIS due to a data-entry error, without breaking the common case of a student changing their number. |
 
 ---
 
@@ -426,7 +426,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - Subject filter state is local per page — do not lift to Zustand.
 - `StudentView` subject filtering is self-contained — no prop threading.
 - Use `useMode()` for visibility — no new `IS_READ_ONLY` imports in components.
-- `ModeContext` default is `'faculty'` — changing it breaks tests.
+- `ModeContext` default is `'admin'` — changing it breaks tests.
 - All hooks must be called **before** any early returns in page components.
 - Do not filter batch dropdowns or exam lists on `exam.batch` directly — always use `getBatchOptions` / `getExamsForBatch` from `src/lib/analytics`.
 - Syllabus Tracker batch names are independent of exam/student-profile batch names — do not derive them from `exams` or `studentProfiles`. Manage via `addSyllabusBatch` / `renameSyllabusBatch` / `deleteSyllabusBatch`.
@@ -445,15 +445,15 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `clearSubjectProgress` intentionally does NOT clear `batchChapterTimelines` — the planned chapter schedule must survive a status reset.
 - The "Timeline" column in `SubjectAccordion` is a fixed column (not a user-defined tracking column). If a user has a tracking column also named "Timeline", they will see two Timeline columns — the old one should be deleted from the program's tracking columns.
 - `stripLatex` in `examPdf.js` must only output ASCII + safe Latin-1 (`×÷±·`). Do not re-introduce Unicode math symbols (Greek, set ops, arrows, `≤≥≠`, `∈∪∩`, `ℝ`) — all fall outside jsPDF Helvetica's WinAnsi encoding and render as garbage.
-- `saveToSupabase` must gate on `supabase.auth.getSession()` before writing — do not remove this check. Teacher and student visits must never overwrite faculty data.
+- `saveToSupabase` must gate on `supabase.auth.getSession()` before writing — do not remove this check. Teacher and student visits must never overwrite admin data.
 - Do not use `.catch()` on Supabase query builder chains — `PostgrestFilterBuilder` is a thenable, not a full Promise; `.catch` is `undefined` and throws silently. Always use `async/await` with `{ error }` destructuring inside the `.then()` callback.
 - `studentSlice.js` mutations must check `getSession()` before choosing Supabase vs fetch path — do not remove this dual-path logic. Dev mode depends on the fetch path; Vercel depends on the Supabase path.
 - `loadStudentsFromSupabase()` must be called after `faculty_state` loads in `initStore()` — it overwrites the stale `studentProfiles` baked into `faculty_state` with fresh data from the normalised tables. Do not remove this call.
-- `loadInsightsFromSupabase()` must be called in `initStore()` after `faculty_state` loads (faculty path only) — same reason as `loadStudentsFromSupabase`: it overwrites the stale `savedInsights` baked into the JSONB blob with fresh data from `class_reports` / `student_plans`. Do not remove this call.
-- `saveToSupabase` strips both `exams` AND `savedInsights` from the JSONB blob before writing — do not remove either field from the destructure. Re-introducing them would double-write the data and let the JSONB drift out of sync with the normalised tables on faculty mutations.
+- `loadInsightsFromSupabase()` must be called in `initStore()` after `faculty_state` loads (admin path only) — same reason as `loadStudentsFromSupabase`: it overwrites the stale `savedInsights` baked into the JSONB blob with fresh data from `class_reports` / `student_plans`. Do not remove this call.
+- `saveToSupabase` strips both `exams` AND `savedInsights` from the JSONB blob before writing — do not remove either field from the destructure. Re-introducing them would double-write the data and let the JSONB drift out of sync with the normalised tables on admin mutations.
 - `insightsSlice.js` mutations are append-only — `saveClassReport` / `saveStudentPlan` insert new rows each time, never update in place. Do not change to upsert; history would be lost.
 - `class_reports` and `student_plans` are read by `loadInsightsFromSupabase()` which collapses to "latest per scope" — preserves the legacy `{ classReport, studentPlans }` store shape. Do not change the in-store shape; the Insights page depends on it.
-- `loadExamsFromSupabase()` is called in `initStore()` (faculty) and in `TeacherPortal` mount (teacher) — both paths must await it; removing it leaves the store with stale JSONB data (or no data).
+- `loadExamsFromSupabase()` is called in `initStore()` (admin) and in `TeacherPortal` mount (teacher) — both paths must await it; removing it leaves the store with stale JSONB data (or no data).
 - `fetchAllRows` pagination in `persist.js` is required for all Supabase tables that can exceed 1000 rows (`exam_results` already at 1472+). Do not replace with a bare `.select('*')` — it silently truncates.
 - `migrate_exams_to_supabase.js --cleanup` only prints the cleanup SQL; it does not execute it. Run the SQL manually in Supabase SQL editor only after confirming exam counts match and the live app shows correct data. Never run cleanup before seeding.
 - `students_db.exams[]` must not be seeded into Supabase — confirmed dead data (no code path reads it). The normalised schema deliberately omits it.
@@ -473,11 +473,13 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `importStudentsDB` must call `set({ studentProfiles, studentList: students })` together — the two are kept in sync and both are required (profiles for lookups, list for duplicate scanning).
 - Do not use `import.meta.env.DEV` anywhere in `src/`. Vercel's Vite 8.0.3 substitutes it with `true` in prod builds (confirmed 2026-05-20). Use `IS_READ_ONLY` from `src/config.js` (or `IS_DEV = !IS_READ_ONLY` in `persist.js`) for any dev-vs-prod branching. Other `import.meta.env.*` (`BASE_URL`, `VITE_SUPABASE_URL`) appear unaffected.
 - Do not remove the `stream` → `src/stubs/empty.js` alias in `vite.config.js`. xlsx's optional stream-probe will crash the bundle at startup without it. If xlsx ever drops the probe (or moves it behind a feature flag), the alias can go — verify by rebuilding and checking that `(va = HM())` no longer appears near `.Readable` in the minified output.
-- `useImportFlow.handleStudentFile` must call `loadExistingStudents()` (not a bare `fetch('/api/students-db')`) before `mergeStudents`. The bare fetch 404s on Vercel and causes silent duplicate creation. Same rule for any future code that needs the snake_case students baseline — go through the helper so the Supabase path is taken when a faculty session exists.
+- `useImportFlow.handleStudentFile` must call `loadExistingStudents()` (not a bare `fetch('/api/students-db')`) before `mergeStudents`. The bare fetch 404s on Vercel and causes silent duplicate creation. Same rule for any future code that needs the snake_case students baseline — go through the helper so the Supabase path is taken when an admin session exists.
 - `mergeStudents` returns `conflicts: []` always (even when empty). Do not remove this field or change to `null` — `ImportStudentsModal.jsx` reads `mergeResult.conflicts?.length` and the test `mergeStudents — return shape > always includes conflicts in the result` asserts on it.
-- Tiered match's "exactly one hit" rule in steps 2 and 3 is a hard requirement — do not change to "first hit wins". Ambiguous matches must surface in `conflicts[]` so faculty resolves manually; auto-picking risks attaching exam/attendance/fee history to the wrong student.
+- Tiered match's "exactly one hit" rule in steps 2 and 3 is a hard requirement — do not change to "first hit wins". Ambiguous matches must surface in `conflicts[]` so admin resolves manually; auto-picking risks attaching exam/attendance/fee history to the wrong student.
 - Step 3 (name+branch) requires a non-empty branch on BOTH sides — do not relax to name-only matching. Two students named "Rohan Patil" with no branch would otherwise auto-merge incorrectly.
 - Tiered match still skips inserting when EIS is blank AND no match is found via steps 2/3 — do not change to insert-on-blank-EIS. Creating EIS-less rows leaves future re-imports unable to match the student and breaks the canonical identifier contract.
 - The Students page renders either the table OR the StudentView — never both. Do not revert to the stacked "Pattern X" layout without explicit user request; it was deliberately removed 2026-05-20.
 - `deleteStudent` must always go through a `window.confirm` (or stricter) at the UI layer. Do not bypass — the action is irreversible at the attendance/login level. The confirm message must name the student and mention what data is lost.
 - `deleteStudent` clears `activeStudent` if (and only if) it matched the deleted student's name. Do not unconditionally clear; switching to another student before deleting should not jump back to the table.
+- The privileged role is `'admin'`, not `'faculty'`. Do not reintroduce `mode === 'faculty'` or `<ModeContext.Provider value="faculty">` — use `'admin'`. The Supabase table name `faculty_state` and the dev file `data/faculty-data.json` are deliberately retained (internal storage, no UI). The user-facing copy "LWS Pune faculty" in the login footer and message templates is also retained — it refers to the real-world teaching staff.
+- The login page has exactly two tabs (Student / Admin · Teacher). Do not split the staff tab back into separate Admin and Teacher tabs — they share a single Supabase auth form, and the role is decided server-side from `user_metadata.role`.

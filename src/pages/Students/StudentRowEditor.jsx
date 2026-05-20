@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 // Inline editor for a single student's branch + batches.
-// Mounted only in faculty mode; the StudentsTable hides the Edit button for teachers.
+// Mounted only in admin mode; the StudentsTable hides the Edit button for teachers.
 // Keeps its own draft state until Save (calls onSave) or Cancel (discards).
 export default function StudentRowEditor({
   lwsId,

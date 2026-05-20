@@ -45,7 +45,7 @@ function makeProps(overrides = {}) {
     activeStudent: null,
     onSelect: vi.fn(),
     onEdit:   vi.fn(),
-    isFaculty: true,
+    isAdmin: true,
     ...overrides,
   }
 }
@@ -68,7 +68,7 @@ describe('StudentsTable — rendering', () => {
   })
 
   it('hides Edit button in teacher mode', () => {
-    render(<StudentsTable {...makeProps({ isFaculty: false })} />)
+    render(<StudentsTable {...makeProps({ isAdmin: false })} />)
     expect(screen.queryAllByRole('button', { name: /edit/i })).toHaveLength(0)
   })
 

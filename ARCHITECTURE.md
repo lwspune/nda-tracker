@@ -6,7 +6,7 @@ A narrative overview for new contributors. For column-level schema reference see
 
 ## 1. Overview
 
-A React + Vite faculty tool for tracking NDA exam performance. Faculty upload Excel result files from an OMR vendor (Evalbee), tag questions with chapter and subtopic metadata, and analyse student performance across exams, chapters, and time. Three additional read-only portals expose subsets of the data: a teacher portal (read-only across the cohort), a student portal (own results only, mobile-number login), and the developer console.
+A React + Vite tool for tracking NDA exam performance, used by LWS Pune teaching staff. Admins upload Excel result files from an OMR vendor (Evalbee), tag questions with chapter and subtopic metadata, and analyse student performance across exams, chapters, and time. Three additional read-only portals expose subsets of the data: a teacher portal (read-only across the cohort), a student portal (own results only, mobile-number login), and the developer console.
 
 The application is a single React SPA. Different runtime modes are selected by hostname and Supabase session, not by separate builds. The same `dist/` artifact serves all four modes.
 
@@ -26,7 +26,7 @@ The application is a single React SPA. Different runtime modes are selected by h
         ▼                     ▼               ▼               ▼                     ▼
   ┌──────────┐         ┌────────────┐  ┌────────────┐  ┌────────────┐         ┌──────────┐
   │ Dev      │         │ Online     │  │ Teacher    │  │ Student    │         │ Static   │
-  │ Faculty  │         │ Faculty    │  │ Portal     │  │ Portal     │         │ GH Pages │
+  │ Admin    │         │ Admin      │  │ Portal     │  │ Portal     │         │ GH Pages │
   │ localhost│         │ Vercel     │  │ Vercel     │  │ Vercel     │         │ (legacy) │
   └────┬─────┘         └─────┬──────┘  └─────┬──────┘  └─────┬──────┘         └──────────┘
        │                     │               │               │
@@ -44,7 +44,7 @@ The application is a single React SPA. Different runtime modes are selected by h
                        └──────────────────────────────────────────┘
 ```
 
-Write path: dev mode writes to a local JSON file via a Vite plugin; production faculty mode writes to Supabase. Teacher and student modes are read-only and never mutate state.
+Write path: dev mode writes to a local JSON file via a Vite plugin; production admin mode writes to Supabase. Teacher and student modes are read-only and never mutate state.
 
 ---
 
@@ -52,7 +52,7 @@ Write path: dev mode writes to a local JSON file via a Vite plugin; production f
 
 A concrete trace that touches every layer.
 
-1. Faculty drops an Excel file (Evalbee results + tag sheet) into `UploadModal`. The browser parses both with `xlsx` ([`src/lib/excel.js`](src/lib/excel.js)), producing an in-memory `exam` object with `questions[]` and `students[]`.
+1. An admin drops an Excel file (Evalbee results + tag sheet) into `UploadModal`. The browser parses both with `xlsx` ([`src/lib/excel.js`](src/lib/excel.js)), producing an in-memory `exam` object with `questions[]` and `students[]`.
 2. The modal calls `addExam(exam)` on the Zustand store ([`src/store/slices/examsSlice.js`](src/store/slices/examsSlice.js)).
 3. `addExam` is **dual-path**:
    - It updates the in-store `exams[]` array and calls `_save()` so the JSONB blob (in dev: `data/faculty-data.json`; in prod: `faculty_state.data`) reflects the change.
@@ -69,7 +69,7 @@ A concrete trace that touches every layer.
 
 The same `StudentView` component is used in all three portals — the data it receives is filtered by the mode-detection logic upstream.
 
-**Student import follows the same dual-path shape.** Faculty drops a Student Search List Excel; `useImportFlow.handleStudentFile` calls [`loadExistingStudents()`](src/lib/students/loadExistingStudents.js) (Supabase tables when a session is active, dev `/api/students-db` fetch otherwise) to obtain the baseline, runs [`mergeStudents`](src/lib/merge/mergeLogic.js) with the tiered match (EIS → mobile → name+branch), and renders a Step 3 preview that includes any `conflicts[]` for the faculty to review before confirming. Confirm calls `importStudentsFromExcel` on the store, which upserts into `students` + `student_batches`.
+**Student import follows the same dual-path shape.** Admin drops a Student Search List Excel; `useImportFlow.handleStudentFile` calls [`loadExistingStudents()`](src/lib/students/loadExistingStudents.js) (Supabase tables when a session is active, dev `/api/students-db` fetch otherwise) to obtain the baseline, runs [`mergeStudents`](src/lib/merge/mergeLogic.js) with the tiered match (EIS → mobile → name+branch), and renders a Step 3 preview that includes any `conflicts[]` for the admin to review before confirming. Confirm calls `importStudentsFromExcel` on the store, which upserts into `students` + `student_batches`.
 
 ---
 
@@ -77,12 +77,12 @@ The same `StudentView` component is used in all three portals — the data it re
 
 | Mode | Hostname / Trigger | Auth | Capabilities | Storage |
 |---|---|---|---|---|
-| **Dev Faculty** | `localhost` | None (assumed faculty) | Full read-write | `data/faculty-data.json` via Vite `/api/data` plugin |
-| **Online Faculty** | Production hostname + Supabase session, no `role` claim | Supabase Auth (email + password) | Full read-write | Supabase tables + JSONB blob (`faculty_state`) |
+| **Dev Admin** | `localhost` | None (assumed admin) | Full read-write | `data/faculty-data.json` via Vite `/api/data` plugin |
+| **Online Admin** | Production hostname + Supabase session, no `role` metadata | Supabase Auth (email + password) | Full read-write | Supabase tables + JSONB blob (`faculty_state`) |
 | **Teacher** | Production hostname + Supabase session with `user_metadata.role = 'teacher'` | Supabase Auth (email + password), individual accounts | Read-only across cohort, no edit UI | Reads `faculty_state` + `exams` + `exam_results` only; no writes |
 | **Student** | Production hostname + `localStorage` session token | Mobile number via `/api/student-login` serverless (no Supabase Auth session) | Read-only, own data only | Server-rendered payload only; no direct DB access |
 
-Mode is decided in [`src/App.jsx`](src/App.jsx) on every render based on `supabaseSession`, `studentData`, and the `user_metadata.role` claim. The chosen portal sets `ModeContext`, which propagates `'faculty' | 'teacher' | 'student'` throughout the component tree. Component-level visibility decisions read from `useMode()`, never from `IS_READ_ONLY` (which only affects routing).
+Mode is decided in [`src/App.jsx`](src/App.jsx) on every render based on `supabaseSession`, `studentData`, and the `user_metadata.role` claim. The chosen portal sets `ModeContext`, which propagates `'admin' | 'teacher' | 'student'` throughout the component tree. Component-level visibility decisions read from `useMode()`, never from `IS_READ_ONLY` (which only affects routing).
 
 ---
 
@@ -199,7 +199,7 @@ Path A keeps the dev workflow simple (one JSON file on disk). Path B keeps prod 
 
 ### Layer 3 — Load function (in `persist.js`)
 
-`loadXFromSupabase()` reads the normalised tables, paginates if needed (the default Supabase select is capped at 1000 rows), and returns a shape that the store consumes. It is called once per session from `initStore()` (faculty) or `TeacherPortal` mount (teacher) — **after** the JSONB blob has loaded — to overwrite stale fields in the blob with the canonical normalised data.
+`loadXFromSupabase()` reads the normalised tables, paginates if needed (the default Supabase select is capped at 1000 rows), and returns a shape that the store consumes. It is called once per session from `initStore()` (admin) or `TeacherPortal` mount (teacher) — **after** the JSONB blob has loaded — to overwrite stale fields in the blob with the canonical normalised data.
 
 ---
 

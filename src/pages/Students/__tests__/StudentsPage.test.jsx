@@ -27,11 +27,11 @@ vi.mock('../StudentView', () => ({
 }))
 
 vi.mock('../StudentsTable', () => ({
-  default: ({ students, activeStudent, isFaculty }) => (
+  default: ({ students, activeStudent, isAdmin }) => (
     <div data-testid="students-table"
          data-count={students.length}
          data-active={activeStudent || ''}
-         data-faculty={String(isFaculty)} />
+         data-faculty={String(isAdmin)} />
   ),
 }))
 

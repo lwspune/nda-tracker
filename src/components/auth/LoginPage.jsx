@@ -1,12 +1,13 @@
 /**
- * LoginPage — unified login for teacher and student portals on GitHub Pages.
+ * LoginPage — unified login for the deployed app (Vercel).
  *
- * Teacher tab: password → SHA-256 verified against /data/teacher-auth.json
- *              → calls onTeacherLogin() on success
- * Student tab: mobile  → hashed and matched against /data/index.json
- *              → calls onStudentLogin(studentData) on success
+ * Two tabs:
+ *   - Student: mobile → /api/student-login (serverless) → onStudentLogin(data)
+ *   - Admin / Teacher: email + password → supabase.auth.signInWithPassword.
+ *     Role distinction (admin vs teacher) happens after login in App.jsx
+ *     based on user_metadata.role.
  *
- * On mount, restores any valid existing session automatically.
+ * On mount, restores any valid student session automatically.
  */
 
 import { useState, useEffect } from 'react'
@@ -42,25 +43,19 @@ export function clearStudentSession() {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function LoginPage({ onStudentLogin }) {
-  const [tab, setTab]         = useState('student') // 'student' | 'teacher' | 'faculty'
+  const [tab, setTab]         = useState('student') // 'student' | 'staff'
   const [checking, setChecking] = useState(true)
 
-  // Teacher tab state
-  const [teacherEmail, setTeacherEmail]       = useState('')
-  const [teacherPassword, setTeacherPassword] = useState('')
-  const [teacherLoading, setTeacherLoading]   = useState(false)
-  const [teacherError, setTeacherError]       = useState(null)
+  // Staff tab state (admin + teacher share the same form)
+  const [staffEmail,    setStaffEmail]    = useState('')
+  const [staffPassword, setStaffPassword] = useState('')
+  const [staffLoading,  setStaffLoading]  = useState(false)
+  const [staffError,    setStaffError]    = useState(null)
 
   // Student tab state
-  const [mobile, setMobile]     = useState('')
+  const [mobile, setMobile]                 = useState('')
   const [studentLoading, setStudentLoading] = useState(false)
-  const [studentError, setStudentError]     = useState(null)
-
-  // Faculty tab state
-  const [facultyEmail, setFacultyEmail]       = useState('')
-  const [facultyPassword, setFacultyPassword] = useState('')
-  const [facultyLoading, setFacultyLoading]   = useState(false)
-  const [facultyError, setFacultyError]       = useState(null)
+  const [studentError,   setStudentError]   = useState(null)
 
   // ── Pre-fill mobile from ?mobile= URL param ────────────────
   useEffect(() => {
@@ -93,36 +88,20 @@ export default function LoginPage({ onStudentLogin }) {
     restore()
   }, [])
 
-  // ── Teacher login (Supabase) ────────────────────────────────
-  async function handleTeacherLogin() {
-    if (!teacherEmail || !teacherPassword) return
-    setTeacherError(null)
-    setTeacherLoading(true)
+  // ── Staff (admin or teacher) login ──────────────────────────
+  async function handleStaffLogin() {
+    if (!staffEmail || !staffPassword) return
+    setStaffError(null)
+    setStaffLoading(true)
     const { error } = await supabase.auth.signInWithPassword({
-      email: teacherEmail.trim(),
-      password: teacherPassword,
+      email: staffEmail.trim(),
+      password: staffPassword,
     })
     if (error) {
-      setTeacherError(error.message)
-      setTeacherLoading(false)
+      setStaffError(error.message)
+      setStaffLoading(false)
     }
-    // On success: App.jsx onAuthStateChange fires → TeacherPortal renders (role check)
-  }
-
-  // ── Faculty login (Supabase) ────────────────────────────────
-  async function handleFacultyLogin() {
-    if (!facultyEmail || !facultyPassword) return
-    setFacultyError(null)
-    setFacultyLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({
-      email: facultyEmail.trim(),
-      password: facultyPassword,
-    })
-    if (error) {
-      setFacultyError(error.message)
-      setFacultyLoading(false)
-    }
-    // On success: App.jsx onAuthStateChange fires → faculty portal renders
+    // On success: App.jsx onAuthStateChange fires → role metadata routes to TeacherPortal or OnlineAdminPortal
   }
 
   // ── Student login ───────────────────────────────────────────
@@ -176,7 +155,7 @@ export default function LoginPage({ onStudentLogin }) {
 
         {/* Tab switcher */}
         <div className="flex rounded-xl bg-surface-2 border border-border p-1 mb-5 gap-1">
-          {[['student', 'Student'], ['teacher', 'Teacher'], ['faculty', 'Faculty']].map(([key, label]) => (
+          {[['student', 'Student'], ['staff', 'Admin / Teacher']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -236,93 +215,48 @@ export default function LoginPage({ onStudentLogin }) {
                 {studentLoading ? 'Checking…' : 'View My Results →'}
               </button>
             </>
-          ) : tab === 'teacher' ? (
-            <> {/* ── Teacher ── */}
-              <div className="text-[15px] font-bold text-ink mb-1">Teacher Access</div>
-              <div className="text-[13px] text-ink-3 mb-5">
-                Sign in with your teacher account to view student results.
-              </div>
-
-              <div className="mb-3">
-                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={teacherEmail}
-                  onChange={e => setTeacherEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleTeacherLogin()}
-                  placeholder="teacher@example.com"
-                  className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
-                             focus:border-accent outline-none transition-colors
-                             text-[14px] text-ink placeholder:text-ink-3/50"
-                  autoFocus={tab === 'teacher'}
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={teacherPassword}
-                  onChange={e => setTeacherPassword(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleTeacherLogin()}
-                  placeholder="••••••••"
-                  className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
-                             focus:border-accent outline-none transition-colors
-                             text-[14px] text-ink placeholder:text-ink-3/50"
-                />
-              </div>
-
-              {teacherError && <ErrorBox message={teacherError} />}
-
-              <button
-                onClick={handleTeacherLogin}
-                disabled={teacherLoading || !teacherEmail || !teacherPassword}
-                className={`w-full py-3 rounded-xl font-bold text-[14px] transition-all
-                  ${teacherLoading || !teacherEmail || !teacherPassword
-                    ? 'bg-surface-3 text-ink-3 cursor-not-allowed'
-                    : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
-                  }`}
-              >
-                {teacherLoading ? 'Signing in…' : 'Teacher Login →'}
-              </button>
-            </>
           ) : (
-            <>
-              <div className="text-[15px] font-bold text-ink mb-1">Faculty Access</div>
+            <> {/* ── Admin / Teacher ── */}
+              <div className="text-[15px] font-bold text-ink mb-1">Staff sign-in</div>
               <div className="text-[13px] text-ink-3 mb-5">
-                Sign in with your faculty account to manage exams and students.
+                Sign in with your LWS Pune account. Admin and teacher accounts use the same form;
+                your access level is determined by your account role.
               </div>
 
               <div className="mb-3">
-                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+                <label
+                  htmlFor="staff-email"
+                  className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5"
+                >
                   Email
                 </label>
                 <input
+                  id="staff-email"
                   type="email"
-                  value={facultyEmail}
-                  onChange={e => setFacultyEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleFacultyLogin()}
-                  placeholder="official@example.com"
+                  value={staffEmail}
+                  onChange={e => setStaffEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleStaffLogin()}
+                  placeholder="you@example.com"
                   className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
                              focus:border-accent outline-none transition-colors
                              text-[14px] text-ink placeholder:text-ink-3/50"
-                  autoFocus={tab === 'faculty'}
+                  autoFocus
                 />
               </div>
 
               <div className="mb-4">
-                <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+                <label
+                  htmlFor="staff-password"
+                  className="block text-[11px] font-bold uppercase tracking-wide text-ink-3 mb-1.5"
+                >
                   Password
                 </label>
                 <input
+                  id="staff-password"
                   type="password"
-                  value={facultyPassword}
-                  onChange={e => setFacultyPassword(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleFacultyLogin()}
+                  value={staffPassword}
+                  onChange={e => setStaffPassword(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleStaffLogin()}
                   placeholder="••••••••"
                   className="w-full border border-border rounded-xl px-3 py-2.5 bg-surface-2
                              focus:border-accent outline-none transition-colors
@@ -330,18 +264,18 @@ export default function LoginPage({ onStudentLogin }) {
                 />
               </div>
 
-              {facultyError && <ErrorBox message={facultyError} />}
+              {staffError && <ErrorBox message={staffError} />}
 
               <button
-                onClick={handleFacultyLogin}
-                disabled={facultyLoading || !facultyEmail || !facultyPassword}
+                onClick={handleStaffLogin}
+                disabled={staffLoading || !staffEmail || !staffPassword}
                 className={`w-full py-3 rounded-xl font-bold text-[14px] transition-all
-                  ${facultyLoading || !facultyEmail || !facultyPassword
+                  ${staffLoading || !staffEmail || !staffPassword
                     ? 'bg-surface-3 text-ink-3 cursor-not-allowed'
                     : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
                   }`}
               >
-                {facultyLoading ? 'Signing in…' : 'Faculty Login →'}
+                {staffLoading ? 'Signing in…' : 'Sign in →'}
               </button>
             </>
           )}
@@ -350,9 +284,7 @@ export default function LoginPage({ onStudentLogin }) {
         <div className="text-center mt-6 text-[11px] text-ink-3">
           {tab === 'student'
             ? 'Having trouble? Contact your LWS Pune faculty.'
-            : tab === 'teacher'
-            ? 'Teachers only. Contact the faculty admin for your account.'
-            : 'Faculty only. Contact the system admin for access.'}
+            : 'Staff only. Contact the system admin if you need an account.'}
         </div>
       </div>
     </div>
