@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { parseStudentsExcel, parseExcelFull } from '../../../lib/excel'
 import { mergeStudents, enrichWithRollNos, applyManualMatch } from '../../../lib/mergeStudents'
+import { loadExistingStudents } from '../../../lib/students/loadExistingStudents'
 import useStore from '../../../store/useStore'
 
 export default function useImportFlow() {
@@ -58,13 +59,7 @@ export default function useImportFlow() {
 
     try {
       const importedRows = await parseStudentsExcel(f)
-
-      let existingStudents = []
-      try {
-        const db = await fetch('/api/students-db').then(r => r.json())
-        existingStudents = db?.students || []
-      } catch (_) { /* treat everyone as new if API unavailable */ }
-
+      const existingStudents = await loadExistingStudents()
       const result = mergeStudents(existingStudents, importedRows)
       setMergeResult(result)
     } catch (e) {

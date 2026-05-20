@@ -73,7 +73,10 @@ npm run lint
 - `apiKey` is **never** persisted to disk or localStorage — memory only.
 
 ### Mode detection & routing
-`src/config.js`: non-localhost hostname → `IS_READ_ONLY = true` (URL/routing only — never use for component visibility).
+`src/config.js`: non-localhost hostname → `IS_READ_ONLY = true`. Two distinct uses:
+- **Component visibility:** never use `IS_READ_ONLY` for this — use `useMode()` (faculty/teacher/student).
+- **Dev-vs-prod data-path branching** (e.g. fetch `/api/data` vs `loadFromSupabase`): use `IS_READ_ONLY` directly (or `IS_DEV = !IS_READ_ONLY` in `persist.js`). Do NOT use `import.meta.env.DEV` — Vercel's Vite 8.0.3 substitutes it incorrectly. See decisions log + memory `project_vite_dev_substitution_bug`.
+
 `ModeContext` (`src/context/ModeContext.jsx`) propagates `'faculty' | 'teacher' | 'student'` app-wide. Default is `'faculty'` so tests work without a Provider. Always use `useMode()` in components.
 
 `src/App.jsx`: `supabaseSession.user.user_metadata.role === 'teacher'` → `<TeacherPortal>`, other `supabaseSession` → `<OnlineFacultyPortal>`, `studentData` → `<StudentPortal>`, neither → `<LoginPage>`. Each portal sets `ModeContext`. `sessionChecked` state prevents flash of login before `onAuthStateChange` fires.
@@ -245,6 +248,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/store/useStore.js` | Zustand store assembler |
 | `src/store/persist.js` | Dev: disk via Vite plugin. Prod faculty: Supabase `faculty_state`. Teacher/student: no-op. |
 | `src/lib/supabase.js` | Null-guarded Supabase client (returns `null` if env vars absent) |
+| `src/stubs/empty.js` | One-line `export default {}` — aliased from `stream` in `vite.config.js` so xlsx's optional `require('stream')` short-circuits cleanly instead of throwing on Vite's externalised-module stub. |
 | `vercel.json` | SPA rewrite rule — all non-`/data/|api/` paths → `index.html` |
 | `api/send-whatsapp.js` | Vercel serverless function — verifies faculty JWT, loads exam from `exams` table + results from `exam_results`, builds Wabridge payloads; mirrors the Vite dev endpoint at the same `/api/send-whatsapp` URL |
 | `migrate_to_supabase.js` | One-time seed script: `faculty-data.json` → Supabase (needs `SUPABASE_SERVICE_ROLE_KEY`) |
@@ -277,6 +281,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 | `src/lib/mergeStudents.js` | Re-export barrel for `src/lib/merge/` (dedup, record merge, roll enrichment) |
 | `src/lib/merge/deduplication.js` | `findDuplicateCandidates`, `getUnmatchedExamNames`, `findExamNameCandidates` |
 | `src/lib/merge/recordMerge.js` | `mergeStudentRecords` — merges two profile records, primary wins on conflicts |
+| `src/lib/students/loadExistingStudents.js` | Dual-path loader returning the existing snake_case students array: Supabase tables when faculty session active, `/api/students-db` fetch otherwise, `[]` on any failure. Used by `useImportFlow` (pre-merge baseline) and `studentSlice.refreshStudents` (post-merge re-read). |
 | `src/store/slices/studentSlice.js` | `importStudentsDB`, `addNameVariant`, `mergeStudentProfiles`, `bulkUpdateStudentContacts`, branch/batch/mobile updates |
 | `src/pages/Students/StudentsTable.jsx` | Filterable + paginated student table (Name / LWS ID / Branch / Batches / Mobile / Status / Exams / Last activity). PAGE_SIZE=25. Click name → activates Pattern X (table stays + StudentView below). |
 | `src/pages/Students/StudentRowEditor.jsx` | Inline expand-in-place editor for branch + batches per row (faculty only). Save calls `updateStudentBranchBatch`. |
@@ -299,7 +304,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **634 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **640 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
@@ -387,6 +392,9 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | Subtopic renames applied via direct MCP SQL, not the migration script | For a known one-time JSONB fixup, a single SQL `UPDATE` with `jsonb_agg(CASE ...)` is atomic and requires no env vars. `migrate_subtopics_supabase.js` is retained for future runs and for team members without MCP access. |
 | `studentList` stored alongside `studentProfiles` (raw vs canonical map) | `studentProfiles` is keyed by `canonical_name` — two profiles sharing a name collapse into one entry. `FindDuplicatesTab` needs both entries to detect identical-name duplicates. Storing the raw Supabase array as `studentList` (not persisted) is cheaper than re-querying Supabase from the modal. |
 | Subject selector rendered in `StudentView`'s filtered-empty-state | The default `'Maths'` filter produces zero exams for GAT-only students. Without the selector in the early-return path, those students hit a dead-end empty state with no way to switch filters. ProfileCard is also rendered for layout consistency with the other two empty states. |
+| `IS_READ_ONLY` (runtime hostname check) gates dev/prod data paths in `persist.js`, `useStore.js`, `defaults.js`, `App.jsx` — NOT `import.meta.env.DEV` | On 2026-05-20, Vercel's Vite 8.0.3 + Rolldown was confirmed to substitute `import.meta.env.DEV` with `true` in production bundles — the opposite of correct behaviour. `loadFromDisk` was running the dev branch in prod, fetching the non-existent `/api/data` route and 404-ing. The bug survived inline refactor, version bump, and "Redeploy without cache". Switched to `IS_READ_ONLY` (a runtime hostname check that can't be miscompiled). Trade-off: dev/prod code paths can no longer be tree-shaken — both ship in the bundle. Fix commit `7b96030`. See memory `project_vite_dev_substitution_bug`. |
+| `vite.config.js` aliases `stream` to `src/stubs/empty.js` | xlsx probes `require('stream')` at module init for optional streaming support. Vite 8 externalises `stream` for the browser and its stub throws on property access (`.Readable`), turning xlsx's harmless `(stream || {}).Readable && ...` short-circuit into a startup crash (`Cannot access ".Readable" in client code`). The empty-module alias makes the optional check short-circuit cleanly. Fix commit `0127900`. |
+| Student import baseline comes from `loadExistingStudents()` (Supabase if session, dev fetch otherwise) — not from a bare `fetch('/api/students-db')` | On Vercel the bare fetch 404s → `existingStudents = []` → `mergeStudents` flagged every row "new" → on confirm, upsert created fresh LWS-IDs for already-existing students (silent duplicate row creation). The fix mirrors the dual-path pattern already in `studentSlice` mutations and `studentList`/`studentProfiles` loads. Bug surfaced 2026-05-20 when "21 students loaded — 21 new" appeared after a re-import of an unchanged file. |
 
 ---
 
@@ -441,3 +449,6 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `FindDuplicatesTab` must scan `studentList` (raw Supabase array), not `Object.values(studentProfiles)`. The map collapses identical canonical names; the scan needs to see both entries to flag them.
 - `StudentView`'s `!examData.length` early return must render the subject selector + ProfileCard. Removing the selector strands GAT-only students on the default Maths filter with no escape.
 - `importStudentsDB` must call `set({ studentProfiles, studentList: students })` together — the two are kept in sync and both are required (profiles for lookups, list for duplicate scanning).
+- Do not use `import.meta.env.DEV` anywhere in `src/`. Vercel's Vite 8.0.3 substitutes it with `true` in prod builds (confirmed 2026-05-20). Use `IS_READ_ONLY` from `src/config.js` (or `IS_DEV = !IS_READ_ONLY` in `persist.js`) for any dev-vs-prod branching. Other `import.meta.env.*` (`BASE_URL`, `VITE_SUPABASE_URL`) appear unaffected.
+- Do not remove the `stream` → `src/stubs/empty.js` alias in `vite.config.js`. xlsx's optional stream-probe will crash the bundle at startup without it. If xlsx ever drops the probe (or moves it behind a feature flag), the alias can go — verify by rebuilding and checking that `(va = HM())` no longer appears near `.Readable` in the minified output.
+- `useImportFlow.handleStudentFile` must call `loadExistingStudents()` (not a bare `fetch('/api/students-db')`) before `mergeStudents`. The bare fetch 404s on Vercel and causes silent duplicate creation. Same rule for any future code that needs the snake_case students baseline — go through the helper so the Supabase path is taken when a faculty session exists.

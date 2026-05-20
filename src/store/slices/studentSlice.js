@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import { mergeStudentRecords } from '../../lib/mergeStudents'
+import { loadExistingStudents } from '../../lib/students/loadExistingStudents'
 
 // ── Supabase helpers (online faculty mode only) ────────────────
 
@@ -10,15 +11,8 @@ async function getSession() {
 }
 
 async function refreshStudents(get) {
-  const { data } = await supabase
-    .from('students')
-    .select('*, student_batches(batch_name)')
-  if (!data) return
-  const arr = data.map(s => ({
-    ...s,
-    batches: (s.student_batches || []).map(b => b.batch_name),
-    student_batches: undefined,
-  }))
+  const arr = await loadExistingStudents()
+  if (!arr.length) return
   get().importStudentsDB(arr)
 }
 
