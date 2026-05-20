@@ -356,6 +356,38 @@ export const createStudentSlice = (set, get) => ({
     }
   },
 
+  // Hard-deletes a student by lws_id. Supabase CASCADEs handle the child rows
+  // (student_batches, student_attendance, student_logins are all wiped).
+  // student_plans use ON DELETE SET NULL — historical AI plans are preserved
+  // under the student_name text column. exam_results are NOT FK-linked, so the
+  // student's exam scores stay in the DB under their name string.
+  async deleteStudent(lwsId) {
+    if (!lwsId) return
+
+    const session = await getSession()
+    if (session) {
+      try {
+        await supabase.from('students').delete().eq('lws_id', lwsId)
+        await refreshStudents(get)
+      } catch (_) { /* no-op */ }
+    } else {
+      try {
+        const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+        if (!existing?.students) return
+        const students = existing.students.filter(s => s.lws_id !== lwsId)
+        if (students.length === existing.students.length) return // not found → no-op
+        await persistStudentsDB(get, existing, students)
+      } catch (_) { /* no-op */ }
+    }
+
+    // Clear the active selection if it pointed at this student
+    const active = get().activeStudent
+    if (active) {
+      const stillExists = get().studentProfiles[active]
+      if (!stillExists) set({ activeStudent: null })
+    }
+  },
+
   async mergeStudentProfiles(primaryLwsId, secondaryLwsId) {
     if (!primaryLwsId || !secondaryLwsId || primaryLwsId === secondaryLwsId) return
 

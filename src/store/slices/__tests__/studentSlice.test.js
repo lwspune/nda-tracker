@@ -122,3 +122,69 @@ describe('addNameVariant', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
+
+// ── deleteStudent ────────────────────────────────────────────
+
+describe('deleteStudent', () => {
+  beforeEach(() => { vi.restoreAllMocks() })
+
+  it('removes the matching student from studentList (dev path)', async () => {
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma' }),
+      makeStudent({ lws_id: 'LWS-002', canonical_name: 'Bob Kumar' }),
+    ])
+    const { slice, getState } = makeStore()
+    await slice.deleteStudent('LWS-001')
+    const ids = getState().studentList.map(s => s.lws_id)
+    expect(ids).toEqual(['LWS-002'])
+  })
+
+  it('removes the matching student from studentProfiles', async () => {
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma' }),
+      makeStudent({ lws_id: 'LWS-002', canonical_name: 'Bob Kumar' }),
+    ])
+    const { slice, getState } = makeStore()
+    await slice.deleteStudent('LWS-001')
+    expect(getState().studentProfiles['Alice Sharma']).toBeUndefined()
+    expect(getState().studentProfiles['Bob Kumar']).toBeDefined()
+  })
+
+  it('clears activeStudent when it matches the deleted student', async () => {
+    mockFetch([makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma' })])
+    const { slice, getState } = makeStore()
+    // Seed activeStudent to the about-to-be-deleted student
+    getState().activeStudent = 'Alice Sharma'
+    await slice.deleteStudent('LWS-001')
+    expect(getState().activeStudent).toBeNull()
+  })
+
+  it('does NOT clear activeStudent when it points to a different student', async () => {
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma' }),
+      makeStudent({ lws_id: 'LWS-002', canonical_name: 'Bob Kumar' }),
+    ])
+    const { slice, getState } = makeStore()
+    getState().activeStudent = 'Bob Kumar'
+    await slice.deleteStudent('LWS-001')
+    expect(getState().activeStudent).toBe('Bob Kumar')
+  })
+
+  it('does nothing and does not call fetch when lwsId is empty', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const { slice } = makeStore()
+    await slice.deleteStudent('')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when the lws_id is not found', async () => {
+    const initial = [makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma' })]
+    mockFetch(initial)
+    const { slice, getState } = makeStore()
+    slice.importStudentsDB(initial) // seed the in-store list
+    await slice.deleteStudent('LWS-MISSING')
+    expect(getState().studentList).toHaveLength(1)
+    expect(getState().studentProfiles['Alice Sharma']).toBeDefined()
+  })
+})

@@ -131,3 +131,44 @@ describe('StudentRowEditor — Cancel', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 })
+
+describe('StudentRowEditor — Delete', () => {
+  it('renders a Delete button when onDelete is provided', () => {
+    render(<StudentRowEditor {...makeProps({ onDelete: vi.fn() })} />)
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
+  })
+
+  it('does NOT render a Delete button when onDelete is not provided', () => {
+    render(<StudentRowEditor {...makeProps()} />)
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
+  })
+
+  it('calls onDelete with the lwsId when the user confirms', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<StudentRowEditor {...makeProps({ onDelete })} />)
+    await user.click(screen.getByRole('button', { name: /delete/i }))
+    expect(onDelete).toHaveBeenCalledWith('LWS-001')
+  })
+
+  it('does NOT call onDelete when the user cancels the confirm', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<StudentRowEditor {...makeProps({ onDelete })} />)
+    await user.click(screen.getByRole('button', { name: /delete/i }))
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('confirm message mentions attendance and login history will be lost', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<StudentRowEditor {...makeProps({ name: 'Aarav Sharma', onDelete: vi.fn() })} />)
+    await user.click(screen.getByRole('button', { name: /delete/i }))
+    const message = confirmSpy.mock.calls[0][0]
+    expect(message).toMatch(/Aarav Sharma/)
+    expect(message).toMatch(/attendance/i)
+    expect(message).toMatch(/login/i)
+  })
+})

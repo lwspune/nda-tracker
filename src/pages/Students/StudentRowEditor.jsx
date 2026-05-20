@@ -4,12 +4,15 @@ import { useState } from 'react'
 // Mounted only in faculty mode; the StudentsTable hides the Edit button for teachers.
 // Keeps its own draft state until Save (calls onSave) or Cancel (discards).
 export default function StudentRowEditor({
+  lwsId,
+  name,
   branch:             initialBranch  = '',
   batches:            initialBatches = [],
   availableBranches   = [],
   availableBatches    = [],
   onSave,
   onCancel,
+  onDelete,
 }) {
   const [branch, setBranch]     = useState(initialBranch)
   const [batches, setBatches]   = useState(initialBatches)
@@ -32,6 +35,15 @@ export default function StudentRowEditor({
 
   function save() {
     onSave({ branch, batches })
+  }
+
+  function requestDelete() {
+    if (!onDelete) return
+    const msg = `Delete ${name || 'this student'}?\n\n`
+      + 'This will permanently remove their attendance history and login records. '
+      + 'Exam scores stay in the database but will become orphaned (not linked to any student).\n\n'
+      + 'This cannot be undone.'
+    if (window.confirm(msg)) onDelete(lwsId)
   }
 
   return (
@@ -104,7 +116,7 @@ export default function StudentRowEditor({
         </div>
       </div>
 
-      {/* Save / Cancel */}
+      {/* Save / Cancel / Delete */}
       <div className="flex md:flex-col gap-2 md:items-stretch justify-end">
         <button
           type="button"
@@ -120,6 +132,16 @@ export default function StudentRowEditor({
         >
           Cancel
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={requestDelete}
+            className="text-[12px] min-h-[36px] px-4 rounded-md border border-danger/40
+                       text-danger hover:bg-danger/10 transition-colors"
+          >
+            🗑 Delete
+          </button>
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 // Tests for StudentsPage (index.jsx).
-// The page renders a paginated, filterable table above; StudentView appears below
-// when a row is clicked (Pattern X — both visible at once).
+// The page renders a paginated, filterable table. When a row is clicked,
+// the table is REPLACED by the StudentView (only one of the two is visible at a time).
+// A "Back to list" button returns to the table.
 
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -81,22 +82,32 @@ describe('StudentsPage — table rendering', () => {
   })
 })
 
-// ── Pattern X — table + view both visible when student selected ───────────────
+// ── Active student replaces the table ────────────────────────────────────────
 
-describe('StudentsPage — Pattern X (table + view coexist)', () => {
-  it('renders BOTH the table and the StudentView when a student is active', () => {
+describe('StudentsPage — active student replaces the table', () => {
+  it('hides the table and renders only the StudentView when a student is active', () => {
     setStudentList([{ lws_id: 'LWS-001', canonical_name: 'Aarav', batches: [] }])
     setActiveStudent('Aarav')
     renderPage()
-    expect(screen.getByTestId('students-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('students-table')).not.toBeInTheDocument()
     expect(screen.getByTestId('student-view')).toHaveAttribute('data-name', 'Aarav')
   })
 
-  it('passes the active student into the table so it can highlight the row', () => {
+  it('shows a "Back to list" control when a student is active', () => {
     setStudentList([{ lws_id: 'LWS-001', canonical_name: 'Aarav', batches: [] }])
     setActiveStudent('Aarav')
     renderPage()
-    expect(screen.getByTestId('students-table')).toHaveAttribute('data-active', 'Aarav')
+    expect(screen.getByRole('button', { name: /back to list/i })).toBeInTheDocument()
+  })
+
+  it('Back to list button clears activeStudent via the store action', async () => {
+    setStudentList([{ lws_id: 'LWS-001', canonical_name: 'Aarav', batches: [] }])
+    setActiveStudent('Aarav')
+    renderPage()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /back to list/i }))
+    expect(mockStore.setActiveStudent).toHaveBeenCalledWith(null)
   })
 })
 

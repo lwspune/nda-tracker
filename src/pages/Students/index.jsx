@@ -14,6 +14,7 @@ export default function StudentsPage() {
   const activeStudent      = useStore(s => s.activeStudent)
   const setActiveStudent   = useStore(s => s.setActiveStudent)
   const updateBranchBatch  = useStore(s => s.updateStudentBranchBatch)
+  const deleteStudent      = useStore(s => s.deleteStudent)
 
   const mode = useMode()
   const isFaculty = mode === 'faculty'
@@ -82,6 +83,18 @@ export default function StudentsPage() {
           title="No students yet"
           sub="Import students or add an exam to get started"
         />
+      ) : activeStudent ? (
+        <>
+          <div className="mb-4">
+            <button
+              onClick={() => setActiveStudent(null)}
+              className="btn btn-secondary text-[12px] min-h-[36px]"
+            >
+              ← Back to list
+            </button>
+          </div>
+          <StudentView name={activeStudent} />
+        </>
       ) : (
         <StudentsTable
           students={students}
@@ -89,12 +102,10 @@ export default function StudentsPage() {
           activeStudent={activeStudent}
           onSelect={setActiveStudent}
           onEdit={(lwsId, name, patch) => updateBranchBatch(lwsId, name, patch)}
+          onDelete={isFaculty ? (lwsId) => deleteStudent(lwsId) : undefined}
           isFaculty={isFaculty}
         />
       )}
-
-      {/* Detail view appears below the table — Pattern X */}
-      {activeStudent && <StudentView name={activeStudent} />}
 
       {importOpen && <ImportStudentsModal onClose={() => setImportOpen(false)} />}
       {manageOpen && <ManageBatchBranchModal onClose={() => setManageOpen(false)} />}

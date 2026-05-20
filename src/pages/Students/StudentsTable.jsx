@@ -34,6 +34,7 @@ export default function StudentsTable({
   activeStudent = null,
   onSelect,
   onEdit,
+  onDelete,
   isFaculty = false,
 }) {
   const [search, setSearch]         = useState('')
@@ -235,6 +236,10 @@ export default function StudentsTable({
                             setEditingId(null)
                           }}
                           onCancel={() => setEditingId(null)}
+                          onDelete={onDelete ? (lwsId) => {
+                            onDelete(lwsId)
+                            setEditingId(null)
+                          } : undefined}
                         />
                       </td>
                     </tr>
