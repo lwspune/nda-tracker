@@ -1,16 +1,91 @@
-# React + Vite
+# NDA Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An internal faculty tool for tracking NDA (National Defence Academy entrance exam) coaching performance. Faculty upload OMR-scanned exam results, tag questions with chapter and subtopic metadata, and analyse student performance across exams, chapters, and time. Teachers and students access read-only views of the same data through dedicated portals.
 
-Currently, two official plugins are available:
+Production: `nda-tracker.vercel.app`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Documentation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| File | Purpose |
+|---|---|
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Narrative onboarding for new contributors. Read first. |
+| [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md) | Column-level Supabase schema reference. |
+| [`OPERATIONS.md`](./OPERATIONS.md) | Triage runbook for known production failure modes. |
+| [`SECURITY.md`](./SECURITY.md) | Auth model, RLS policies, PII handling, secret management. |
+| [`CLAUDE.md`](./CLAUDE.md) | Operational reference: commands, conventions, decisions log, "what not to change". |
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Quick start
+
+```bash
+npm install
+npm run dev          # Vite dev server on localhost:5173 (faculty mode, writes to data/faculty-data.json)
+npm run test         # Vitest single pass
+npm run test:watch
+npm run lint
+```
+
+The dev server is faculty mode by default. Mock data lives in `data/faculty-data.json` (gitignored). To work against production Supabase, set the env vars listed below and visit the deployed URL.
+
+---
+
+## Tech stack
+
+- React 19 + Vite 8 (single-page app, no SSR)
+- Tailwind CSS 3
+- Zustand 5 (state — sliced under `src/store/slices/`)
+- Supabase (Postgres + Auth, 10 tables — see `DATABASE_SCHEMA.md`)
+- Vitest 4 + React Testing Library 16 (601 tests)
+- Vercel serverless functions for student login + WhatsApp send + dev data file proxy
+- Python for OMR-result delivery scripts (`send_results_whatsapp.py`, `send_schedule.py`)
+
+---
+
+## Environment
+
+The app runs without Supabase env vars (returns a null client; dev mode uses the local JSON file). For production behaviour:
+
+| Variable | Where it lives | Used by |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Vercel dashboard | Browser client |
+| `VITE_SUPABASE_ANON_KEY` | Vercel dashboard | Browser client |
+| `SUPABASE_SERVICE_ROLE_KEY` | Local shell (one-off scripts only) | `migrate_*.js`, `sync_*.js`, `create_teacher_account.js` |
+| `WABRIDGE_*` | `.env.local` / Vercel | `api/send-whatsapp.js`, `send_results_whatsapp.py` |
+| Gmail SMTP creds | `.env.local` | `send_schedule.py` |
+
+Never commit secrets. See `SECURITY.md` for the full secret-management policy.
+
+---
+
+## Running tests
+
+```bash
+npm run test                              # all tests
+npx vitest run src/lib/analytics          # one directory
+npx vitest run --reporter=verbose         # detailed output
+```
+
+Python tests:
+
+```bash
+pip install pytest tzdata
+pytest tests/
+```
+
+---
+
+## Deployment
+
+- **Production:** every push to `main` triggers a Vercel deploy. No staging environment.
+- **GitHub Pages (legacy):** `npm run deploy` builds with `--base=/nda-tracker/` and pushes to `gh-pages`. The static site loads but student/teacher login does not work without serverless functions. Direct users to the Vercel URL.
+
+See `OPERATIONS.md` for triage steps when a deploy breaks.
+
+---
+
+## License
+
+Private / internal. No external license granted.

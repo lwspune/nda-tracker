@@ -1,5 +1,7 @@
 # NDA Maths Tracker — CLAUDE.md
 
+> **Companion docs:** [`README.md`](./README.md) — public-facing entry point and quick start. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — narrative onboarding for new contributors. [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md) — column-level schema reference. [`OPERATIONS.md`](./OPERATIONS.md) — production triage runbook. [`SECURITY.md`](./SECURITY.md) — auth model, RLS, PII handling, secret management. This file is the operational reference for daily work (commands, conventions, decisions log, "what not to change").
+
 ## Project overview
 
 A React + Vite faculty tool for LWS Pune to track NDA Maths exam performance.
@@ -55,6 +57,9 @@ npm run lint
 ## Architecture decisions
 
 ### Data persistence
+
+> **Column-level schema reference:** see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). This section covers *behaviour* (load/save paths, what's normalised); the schema file covers *shape* (types, defaults, constraints, RLS).
+
 - **Dev**: `data/faculty-data.json` via `POST /api/data` (Vite `localDataPlugin`). Bypasses 5 MB localStorage limit.
 - **Prod online faculty** (Vercel): Four Supabase stores:
   - `faculty_state` JSONB row (`id=1`) — syllabus, timetable, cost log, etc. (exams removed Phase 5; savedInsights removed Phase 6). Fire-and-forget saves via `saveToSupabase` (session-gated). `saveToSupabase` strips both `exams` and `savedInsights` before writing.
@@ -284,7 +289,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **546 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **601 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
