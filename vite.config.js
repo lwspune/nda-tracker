@@ -179,6 +179,15 @@ function localDataPlugin() {
 
 export default defineConfig({
   plugins: [react(), localDataPlugin()],
+  resolve: {
+    alias: {
+      // xlsx probes `require('stream')` at module init to enable optional
+      // streaming. Vite 8 externalises `stream` for the browser and the stub
+      // throws on property access (`.Readable`), crashing the bundle at startup.
+      // Alias to an empty module so the optional check short-circuits.
+      stream: resolve('./src/stubs/empty.js'),
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
