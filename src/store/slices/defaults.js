@@ -23,6 +23,7 @@ export const DEFAULTS = {
   timetableMappings: [],
   timetables: [],
   whatsappSendHistory: {},
+  branches: [],
 }
 
 // Merge saved data with defaults (handles missing keys from old versions)
@@ -47,5 +48,17 @@ export function hydrate() {
     timetableTeachers:       saved.timetableTeachers || [],
     timetableMappings:       saved.timetableMappings || [],
     timetables:              saved.timetables || [],
+    branches:                seedBranches(saved),
   }
+}
+
+// First-load seed for the canonical branches[] list: union of branch values
+// already present on timetables and in syllabusBatchBranches. After the
+// first save the user-managed `branches[]` is authoritative — this seed
+// only runs while the field is empty.
+export function seedBranches(saved) {
+  if (saved?.branches?.length) return saved.branches
+  const fromTimetables = (saved?.timetables || []).map(t => t.branch).filter(Boolean)
+  const fromSyllabus   = Object.values(saved?.syllabusBatchBranches || {}).filter(Boolean)
+  return [...new Set([...fromTimetables, ...fromSyllabus])]
 }

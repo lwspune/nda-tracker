@@ -17,8 +17,8 @@ export default function SyllabusPage() {
   const syllabusBatchBranches   = useStore(s => s.syllabusBatchBranches)
   const timetables              = useStore(s => s.timetables)
   const addSyllabusBatch        = useStore(s => s.addSyllabusBatch)
-  const renameSyllabusBatch     = useStore(s => s.renameSyllabusBatch)
-  const deleteSyllabusBatch     = useStore(s => s.deleteSyllabusBatch)
+  const renameBatch             = useStore(s => s.renameBatch)
+  const deleteBatch             = useStore(s => s.deleteBatch)
   const setSyllabusBatchBranch  = useStore(s => s.setSyllabusBatchBranch)
 
   // Branch names sourced from timetables (same source as TimetablePage / ExamScheduleView)
@@ -105,7 +105,7 @@ export default function SyllabusPage() {
   }
 
   function handleRenameConfirm(oldName) {
-    renameSyllabusBatch(oldName, renameValue)
+    renameBatch(oldName, renameValue)
     if (selectedBatch === oldName) setSelectedBatch(renameValue.trim() || oldName)
     setRenamingBatch(null)
   }
@@ -113,7 +113,13 @@ export default function SyllabusPage() {
   function handleDelete(name) {
     const hasProgress = !!batchProgramAssignments[name]?.length
     if (hasProgress && !window.confirm(`Delete batch "${name}"? This will remove all program assignments and progress for this batch.`)) return
-    deleteSyllabusBatch(name)
+    const result = deleteBatch(name)
+    if (!result.ok) {
+      const parts = []
+      if (result.usage.timetableCount)    parts.push(`${result.usage.timetableCount} timetable${result.usage.timetableCount > 1 ? 's' : ''}`)
+      if (result.usage.examScheduleCount) parts.push(`${result.usage.examScheduleCount} exam schedule${result.usage.examScheduleCount > 1 ? 's' : ''}`)
+      window.alert(`Cannot delete "${name}" — still in use by ${parts.join(' and ')}.\n\nDelete those first from the Timetable page (or use Settings → Batches).`)
+    }
     setBatchMenuOpen(null)
   }
 

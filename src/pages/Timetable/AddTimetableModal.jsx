@@ -2,28 +2,29 @@ import { useState } from 'react'
 import useStore from '../../store/useStore'
 import ModalShell from './ModalShell'
 
-const PRESET_BRANCHES = ['APJ', 'LWS Pune']
-
 export default function AddTimetableModal({ timetable, onClose }) {
   const timetables          = useStore(s => s.timetables)
+  const storeBranches       = useStore(s => s.branches)
   const addTimetable        = useStore(s => s.addTimetable)
   const updateTimetable     = useStore(s => s.updateTimetable)
   const renameTimetableBatch = useStore(s => s.renameTimetableBatch)
   const deleteTimetable     = useStore(s => s.deleteTimetable)
 
-  // Collect branches already in use
-  const existingBranches = [...new Set(timetables.map(t => t.branch))]
-  const branchOptions = [...new Set([...PRESET_BRANCHES, ...existingBranches])]
+  // Branch options: central list, plus any timetable branch already in use
+  // (defensive — if a timetable refers to a branch not yet in branches[]
+  // it should still appear so the user can edit through it).
+  const existingBranches = [...new Set(timetables.map(t => t.branch).filter(Boolean))]
+  const branchOptions = [...new Set([...storeBranches, ...existingBranches])]
 
   const isEdit = !!timetable
 
-  const [branch, setBranch]       = useState(timetable?.branch ?? PRESET_BRANCHES[0])
+  const [branch, setBranch]       = useState(timetable?.branch ?? branchOptions[0] ?? '')
   const [customBranch, setCustomBranch] = useState(
-    timetable?.branch && !PRESET_BRANCHES.includes(timetable.branch) ? timetable.branch : ''
+    timetable?.branch && !branchOptions.includes(timetable.branch) ? timetable.branch : ''
   )
   const [batchName, setBatchName] = useState(timetable?.batchName ?? '')
   const [useCustom, setUseCustom] = useState(
-    !!(timetable?.branch && !PRESET_BRANCHES.includes(timetable.branch))
+    !!(timetable?.branch && !branchOptions.includes(timetable.branch))
   )
 
   const effectiveBranch = useCustom ? customBranch.trim() : branch

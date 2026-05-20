@@ -3,7 +3,7 @@ import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fet
 import { supabase } from '../lib/supabase'
 import { IS_READ_ONLY } from '../config'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
-import { DEFAULTS, hydrate } from './slices/defaults'
+import { DEFAULTS, hydrate, seedBranches } from './slices/defaults'
 import { createExamsSlice } from './slices/examsSlice'
 import { createStudentSlice } from './slices/studentSlice'
 import { createInsightsSlice } from './slices/insightsSlice'
@@ -11,6 +11,7 @@ import { createNdaSlice } from './slices/ndaSlice'
 import { createSyllabusSlice } from './slices/syllabusSlice'
 import { createTimetableSlice } from './slices/timetableSlice'
 import { createAttendanceSlice } from './slices/attendanceSlice'
+import { createConfigSlice } from './slices/configSlice'
 
 const useStore = create((set, get) => ({
   // ── Data state ────────────────────────────────────────────
@@ -59,6 +60,7 @@ const useStore = create((set, get) => ({
               timetableMappings:       saved.timetableMappings || [],
               timetables:              saved.timetables || [],
               examSchedules:           saved.examSchedules || [],
+              branches:                seedBranches(saved),
               hydrated: true,
             })
             // Load fresh data from normalised Supabase tables.
@@ -113,6 +115,7 @@ const useStore = create((set, get) => ({
         timetableMappings:       saved.timetableMappings || [],
         timetables:              saved.timetables || [],
         examSchedules:           saved.examSchedules || [],
+        branches:                seedBranches(saved),
         hydrated: true,
       })
     } else {
@@ -185,6 +188,7 @@ const useStore = create((set, get) => ({
       timetableMappings:       data.timetableMappings || [],
       timetables:              data.timetables || [],
       examSchedules:           data.examSchedules || [],
+      branches:                seedBranches(data),
     })
   },
 
@@ -221,6 +225,7 @@ const useStore = create((set, get) => ({
   ...createSyllabusSlice(set, get),
   ...createTimetableSlice(set, get),
   ...createAttendanceSlice(set, get),
+  ...createConfigSlice(set, get),
 }))
 
 export default useStore

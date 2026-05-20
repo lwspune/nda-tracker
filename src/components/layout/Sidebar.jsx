@@ -13,6 +13,7 @@ const NAV = [
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
   { id: 'insights',  icon: '🧠', label: 'Insights', adminOnly: true },
   { id: 'costs',     icon: '💰', label: 'API Costs', adminOnly: true },
+  { id: 'settings',  icon: '⚙', label: 'Settings', adminOnly: true },
 ]
 
 // Returns true if exams exist that post-date the last deploy run.
