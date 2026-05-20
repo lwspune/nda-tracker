@@ -82,6 +82,25 @@ export const createConfigSlice = (set, get) => ({
   },
 
   // ── Unified batch CRUD ──────────────────────────────────────
+
+  // Create a batch with a mandatory branch. Returns
+  //   { ok: true, name }
+  //   { ok: false, reason: 'name_required' | 'branch_required' | 'unknown_branch' | 'duplicate_name' }
+  // The branch must already exist in branches[] — add the branch first if not.
+  addBatch(name, branch) {
+    const trimmed = (name ?? '').trim()
+    const branchValue = (branch ?? '').trim()
+    if (!trimmed)      return { ok: false, reason: 'name_required' }
+    if (!branchValue)  return { ok: false, reason: 'branch_required' }
+    const s = get()
+    if (!s.branches.includes(branchValue)) return { ok: false, reason: 'unknown_branch' }
+    if (s.syllabusBatches.includes(trimmed)) return { ok: false, reason: 'duplicate_name' }
+    if (s.timetables.some(t => t.batchName === trimmed)) return { ok: false, reason: 'duplicate_name' }
+    get().addSyllabusBatch(trimmed)
+    get().setSyllabusBatchBranch(trimmed, branchValue)
+    return { ok: true, name: trimmed }
+  },
+
   // Delegate to both syllabus + timetable rename actions so the two stores
   // can't diverge after a rename through this path. Either side may be
   // empty for the given oldName — each delegate is independently no-op-safe.

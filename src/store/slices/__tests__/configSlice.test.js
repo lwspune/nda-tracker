@@ -187,6 +187,64 @@ describe('deleteBranch', () => {
 })
 
 // ── Unified batch CRUD ───────────────────────────────────────────────────────
+describe('addBatch', () => {
+  it('creates syllabus entry + branch mapping in one call', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    const result = slice.addBatch('APJ_12th', 'APJ')
+    expect(result.ok).toBe(true)
+    expect(get().syllabusBatches).toEqual(['APJ_12th'])
+    expect(get().syllabusBatchBranches).toEqual({ 'APJ_12th': 'APJ' })
+  })
+
+  it('rejects empty name', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    const result = slice.addBatch('   ', 'APJ')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('name_required')
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  it('rejects empty branch', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    const result = slice.addBatch('X', '')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('branch_required')
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  it('rejects branch not in branches[]', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    const result = slice.addBatch('X', 'MissingBranch')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('unknown_branch')
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  it('rejects duplicate name (already in syllabusBatches)', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'], syllabusBatches: ['X'] })
+    const result = slice.addBatch('X', 'APJ')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('duplicate_name')
+    expect(get().syllabusBatches).toEqual(['X'])
+  })
+
+  it('rejects duplicate name (already a timetable batchName)', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    slice.addTimetable('APJ', 'X')
+    const result = slice.addBatch('X', 'APJ')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('duplicate_name')
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  it('trims whitespace', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    slice.addBatch('  Y  ', 'APJ')
+    expect(get().syllabusBatches).toEqual(['Y'])
+    expect(get().syllabusBatchBranches['Y']).toBe('APJ')
+  })
+})
+
 describe('renameBatch', () => {
   it('renames in both syllabusBatches[] and timetables[].batchName', () => {
     const { get, slice } = makeStore()

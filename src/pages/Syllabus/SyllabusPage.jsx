@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
@@ -7,6 +7,9 @@ import ManageProgramModal from './ManageProgramModal'
 import ManageSubjectModal from './ManageSubjectModal'
 import AssignProgramsModal from './AssignProgramsModal'
 
+// Batch CRUD lives in Settings → Batches (since 2026-05-20). This page
+// renders syllabus progress for a selected batch — view-only on the batch
+// list itself, edit on the per-batch program assignments and chapter status.
 export default function SyllabusPage() {
   const mode      = useMode()
   const isAdmin = mode === 'admin'
@@ -15,14 +18,7 @@ export default function SyllabusPage() {
   const batchProgramAssignments = useStore(s => s.batchProgramAssignments)
   const syllabusBatches         = useStore(s => s.syllabusBatches)
   const syllabusBatchBranches   = useStore(s => s.syllabusBatchBranches)
-  const timetables              = useStore(s => s.timetables)
-  const addSyllabusBatch        = useStore(s => s.addSyllabusBatch)
-  const renameBatch             = useStore(s => s.renameBatch)
-  const deleteBatch             = useStore(s => s.deleteBatch)
-  const setSyllabusBatchBranch  = useStore(s => s.setSyllabusBatchBranch)
-
-  // Branch names sourced from timetables (same source as TimetablePage / ExamScheduleView)
-  const branches = [...new Set(timetables.map(t => t.branch))].sort()
+  const branches                = useStore(s => s.branches)
 
   const [selectedBranch, setSelectedBranch]         = useState(null) // null = All
   const [selectedBatch, setSelectedBatch]           = useState(() => syllabusBatches[0] ?? '')
@@ -31,48 +27,10 @@ export default function SyllabusPage() {
   const [manageSubject, setManageSubject]           = useState(null)
   const [assignOpen, setAssignOpen]                 = useState(false)
 
-  // Batch add state
-  const [addingBatch, setAddingBatch]       = useState(false)
-  const [newBatchName, setNewBatchName]     = useState('')
-  const [newBatchBranch, setNewBatchBranch] = useState('')
-
-  // Batch rename state
-  const [renamingBatch, setRenamingBatch] = useState(null)
-  const [renameValue, setRenameValue]     = useState('')
-
-  // Batch menu + branch picker
-  const [batchMenuOpen, setBatchMenuOpen]       = useState(null)
-  const [settingBranchFor, setSettingBranchFor] = useState(null)
-  const menuRef = useRef(null)
-
   // Batches visible under the current branch filter
   const visibleBatches = selectedBranch
     ? syllabusBatches.filter(b => syllabusBatchBranches[b] === selectedBranch)
     : syllabusBatches
-
-  // Close batch menu on outside click
-  useEffect(() => {
-    if (!batchMenuOpen) return
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setBatchMenuOpen(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [batchMenuOpen])
-
-  // Close branch picker on outside click
-  useEffect(() => {
-    if (!settingBranchFor) return
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setSettingBranchFor(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [settingBranchFor])
 
   // Auto-select first visible batch when filter changes and current selection disappears
   useEffect(() => {
@@ -91,37 +49,6 @@ export default function SyllabusPage() {
     : assignedPrograms[0]?.id ?? null
 
   const activeProgram = syllabusPrograms.find(p => p.id === activeProgramId) ?? null
-
-  function handleAddBatch() {
-    const name = newBatchName.trim()
-    if (!name) return
-    addSyllabusBatch(name)
-    const branch = selectedBranch || newBatchBranch || null
-    if (branch) setSyllabusBatchBranch(name, branch)
-    setSelectedBatch(name)
-    setNewBatchName('')
-    setNewBatchBranch('')
-    setAddingBatch(false)
-  }
-
-  function handleRenameConfirm(oldName) {
-    renameBatch(oldName, renameValue)
-    if (selectedBatch === oldName) setSelectedBatch(renameValue.trim() || oldName)
-    setRenamingBatch(null)
-  }
-
-  function handleDelete(name) {
-    const hasProgress = !!batchProgramAssignments[name]?.length
-    if (hasProgress && !window.confirm(`Delete batch "${name}"? This will remove all program assignments and progress for this batch.`)) return
-    const result = deleteBatch(name)
-    if (!result.ok) {
-      const parts = []
-      if (result.usage.timetableCount)    parts.push(`${result.usage.timetableCount} timetable${result.usage.timetableCount > 1 ? 's' : ''}`)
-      if (result.usage.examScheduleCount) parts.push(`${result.usage.examScheduleCount} exam schedule${result.usage.examScheduleCount > 1 ? 's' : ''}`)
-      window.alert(`Cannot delete "${name}" — still in use by ${parts.join(' and ')}.\n\nDelete those first from the Timetable page (or use Settings → Batches).`)
-    }
-    setBatchMenuOpen(null)
-  }
 
   return (
     <div>
@@ -168,165 +95,30 @@ export default function SyllabusPage() {
         </div>
       )}
 
-      {/* Batch selector */}
+      {/* Batch selector — view only. CRUD lives in Settings → Batches. */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <label className="text-[12px] text-ink-3 font-semibold uppercase tracking-wide">Batch</label>
 
-        {visibleBatches.length === 0 && !addingBatch ? (
+        {visibleBatches.length === 0 ? (
           <span className="text-[12px] text-ink-3 italic">
             {selectedBranch ? `No batches for ${selectedBranch}.` : 'No batches yet.'}
-            {isAdmin && ' Add one below.'}
+            {isAdmin && ' Add one in Settings → Batches.'}
           </span>
         ) : (
           <div className="flex flex-wrap gap-2 items-center">
             {visibleBatches.map(b => (
-              <div
-                key={b}
-                className="relative flex items-center gap-0.5"
-                ref={(batchMenuOpen === b || settingBranchFor === b) ? menuRef : null}
-              >
-                {renamingBatch === b ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      autoFocus
-                      className="input text-[12px] py-1 px-2 w-36"
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter')  handleRenameConfirm(b)
-                        if (e.key === 'Escape') setRenamingBatch(null)
-                      }}
-                    />
-                    <button
-                      className="text-[11px] px-1.5 py-0.5 rounded bg-accent text-white"
-                      onClick={() => handleRenameConfirm(b)}
-                    >✓</button>
-                    <button
-                      className="text-[11px] px-1.5 py-0.5 rounded border border-border text-ink-3"
-                      onClick={() => setRenamingBatch(null)}
-                    >✕</button>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { setSelectedBatch(b); setSelectedProgramId(null) }}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
-                        b === selectedBatch
-                          ? 'bg-accent text-white border-accent'
-                          : 'bg-surface border-border text-ink-2 hover:border-accent/50'
-                      }`}
-                    >
-                      {b}
-                    </button>
-                    {isAdmin && (
-                      <button
-                        className="p-0.5 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[11px] leading-none transition-colors"
-                        onClick={() => setBatchMenuOpen(batchMenuOpen === b ? null : b)}
-                        title="Batch options"
-                      >⋯</button>
-                    )}
-
-                    {/* Batch ⋯ menu */}
-                    {isAdmin && batchMenuOpen === b && (
-                      <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 min-w-[130px]">
-                        <button
-                          className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-2 transition-colors"
-                          onClick={() => { setRenamingBatch(b); setRenameValue(b); setBatchMenuOpen(null) }}
-                        >Rename</button>
-                        {branches.length > 0 && (
-                          <button
-                            className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-2 transition-colors"
-                            onClick={() => { setSettingBranchFor(b); setBatchMenuOpen(null) }}
-                          >Set branch</button>
-                        )}
-                        <button
-                          className="w-full text-left px-3 py-1.5 text-[12px] text-red-500 hover:bg-surface-2 transition-colors"
-                          onClick={() => handleDelete(b)}
-                        >Delete</button>
-                      </div>
-                    )}
-
-                    {/* Branch picker popover */}
-                    {isAdmin && settingBranchFor === b && (
-                      <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg z-50 py-1 min-w-[130px]">
-                        <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-3 border-b border-border mb-1">Set branch</div>
-                        {branches.map(br => (
-                          <button
-                            key={br}
-                            className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-2 transition-colors flex items-center gap-2 ${syllabusBatchBranches[b] === br ? 'text-accent font-semibold' : ''}`}
-                            onClick={() => { setSyllabusBatchBranch(b, br); setSettingBranchFor(null) }}
-                          >
-                            <span className="w-3">{syllabusBatchBranches[b] === br ? '✓' : ''}</span>
-                            {br}
-                          </button>
-                        ))}
-                        {syllabusBatchBranches[b] && (
-                          <button
-                            className="w-full text-left px-3 py-1.5 text-[12px] text-ink-3 hover:bg-surface-2 transition-colors border-t border-border mt-1"
-                            onClick={() => { setSyllabusBatchBranch(b, null); setSettingBranchFor(null) }}
-                          >Clear branch</button>
-                        )}
-                        <button
-                          className="w-full text-left px-3 py-1.5 text-[12px] text-ink-3 hover:bg-surface-2 transition-colors"
-                          onClick={() => setSettingBranchFor(null)}
-                        >Cancel</button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-
-            {/* Add batch */}
-            {isAdmin && !addingBatch && (
               <button
-                className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
-                onClick={() => setAddingBatch(true)}
-              >+ Add batch</button>
-            )}
-          </div>
-        )}
-
-        {isAdmin && !addingBatch && visibleBatches.length === 0 && (
-          <button
-            className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
-            onClick={() => setAddingBatch(true)}
-          >+ Add batch</button>
-        )}
-
-        {isAdmin && addingBatch && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <input
-              autoFocus
-              className="input text-[12px] py-1 px-2 w-44"
-              placeholder="e.g. LWS 2Y 26-28"
-              value={newBatchName}
-              onChange={e => setNewBatchName(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter')  handleAddBatch()
-                if (e.key === 'Escape') { setAddingBatch(false); setNewBatchName(''); setNewBatchBranch('') }
-              }}
-            />
-            {/* Branch selector in add form — only when no branch filter is active */}
-            {!selectedBranch && branches.length > 0 && (
-              <select
-                className="input text-[12px] py-1 px-2"
-                value={newBatchBranch}
-                onChange={e => setNewBatchBranch(e.target.value)}
+                key={b}
+                onClick={() => { setSelectedBatch(b); setSelectedProgramId(null) }}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
+                  b === selectedBatch
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-surface border-border text-ink-2 hover:border-accent/50'
+                }`}
               >
-                <option value="">No branch</option>
-                {branches.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-            )}
-            <button
-              className="text-[11px] px-2 py-1 rounded bg-accent text-white disabled:opacity-40"
-              onClick={handleAddBatch}
-              disabled={!newBatchName.trim()}
-            >Add</button>
-            <button
-              className="text-[11px] px-2 py-1 rounded border border-border text-ink-3"
-              onClick={() => { setAddingBatch(false); setNewBatchName(''); setNewBatchBranch('') }}
-            >Cancel</button>
+                {b}
+              </button>
+            ))}
           </div>
         )}
       </div>

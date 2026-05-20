@@ -6,7 +6,6 @@ import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
-import ManageTeachersModal from './ManageTeachersModal'
 import ManageMappingsModal from './ManageMappingsModal'
 import AddTimetableModal from './AddTimetableModal'
 import AddSlotModal from './AddSlotModal'
@@ -202,7 +201,6 @@ export default function TimetablePage() {
 
   const gridRef = useRef(null)
 
-  const [teachersModalOpen, setTeachersModalOpen]   = useState(false)
   const [mappingsModalOpen, setMappingsModalOpen]   = useState(false)
   const [addTTModal, setAddTTModal]                 = useState(null)
   const [editCell, setEditCell]                     = useState(null)
@@ -345,9 +343,6 @@ export default function TimetablePage() {
         }
         actions={isAdmin && (
           <div className="flex gap-2 flex-wrap">
-            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={() => setTeachersModalOpen(true)}>
-              Teachers
-            </button>
             <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={() => setMappingsModalOpen(true)}>
               Mappings
             </button>
@@ -644,7 +639,6 @@ export default function TimetablePage() {
       {view === 'exam' && <ExamScheduleView />}
 
       {/* ── Modals ───────────────────────────────────────── */}
-      {teachersModalOpen && <ManageTeachersModal onClose={() => setTeachersModalOpen(false)} />}
       {mappingsModalOpen && <ManageMappingsModal onClose={() => setMappingsModalOpen(false)} />}
       {addTTModal && (
         <AddTimetableModal

@@ -2,25 +2,31 @@ import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { Card } from '../../components/ui'
 
+const REASON_LABELS = {
+  name_required:   'Name is required.',
+  branch_required: 'Branch is required.',
+  unknown_branch:  'Branch is not in the central branch list.',
+  duplicate_name:  'A batch with this name already exists.',
+}
+
 export default function BatchesTab() {
   const syllabusBatches       = useStore(s => s.syllabusBatches)
   const syllabusBatchBranches = useStore(s => s.syllabusBatchBranches)
   const batchProgramAssignments = useStore(s => s.batchProgramAssignments)
   const timetables            = useStore(s => s.timetables)
   const branches              = useStore(s => s.branches)
-  const addSyllabusBatch      = useStore(s => s.addSyllabusBatch)
+  const addBatch              = useStore(s => s.addBatch)
   const renameBatch           = useStore(s => s.renameBatch)
   const deleteBatch           = useStore(s => s.deleteBatch)
   const batchInUseBy          = useStore(s => s.batchInUseBy)
   const setSyllabusBatchBranch = useStore(s => s.setSyllabusBatchBranch)
 
   const [newName, setNewName] = useState('')
-  const [newBranch, setNewBranch] = useState('')
+  const [newBranch, setNewBranch] = useState(branches[0] ?? '')
   const [editing, setEditing] = useState(null)
   const [error, setError]     = useState('')
 
-  // Union of names from both stores — usually they match (post-unification),
-  // but we union so drift is visible to the admin.
+  // Union of names from both stores so drift is visible to the admin.
   const allBatches = useMemo(() => {
     return [...new Set([
       ...syllabusBatches,
@@ -29,13 +35,12 @@ export default function BatchesTab() {
   }, [syllabusBatches, timetables])
 
   function handleAdd() {
-    const name = newName.trim()
-    if (!name) return
-    if (allBatches.includes(name)) { setError(`"${name}" already exists`); return }
-    addSyllabusBatch(name)
-    if (newBranch) setSyllabusBatchBranch(name, newBranch)
+    const result = addBatch(newName, newBranch)
+    if (!result.ok) {
+      setError(REASON_LABELS[result.reason] ?? 'Could not add batch.')
+      return
+    }
     setNewName('')
-    setNewBranch('')
     setError('')
   }
 
@@ -54,46 +59,57 @@ export default function BatchesTab() {
       const parts = []
       if (result.usage.timetableCount)    parts.push(`${result.usage.timetableCount} timetable${result.usage.timetableCount > 1 ? 's' : ''}`)
       if (result.usage.examScheduleCount) parts.push(`${result.usage.examScheduleCount} exam schedule${result.usage.examScheduleCount > 1 ? 's' : ''}`)
-      window.alert(`Cannot delete "${name}" — still in use by ${parts.join(', ')}.\n\nDelete the timetable(s) and exam schedule(s) first.`)
+      window.alert(`Cannot delete "${name}" — still in use by ${parts.join(' and ')}.\n\nDelete the timetable(s) and exam schedule(s) first.`)
     }
   }
 
+  function handleSetBranch(name, branch) {
+    setSyllabusBatchBranch(name, branch || null)
+  }
+
   function rowMeta(name) {
-    const inSyllabus = syllabusBatches.includes(name)
-    const ttCount    = timetables.filter(t => t.batchName === name).length
-    const branch     = syllabusBatchBranches[name] ?? null
+    const inSyllabus   = syllabusBatches.includes(name)
+    const ttCount      = timetables.filter(t => t.batchName === name).length
+    const branch       = syllabusBatchBranches[name] ?? null
     const programCount = (batchProgramAssignments[name] ?? []).length
     return { inSyllabus, ttCount, branch, programCount }
   }
+
+  const branchesEmpty = branches.length === 0
 
   return (
     <div className="space-y-4">
       <Card>
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">Add batch</div>
-        <div className="flex gap-2 mb-2">
-          <input
-            className="input flex-1 text-[13px]"
-            placeholder="e.g. LWS_NDA_2Y_(26-28)_C"
-            value={newName}
-            onChange={e => { setNewName(e.target.value); setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          />
-          <select
-            className="input text-[13px] min-w-[140px]"
-            value={newBranch}
-            onChange={e => setNewBranch(e.target.value)}
-          >
-            <option value="">No branch</option>
-            {branches.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <button
-            className="btn btn-primary px-4 text-[12px] min-h-[36px] disabled:opacity-40"
-            onClick={handleAdd}
-            disabled={!newName.trim()}
-          >Add</button>
-        </div>
-        <p className="text-[11px] text-ink-3">Creates a syllabus entry. Add a timetable separately from the Timetable page when classes start.</p>
-        {error && <div className="text-[12px] text-red-500 mt-2">{error}</div>}
+        {branchesEmpty ? (
+          <p className="text-[13px] text-amber-600 italic">Add at least one branch first (Branches tab).</p>
+        ) : (
+          <>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1 text-[13px]"
+                placeholder="e.g. LWS_NDA_2Y_(26-28)_C"
+                value={newName}
+                onChange={e => { setNewName(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              />
+              <select
+                className="input text-[13px] min-w-[140px]"
+                value={newBranch}
+                onChange={e => setNewBranch(e.target.value)}
+              >
+                {branches.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <button
+                className="btn btn-primary px-4 text-[12px] min-h-[36px] disabled:opacity-40"
+                onClick={handleAdd}
+                disabled={!newName.trim() || !newBranch}
+              >Add</button>
+            </div>
+            <p className="text-[11px] text-ink-3">Every batch must have a branch. Creates the syllabus entry; add a timetable later from the Timetable page when classes start.</p>
+            {error && <div className="text-[12px] text-red-500 mt-2">{error}</div>}
+          </>
+        )}
       </Card>
 
       <Card>
@@ -107,7 +123,7 @@ export default function BatchesTab() {
             {allBatches.map(b => {
               const meta = rowMeta(b)
               const usage = batchInUseBy(b)
-              const isDriftEditing = !meta.inSyllabus  // exists only in timetables
+              const branchMissing = meta.inSyllabus && !meta.branch
               return (
                 <div key={b} className="py-2.5 flex items-center gap-3 group">
                   {editing?.oldName === b ? (
@@ -128,12 +144,12 @@ export default function BatchesTab() {
                   ) : (
                     <>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[14px] font-medium flex items-center gap-2">
-                          {b}
-                          {meta.branch && (
-                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-ink-3">{meta.branch}</span>
+                        <div className="text-[14px] font-medium flex items-center gap-2 flex-wrap">
+                          <span>{b}</span>
+                          {branchMissing && (
+                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-50 text-red-700">no branch</span>
                           )}
-                          {isDriftEditing && (
+                          {!meta.inSyllabus && (
                             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Exists only in timetables — no syllabus entry">timetable-only</span>
                           )}
                         </div>
@@ -145,6 +161,17 @@ export default function BatchesTab() {
                           {meta.programCount} program{meta.programCount !== 1 ? 's' : ''}
                         </div>
                       </div>
+                      {meta.inSyllabus && (
+                        <select
+                          className="input text-[12px] py-1 min-w-[120px]"
+                          value={meta.branch ?? ''}
+                          onChange={e => handleSetBranch(b, e.target.value)}
+                          aria-label={`Branch for ${b}`}
+                        >
+                          {!meta.branch && <option value="">— pick branch —</option>}
+                          {branches.map(br => <option key={br} value={br}>{br}</option>)}
+                        </select>
+                      )}
                       <button
                         className="text-[12px] text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded hover:bg-surface-2"
                         onClick={() => setEditing({ oldName: b, draft: b })}
@@ -167,7 +194,7 @@ export default function BatchesTab() {
       <Card>
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">About</div>
         <p className="text-[12px] text-ink-3 leading-relaxed">
-          A batch name lives in two places — the syllabus tracker and the timetable. Renaming here updates both at once, so they can't drift.
+          Every batch must belong to a branch. Renaming here updates the syllabus and timetable in one step so they can't drift.
           Deleting requires you to remove the timetable and any exam schedules first.
           The <code className="px-1 py-0.5 rounded bg-surface-2 text-ink-2">batches</code> field on student profiles is a separate list maintained from the Students page.
         </p>
