@@ -128,6 +128,20 @@ Analytics functions (`getAllStudents`, `computeChapterStats`, `getAtRisk`, `getH
 
 **Name variant normalization in `StudentView`**: after the profile lookup, builds `allNames = Set([name, ...(profile?.nameVariants || [])])` and creates `normalizedExams` — a shallow in-memory copy where any student entry whose name is a known variant is renamed to the canonical name. All analytics (`getStudentExams`, `computeStudentChapterStats`, audits, etc.) then operate on the canonical name and find records regardless of which spelling appeared in the uploaded results. No-op when the student has no variants.
 
+### Student import — tiered match (`src/lib/merge/mergeLogic.js`)
+
+`mergeStudents(existingStudents, importedRows)` matches each Excel row to an existing student via three tiered steps. The first hit wins:
+
+1. **EIS** — `eis_reg_no` exact match.
+2. **Mobile** — non-empty mobile that uniquely identifies one existing student (2+ candidates → falls through with `ambiguous_mobile` conflict).
+3. **Name + branch** — `canonical_name` (case-insensitive) AND non-empty `branch` matching exactly one existing student (2+ → `ambiguous_name_branch` conflict).
+
+If still no match: insert as new **only when EIS is non-empty** (preserves the safety net — blank-EIS rows that can't be matched are skipped, not inserted, so we don't create students without their canonical identifier). When matched via step 2 or 3, the existing row's `eis_reg_no` is updated from the import (lets re-registration with a new EIS still resolve to the same student).
+
+Returns `{ students, added, updated, unchanged, conflicts }`. `conflicts[]` shape: `{ row, reason, candidates: [{ lws_id, canonical_name, mobile, branch }] }`. Surfaced in the Step 3 preview in `ImportStudentsModal.jsx` (amber section). Reasons:
+- `ambiguous_mobile` / `ambiguous_name_branch` — non-blocking; the row was inserted as new because no unique match could be found.
+- `mobile_conflict_on_eis_match` — non-blocking; EIS matched but the existing student's non-empty mobile differs from the import row's. The update still proceeds (EIS wins) — the conflict lets faculty notice when an EIS might be shared by different people.
+
 ### Duplicate detection & name-variant linking (`src/lib/merge/`)
 
 Six files under `src/lib/merge/`, re-exported as a flat API via `src/lib/mergeStudents.js`.
@@ -304,7 +318,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'faculty'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **640 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **653 Vitest tests passing**. **39 Python tests** in `tests/test_subtopic_merge.py`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (35 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (10 tests), AttendanceRings (6 tests), student-login login tracking (2 tests), consecutiveAbsent (14 tests), migrate_insights (11 tests: name lookup + classReport/studentPlan seed + duplicate skip), subtopic rename (39 Python tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
@@ -395,6 +409,10 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 | `IS_READ_ONLY` (runtime hostname check) gates dev/prod data paths in `persist.js`, `useStore.js`, `defaults.js`, `App.jsx` — NOT `import.meta.env.DEV` | On 2026-05-20, Vercel's Vite 8.0.3 + Rolldown was confirmed to substitute `import.meta.env.DEV` with `true` in production bundles — the opposite of correct behaviour. `loadFromDisk` was running the dev branch in prod, fetching the non-existent `/api/data` route and 404-ing. The bug survived inline refactor, version bump, and "Redeploy without cache". Switched to `IS_READ_ONLY` (a runtime hostname check that can't be miscompiled). Trade-off: dev/prod code paths can no longer be tree-shaken — both ship in the bundle. Fix commit `7b96030`. See memory `project_vite_dev_substitution_bug`. |
 | `vite.config.js` aliases `stream` to `src/stubs/empty.js` | xlsx probes `require('stream')` at module init for optional streaming support. Vite 8 externalises `stream` for the browser and its stub throws on property access (`.Readable`), turning xlsx's harmless `(stream || {}).Readable && ...` short-circuit into a startup crash (`Cannot access ".Readable" in client code`). The empty-module alias makes the optional check short-circuit cleanly. Fix commit `0127900`. |
 | Student import baseline comes from `loadExistingStudents()` (Supabase if session, dev fetch otherwise) — not from a bare `fetch('/api/students-db')` | On Vercel the bare fetch 404s → `existingStudents = []` → `mergeStudents` flagged every row "new" → on confirm, upsert created fresh LWS-IDs for already-existing students (silent duplicate row creation). The fix mirrors the dual-path pattern already in `studentSlice` mutations and `studentList`/`studentProfiles` loads. Bug surfaced 2026-05-20 when "21 students loaded — 21 new" appeared after a re-import of an unchanged file. |
+| `mergeStudents` matches Excel rows via tiered match (EIS → mobile → name+branch), not EIS alone | EIS-only matching meant re-registrations (new EIS issued) or EIS typos created duplicate rows for existing students. Mobile is the secondary key because it's typically stable across years. Name+branch is the tertiary because students who keep both rarely move records. Each step requires "exactly one" hit — 2+ candidates fall through with a conflict entry so faculty can resolve manually. Step 3 requires non-empty branch to avoid false-positive matches on common single-token surnames. |
+| Tiered match auto-merges only when ambiguity is zero — ambiguous matches always fall through to insert + conflict report | Auto-picking the first ambiguous candidate would silently attach exam history / attendance / fees to the wrong student. The cost of a wrong-merge is high (data corruption that's hard to undo); cost of a "Possible conflict" preview entry is one human glance. The conservative path is correct here. |
+| Tiered match keeps the "don't insert without EIS" safety net | Allowing inserts without EIS would let blank-EIS Excel rows create permanent records that lack the canonical identifier, making future re-imports impossible to match. Blank-EIS rows can still UPDATE existing students (via mobile or name+branch) — they just can't CREATE new ones. |
+| `mobile_conflict_on_eis_match` is non-blocking | The EIS match contract is "EIS wins" — overriding it on every mobile difference would block legitimate phone-number changes. Surfacing as a conflict (rather than skipping the update) lets faculty notice the rare case where two students share an EIS due to a data-entry error, without breaking the common case of a student changing their number. |
 
 ---
 
@@ -452,3 +470,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - Do not use `import.meta.env.DEV` anywhere in `src/`. Vercel's Vite 8.0.3 substitutes it with `true` in prod builds (confirmed 2026-05-20). Use `IS_READ_ONLY` from `src/config.js` (or `IS_DEV = !IS_READ_ONLY` in `persist.js`) for any dev-vs-prod branching. Other `import.meta.env.*` (`BASE_URL`, `VITE_SUPABASE_URL`) appear unaffected.
 - Do not remove the `stream` → `src/stubs/empty.js` alias in `vite.config.js`. xlsx's optional stream-probe will crash the bundle at startup without it. If xlsx ever drops the probe (or moves it behind a feature flag), the alias can go — verify by rebuilding and checking that `(va = HM())` no longer appears near `.Readable` in the minified output.
 - `useImportFlow.handleStudentFile` must call `loadExistingStudents()` (not a bare `fetch('/api/students-db')`) before `mergeStudents`. The bare fetch 404s on Vercel and causes silent duplicate creation. Same rule for any future code that needs the snake_case students baseline — go through the helper so the Supabase path is taken when a faculty session exists.
+- `mergeStudents` returns `conflicts: []` always (even when empty). Do not remove this field or change to `null` — `ImportStudentsModal.jsx` reads `mergeResult.conflicts?.length` and the test `mergeStudents — return shape > always includes conflicts in the result` asserts on it.
+- Tiered match's "exactly one hit" rule in steps 2 and 3 is a hard requirement — do not change to "first hit wins". Ambiguous matches must surface in `conflicts[]` so faculty resolves manually; auto-picking risks attaching exam/attendance/fee history to the wrong student.
+- Step 3 (name+branch) requires a non-empty branch on BOTH sides — do not relax to name-only matching. Two students named "Rohan Patil" with no branch would otherwise auto-merge incorrectly.
+- Tiered match still skips inserting when EIS is blank AND no match is found via steps 2/3 — do not change to insert-on-blank-EIS. Creating EIS-less rows leaves future re-imports unable to match the student and breaks the canonical identifier contract.

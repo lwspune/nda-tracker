@@ -262,6 +262,41 @@ export default function ImportStudentsModal({ onClose }) {
                 </div>
               )}
 
+              {mergeResult.conflicts?.length > 0 && (
+                <div className="border border-warning rounded-xl overflow-hidden mb-4">
+                  <div className="px-4 py-2.5 bg-amber-50 border-b border-border
+                                  text-[10px] font-bold uppercase tracking-wide text-warning">
+                    ⚠️ {mergeResult.conflicts.length} possible conflict{mergeResult.conflicts.length !== 1 ? 's' : ''} — review before confirming
+                  </div>
+                  <div className="divide-y divide-border max-h-60 overflow-y-auto">
+                    {mergeResult.conflicts.map((c, i) => (
+                      <div key={i} className="px-4 py-3 text-[12px]">
+                        <div className="font-semibold text-ink mb-1">
+                          {c.reason === 'ambiguous_mobile' && 'Mobile shared by multiple existing students'}
+                          {c.reason === 'ambiguous_name_branch' && 'Name + branch shared by multiple existing students'}
+                          {c.reason === 'mobile_conflict_on_eis_match' && 'EIS match but mobile differs'}
+                        </div>
+                        <div className="text-ink-2 mb-1.5">
+                          Import row: <span className="font-medium">{c.row.canonical_name || '—'}</span>
+                          {c.row.eis_reg_no && <> · EIS <span className="font-mono">{c.row.eis_reg_no}</span></>}
+                          {c.row.mobile && <> · Mobile <span className="font-mono">{c.row.mobile}</span></>}
+                        </div>
+                        <div className="text-ink-3 text-[11px] space-y-0.5">
+                          {c.candidates.map((cand, j) => (
+                            <div key={j}>
+                              ↔ <span className="font-mono">{cand.lws_id}</span>{' '}
+                              <span className="font-medium text-ink-2">{cand.canonical_name}</span>
+                              {cand.branch && <> · {cand.branch}</>}
+                              {cand.mobile && <> · {cand.mobile}</>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {mergeResult.added === 0 && mergeResult.updated === 0 && totalRollsAssigned === 0 && (
                 <Alert type="info">
                   <span>ℹ️</span>

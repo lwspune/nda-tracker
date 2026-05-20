@@ -83,7 +83,7 @@ describe('mergeStudents — counts', () => {
   it('returns added=1 for a brand-new student', () => {
     const { added, updated, unchanged } = mergeStudents(
       [makeExisting()],
-      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar' })],
+      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar', mobile: '9999999999' })],
     )
     expect(added).toBe(1)
     expect(updated).toBe(0)
@@ -110,10 +110,11 @@ describe('mergeStudents — counts', () => {
     expect(unchanged).toBe(1)
   })
 
-  it('skips rows without eis_reg_no', () => {
+  it('skips rows with no usable identifier (no eis, no mobile, no name+branch hit)', () => {
+    // Truly unidentifiable: blank EIS, blank mobile, name that does not match any existing student
     const { added, updated, unchanged } = mergeStudents(
       [makeExisting()],
-      [makeImportRow({ eis_reg_no: '' })],
+      [makeImportRow({ eis_reg_no: '', mobile: '', canonical_name: 'Stranger Person' })],
     )
     expect(added).toBe(0)
     expect(updated).toBe(0)
@@ -128,7 +129,7 @@ describe('mergeStudents — counts', () => {
     const imported = [
       makeImportRow({ eis_reg_no: 'EIS-001', mobile: '9111111111' }), // updated
       makeImportRow({ eis_reg_no: 'EIS-002', mobile: '9000000002', canonical_name: 'Bob Kumar' }), // unchanged
-      makeImportRow({ eis_reg_no: 'EIS-003', canonical_name: 'Carol Nair' }),  // new
+      makeImportRow({ eis_reg_no: 'EIS-003', canonical_name: 'Carol Nair', mobile: '9333333333' }),  // new
     ]
     const { added, updated, unchanged } = mergeStudents(existing, imported)
     expect(added).toBe(1)
@@ -143,7 +144,7 @@ describe('mergeStudents — new student', () => {
   it('assigns the next LWS ID to a new student', () => {
     const { students } = mergeStudents(
       [makeExisting({ lws_id: 'LWS-001' })],
-      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar' })],
+      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar', mobile: '9999999999' })],
     )
     const newStudent = students.find(s => s.eis_reg_no === 'EIS-NEW')
     expect(newStudent.lws_id).toBe('LWS-002')
@@ -153,8 +154,8 @@ describe('mergeStudents — new student', () => {
     const { students } = mergeStudents(
       [makeExisting({ lws_id: 'LWS-005' })],
       [
-        makeImportRow({ eis_reg_no: 'EIS-NEW-1', canonical_name: 'Bob Kumar' }),
-        makeImportRow({ eis_reg_no: 'EIS-NEW-2', canonical_name: 'Carol Nair' }),
+        makeImportRow({ eis_reg_no: 'EIS-NEW-1', canonical_name: 'Bob Kumar',  mobile: '9999111111' }),
+        makeImportRow({ eis_reg_no: 'EIS-NEW-2', canonical_name: 'Carol Nair', mobile: '9999222222' }),
       ],
     )
     const ids = students.filter(s => ['EIS-NEW-1', 'EIS-NEW-2'].includes(s.eis_reg_no))
@@ -1062,5 +1063,138 @@ describe('findExamNameCandidates', () => {
 
   it('returns an empty array for an empty unmatched names list', () => {
     expect(findExamNameCandidates([], EXAM_SNAKE_PROFILES)).toEqual([])
+  })
+})
+
+// ── mergeStudents — Layer 2 tiered match ──────────────────────
+//
+// Match order:
+//   1. EIS (current behaviour)
+//   2. Mobile — exactly one existing student with that mobile
+//   3. canonical_name + branch — exactly one existing student
+// Ambiguous matches (2+ candidates) → push to conflicts[] and fall through.
+
+describe('mergeStudents — tiered match: step 2 (mobile)', () => {
+  it('matches by mobile when EIS differs but mobile is identical and unique', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-OLD', mobile: '9000000001' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-NEW', mobile: '9000000001' })]
+    const { added, updated, students } = mergeStudents(existing, imported)
+    expect(added).toBe(0)
+    expect(updated).toBe(1)
+    // Same student row, EIS updated from import
+    expect(students[0].lws_id).toBe('LWS-001')
+    expect(students[0].eis_reg_no).toBe('EIS-NEW')
+  })
+
+  it('does NOT match by mobile when mobile is empty on either side', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-OLD', mobile: '' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-NEW', mobile: '', canonical_name: 'Different Name', branch: 'Different' })]
+    const { added } = mergeStudents(existing, imported)
+    expect(added).toBe(1) // falls through to insert-as-new
+  })
+
+  it('flags ambiguous_mobile and falls through when 2+ existing students share the mobile', () => {
+    const existing = [
+      makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-001', canonical_name: 'Sibling One', mobile: '9000000099' }),
+      makeExisting({ lws_id: 'LWS-002', eis_reg_no: 'EIS-002', canonical_name: 'Sibling Two', mobile: '9000000099' }),
+    ]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-NEW', mobile: '9000000099', canonical_name: 'Different Name', branch: 'Different' })]
+    const { added, updated, conflicts } = mergeStudents(existing, imported)
+    expect(added).toBe(1) // step 3 also misses, falls through to insert
+    expect(updated).toBe(0)
+    expect(conflicts).toBeDefined()
+    expect(conflicts.length).toBeGreaterThan(0)
+    expect(conflicts.some(c => c.reason === 'ambiguous_mobile')).toBe(true)
+    const c = conflicts.find(c => c.reason === 'ambiguous_mobile')
+    expect(c.candidates.map(x => x.lws_id).sort()).toEqual(['LWS-001', 'LWS-002'])
+  })
+})
+
+describe('mergeStudents — tiered match: step 3 (name + branch)', () => {
+  it('matches by name+branch when EIS and mobile both differ but name and branch are identical', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-OLD', mobile: '9000000001', canonical_name: 'Anant Vijay Sharma', branch: 'LWS' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-NEW', mobile: '9111111111', canonical_name: 'Anant Vijay Sharma', branch: 'LWS' })]
+    const { added, updated, students } = mergeStudents(existing, imported)
+    expect(added).toBe(0)
+    expect(updated).toBe(1)
+    expect(students[0].lws_id).toBe('LWS-001')
+    expect(students[0].mobile).toBe('9111111111')
+    expect(students[0].eis_reg_no).toBe('EIS-NEW')
+  })
+
+  it('is case-insensitive on canonical_name', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'E-OLD', mobile: '1', canonical_name: 'Anant Vijay Sharma', branch: 'LWS' })]
+    const imported = [makeImportRow({ eis_reg_no: 'E-NEW', mobile: '2', canonical_name: 'ANANT VIJAY SHARMA', branch: 'LWS' })]
+    const { updated } = mergeStudents(existing, imported)
+    expect(updated).toBe(1)
+  })
+
+  it('does NOT match by name when branch is empty on either side', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-OLD', mobile: '9000000001', canonical_name: 'Anant Sharma', branch: '' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-NEW', mobile: '9111111111', canonical_name: 'Anant Sharma', branch: '' })]
+    const { added } = mergeStudents(existing, imported)
+    expect(added).toBe(1) // no branch on either side, name-only match is too aggressive
+  })
+
+  it('flags ambiguous_name_branch and falls through when 2+ students share name+branch', () => {
+    const existing = [
+      makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'E1', mobile: '1', canonical_name: 'Rohan Patil', branch: 'LWS' }),
+      makeExisting({ lws_id: 'LWS-002', eis_reg_no: 'E2', mobile: '2', canonical_name: 'Rohan Patil', branch: 'LWS' }),
+    ]
+    const imported = [makeImportRow({ eis_reg_no: 'E-NEW', mobile: '9', canonical_name: 'Rohan Patil', branch: 'LWS' })]
+    const { added, conflicts } = mergeStudents(existing, imported)
+    expect(added).toBe(1)
+    expect(conflicts.some(c => c.reason === 'ambiguous_name_branch')).toBe(true)
+  })
+})
+
+describe('mergeStudents — tiered match: blank EIS', () => {
+  it('matches via mobile when EIS is blank but mobile matches', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-EXISTS', mobile: '9000000001' })]
+    const imported = [makeImportRow({ eis_reg_no: '', mobile: '9000000001' })]
+    // Import row has all default fields from makeImportRow, identical to existing → unchanged
+    const { added, updated, unchanged } = mergeStudents(existing, imported)
+    expect(added).toBe(0)
+    expect(updated + unchanged).toBe(1) // either unchanged or updated, definitely matched
+  })
+
+  it('does NOT insert a new student when EIS is blank and no match found (preserves safety net)', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-001', mobile: '9000000001' })]
+    const imported = [makeImportRow({ eis_reg_no: '', mobile: '9999999999', canonical_name: 'Brand New Student', branch: 'New Branch' })]
+    const { added, updated, unchanged } = mergeStudents(existing, imported)
+    expect(added).toBe(0)
+    expect(updated).toBe(0)
+    expect(unchanged).toBe(0)
+  })
+})
+
+describe('mergeStudents — tiered match: mobile conflict on EIS match', () => {
+  it('flags mobile_conflict_on_eis_match when EIS matches but new mobile differs from existing non-empty mobile', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-001', mobile: '9000000001' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-001', mobile: '9999999999' })]
+    const { updated, conflicts } = mergeStudents(existing, imported)
+    expect(updated).toBe(1) // EIS match still wins
+    expect(conflicts.some(c => c.reason === 'mobile_conflict_on_eis_match')).toBe(true)
+  })
+
+  it('does NOT flag mobile conflict when existing mobile is empty', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-001', mobile: '' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-001', mobile: '9999999999' })]
+    const { conflicts } = mergeStudents(existing, imported)
+    expect(conflicts.some(c => c.reason === 'mobile_conflict_on_eis_match')).toBe(false)
+  })
+
+  it('does NOT flag mobile conflict when new mobile is empty', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', eis_reg_no: 'EIS-001', mobile: '9000000001' })]
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-001', mobile: '' })]
+    const { conflicts } = mergeStudents(existing, imported)
+    expect(conflicts.some(c => c.reason === 'mobile_conflict_on_eis_match')).toBe(false)
+  })
+})
+
+describe('mergeStudents — return shape', () => {
+  it('always includes conflicts in the result (empty array when none)', () => {
+    const { conflicts } = mergeStudents([makeExisting()], [makeImportRow()])
+    expect(Array.isArray(conflicts)).toBe(true)
   })
 })
