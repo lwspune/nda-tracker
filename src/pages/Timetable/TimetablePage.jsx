@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { toPng } from 'html-to-image'
+import html2canvas from 'html2canvas'
 import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
@@ -326,13 +326,16 @@ export default function TimetablePage() {
     document.body.appendChild(wrapper)
 
     try {
-      // skipFonts: true bypasses html-to-image's @font-face embedding step. The
-      // page imports Google Fonts + KaTeX webfonts; one of those font fetches
-      // fails silently during embedding, leaving a broken @font-face in the
-      // serialized SVG that prevents the foreignObject from rendering at all
-      // (every output pixel comes out rgba(0,0,0,0)). The wrapper sets
-      // font-family: system-ui explicitly, so the export doesn't need webfonts.
-      const dataUrl = await toPng(wrapper, { pixelRatio: 2, skipFonts: true })
+      // html2canvas walks the DOM and paints to canvas directly — no SVG
+      // foreignObject, so the page's @import/font-face stylesheet rules can't
+      // silently break the render (html-to-image's failure mode produced an
+      // all-transparent PNG even with skipFonts).
+      const canvas = await html2canvas(wrapper, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+      })
+      const dataUrl = canvas.toDataURL('image/png')
       const link = document.createElement('a')
       link.download = `${activeTT.branch}-${activeTT.batchName}-timetable.png`
         .replace(/[^a-z0-9]+/gi, '-').toLowerCase()
