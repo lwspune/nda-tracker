@@ -178,8 +178,21 @@ function downloadTimetableExcel(timetable, mappings) {
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Timetable')
-  XLSX.writeFile(wb, `${timetable.branch}-${timetable.batchName}-timetable.xlsx`
-    .replace(/[^a-z0-9.]+/gi, '-').toLowerCase())
+
+  // Browser-native download (XLSX.writeFile uses Node's fs which Vite
+  // externalises — calling it from the browser throws "Cannot access
+  // .writeFileSync in client code").
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([wbout], { type: 'application/octet-stream' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${timetable.branch}-${timetable.batchName}-timetable.xlsx`
+    .replace(/[^a-z0-9.]+/gi, '-').toLowerCase()
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // ── Component ─────────────────────────────────────────────
