@@ -165,12 +165,10 @@ export function mergeStudents(existingStudents, importedRows, opts = {}) {
         changed = true
       }
 
-      // Merge batch (no duplicates)
-      const newBatch = row.batches?.[0]
-      if (newBatch && !(s.batches || []).includes(newBatch)) {
-        s.batches = [...(s.batches || []), newBatch]
-        changed = true
-      }
+      // XLS Batch column is intentionally discarded — existing student batches
+      // are never modified by import. Faculty assigns batches manually via the
+      // Settings → Students row editor using the central syllabusBatches list.
+      // (See decisions log: "import path lock" for the 2026-05-21 sweep.)
 
       // Merge name variant (no duplicates)
       const newName = row.canonical_name
@@ -204,7 +202,8 @@ export function mergeStudents(existingStudents, importedRows, opts = {}) {
         email:             row.email              || '',
         eis_reg_no:        eisKey,
         registration_date: row.registration_date  || null,
-        batches:           row.batches            || [],
+        // Batches are assigned manually after import — never carried over from XLS.
+        batches:           [],
         branch:            row.branch             || defaultBranch || '',
         account_status:    row.account_status     || '',
         coming_status:     row.coming_status      || '',

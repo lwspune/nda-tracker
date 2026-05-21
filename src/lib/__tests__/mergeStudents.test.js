@@ -249,32 +249,37 @@ describe('mergeStudents — existing student field updates', () => {
   })
 })
 
-// ── mergeStudents — batch merging ─────────────────────────────
+// ── mergeStudents — XLS Batch column is discarded ─────────────
+//
+// The XLS Batch column from HR is intentionally ignored at import. Batches are
+// assigned manually via the Settings → Students row editor using the central
+// `syllabusBatches[]` list. This is the lock that keeps HR-namespace names
+// from re-entering the system after the one-time alignment sweep.
 
-describe('mergeStudents — batch merging', () => {
-  it('adds a new batch that is not already in the array', () => {
+describe('mergeStudents — XLS Batch column is ignored', () => {
+  it('existing student batches are NEVER modified by import even when XLS has a different batch', () => {
     const { students } = mergeStudents(
-      [makeExisting({ batches: ['Batch A'] })],
-      [makeImportRow({ batches: ['Batch B'] })],
+      [makeExisting({ batches: ['Central_A'] })],
+      [makeImportRow({ batches: ['HR_Name'] })],
     )
-    expect(students[0].batches).toContain('Batch A')
-    expect(students[0].batches).toContain('Batch B')
+    expect(students[0].batches).toEqual(['Central_A'])
   })
 
-  it('does not duplicate a batch already in the array', () => {
+  it('existing student batches are NEVER modified by import even when XLS batch is blank', () => {
     const { students } = mergeStudents(
-      [makeExisting({ batches: ['Batch A'] })],
-      [makeImportRow({ batches: ['Batch A'] })],
-    )
-    expect(students[0].batches.filter(b => b === 'Batch A')).toHaveLength(1)
-  })
-
-  it('keeps existing batches untouched when import row has no batch', () => {
-    const { students } = mergeStudents(
-      [makeExisting({ batches: ['Batch A'] })],
+      [makeExisting({ batches: ['Central_A'] })],
       [makeImportRow({ batches: [] })],
     )
-    expect(students[0].batches).toEqual(['Batch A'])
+    expect(students[0].batches).toEqual(['Central_A'])
+  })
+
+  it('new students are created with empty batches[] regardless of XLS Batch column', () => {
+    const { students } = mergeStudents(
+      [],
+      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar', batches: ['HR_Name'] })],
+    )
+    const newStudent = students.find(s => s.eis_reg_no === 'EIS-NEW')
+    expect(newStudent.batches).toEqual([])
   })
 })
 
