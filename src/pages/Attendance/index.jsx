@@ -57,10 +57,33 @@ function fmtDate(iso) {
 
 // ── page ─────────────────────────────────────────────────────
 
+// Extract names that failed or were skipped from the endpoint's log lines.
+// Lines come in formats:
+//   "  FAIL → Name (student → 9123…): error"
+//   "  FAIL → Name (parent → 9123…): error"
+//   "  SKIP Name — no mobile"
+//   "  SKIP Name parent 9123 — unrecognised format"
+// Format owned by api/send-late-notifications.js; keep this in sync if that
+// log shape ever changes.
+export function parseFailedNames(lines) {
+  if (!Array.isArray(lines)) return []
+  const out = new Set()
+  for (const raw of lines) {
+    const line = String(raw)
+    let m = line.match(/^\s*FAIL → (.+?) \((?:student|parent)/)
+    if (m) { out.add(m[1].trim()); continue }
+    m = line.match(/^\s*SKIP (.+?) (?:—|parent )/)
+    if (m) { out.add(m[1].trim()); continue }
+  }
+  return [...out]
+}
+
 export default function AttendancePage() {
   const studentProfiles  = useStore(s => s.studentProfiles)
   const importAttendance = useStore(s => s.importAttendance)
   const setActiveStudent = useStore(s => s.setActiveStudent)
+  const lateSendHistory  = useStore(s => s.lateSendHistory)
+  const setLateSendHistory = useStore(s => s.setLateSendHistory)
   const mode = useMode()
 
   const [consecutiveDays, setConsecutiveDays] = useState(3)
@@ -81,7 +104,12 @@ export default function AttendancePage() {
 
   function handleSendLate(lwsIds) {
     if (!lwsIds?.length) return
-    setLateModal({ date: today, lwsIds })
+    const prior = lateSendHistory?.[today] ?? null
+    setLateModal({
+      date: today,
+      lwsIds,
+      failedNames: prior?.failedNames ?? null,
+    })
   }
 
   function handleSendLectureMiss(absencesByLwsId, date) {
@@ -119,6 +147,18 @@ export default function AttendancePage() {
         }
       }
       setSendResult({ kind, ok: r.ok && data.ok && data.sent > 0, sent: data.sent, skipped: data.skipped, error: detail, preview })
+
+      // Persist per-day send summary for the late flow so the widget can
+      // surface "Resend N failed" on subsequent opens.
+      if (kind === 'late' && lateModal?.date && r.ok) {
+        const failedNames = parseFailedNames(data.lines)
+        setLateSendHistory(lateModal.date, {
+          sentAt: Date.now(),
+          sent: data.sent ?? 0,
+          skipped: data.skipped ?? 0,
+          failedNames,
+        })
+      }
     } catch (e) {
       setSendResult({ kind, error: e.message })
     } finally {
@@ -445,6 +485,7 @@ export default function AttendancePage() {
         <LateNotificationPreviewModal
           date={lateModal.date}
           lateLwsIds={lateModal.lwsIds}
+          failedNames={lateModal.failedNames}
           sending={sending}
           onClose={() => !sending && setLateModal(null)}
           onConfirm={(students, redirectTo) =>

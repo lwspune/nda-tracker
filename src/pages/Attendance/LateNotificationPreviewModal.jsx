@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 
 function fmtDate(iso) {
@@ -25,25 +25,46 @@ function buildRows(lateLwsIds, studentProfiles) {
   })
 }
 
-export default function LateNotificationPreviewModal({ date, lateLwsIds, onConfirm, onClose, sending = false }) {
+// failedNames: string[] from previous send; null = first send.
+export default function LateNotificationPreviewModal({
+  date,
+  lateLwsIds,
+  failedNames = null,
+  onConfirm,
+  onClose,
+  sending = false,
+}) {
   const studentProfiles = useStore(s => s.studentProfiles)
+  const bulkUpdateStudentContacts = useStore(s => s.bulkUpdateStudentContacts)
+
+  const isResend = failedNames !== null && failedNames !== undefined
+  const failedSet = useMemo(() => new Set(failedNames || []), [failedNames])
+
   const [rows, setRows] = useState(() => buildRows(lateLwsIds, studentProfiles))
   const [redirectTo, setRedirectTo] = useState('')
+  const [scopeAll, setScopeAll] = useState(!isResend)
 
-  const empty = rows.length === 0
+  const failedRows = useMemo(() => rows.filter(r => failedSet.has(r.name)), [rows, failedSet])
+  const visibleRows = scopeAll ? rows : failedRows
+  const empty = visibleRows.length === 0
 
   function updateRow(idx, field, value) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
   }
 
   function handleConfirm() {
-    const cleaned = rows.map(r => ({
+    const cleaned = visibleRows.map(r => ({
       lwsId: r.lwsId,
       name:  r.name,
       mobile: r.mobile.replace(/\D/g, '').slice(-10),
       parentMobiles: r.parentMobiles
         .split(',').map(p => p.trim().replace(/\D/g, '').slice(-10)).filter(Boolean),
     }))
+    // Persist contact edits back to the student profile so future sends use
+    // the corrected numbers — mirrors WhatsAppPreviewModal's flow.
+    if (cleaned.length > 0 && typeof bulkUpdateStudentContacts === 'function') {
+      bulkUpdateStudentContacts(cleaned)
+    }
     onConfirm?.(cleaned, redirectTo.trim())
   }
 
@@ -60,42 +81,80 @@ export default function LateNotificationPreviewModal({ date, lateLwsIds, onConfi
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border flex-shrink-0">
           <div>
-            <div className="text-[15px] font-bold text-ink">Send Morning Late Notifications</div>
+            <div className="text-[15px] font-bold text-ink">
+              {isResend ? 'Resend Morning Late Notifications' : 'Send Morning Late Notifications'}
+            </div>
             <div className="text-[12px] text-ink-3 mt-0.5">{fmtDate(date)}</div>
           </div>
           <button onClick={onClose} disabled={sending} className="text-ink-3 hover:text-ink text-[20px] leading-none">×</button>
         </div>
+
+        {/* Scope toggle — only shown on resend */}
+        {isResend && (
+          <div className="px-5 py-3 bg-amber-50 border-b border-border flex-shrink-0 flex items-center gap-4 flex-wrap">
+            <span className="text-[12px] text-amber-800 font-medium">Resend to:</span>
+            <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
+              <input
+                type="radio"
+                checked={!scopeAll}
+                onChange={() => setScopeAll(false)}
+                disabled={sending}
+                aria-label={`Failed & skipped only (${failedRows.length})`}
+                className="accent-amber-600"
+              />
+              <span className="text-amber-900 font-medium">
+                Failed &amp; skipped only ({failedRows.length})
+              </span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
+              <input
+                type="radio"
+                checked={scopeAll}
+                onChange={() => setScopeAll(true)}
+                disabled={sending}
+                aria-label={`All students (${rows.length})`}
+                className="accent-amber-600"
+              />
+              <span className="text-amber-900 font-medium">
+                All students ({rows.length})
+              </span>
+            </label>
+          </div>
+        )}
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
           {empty ? (
             <div className="text-[13px] text-ink-3 italic py-6 text-center">No students to notify.</div>
           ) : (
             <div className="space-y-2">
-              {rows.map((r, idx) => (
-                <div key={r.lwsId} className="card px-4 py-3">
-                  <div className="font-semibold text-[13px] text-ink mb-2">{r.name}</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Mobile</span>
-                      <input
-                        type="text"
-                        value={r.mobile}
-                        onChange={e => updateRow(idx, 'mobile', e.target.value)}
-                        className="form-input text-[12px] min-h-[40px] px-2"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Parent mobiles (comma-separated)</span>
-                      <input
-                        type="text"
-                        value={r.parentMobiles}
-                        onChange={e => updateRow(idx, 'parentMobiles', e.target.value)}
-                        className="form-input text-[12px] min-h-[40px] px-2"
-                      />
-                    </label>
+              {visibleRows.map((r) => {
+                const idx = rows.indexOf(r)
+                return (
+                  <div key={r.lwsId} className="card px-4 py-3">
+                    <div className="font-semibold text-[13px] text-ink mb-2">{r.name}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Mobile</span>
+                        <input
+                          type="text"
+                          value={r.mobile}
+                          onChange={e => updateRow(idx, 'mobile', e.target.value)}
+                          className="form-input text-[12px] min-h-[40px] px-2"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Parent mobiles (comma-separated)</span>
+                        <input
+                          type="text"
+                          value={r.parentMobiles}
+                          onChange={e => updateRow(idx, 'parentMobiles', e.target.value)}
+                          className="form-input text-[12px] min-h-[40px] px-2"
+                        />
+                      </label>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

@@ -9,6 +9,7 @@ export default function LateMarkingWidget({ date, onSend }) {
   const markLate = useStore(s => s.markLate)
   const unmarkLate = useStore(s => s.unmarkLate)
   const getLateStudentsForDate = useStore(s => s.getLateStudentsForDate)
+  const history = useStore(s => s.lateSendHistory?.[date] ?? null)
 
   const [lateIds, setLateIds] = useState([])
   const [query, setQuery] = useState('')
@@ -75,16 +76,48 @@ export default function LateMarkingWidget({ date, onSend }) {
         <h3 className="text-[12px] font-mono uppercase tracking-widest text-ink-3">
           Today's late arrivals
         </h3>
-        <button
-          type="button"
-          onClick={() => onSend?.(lateIds)}
-          disabled={lateIds.length === 0 || loading}
-          className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="Send Morning Late Notifications"
-        >
-          Send Morning Late Notifications
-          {lateIds.length > 0 && <span className="ml-2 opacity-80">({lateIds.length})</span>}
-        </button>
+        {(() => {
+          const hasFailures = (history?.failedNames?.length ?? 0) > 0
+          if (history && hasFailures) {
+            return (
+              <button
+                type="button"
+                onClick={() => onSend?.(lateIds)}
+                disabled={lateIds.length === 0 || loading}
+                className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label={`Sent ${history.sent} · Failed ${history.skipped} · Resend`}
+              >
+                Sent ✓{history.sent} · Failed ✗{history.skipped} · Resend
+              </button>
+            )
+          }
+          if (history) {
+            return (
+              <button
+                type="button"
+                onClick={() => onSend?.(lateIds)}
+                disabled={lateIds.length === 0 || loading}
+                className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Sent today · Resend all"
+              >
+                ✓ Sent today · Resend all
+                {lateIds.length > 0 && <span className="ml-2 opacity-80">({lateIds.length})</span>}
+              </button>
+            )
+          }
+          return (
+            <button
+              type="button"
+              onClick={() => onSend?.(lateIds)}
+              disabled={lateIds.length === 0 || loading}
+              className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Send Morning Late Notifications"
+            >
+              Send Morning Late Notifications
+              {lateIds.length > 0 && <span className="ml-2 opacity-80">({lateIds.length})</span>}
+            </button>
+          )
+        })()}
       </div>
 
       {/* Search box */}

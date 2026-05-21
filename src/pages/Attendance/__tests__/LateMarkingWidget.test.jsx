@@ -6,6 +6,7 @@ const mockStore = {
   markLate: vi.fn(),
   unmarkLate: vi.fn(),
   getLateStudentsForDate: vi.fn(),
+  lateSendHistory: {},
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -27,6 +28,7 @@ const PROFILES = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockStore.studentProfiles = PROFILES
+  mockStore.lateSendHistory = {}
   mockStore.markLate.mockResolvedValue(true)
   mockStore.unmarkLate.mockResolvedValue(true)
   mockStore.getLateStudentsForDate.mockResolvedValue([])
@@ -126,5 +128,37 @@ describe('LateMarkingWidget — send button', () => {
     const sendBtn = screen.getByRole('button', { name: /send morning late notifications/i })
     fireEvent.click(sendBtn)
     expect(onSend).toHaveBeenCalledWith(['LWS-001', 'LWS-002'])
+  })
+})
+
+describe('LateMarkingWidget — resend states', () => {
+  it('shows the original button label when no history exists for this date', async () => {
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Arjun Sharma')
+    expect(screen.getByRole('button', { name: /send morning late notifications/i })).toBeInTheDocument()
+  })
+
+  it('shows "Sent ... Failed ... Resend" when history has failures and a failed name is still marked', async () => {
+    mockStore.lateSendHistory = {
+      '2026-05-21': { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'] },
+    }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Arjun Sharma')
+    const btn = screen.getByRole('button', { name: /resend/i })
+    expect(btn).toBeInTheDocument()
+    expect(btn.textContent).toMatch(/Sent.*1.*Failed.*1/i)
+  })
+
+  it('shows "Sent today · Resend all" when history has no failures', async () => {
+    mockStore.lateSendHistory = {
+      '2026-05-21': { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [] },
+    }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Arjun Sharma')
+    const btn = screen.getByRole('button', { name: /resend all/i })
+    expect(btn).toBeInTheDocument()
   })
 })

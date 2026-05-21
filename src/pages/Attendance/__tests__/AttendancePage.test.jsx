@@ -19,6 +19,8 @@ const mockStore = {
   markLate: vi.fn().mockResolvedValue(true),
   unmarkLate: vi.fn().mockResolvedValue(true),
   getLateStudentsForDate: vi.fn().mockResolvedValue([]),
+  lateSendHistory: {},
+  setLateSendHistory: vi.fn(),
   // LectureLogTab deps (rendered only when that tab is active)
   timetables: [],
   timetableMappings: [],

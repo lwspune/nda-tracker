@@ -23,6 +23,7 @@ export const DEFAULTS = {
   timetableMappings: [],
   timetables: [],
   whatsappSendHistory: {},
+  lateSendHistory: {},
   branches: [],
 }
 

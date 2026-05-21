@@ -218,6 +218,13 @@ const useStore = create((set, get) => ({
     get()._save()
   },
 
+  // ── Late-notification send history (faculty only, persisted, keyed by date) ──────
+  setLateSendHistory(date, record) {
+    if (!date) return
+    set(s => ({ lateSendHistory: { ...s.lateSendHistory, [date]: record } }))
+    get()._save()
+  },
+
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
   ...createStudentSlice(set, get),

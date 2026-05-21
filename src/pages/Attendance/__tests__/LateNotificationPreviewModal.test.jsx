@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
   studentProfiles: {},
+  bulkUpdateStudentContacts: vi.fn().mockResolvedValue({}),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -119,5 +120,114 @@ describe('LateNotificationPreviewModal', () => {
     )
     expect(screen.getByText(/no students/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /confirm send/i })).toBeDisabled()
+  })
+
+  // ── Persist contact edits before sending ──────────────────
+
+  it('saves edited contacts via bulkUpdateStudentContacts before calling onConfirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.change(screen.getByDisplayValue('9876543210'), { target: { value: '8888888888' } })
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+
+    expect(mockStore.bulkUpdateStudentContacts).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          lwsId: 'LWS-001',
+          mobile: '8888888888',
+          parentMobiles: ['9876543211'],
+        }),
+      ])
+    )
+    expect(onConfirm).toHaveBeenCalled()
+  })
+
+  // ── Resend mode (failedNames non-null) ────────────────────
+
+  it('does not render the scope banner when failedNames is null (first send)', () => {
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-002']}
+        failedNames={null}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/resend to/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the scope banner with correct counts when failedNames is non-null', () => {
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-002']}
+        failedNames={['Arjun Sharma']}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/resend to/i)).toBeInTheDocument()
+    // Failed-only count: 1 (Arjun in failedNames)
+    expect(screen.getByLabelText(/failed.*1/i)).toBeChecked()
+    // All-students count: 2
+    expect(screen.getByLabelText(/all students.*2/i)).not.toBeChecked()
+  })
+
+  it('defaults to failed-only scope and sends only failed names on confirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-002']}
+        failedNames={['Arjun Sharma']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    const sentRows = onConfirm.mock.calls[0][0]
+    expect(sentRows).toHaveLength(1)
+    expect(sentRows[0].name).toBe('Arjun Sharma')
+  })
+
+  it('switching scope to "All students" sends all rows on confirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-002']}
+        failedNames={['Arjun Sharma']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByLabelText(/all students.*2/i))
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    const sentRows = onConfirm.mock.calls[0][0]
+    expect(sentRows).toHaveLength(2)
+    expect(sentRows.map(r => r.name)).toEqual(['Arjun Sharma', 'Ravi Kumar'])
+  })
+
+  it('only the in-scope rows are visible when failedNames is set', () => {
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-002']}
+        failedNames={['Arjun Sharma']}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    // Only Arjun (the failed one) is visible
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(screen.queryByText('Ravi Kumar')).not.toBeInTheDocument()
   })
 })
