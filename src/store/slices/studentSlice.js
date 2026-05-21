@@ -131,62 +131,6 @@ export const createStudentSlice = (set, get) => ({
     return { added, updated, unchanged }
   },
 
-  async renameBatch(oldName, newName) {
-    if (!oldName || !newName || oldName === newName) return
-    set(s => ({
-      exams: s.exams.map(e => ({ ...e, batch: e.batch === oldName ? newName : e.batch }))
-    }))
-    get()._save()
-
-    const session = await getSession()
-    if (session) {
-      try {
-        const { data: affected } = await supabase
-          .from('student_batches').select('lws_id').eq('batch_name', oldName)
-        if (affected?.length) {
-          await supabase.from('student_batches').delete().eq('batch_name', oldName)
-          await supabase.from('student_batches')
-            .insert(affected.map(r => ({ lws_id: r.lws_id, batch_name: newName })))
-        }
-        await refreshStudents(get)
-      } catch (_) { /* no-op */ }
-    } else {
-      try {
-        const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
-        if (!existing?.students) return
-        const students = existing.students.map(s => ({
-          ...s, batches: (s.batches || []).map(b => b === oldName ? newName : b),
-        }))
-        await persistStudentsDB(get, existing, students)
-      } catch (_) { /* no-op */ }
-    }
-  },
-
-  async renameBranch(oldName, newName) {
-    if (!oldName || !newName || oldName === newName) return
-    set(s => ({
-      exams: s.exams.map(e => ({ ...e, branch: e.branch === oldName ? newName : e.branch }))
-    }))
-    get()._save()
-
-    const session = await getSession()
-    if (session) {
-      try {
-        await supabase.from('students').update({ branch: newName }).eq('branch', oldName)
-        await refreshStudents(get)
-      } catch (_) { /* no-op */ }
-    } else {
-      try {
-        const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
-        if (!existing?.students) return
-        const students = existing.students.map(s => ({
-          ...s, branch: s.branch === oldName ? newName : s.branch,
-        }))
-        await persistStudentsDB(get, existing, students)
-      } catch (_) { /* no-op */ }
-    }
-  },
-
   async bulkAssignBatch(lwsIds, batchName) {
     if (!lwsIds?.length || !batchName) return
 

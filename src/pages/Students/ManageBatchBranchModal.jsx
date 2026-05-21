@@ -2,18 +2,19 @@ import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { uniqueStudents } from './batchBranch/helpers'
 import { TabBtn } from './batchBranch/TabBtn'
-import RenameTab from './batchBranch/RenameTab'
 import BulkAssignTab from './batchBranch/BulkAssignTab'
 import FindDuplicatesTab from './batchBranch/FindDuplicatesTab'
 
+// Rename functionality moved to Settings → Branches / Settings → Batches
+// (2026-05-21). This modal now only handles Bulk Assign + Find Duplicates,
+// both of which operate on student records (the legitimate use case that
+// can't live in Settings since it requires per-student selection).
 export default function ManageBatchBranchModal({ onClose }) {
-  const [tab, setTab] = useState('rename')
+  const [tab, setTab] = useState('assign')
 
   const exams                = useStore(s => s.exams)
   const studentProfiles      = useStore(s => s.studentProfiles)
   const studentList          = useStore(s => s.studentList)
-  const renameBatch          = useStore(s => s.renameBatch)
-  const renameBranch         = useStore(s => s.renameBranch)
   const bulkAssignBatch      = useStore(s => s.bulkAssignBatch)
   const bulkAssignBranch     = useStore(s => s.bulkAssignBranch)
   const mergeStudentProfiles = useStore(s => s.mergeStudentProfiles)
@@ -50,7 +51,7 @@ export default function ManageBatchBranchModal({ onClose }) {
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
           <div>
             <h2 className="text-[17px] font-extrabold text-ink">Manage Batches &amp; Branches</h2>
-            <p className="text-[12px] text-ink-3 mt-0.5">Rename existing batches/branches, bulk-assign them to students, or detect &amp; merge duplicate records</p>
+            <p className="text-[12px] text-ink-3 mt-0.5">Bulk-assign batches/branches to students or detect &amp; merge duplicate records. Rename batches and branches in <strong>Settings</strong>.</p>
           </div>
           <button
             onClick={onClose}
@@ -62,21 +63,13 @@ export default function ManageBatchBranchModal({ onClose }) {
 
         {/* Tabs */}
         <div className="flex gap-2 px-6 py-4 border-b border-border flex-shrink-0">
-          <TabBtn label="Rename"          active={tab === 'rename'} onClick={() => setTab('rename')} />
           <TabBtn label="Bulk Assign"     active={tab === 'assign'} onClick={() => setTab('assign')} />
           <TabBtn label="Find Duplicates" active={tab === 'dedup'}  onClick={() => setTab('dedup')} />
         </div>
 
         {/* Body */}
         <div className="px-6 py-5 flex-1">
-          {tab === 'rename' ? (
-            <RenameTab
-              students={students}
-              exams={exams}
-              renameBatch={renameBatch}
-              renameBranch={renameBranch}
-            />
-          ) : tab === 'assign' ? (
+          {tab === 'assign' ? (
             <BulkAssignTab
               students={students}
               exams={exams}
