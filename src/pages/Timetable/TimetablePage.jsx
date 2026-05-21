@@ -271,11 +271,9 @@ export default function TimetablePage() {
     // Clone just the <table> — avoids the overflow-x-auto scroll container
     // (which causes the scrollbar artifact and cuts off the last row).
     const table = gridRef.current.querySelector('table')
-    console.log('[png] table?', !!table, 'outerHTML len:', table?.outerHTML?.length)
     if (!table) { setPngLoading(false); return }
 
     const clone = table.cloneNode(true)
-    console.log('[png] clone children:', clone.children.length, 'outerHTML len:', clone.outerHTML?.length)
 
     // Apply export-only visual overrides directly to cloned nodes.
     // html-to-image reads getComputedStyle, so inline styles take precedence.
@@ -327,31 +325,14 @@ export default function TimetablePage() {
     wrapper.appendChild(clone)
     document.body.appendChild(wrapper)
 
-    console.log('[png] wrapper rect:', wrapper.getBoundingClientRect())
-    console.log('[png] wrapper offsetWidth/Height:', wrapper.offsetWidth, wrapper.offsetHeight)
-    console.log('[png] clone rect:', clone.getBoundingClientRect())
-
     try {
-      const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
-      console.log('[png] dataUrl length:', dataUrl.length, 'prefix:', dataUrl.slice(0, 80))
-
-      // Sample pixels from the rendered PNG to see what html-to-image actually drew.
-      const img = new Image()
-      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl })
-      const c = document.createElement('canvas')
-      c.width = img.width; c.height = img.height
-      const ctx = c.getContext('2d')
-      ctx.drawImage(img, 0, 0)
-      const samples = [[10, 10], [Math.floor(img.width/2), Math.floor(img.height/2)], [img.width-10, img.height-10], [100, 100], [400, 300]]
-      console.log('[png] image natural size:', img.width, 'x', img.height)
-      for (const [x, y] of samples) {
-        const p = ctx.getImageData(x, y, 1, 1).data
-        console.log(`[png] pixel (${x},${y}):`, `rgba(${p[0]},${p[1]},${p[2]},${p[3]})`)
-      }
-
-      // Open in a new tab so we can see what Chrome itself thinks the PNG looks like.
-      window.open(dataUrl, '_blank')
-
+      // skipFonts: true bypasses html-to-image's @font-face embedding step. The
+      // page imports Google Fonts + KaTeX webfonts; one of those font fetches
+      // fails silently during embedding, leaving a broken @font-face in the
+      // serialized SVG that prevents the foreignObject from rendering at all
+      // (every output pixel comes out rgba(0,0,0,0)). The wrapper sets
+      // font-family: system-ui explicitly, so the export doesn't need webfonts.
+      const dataUrl = await toPng(wrapper, { pixelRatio: 2, skipFonts: true })
       const link = document.createElement('a')
       link.download = `${activeTT.branch}-${activeTT.batchName}-timetable.png`
         .replace(/[^a-z0-9]+/gi, '-').toLowerCase()
