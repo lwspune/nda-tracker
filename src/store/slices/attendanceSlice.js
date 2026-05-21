@@ -51,17 +51,86 @@ export const createAttendanceSlice = (set, get) => ({
     }
 
     let upserted = 0
+    let lateProtected = 0
     if (records.length > 0) {
       const session = await getSession()
       if (session) {
-        const { error } = await supabase
+        // Protect existing L (late) markings — XLS doesn't carry the L symbol,
+        // so re-importing today's attendance would otherwise overwrite L → P/A.
+        const dates  = [...new Set(records.map(r => r.date))]
+        const lwsIds = [...new Set(records.map(r => r.lws_id))]
+        const { data: lateRows, error: selectError } = await supabase
           .from('student_attendance')
-          .upsert(records, { onConflict: 'lws_id,date' })
-        if (error) console.error('[attendance] upsert failed:', error)
-        else upserted = records.length
+          .select('lws_id, date')
+          .eq('status', 'L')
+          .in('lws_id', lwsIds)
+          .in('date', dates)
+        if (selectError) console.error('[attendance] L-protection select failed:', selectError)
+        const lateKeys = new Set((lateRows ?? []).map(r => `${r.lws_id}|${r.date}`))
+        const filtered = records.filter(r => !lateKeys.has(`${r.lws_id}|${r.date}`))
+        lateProtected = records.length - filtered.length
+
+        if (filtered.length > 0) {
+          const { error } = await supabase
+            .from('student_attendance')
+            .upsert(filtered, { onConflict: 'lws_id,date' })
+          if (error) console.error('[attendance] upsert failed:', error)
+          else upserted = filtered.length
+        }
       }
     }
 
-    return { matched, unmatched, upserted }
+    return { matched, unmatched, upserted, lateProtected }
+  },
+
+  // Marks a student as late (L) for a given date. Replaces any existing P/A row.
+  async markLate(lwsId, date) {
+    if (!lwsId || !date) return false
+    const session = await getSession()
+    if (!session) return false
+    const { error } = await supabase
+      .from('student_attendance')
+      .upsert({ lws_id: lwsId, date, status: 'L' }, { onConflict: 'lws_id,date' })
+    if (error) {
+      console.error('[attendance] markLate failed:', error)
+      return false
+    }
+    return true
+  },
+
+  // Removes a late marking. Scoped to status='L' so we don't accidentally
+  // delete an attendance P/A row in case the data drifted.
+  async unmarkLate(lwsId, date) {
+    if (!lwsId || !date) return false
+    const session = await getSession()
+    if (!session) return false
+    const { error } = await supabase
+      .from('student_attendance')
+      .delete()
+      .eq('lws_id', lwsId)
+      .eq('date', date)
+      .eq('status', 'L')
+    if (error) {
+      console.error('[attendance] unmarkLate failed:', error)
+      return false
+    }
+    return true
+  },
+
+  // Returns lws_id[] for students marked late on the given date.
+  async getLateStudentsForDate(date) {
+    if (!date) return []
+    const session = await getSession()
+    if (!session) return []
+    const { data, error } = await supabase
+      .from('student_attendance')
+      .select('lws_id')
+      .eq('date', date)
+      .eq('status', 'L')
+    if (error) {
+      console.error('[attendance] getLateStudentsForDate failed:', error)
+      return []
+    }
+    return (data ?? []).map(r => r.lws_id)
   },
 })

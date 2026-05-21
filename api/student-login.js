@@ -140,6 +140,17 @@ export default async function handler(req, res) {
     .select('date, status')
     .eq('lws_id', student.lws_id)
 
+  // ── 5a. Load recent lecture absences (last 30 days) for the incidents strip
+  const since = new Date()
+  since.setDate(since.getDate() - 30)
+  const sinceIso = `${since.getFullYear()}-${String(since.getMonth()+1).padStart(2,'0')}-${String(since.getDate()).padStart(2,'0')}`
+  const { data: lectureRows } = await supabase
+    .from('lecture_absences')
+    .select('date, subject')
+    .eq('lws_id', student.lws_id)
+    .gte('date', sinceIso)
+    .order('date', { ascending: false })
+
   // ── 5b. Record login event (fire-and-forget) ─────────────────────────────
   supabase.from('student_logins').insert({ lws_id: student.lws_id }).then(() => {})
 
@@ -177,6 +188,7 @@ export default async function handler(req, res) {
     profile,
     exams,
     attendance:       attendanceRows || [],
+    lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
     ndaFreqBySubject: stateRow.data?.ndaFreqBySubject || {},
   })
 }

@@ -232,7 +232,7 @@ function StudentPortal({ data, onLogout }) {
         </div>
 
         <div className="pt-[72px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
-          <StudentView name={data.name} attendance={data.attendance || []} />
+          <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} />
         </div>
       </div>
     </ModeContext.Provider>

@@ -4,6 +4,7 @@ import { Card, CardTitle, StatCard, EmptyState } from '../../components/ui'
 import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import AttendanceRings from '../Attendance/AttendanceRings'
+import RecentIncidents from './RecentIncidents'
 import {
   getStudentExams, filterValidExams,
   computeStudentChapterStats,
@@ -19,7 +20,7 @@ import { ProfileCard, ImprovementPlan } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
-export default function StudentView({ name, attendance: attendanceProp = null }) {
+export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const savedInsights      = useStore(s => s.savedInsights)
@@ -231,6 +232,14 @@ export default function StudentView({ name, attendance: attendanceProp = null })
           <AttendanceRings attendance={attendance} />
         </Card>
       )}
+
+      {/* Recent late + lecture-miss incidents (last 30 days) */}
+      <RecentIncidents
+        lwsId={profile?.lwsId}
+        attendance={attendance}
+        lectureAbsencesProp={lectureAbsencesProp}
+      />
+
 
       {/* Pre-registration exclusion notice — faculty/teacher only */}
       {excludedCount > 0 && mode !== 'student' && (

@@ -25,13 +25,28 @@ function makeStore(profileOverrides = {}) {
   return { slice, getState: () => state }
 }
 
-function mockSupabase({ sessionActive = true, upsertError = null } = {}) {
+// Chainable query-builder mock. `select`/`eq`/`in`/`delete` all return the builder.
+// Awaiting the builder resolves to `{ data, error }`.
+// `upsert(...)` returns its own promise (terminal).
+function makeQueryBuilder({ data = [], error = null, upsertError = null } = {}) {
+  const builder = {}
+  builder.select = vi.fn(() => builder)
+  builder.eq     = vi.fn(() => builder)
+  builder.in     = vi.fn(() => builder)
+  builder.delete = vi.fn(() => builder)
+  builder.upsert = vi.fn(() => Promise.resolve({ error: upsertError }))
+  builder.then   = (onFulfilled, onRejected) =>
+    Promise.resolve({ data, error }).then(onFulfilled, onRejected)
+  return builder
+}
+
+function mockSupabase({ sessionActive = true, upsertError = null, lateRows = [] } = {}) {
   supabase.auth.getSession.mockResolvedValue({
     data: { session: sessionActive ? { user: { id: 'admin' } } : null },
   })
-  const mockUpsert = vi.fn().mockResolvedValue({ error: upsertError })
-  supabase.from.mockReturnValue({ upsert: mockUpsert })
-  return { mockUpsert }
+  const builder = makeQueryBuilder({ data: lateRows, upsertError })
+  supabase.from.mockReturnValue(builder)
+  return { builder, mockUpsert: builder.upsert }
 }
 
 const PARSED = {
@@ -41,7 +56,7 @@ const PARSED = {
   ],
 }
 
-// ── tests ────────────────────────────────────────────────────
+// ── importAttendance tests ───────────────────────────────────
 
 describe('importAttendance', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -126,7 +141,7 @@ describe('importAttendance', () => {
     const result = await slice.importAttendance(parsed)
     expect(result.matched).toBe(1)
     expect(result.upserted).toBe(0)
-    // upsert should not be called when there are no records
+    // supabase.from should not be called when there are no records
     expect(supabase.from).not.toHaveBeenCalled()
   })
 
@@ -148,5 +163,129 @@ describe('importAttendance', () => {
     const result = await slice.importAttendance(parsed)
     expect(result.matched).toBe(1)
     expect(mockUpsert.mock.calls[0][0][0].lws_id).toBe('LWS-001')
+  })
+
+  // ── New: L-status protection ───────────────────────────────
+
+  it('does NOT overwrite existing L (late) markings on import', async () => {
+    // Arjun marked L on 2026-05-07 already. XLS says P. Must NOT overwrite.
+    const { mockUpsert } = mockSupabase({
+      lateRows: [{ lws_id: 'LWS-001', date: '2026-05-07' }],
+    })
+    const { slice } = makeStore()
+    const result = await slice.importAttendance(PARSED)
+
+    expect(mockUpsert).toHaveBeenCalledOnce()
+    const records = mockUpsert.mock.calls[0][0]
+    // 3 total expected, 1 protected → 2 upserted
+    expect(records).toHaveLength(2)
+    expect(records).not.toContainEqual(expect.objectContaining({ lws_id: 'LWS-001', date: '2026-05-07' }))
+    expect(records).toContainEqual({ lws_id: 'LWS-001', date: '2026-05-06', status: 'A' })
+    expect(records).toContainEqual({ lws_id: 'LWS-002', date: '2026-05-07', status: 'A' })
+    expect(result.lateProtected).toBe(1)
+  })
+
+  it('does not call upsert when every row is protected by L', async () => {
+    // Both rows in parsed match an existing L row.
+    const { mockUpsert } = mockSupabase({
+      lateRows: [
+        { lws_id: 'LWS-001', date: '2026-05-07' },
+        { lws_id: 'LWS-001', date: '2026-05-06' },
+        { lws_id: 'LWS-002', date: '2026-05-07' },
+      ],
+    })
+    const { slice } = makeStore()
+    const result = await slice.importAttendance(PARSED)
+
+    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(result.upserted).toBe(0)
+    expect(result.lateProtected).toBe(3)
+  })
+})
+
+// ── markLate / unmarkLate / getLateStudentsForDate tests ─────
+
+describe('markLate', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('upserts an L row for (lwsId, date)', async () => {
+    const { mockUpsert } = mockSupabase()
+    const { slice } = makeStore()
+    const ok = await slice.markLate('LWS-001', '2026-05-21')
+    expect(ok).toBe(true)
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { lws_id: 'LWS-001', date: '2026-05-21', status: 'L' },
+      { onConflict: 'lws_id,date' },
+    )
+  })
+
+  it('returns false when no session', async () => {
+    mockSupabase({ sessionActive: false })
+    const { slice } = makeStore()
+    const ok = await slice.markLate('LWS-001', '2026-05-21')
+    expect(ok).toBe(false)
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('returns false when lwsId or date is missing', async () => {
+    mockSupabase()
+    const { slice } = makeStore()
+    expect(await slice.markLate('', '2026-05-21')).toBe(false)
+    expect(await slice.markLate('LWS-001', '')).toBe(false)
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('returns false on supabase error', async () => {
+    mockSupabase({ upsertError: { message: 'boom' } })
+    const { slice } = makeStore()
+    const ok = await slice.markLate('LWS-001', '2026-05-21')
+    expect(ok).toBe(false)
+  })
+})
+
+describe('unmarkLate', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('deletes the L row scoped to (lwsId, date) and status=L', async () => {
+    const { builder } = mockSupabase()
+    const { slice } = makeStore()
+    const ok = await slice.unmarkLate('LWS-001', '2026-05-21')
+    expect(ok).toBe(true)
+    expect(builder.delete).toHaveBeenCalled()
+    expect(builder.eq).toHaveBeenCalledWith('lws_id', 'LWS-001')
+    expect(builder.eq).toHaveBeenCalledWith('date', '2026-05-21')
+    expect(builder.eq).toHaveBeenCalledWith('status', 'L')
+  })
+
+  it('returns false when no session', async () => {
+    mockSupabase({ sessionActive: false })
+    const { slice } = makeStore()
+    const ok = await slice.unmarkLate('LWS-001', '2026-05-21')
+    expect(ok).toBe(false)
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+})
+
+describe('getLateStudentsForDate', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('returns array of lws_ids with status=L for the given date', async () => {
+    const { builder } = mockSupabase({
+      lateRows: [{ lws_id: 'LWS-001' }, { lws_id: 'LWS-007' }],
+    })
+    const { slice } = makeStore()
+    const result = await slice.getLateStudentsForDate('2026-05-21')
+    expect(result).toEqual(['LWS-001', 'LWS-007'])
+    expect(builder.select).toHaveBeenCalledWith('lws_id')
+    expect(builder.eq).toHaveBeenCalledWith('date', '2026-05-21')
+    expect(builder.eq).toHaveBeenCalledWith('status', 'L')
+  })
+
+  it('returns [] when no session', async () => {
+    mockSupabase({ sessionActive: false })
+    const { slice } = makeStore()
+    const result = await slice.getLateStudentsForDate('2026-05-21')
+    expect(result).toEqual([])
+    expect(supabase.from).not.toHaveBeenCalled()
   })
 })

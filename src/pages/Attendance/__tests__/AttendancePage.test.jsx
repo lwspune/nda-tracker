@@ -15,6 +15,15 @@ const mockStore = {
   studentProfiles: {},
   importAttendance: vi.fn(),
   setActiveStudent: vi.fn(),
+  // Late-marking widget deps (admin only, rendered on Class metrics tab)
+  markLate: vi.fn().mockResolvedValue(true),
+  unmarkLate: vi.fn().mockResolvedValue(true),
+  getLateStudentsForDate: vi.fn().mockResolvedValue([]),
+  // LectureLogTab deps (rendered only when that tab is active)
+  timetables: [],
+  timetableMappings: [],
+  setLectureAbsenteesForPeriod: vi.fn().mockResolvedValue(true),
+  getLectureAbsencesForDate: vi.fn().mockResolvedValue([]),
 }
 
 vi.mock('../../../store/useStore', () => ({

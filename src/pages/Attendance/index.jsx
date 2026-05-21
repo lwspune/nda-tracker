@@ -5,6 +5,15 @@ import { supabase } from '../../lib/supabase'
 import { parseAttendanceExcel } from '../../lib/excel'
 import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
 import { buildConsecutiveAbsent } from './consecutiveAbsent'
+import LateMarkingWidget from './LateMarkingWidget'
+import LectureLogTab from './LectureLogTab'
+import LateNotificationPreviewModal from './LateNotificationPreviewModal'
+import LectureMissPreviewModal from './LectureMissPreviewModal'
+
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -60,7 +69,50 @@ export default function AttendancePage() {
   const [refreshKey,      setRefreshKey]      = useState(0)
   const [importing,       setImporting]       = useState(false)
   const [importResult,    setImportResult]    = useState(null)
+  const [activeTab,       setActiveTab]       = useState('class-metrics')
   const fileInputRef = useRef(null)
+
+  const today = useMemo(todayIso, [])
+
+  const [lateModal,     setLateModal]     = useState(null) // { date, lwsIds[] }
+  const [lectureModal,  setLectureModal]  = useState(null) // { date, absencesByLwsId }
+  const [sending,       setSending]       = useState(false)
+  const [sendResult,    setSendResult]    = useState(null) // { kind, ok, sent, skipped, error? }
+
+  function handleSendLate(lwsIds) {
+    if (!lwsIds?.length) return
+    setLateModal({ date: today, lwsIds })
+  }
+
+  function handleSendLectureMiss(absencesByLwsId, date) {
+    if (!absencesByLwsId || !Object.keys(absencesByLwsId).length) return
+    setLectureModal({ date, absencesByLwsId })
+  }
+
+  async function confirmSend(endpoint, payload, kind) {
+    if (!supabase) {
+      setSendResult({ kind, error: 'Supabase not configured locally — deploy to Vercel to send.' })
+      return
+    }
+    setSending(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sign in as admin to send notifications.')
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(payload),
+      })
+      const data = await r.json()
+      setSendResult({ kind, ok: r.ok && data.ok, sent: data.sent, skipped: data.skipped, error: data.error })
+    } catch (e) {
+      setSendResult({ kind, error: e.message })
+    } finally {
+      setSending(false)
+      setLateModal(null)
+      setLectureModal(null)
+    }
+  }
 
   // lws_id → canonical name
   const lwsIdToName = useMemo(() => {
@@ -171,13 +223,46 @@ export default function AttendancePage() {
             : (
               <Alert type="success">
                 ✓ Matched {importResult.matched} students
-                ({importResult.upserted} records saved)
+                ({importResult.upserted} records saved
+                {importResult.lateProtected > 0 && `, ${importResult.lateProtected} late marks preserved`})
                 {importResult.unmatched > 0 && ` · ${importResult.unmatched} not found in profiles`}
               </Alert>
             )
           }
         </div>
       )}
+
+      {/* Tab strip */}
+      <div className="border-b border-border mb-5 flex gap-1">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'class-metrics'}
+          onClick={() => setActiveTab('class-metrics')}
+          className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+            ${activeTab === 'class-metrics' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+        >
+          Class metrics
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'lecture-log'}
+          onClick={() => setActiveTab('lecture-log')}
+          className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+            ${activeTab === 'lecture-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+        >
+          Lecture log
+        </button>
+      </div>
+
+      {activeTab === 'lecture-log' ? (
+        <LectureLogTab onSend={handleSendLectureMiss} />
+      ) : (
+        <>
+          {mode === 'admin' && (
+            <LateMarkingWidget date={today} onSend={handleSendLate} />
+          )}
 
       {/* Consecutive absences alert */}
       {records.length > 0 && (
@@ -318,6 +403,57 @@ export default function AttendancePage() {
             </div>
           )
       }
+        </>
+      )}
+
+      {/* Send-result alert */}
+      {sendResult && (
+        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 md:max-w-md z-[900]">
+          {sendResult.error ? (
+            <Alert type="error">
+              ❌ {sendResult.kind === 'late' ? 'Late' : 'Lecture-miss'} send failed: {sendResult.error}
+              <button onClick={() => setSendResult(null)} className="ml-3 text-[12px] underline">dismiss</button>
+            </Alert>
+          ) : (
+            <Alert type="success">
+              ✓ {sendResult.kind === 'late' ? 'Late notifications' : 'Lecture-miss notifications'} sent: {sendResult.sent ?? 0} · skipped: {sendResult.skipped ?? 0}
+              <button onClick={() => setSendResult(null)} className="ml-3 text-[12px] underline">dismiss</button>
+            </Alert>
+          )}
+        </div>
+      )}
+
+      {/* Preview modals */}
+      {lateModal && (
+        <LateNotificationPreviewModal
+          date={lateModal.date}
+          lateLwsIds={lateModal.lwsIds}
+          sending={sending}
+          onClose={() => !sending && setLateModal(null)}
+          onConfirm={(students, redirectTo) =>
+            confirmSend(
+              '/api/send-late-notifications',
+              { date: lateModal.date, redirectTo, students },
+              'late'
+            )
+          }
+        />
+      )}
+      {lectureModal && (
+        <LectureMissPreviewModal
+          date={lectureModal.date}
+          absencesByLwsId={lectureModal.absencesByLwsId}
+          sending={sending}
+          onClose={() => !sending && setLectureModal(null)}
+          onConfirm={(students, redirectTo) =>
+            confirmSend(
+              '/api/send-lecture-absences',
+              { date: lectureModal.date, redirectTo, students },
+              'lecture-miss'
+            )
+          }
+        />
+      )}
     </div>
   )
 }

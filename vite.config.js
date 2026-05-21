@@ -134,6 +134,35 @@ function localDataPlugin() {
         })
       })
 
+      // POST /api/send-late-notifications  /  /api/send-lecture-absences
+      // In dev we re-use the same Vercel JS handlers, with a tiny shim that
+      // parses the JSON body and adapts res to the Vercel res shape.
+      function makeApiShim(handlerPath) {
+        return (req, res) => {
+          if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
+          let body = ''
+          req.on('data', c => { body += c })
+          req.on('end', async () => {
+            try {
+              req.body = JSON.parse(body || '{}')
+              res.status = (c) => { res.statusCode = c; return res }
+              res.json   = (data) => {
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify(data))
+              }
+              const { default: handler } = await import(handlerPath)
+              await handler(req, res)
+            } catch (e) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ ok: false, error: e.message }))
+            }
+          })
+        }
+      }
+      server.middlewares.use('/api/send-late-notifications', makeApiShim('./api/send-late-notifications.js'))
+      server.middlewares.use('/api/send-lecture-absences',   makeApiShim('./api/send-lecture-absences.js'))
+
       // POST /api/send-whatsapp  { examName? }
       // Spawns send_results_whatsapp.py and returns { ok, sent, skipped, lines[] }
       server.middlewares.use('/api/send-whatsapp', (req, res) => {

@@ -96,6 +96,26 @@ function makeMockClient({
       if (table === 'student_logins') {
         return { insert: loginInsert }
       }
+      if (table === 'student_attendance') {
+        // chain: .select('date, status').eq('lws_id', X) — await this
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+        }
+        return builder
+      }
+      if (table === 'lecture_absences') {
+        // chain: .select(...).eq('lws_id', X).gte('date', X).order(...) — await this
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          gte:    vi.fn(() => builder),
+          order:  vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+        }
+        return builder
+      }
       // faculty_state — ndaFreqBySubject only
       return {
         select: vi.fn().mockReturnValue({
