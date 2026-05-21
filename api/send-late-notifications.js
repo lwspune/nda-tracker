@@ -97,7 +97,8 @@ export default async function handler(req, res) {
     const name = (row.name || '').trim()
     if (!name) continue
 
-    const variables = [name, dateLabel]
+    // Template uses named placeholders ({{name}}, {{date}}) — send as object.
+    const variables = { name, date: dateLabel }
 
     // Student
     const destStudent = redirectNorm || normMobile(row.mobile)
