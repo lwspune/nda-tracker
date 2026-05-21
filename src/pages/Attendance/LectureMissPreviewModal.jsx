@@ -19,9 +19,11 @@ function normaliseEntry(item) {
 function formatSubjectWithTime(entry) {
   const { subject, startTime, endTime } = entry
   if (!startTime || !endTime) return subject
-  // ASCII hyphen — preview matches the wire format sent to Wabridge
-  // (unicode en-dash silently breaks Meta's template parameter validation).
-  return `${subject} (${startTime} - ${endTime})`
+  // No parens / ASCII only — preview matches the wire format sent to
+  // Wabridge (parens + colons + AM/PM inside a template variable trip
+  // Meta's "looks-like-rich-formatting" filter and silently drop the
+  // message). Plain "Subject HH:MM AM to HH:MM PM" delivers reliably.
+  return `${subject} ${startTime} to ${endTime}`
 }
 
 function buildRows(absencesByLwsId, studentProfiles) {

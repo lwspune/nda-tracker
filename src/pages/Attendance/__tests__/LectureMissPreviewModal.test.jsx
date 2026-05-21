@@ -40,9 +40,10 @@ describe('LectureMissPreviewModal', () => {
     )
     expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
     expect(screen.getByText('Ravi Kumar')).toBeInTheDocument()
-    // Comma-joined with time in parens, en-dash separator
-    expect(screen.getByText(/Maths \(9:00 AM - 10:00 AM\).+Physics \(10:00 AM - 11:00 AM\)/)).toBeInTheDocument()
-    expect(screen.getByText(/English \(11:00 AM - 12:00 PM\)/)).toBeInTheDocument()
+    // ASCII-only, no parens: "Subject HH:MM AM to HH:MM PM" (paren+colon
+    // patterns inside template variables trip Meta's validator).
+    expect(screen.getByText(/Maths 9:00 AM to 10:00 AM.+Physics 10:00 AM to 11:00 AM/)).toBeInTheDocument()
+    expect(screen.getByText(/English 11:00 AM to 12:00 PM/)).toBeInTheDocument()
   })
 
   it('confirm passes rows with the object-shaped subjects to onConfirm', () => {
