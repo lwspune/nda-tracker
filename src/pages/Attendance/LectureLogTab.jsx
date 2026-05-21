@@ -21,6 +21,10 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const mappings           = useStore(s => s.timetableMappings)
   const setForPeriod       = useStore(s => s.setLectureAbsenteesForPeriod)
   const getAbsencesForDate = useStore(s => s.getLectureAbsencesForDate)
+  // Per-(date, batch) send history — keyed by `${date}|${batchName}` so two
+  // batches sent on the same day stay independent. Read here to render the
+  // contextual send-button label; AttendancePage writes it after each send.
+  const lectureMissSendHistory = useStore(s => s.lectureMissSendHistory)
 
   const [date, setDate]           = useState(initialDate ?? todayIso())
   const [batchName, setBatchName] = useState(initialBatch ?? '')
@@ -152,16 +156,50 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
           </select>
         </label>
         <div className="ml-auto">
-          <button
-            type="button"
-            onClick={() => onSend?.(absencesByLwsId, date)}
-            disabled={totalAbsences === 0}
-            className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label="Send Lecture-Miss Notifications"
-          >
-            Send Lecture-Miss Notifications
-            {totalAbsences > 0 && <span className="ml-2 opacity-80">({Object.keys(absencesByLwsId).length})</span>}
-          </button>
+          {(() => {
+            const history = batchName ? lectureMissSendHistory?.[`${date}|${batchName}`] : null
+            const hasFailures = (history?.failedNames?.length ?? 0) > 0
+            const disabled = totalAbsences === 0
+            if (history && hasFailures) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => onSend?.(absencesByLwsId, date, batchName)}
+                  disabled={disabled}
+                  className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={`Sent ${history.sent} · Failed ${history.skipped} · Resend`}
+                >
+                  Sent ✓{history.sent} · Failed ✗{history.skipped} · Resend
+                </button>
+              )
+            }
+            if (history) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => onSend?.(absencesByLwsId, date, batchName)}
+                  disabled={disabled}
+                  className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Sent today · Resend all"
+                >
+                  ✓ Sent today · Resend all
+                  {totalAbsences > 0 && <span className="ml-2 opacity-80">({Object.keys(absencesByLwsId).length})</span>}
+                </button>
+              )
+            }
+            return (
+              <button
+                type="button"
+                onClick={() => onSend?.(absencesByLwsId, date, batchName)}
+                disabled={disabled}
+                className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Send Lecture-Miss Notifications"
+              >
+                Send Lecture-Miss Notifications
+                {totalAbsences > 0 && <span className="ml-2 opacity-80">({Object.keys(absencesByLwsId).length})</span>}
+              </button>
+            )
+          })()}
         </div>
       </div>
 

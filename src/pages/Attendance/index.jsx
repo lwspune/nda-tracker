@@ -84,6 +84,8 @@ export default function AttendancePage() {
   const setActiveStudent = useStore(s => s.setActiveStudent)
   const lateSendHistory  = useStore(s => s.lateSendHistory)
   const setLateSendHistory = useStore(s => s.setLateSendHistory)
+  const lectureMissSendHistory  = useStore(s => s.lectureMissSendHistory)
+  const setLectureMissSendHistory = useStore(s => s.setLectureMissSendHistory)
   const mode = useMode()
 
   const [consecutiveDays, setConsecutiveDays] = useState(3)
@@ -112,9 +114,16 @@ export default function AttendancePage() {
     })
   }
 
-  function handleSendLectureMiss(absencesByLwsId, date) {
+  function handleSendLectureMiss(absencesByLwsId, date, batchName) {
     if (!absencesByLwsId || !Object.keys(absencesByLwsId).length) return
-    setLectureModal({ date, absencesByLwsId })
+    const key = batchName ? `${date}|${batchName}` : null
+    const prior = key ? lectureMissSendHistory?.[key] : null
+    setLectureModal({
+      date,
+      batchName,
+      absencesByLwsId,
+      failedNames: prior?.failedNames ?? null,
+    })
   }
 
   async function confirmSend(endpoint, payload, kind) {
@@ -153,6 +162,17 @@ export default function AttendancePage() {
       if (kind === 'late' && lateModal?.date && r.ok) {
         const failedNames = parseFailedNames(data.lines)
         setLateSendHistory(lateModal.date, {
+          sentAt: Date.now(),
+          sent: data.sent ?? 0,
+          skipped: data.skipped ?? 0,
+          failedNames,
+        })
+      }
+      // Same for lecture-miss, keyed by compound (date|batchName) so two
+      // batches sent on the same day stay independent.
+      if (kind === 'lecture-miss' && lectureModal?.date && lectureModal?.batchName && r.ok) {
+        const failedNames = parseFailedNames(data.lines)
+        setLectureMissSendHistory(`${lectureModal.date}|${lectureModal.batchName}`, {
           sentAt: Date.now(),
           sent: data.sent ?? 0,
           skipped: data.skipped ?? 0,
@@ -501,6 +521,7 @@ export default function AttendancePage() {
         <LectureMissPreviewModal
           date={lectureModal.date}
           absencesByLwsId={lectureModal.absencesByLwsId}
+          failedNames={lectureModal.failedNames}
           sending={sending}
           onClose={() => !sending && setLectureModal(null)}
           onConfirm={(students, redirectTo) =>

@@ -24,6 +24,7 @@ export const DEFAULTS = {
   timetables: [],
   whatsappSendHistory: {},
   lateSendHistory: {},
+  lectureMissSendHistory: {},
   branches: [],
 }
 

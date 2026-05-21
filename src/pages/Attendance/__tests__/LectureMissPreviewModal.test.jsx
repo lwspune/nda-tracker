@@ -1,7 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockStore = { studentProfiles: {} }
+const mockStore = {
+  studentProfiles: {},
+  bulkUpdateStudentContacts: vi.fn().mockResolvedValue({}),
+}
 
 vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
@@ -133,5 +136,113 @@ describe('LectureMissPreviewModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
     expect(onClose).toHaveBeenCalled()
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  // ── Persist contact edits before sending ───────────────────
+
+  it('saves edited contacts via bulkUpdateStudentContacts before calling onConfirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={{ 'LWS-001': [{ subject: 'Maths', startTime: '9:00 AM', endTime: '10:00 AM' }] }}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.change(screen.getByDisplayValue('9876543210'), { target: { value: '8888888888' } })
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+
+    expect(mockStore.bulkUpdateStudentContacts).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          lwsId: 'LWS-001',
+          mobile: '8888888888',
+          parentMobiles: ['9876543211'],
+        }),
+      ])
+    )
+    expect(onConfirm).toHaveBeenCalled()
+  })
+
+  // ── Resend mode (failedNames non-null) ─────────────────────
+
+  it('does not render the scope banner when failedNames is null', () => {
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={ABSENCES}
+        failedNames={null}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/resend to/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the scope banner with correct counts when failedNames is non-null', () => {
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={ABSENCES}
+        failedNames={['Arjun Sharma']}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/resend to/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/failed.*1/i)).toBeChecked()
+    expect(screen.getByLabelText(/all students.*2/i)).not.toBeChecked()
+  })
+
+  it('defaults to failed-only scope and sends only failed names on confirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={ABSENCES}
+        failedNames={['Arjun Sharma']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    const sentRows = onConfirm.mock.calls[0][0]
+    expect(sentRows).toHaveLength(1)
+    expect(sentRows[0].name).toBe('Arjun Sharma')
+    // Subjects (full list) retained for the failed student
+    expect(sentRows[0].subjects).toHaveLength(2)
+  })
+
+  it('switching scope to "All students" sends all rows on confirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={ABSENCES}
+        failedNames={['Arjun Sharma']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByLabelText(/all students.*2/i))
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    const sentRows = onConfirm.mock.calls[0][0]
+    expect(sentRows).toHaveLength(2)
+    expect(sentRows.map(r => r.name)).toEqual(['Arjun Sharma', 'Ravi Kumar'])
+  })
+
+  it('only the in-scope rows are visible when failedNames is set', () => {
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={ABSENCES}
+        failedNames={['Arjun Sharma']}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(screen.queryByText('Ravi Kumar')).not.toBeInTheDocument()
   })
 })

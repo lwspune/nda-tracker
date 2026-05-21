@@ -7,6 +7,7 @@ const mockStore = {
   timetableMappings: [],
   setLectureAbsenteesForPeriod: vi.fn(),
   getLectureAbsencesForDate: vi.fn(),
+  lectureMissSendHistory: {},
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -54,6 +55,7 @@ beforeEach(() => {
   mockStore.studentProfiles = PROFILES
   mockStore.timetables = [TIMETABLE]
   mockStore.timetableMappings = MAPPINGS
+  mockStore.lectureMissSendHistory = {}
   mockStore.getLectureAbsencesForDate.mockResolvedValue([])
   mockStore.setLectureAbsenteesForPeriod.mockResolvedValue(true)
 })
@@ -193,7 +195,7 @@ describe('LectureLogTab — send button', () => {
     expect(sendBtn).toBeDisabled()
   })
 
-  it('enabled and calls onSend(absencesByLwsId) when clicked', async () => {
+  it('enabled and calls onSend(absencesByLwsId, date, batchName) when clicked', async () => {
     mockStore.getLectureAbsencesForDate.mockResolvedValue([
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths'   },
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's2', subject: 'Physics' },
@@ -207,8 +209,10 @@ describe('LectureLogTab — send button', () => {
     const sendBtn = screen.getByRole('button', { name: /send lecture-miss notifications/i })
     expect(sendBtn).not.toBeDisabled()
     fireEvent.click(sendBtn)
-    // onSend receives (absencesByLwsId, date). Each entry is now an object
-    // enriched with time info from the timetable.
+    // onSend receives (absencesByLwsId, date, batchName). batchName threads
+    // through so AttendancePage can key lectureMissSendHistory by
+    // `${date}|${batchName}` (compound key keeps two batches independent
+    // on the same day).
     expect(onSend).toHaveBeenCalledWith(
       expect.objectContaining({
         'LWS-001': expect.arrayContaining([
@@ -220,6 +224,47 @@ describe('LectureLogTab — send button', () => {
         ],
       }),
       THURSDAY,
+      'LWS_NDA_2Y_(25-27)_A',
     )
+  })
+})
+
+describe('LectureLogTab — resend states (read lectureMissSendHistory)', () => {
+  const HISTORY_KEY = `${THURSDAY}|LWS_NDA_2Y_(25-27)_A`
+
+  it('renders the original button label when no history exists for (date, batch)', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /send lecture-miss notifications/i })).toBeInTheDocument()
+  })
+
+  it('shows "Sent ... Failed ... Resend" when history has failures', async () => {
+    mockStore.lectureMissSendHistory = {
+      [HISTORY_KEY]: { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'] },
+    }
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+    const btn = screen.getByRole('button', { name: /resend/i })
+    expect(btn).toBeInTheDocument()
+    expect(btn.textContent).toMatch(/Sent.*1.*Failed.*1/i)
+  })
+
+  it('shows "Sent today · Resend all" when history has no failures', async () => {
+    mockStore.lectureMissSendHistory = {
+      [HISTORY_KEY]: { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [] },
+    }
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+    const btn = screen.getByRole('button', { name: /resend all/i })
+    expect(btn).toBeInTheDocument()
   })
 })

@@ -225,6 +225,15 @@ const useStore = create((set, get) => ({
     get()._save()
   },
 
+  // ── Lecture-miss send history (faculty only, persisted, keyed by `${date}|${batchName}`) ──────
+  // Compound key so two batches sent on the same day stay independent —
+  // see decisions log entry for "lectureMissSendHistory compound key".
+  setLectureMissSendHistory(key, record) {
+    if (!key) return
+    set(s => ({ lectureMissSendHistory: { ...s.lectureMissSendHistory, [key]: record } }))
+    get()._save()
+  },
+
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
   ...createStudentSlice(set, get),
