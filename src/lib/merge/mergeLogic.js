@@ -44,9 +44,14 @@ function candidateOf(s) {
  *
  * @param {Array} existingStudents - students array from students_db.json
  * @param {Array} importedRows     - output of parseStudentsExcel()
+ * @param {Object} [opts]
+ * @param {string} [opts.defaultBranch] - branch to use when XLS row has no
+ *   branch. Applied to NEW inserts and to existing matched students whose
+ *   current branch is empty. Never overwrites an existing non-empty branch.
  * @returns {{ students: Array, added: number, updated: number, unchanged: number, conflicts: Array }}
  */
-export function mergeStudents(existingStudents, importedRows) {
+export function mergeStudents(existingStudents, importedRows, opts = {}) {
+  const defaultBranch = trimStr(opts.defaultBranch)
   const students = existingStudents.map(s => ({ ...s }))
 
   // Build indices
@@ -145,6 +150,13 @@ export function mergeStudents(existingStudents, importedRows) {
         }
       }
 
+      // Default branch fills the blank ONLY when the row is silent on it AND
+      // the existing record is also blank. Never overwrites a non-empty branch.
+      if (defaultBranch && !trimStr(row.branch) && !trimStr(s.branch)) {
+        s.branch = defaultBranch
+        changed = true
+      }
+
       // If matched via mobile or name+branch, pull eis_reg_no in too
       if (matchedBy !== 'eis' && eisKey && eisKey !== trimStr(s.eis_reg_no)) {
         s.eis_reg_no = eisKey
@@ -193,7 +205,7 @@ export function mergeStudents(existingStudents, importedRows) {
         eis_reg_no:        eisKey,
         registration_date: row.registration_date  || null,
         batches:           row.batches            || [],
-        branch:            row.branch             || '',
+        branch:            row.branch             || defaultBranch || '',
         account_status:    row.account_status     || '',
         coming_status:     row.coming_status      || '',
         quit_date:         row.quit_date          || null,

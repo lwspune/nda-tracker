@@ -1198,3 +1198,57 @@ describe('mergeStudents — return shape', () => {
     expect(Array.isArray(conflicts)).toBe(true)
   })
 })
+
+describe('mergeStudents — defaultBranch option', () => {
+  // Scope B: applies to NEW inserts + EXISTING students with blank branch.
+  // Never overwrites an existing non-empty branch.
+
+  it('assigns defaultBranch to a brand-new student when XLS row has no branch', () => {
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-999', canonical_name: 'Fresh New', branch: '' })]
+    const { students } = mergeStudents([], imported, { defaultBranch: 'LWS Pune' })
+    expect(students[0].branch).toBe('LWS Pune')
+  })
+
+  it('keeps XLS row branch when present, ignores defaultBranch (per-row XLS wins)', () => {
+    const imported = [makeImportRow({ eis_reg_no: 'EIS-998', canonical_name: 'XLS Has Branch', branch: 'APJ' })]
+    const { students } = mergeStudents([], imported, { defaultBranch: 'LWS Pune' })
+    expect(students[0].branch).toBe('APJ')
+  })
+
+  it('fills blank branch on an existing matched student when defaultBranch is set', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', branch: '' })]
+    const imported = [makeImportRow({ branch: '' })]
+    const { students } = mergeStudents(existing, imported, { defaultBranch: 'LWS Pune' })
+    expect(students[0].lws_id).toBe('LWS-001')
+    expect(students[0].branch).toBe('LWS Pune')
+  })
+
+  it('does NOT overwrite a non-empty branch on an existing matched student', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', branch: 'APJ' })]
+    const imported = [makeImportRow({ branch: '' })]
+    const { students } = mergeStudents(existing, imported, { defaultBranch: 'LWS Pune' })
+    expect(students[0].branch).toBe('APJ')
+  })
+
+  it('XLS row branch still wins over defaultBranch on an existing student match', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', branch: '' })]
+    const imported = [makeImportRow({ branch: 'APJ' })]
+    const { students } = mergeStudents(existing, imported, { defaultBranch: 'LWS Pune' })
+    expect(students[0].branch).toBe('APJ')
+  })
+
+  it('no defaultBranch passed → behaves identically to today (backward compatible)', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', branch: '' })]
+    const imported = [makeImportRow({ branch: '' })]
+    const { students } = mergeStudents(existing, imported)
+    expect(students[0].branch).toBe('')
+  })
+
+  it('marks the row as updated when defaultBranch fills a blank existing branch', () => {
+    const existing = [makeExisting({ lws_id: 'LWS-001', branch: '' })]
+    const imported = [makeImportRow({ branch: '' })]
+    const { updated, unchanged } = mergeStudents(existing, imported, { defaultBranch: 'LWS Pune' })
+    expect(updated).toBe(1)
+    expect(unchanged).toBe(0)
+  })
+})

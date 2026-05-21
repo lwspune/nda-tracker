@@ -2,11 +2,13 @@ import { Alert, DropZone, Spinner } from '../ui'
 import { Steps, SummaryTile } from './import/Steps'
 import UnresolvedRow from './import/UnresolvedRow'
 import useImportFlow from './import/useImportFlow'
+import useStore from '../../store/useStore'
 
 export default function ImportStudentsModal({ onClose }) {
   const {
     step, saving, error, done,
     studentFile, dragging, setDragging, loadingStudents, studentError, mergeResult,
+    selectedBranch, setSelectedBranch,
     examFiles, loadingExam, examError, selections,
     studentFileRef, examFileRef,
     allStudentNames, totalRollsAssigned, addedStudents,
@@ -15,6 +17,8 @@ export default function ImportStudentsModal({ onClose }) {
     handleConfirm, goBackToStep1,
     setStep,
   } = useImportFlow()
+
+  const branches = useStore(s => s.branches)
 
   return (
     <div
@@ -78,15 +82,46 @@ export default function ImportStudentsModal({ onClose }) {
               )}
 
               {mergeResult && !loadingStudents && (
-                <div className="mt-4 flex items-center gap-2 text-[13px]">
-                  <span className="text-success font-bold">✓</span>
-                  <span className="text-ink-2">
-                    <strong>{mergeResult.students.length}</strong> students loaded —{' '}
-                    {mergeResult.added > 0 && <><span className="text-success">{mergeResult.added} new</span>, </>}
-                    {mergeResult.updated > 0 && <><span className="text-accent">{mergeResult.updated} updated</span>, </>}
-                    {mergeResult.unchanged} unchanged
-                  </span>
-                </div>
+                <>
+                  <div className="mt-4 flex items-center gap-2 text-[13px]">
+                    <span className="text-success font-bold">✓</span>
+                    <span className="text-ink-2">
+                      <strong>{mergeResult.students.length}</strong> students loaded —{' '}
+                      {mergeResult.added > 0 && <><span className="text-success">{mergeResult.added} new</span>, </>}
+                      {mergeResult.updated > 0 && <><span className="text-accent">{mergeResult.updated} updated</span>, </>}
+                      {mergeResult.unchanged} unchanged
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-3">
+                    <label htmlFor="import-branch" className="text-[12px] text-ink-3 font-semibold uppercase tracking-wide whitespace-nowrap">
+                      Set branch
+                    </label>
+                    {branches.length === 0 ? (
+                      <span className="text-[12px] text-ink-3 italic">
+                        No branches yet — add one in <strong>Settings → Branches</strong>.
+                      </span>
+                    ) : (
+                      <>
+                        <select
+                          id="import-branch"
+                          aria-label="Default branch for imported students"
+                          className="form-input text-[12px] py-1.5 w-auto min-w-[160px]"
+                          value={selectedBranch}
+                          onChange={e => setSelectedBranch(e.target.value)}
+                        >
+                          <option value="">— don't set —</option>
+                          {branches.map(b => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-ink-3">
+                          Applied to new students and existing ones with no branch.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </>
               )}
 
               {studentError && (

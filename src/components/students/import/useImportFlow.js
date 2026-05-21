@@ -14,6 +14,14 @@ export default function useImportFlow() {
   const [studentError,    setStudentError]    = useState(null)
   const [mergeResult,     setMergeResult]     = useState(null)
 
+  // Branch dropdown — admin can tag the import with a branch so new students
+  // and existing students with blank branch get the value. Empty means
+  // "don't set a default" (current behaviour). Cached inputs let us re-merge
+  // without re-reading the file when the branch is changed.
+  const [selectedBranch,  setSelectedBranchState] = useState('')
+  const [parsedRows,      setParsedRows]      = useState(null)
+  const [existingCache,   setExistingCache]   = useState(null)
+
   // ── Step 2 state ─────────────────────────────────────────────
   const [enrichedStudents, setEnrichedStudents] = useState([])
   const [examFiles,        setExamFiles]        = useState([])
@@ -60,13 +68,25 @@ export default function useImportFlow() {
     try {
       const importedRows = await parseStudentsExcel(f)
       const existingStudents = await loadExistingStudents()
-      const result = mergeStudents(existingStudents, importedRows)
+      setParsedRows(importedRows)
+      setExistingCache(existingStudents)
+      const result = mergeStudents(existingStudents, importedRows, { defaultBranch: selectedBranch })
       setMergeResult(result)
     } catch (e) {
       setStudentError('Error reading file: ' + e.message)
     }
 
     setLoadingStudents(false)
+  }
+
+  // Re-run the merge with a new defaultBranch using cached inputs (no
+  // file re-read). Called from the modal's branch dropdown.
+  function setSelectedBranch(branch) {
+    setSelectedBranchState(branch)
+    if (parsedRows && existingCache) {
+      const result = mergeStudents(existingCache, parsedRows, { defaultBranch: branch })
+      setMergeResult(result)
+    }
   }
 
   function handleStudentNext() {
@@ -172,6 +192,7 @@ export default function useImportFlow() {
     // state
     step, saving, error, done,
     studentFile, dragging, setDragging, loadingStudents, studentError, mergeResult,
+    selectedBranch, setSelectedBranch,
     enrichedStudents, examFiles, loadingExam, examError, selections,
     // refs
     studentFileRef, examFileRef,
