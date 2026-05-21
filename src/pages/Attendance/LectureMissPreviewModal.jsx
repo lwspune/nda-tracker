@@ -19,7 +19,9 @@ function normaliseEntry(item) {
 function formatSubjectWithTime(entry) {
   const { subject, startTime, endTime } = entry
   if (!startTime || !endTime) return subject
-  return `${subject} (${startTime} – ${endTime})`
+  // ASCII hyphen — preview matches the wire format sent to Wabridge
+  // (unicode en-dash silently breaks Meta's template parameter validation).
+  return `${subject} (${startTime} - ${endTime})`
 }
 
 function buildRows(absencesByLwsId, studentProfiles) {

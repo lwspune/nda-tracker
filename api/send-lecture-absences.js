@@ -106,8 +106,11 @@ export default async function handler(req, res) {
       : []
     if (entries.length === 0) { lines.push(`  SKIP ${name} — no subjects`); skipped++; continue }
 
+    // ASCII hyphen (not en-dash). Meta's WhatsApp template parameter
+    // validation silently drops messages whose variable values contain
+    // unicode dashes; keep the wire format ASCII-safe.
     const fmt = e => (e.startTime && e.endTime)
-      ? `${e.subject} (${e.startTime} – ${e.endTime})`
+      ? `${e.subject} (${e.startTime} - ${e.endTime})`
       : e.subject
     // Smart layout: single entry inline, 2+ as a newline-prefixed dashed list
     // so the message reads "Subjects: Maths (...)" for one, or

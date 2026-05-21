@@ -98,7 +98,7 @@ describe('send-lecture-absences', () => {
     expect(payload.variables).toEqual([
       'Arjun Sharma',
       '21 May 2026',
-      '\n- Maths (9:00 AM – 10:00 AM)\n- Physics (10:00 AM – 11:00 AM)',
+      '\n- Maths (9:00 AM - 10:00 AM)\n- Physics (10:00 AM - 11:00 AM)',
     ])
   })
 
@@ -114,7 +114,7 @@ describe('send-lecture-absences', () => {
       ],
     })
     const payload = JSON.parse(fetch.mock.calls[0][1].body)
-    expect(payload.variables[2]).toBe('Maths (9:00 AM – 10:00 AM)')
+    expect(payload.variables[2]).toBe('Maths (9:00 AM - 10:00 AM)')
   })
 
   it('falls back to the bare subject when time info is missing (drift case)', async () => {
