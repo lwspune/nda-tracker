@@ -271,9 +271,11 @@ export default function TimetablePage() {
     // Clone just the <table> — avoids the overflow-x-auto scroll container
     // (which causes the scrollbar artifact and cuts off the last row).
     const table = gridRef.current.querySelector('table')
+    console.log('[png] table?', !!table, 'outerHTML len:', table?.outerHTML?.length)
     if (!table) { setPngLoading(false); return }
 
     const clone = table.cloneNode(true)
+    console.log('[png] clone children:', clone.children.length, 'outerHTML len:', clone.outerHTML?.length)
 
     // Apply export-only visual overrides directly to cloned nodes.
     // html-to-image reads getComputedStyle, so inline styles take precedence.
@@ -325,8 +327,13 @@ export default function TimetablePage() {
     wrapper.appendChild(clone)
     document.body.appendChild(wrapper)
 
+    console.log('[png] wrapper rect:', wrapper.getBoundingClientRect())
+    console.log('[png] wrapper offsetWidth/Height:', wrapper.offsetWidth, wrapper.offsetHeight)
+    console.log('[png] clone rect:', clone.getBoundingClientRect())
+
     try {
       const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
+      console.log('[png] dataUrl length:', dataUrl.length, 'prefix:', dataUrl.slice(0, 80))
       const link = document.createElement('a')
       link.download = `${activeTT.branch}-${activeTT.batchName}-timetable.png`
         .replace(/[^a-z0-9]+/gi, '-').toLowerCase()
