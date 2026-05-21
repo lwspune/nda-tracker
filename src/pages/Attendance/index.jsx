@@ -104,7 +104,15 @@ export default function AttendancePage() {
         body: JSON.stringify(payload),
       })
       const data = await r.json()
-      setSendResult({ kind, ok: r.ok && data.ok, sent: data.sent, skipped: data.skipped, error: data.error })
+      // When Wabridge rejected every row, the server returns 200 + sent:0 but
+      // each row has a FAIL line in data.lines — surface the first one so we
+      // can see the actual Wabridge error without digging into runtime logs.
+      let detail = data.error
+      if (!detail && data.sent === 0 && data.skipped > 0 && Array.isArray(data.lines)) {
+        const fail = data.lines.find(l => /^\s*FAIL/.test(l)) || data.lines.find(l => /^\s*SKIP/.test(l))
+        if (fail) detail = fail.trim()
+      }
+      setSendResult({ kind, ok: r.ok && data.ok && data.sent > 0, sent: data.sent, skipped: data.skipped, error: detail })
     } catch (e) {
       setSendResult({ kind, error: e.message })
     } finally {

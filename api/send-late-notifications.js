@@ -97,8 +97,9 @@ export default async function handler(req, res) {
     const name = (row.name || '').trim()
     if (!name) continue
 
-    // Template uses named placeholders ({{name}}, {{date}}) — send as object.
-    const variables = { name, date: dateLabel }
+    // Wabridge expects positional variables — the Meta-approved template body
+    // must use {{1}}, {{2}} placeholders (Meta does NOT substitute {{name}}).
+    const variables = [name, dateLabel]
 
     // Student
     const destStudent = redirectNorm || normMobile(row.mobile)
