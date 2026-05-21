@@ -123,6 +123,7 @@ export default async function handler(req, res) {
 
     const destStudent = redirectNorm || normMobile(row.mobile)
     if (destStudent) {
+      console.log(`[lecture] → ${name} student dest=${destStudent} redirect=${redirectNorm ?? 'none'} templateId=${templateId} varsCount=${variables.length} v3=${JSON.stringify(subjectsVar)}`)
       const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, variables)
       if (ok) { lines.push(`  SENT → ${name} (student → ${destStudent})`); sent++ }
       else    { lines.push(`  FAIL → ${name} (student → ${destStudent}): ${detail}`); skipped++ }
@@ -132,6 +133,7 @@ export default async function handler(req, res) {
 
     for (const parentRaw of (row.parentMobiles || [])) {
       const destParent = redirectNorm || normMobile(parentRaw)
+      console.log(`[lecture] → ${name} parent dest=${destParent} redirect=${redirectNorm ?? 'none'}`)
       if (!destParent) { lines.push(`  SKIP ${name} parent ${parentRaw} — unrecognised format`); skipped++; continue }
       const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, variables)
       if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
