@@ -86,15 +86,43 @@ describe('LectureLogTab — period cards', () => {
 
   it('shows the count of absentees per period (filtered to batch students)', async () => {
     mockStore.getLectureAbsencesForDate.mockResolvedValue([
-      { lws_id: 'LWS-001', subject: 'Maths',   date: THURSDAY },
-      { lws_id: 'LWS-002', subject: 'Maths',   date: THURSDAY },
-      { lws_id: 'LWS-003', subject: 'Maths',   date: THURSDAY }, // out-of-batch, ignored
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths'   },
+      { lws_id: 'LWS-002', date: THURSDAY, slot_id: 's1', subject: 'Maths'   },
+      { lws_id: 'LWS-003', date: THURSDAY, slot_id: 's1', subject: 'Maths'   }, // out-of-batch, ignored
     ])
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
     await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
     // 2 of the 3 absences are in this batch
     expect(await screen.findByText(/2 absent/i)).toBeInTheDocument()
     // Physics has none
+    expect(screen.getByText(/^0 absent/i)).toBeInTheDocument()
+  })
+
+  it('two same-subject periods on the same day stay independent', async () => {
+    // Regression test for the slot_id schema fix. Mock a timetable that has
+    // Maths twice (two slots, same subject, same day) and verify each card
+    // reports its own count, NOT the combined sum.
+    const TWO_MATHS_TIMETABLE = {
+      ...TIMETABLE,
+      timeSlots: [
+        { id: 's1', startTime: '9:00 AM',  endTime: '10:00 AM' },
+        { id: 's2', startTime: '2:00 PM',  endTime: '3:00 PM'  },
+      ],
+      grid: {
+        s1: { Thursday: { type: 'class', mappingId: 'm-maths' } },
+        s2: { Thursday: { type: 'class', mappingId: 'm-maths' } },
+      },
+    }
+    mockStore.timetables = [TWO_MATHS_TIMETABLE]
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      // Only the morning Maths (s1) has absences
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+      { lws_id: 'LWS-002', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+    // First Maths card → 2 absent; second Maths card → 0 absent
+    expect(await screen.findByText(/2 absent/i)).toBeInTheDocument()
     expect(screen.getByText(/^0 absent/i)).toBeInTheDocument()
   })
 
@@ -136,7 +164,7 @@ describe('LectureLogTab — marking flow', () => {
 
     await waitFor(() =>
       expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(
-        THURSDAY, 'Maths', ['LWS-001', 'LWS-002']
+        THURSDAY, 's1', 'Maths', ['LWS-001', 'LWS-002']
       )
     )
   })
@@ -167,9 +195,9 @@ describe('LectureLogTab — send button', () => {
 
   it('enabled and calls onSend(absencesByLwsId) when clicked', async () => {
     mockStore.getLectureAbsencesForDate.mockResolvedValue([
-      { lws_id: 'LWS-001', subject: 'Maths',   date: THURSDAY },
-      { lws_id: 'LWS-001', subject: 'Physics', date: THURSDAY },
-      { lws_id: 'LWS-002', subject: 'Maths',   date: THURSDAY },
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths'   },
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's2', subject: 'Physics' },
+      { lws_id: 'LWS-002', date: THURSDAY, slot_id: 's1', subject: 'Maths'   },
     ])
     const onSend = vi.fn()
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={onSend} />)

@@ -12,6 +12,9 @@ function todayIso() {
 // picks the students who missed that lecture, saves. Cards re-render with the
 // new count. Send button hands per-student subject lists to the parent for the
 // notification preview modal.
+//
+// Keying by slot_id (not subject) so two same-subject periods on the same day
+// stay independent — see lecture_absences UNIQUE (lws_id, date, slot_id).
 export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const studentProfiles    = useStore(s => s.studentProfiles)
   const timetables         = useStore(s => s.timetables)
@@ -21,8 +24,10 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
 
   const [date, setDate]           = useState(initialDate ?? todayIso())
   const [batchName, setBatchName] = useState(initialBatch ?? '')
-  const [absencesBySubject, setAbsencesBySubject] = useState({}) // { subject: [lwsId] }
-  const [modalSubject, setModalSubject] = useState(null)
+  const [absencesBySlot, setAbsencesBySlot] = useState({}) // { slotId: [lwsId] }
+  // Open-modal context. null = closed. Otherwise { slotId, subject } so the
+  // save handler can both key by slot_id and persist the subject for display.
+  const [modalSlot, setModalSlot] = useState(null)
 
   // Available batches: union of all timetable batch names
   const availableBatches = useMemo(() => {
@@ -41,6 +46,13 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     () => getTodaysLectures(timetable, date, mappings),
     [timetable, date, mappings]
   )
+
+  // slot_id → lecture for quick lookups (subject + time)
+  const lecturesBySlotId = useMemo(() => {
+    const map = {}
+    for (const lec of lectures) map[lec.slotId] = lec
+    return map
+  }, [lectures])
 
   // Students in the selected batch (deduped, sorted by name)
   const studentsInBatch = useMemo(() => {
@@ -61,11 +73,12 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     [studentsInBatch]
   )
 
-  // Load existing absences for the date, filter to this batch
+  // Load existing absences for the date, filter to this batch's students,
+  // and group by slot_id so each card reads its own count.
   useEffect(() => {
     if (!date || !batchName) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAbsencesBySubject({})
+      setAbsencesBySlot({})
       return
     }
     let cancelled = false
@@ -74,56 +87,43 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       const grouped = {}
       for (const r of rows) {
         if (!batchIdSet.has(r.lws_id)) continue
-        if (!grouped[r.subject]) grouped[r.subject] = []
-        grouped[r.subject].push(r.lws_id)
+        if (!r.slot_id) continue // legacy/orphan rows without slot_id are skipped
+        if (!grouped[r.slot_id]) grouped[r.slot_id] = []
+        grouped[r.slot_id].push(r.lws_id)
       }
-      setAbsencesBySubject(grouped)
+      setAbsencesBySlot(grouped)
     })
     return () => { cancelled = true }
   }, [date, batchName, getAbsencesForDate, batchIdSet])
 
   async function handleSavePeriod(lwsIds) {
-    if (!modalSubject) return
-    const ok = await setForPeriod(date, modalSubject, lwsIds)
+    if (!modalSlot?.slotId) return
+    const ok = await setForPeriod(date, modalSlot.slotId, modalSlot.subject, lwsIds)
     if (ok) {
-      setAbsencesBySubject(prev => ({ ...prev, [modalSubject]: lwsIds }))
+      setAbsencesBySlot(prev => ({ ...prev, [modalSlot.slotId]: lwsIds }))
     }
   }
 
-  // subject → { startTime, endTime } for today's lectures (used to enrich the
-  // send payload). Falls back to undefined when a subject was logged but no
-  // longer matches a slot in today's timetable.
-  const subjectTimes = useMemo(() => {
-    const map = {}
-    for (const lec of lectures) {
-      if (lec.subject && !map[lec.subject]) {
-        map[lec.subject] = { startTime: lec.startTime, endTime: lec.endTime }
-      }
-    }
-    return map
-  }, [lectures])
-
-  // Per-student missed-subject list, each entry enriched with time info from
-  // the timetable. Shape: { lwsId: [{ subject, startTime?, endTime? }] }
+  // Per-student missed-subject list with time info, derived by looking up the
+  // slot in today's lectures. Shape: { lwsId: [{ subject, startTime?, endTime? }] }
   const absencesByLwsId = useMemo(() => {
     const out = {}
-    for (const [subject, ids] of Object.entries(absencesBySubject)) {
-      const times = subjectTimes[subject]
+    for (const [slotId, ids] of Object.entries(absencesBySlot)) {
+      const lec = lecturesBySlotId[slotId]
+      if (!lec) continue // slot no longer in today's timetable — skip (drift)
       for (const id of ids) {
         if (!out[id]) out[id] = []
-        if (!out[id].some(e => e.subject === subject)) {
-          out[id].push({
-            subject,
-            startTime: times?.startTime,
-            endTime:   times?.endTime,
-          })
-        }
+        out[id].push({
+          subject:   lec.subject,
+          startTime: lec.startTime,
+          endTime:   lec.endTime,
+        })
       }
     }
     return out
-  }, [absencesBySubject, subjectTimes])
+  }, [absencesBySlot, lecturesBySlotId])
 
-  const totalAbsences = Object.values(absencesBySubject).reduce((acc, ids) => acc + ids.length, 0)
+  const totalAbsences = Object.values(absencesBySlot).reduce((acc, ids) => acc + ids.length, 0)
 
   return (
     <div>
@@ -179,7 +179,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {lectures.map(lec => {
-            const count = (absencesBySubject[lec.subject] || []).length
+            const count = (absencesBySlot[lec.slotId] || []).length
             return (
               <div
                 key={lec.slotId}
@@ -197,9 +197,9 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setModalSubject(lec.subject)}
+                    onClick={() => setModalSlot({ slotId: lec.slotId, subject: lec.subject })}
                     className="btn text-[12px] min-h-[36px] px-3"
-                    aria-label={`Mark absentees for ${lec.subject}`}
+                    aria-label={`Mark absentees for ${lec.subject} ${lec.startTime}`}
                   >
                     Mark absentees
                   </button>
@@ -211,13 +211,13 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       )}
 
       <MarkAbsenteesModal
-        open={modalSubject !== null}
+        open={modalSlot !== null}
         date={date}
-        subject={modalSubject ?? ''}
+        subject={modalSlot?.subject ?? ''}
         studentsInBatch={studentsInBatch}
-        initialAbsentees={modalSubject ? (absencesBySubject[modalSubject] || []) : []}
+        initialAbsentees={modalSlot ? (absencesBySlot[modalSlot.slotId] || []) : []}
         onSave={handleSavePeriod}
-        onClose={() => setModalSubject(null)}
+        onClose={() => setModalSlot(null)}
       />
     </div>
   )

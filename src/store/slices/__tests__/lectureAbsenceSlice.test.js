@@ -52,30 +52,31 @@ function makeStore() {
 describe('setLectureAbsenteesForPeriod', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('deletes existing rows for (date, subject) and inserts the new set', async () => {
+  it('deletes existing rows for (date, slotId) and inserts the new set', async () => {
     const { builder } = mockSupabase()
     const { slice } = makeStore()
     const ok = await slice.setLectureAbsenteesForPeriod(
       '2026-05-21',
+      'slot_abc',
       'Maths',
       ['LWS-001', 'LWS-002', 'LWS-003']
     )
     expect(ok).toBe(true)
     expect(builder.delete).toHaveBeenCalled()
-    // Insert receives rows
+    // Insert receives rows keyed by slot_id (subject still stored for display)
     expect(builder.insert).toHaveBeenCalledOnce()
     const rows = builder.insert.mock.calls[0][0]
     expect(rows).toEqual([
-      { lws_id: 'LWS-001', date: '2026-05-21', subject: 'Maths', created_by: 'admin@lws' },
-      { lws_id: 'LWS-002', date: '2026-05-21', subject: 'Maths', created_by: 'admin@lws' },
-      { lws_id: 'LWS-003', date: '2026-05-21', subject: 'Maths', created_by: 'admin@lws' },
+      { lws_id: 'LWS-001', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
+      { lws_id: 'LWS-002', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
+      { lws_id: 'LWS-003', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
     ])
   })
 
   it('only deletes when the new list is empty (clear-the-period flow)', async () => {
     const { builder } = mockSupabase()
     const { slice } = makeStore()
-    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'Maths', [])
+    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', 'Maths', [])
     expect(ok).toBe(true)
     expect(builder.delete).toHaveBeenCalled()
     expect(builder.insert).not.toHaveBeenCalled()
@@ -86,6 +87,7 @@ describe('setLectureAbsenteesForPeriod', () => {
     const { slice } = makeStore()
     await slice.setLectureAbsenteesForPeriod(
       '2026-05-21',
+      'slot_abc',
       'Maths',
       ['LWS-001', 'LWS-001', 'LWS-002']
     )
@@ -96,7 +98,7 @@ describe('setLectureAbsenteesForPeriod', () => {
   it('returns false when no session', async () => {
     mockSupabase({ sessionActive: false })
     const { slice } = makeStore()
-    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'Maths', ['LWS-001'])
+    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', 'Maths', ['LWS-001'])
     expect(ok).toBe(false)
     expect(supabase.from).not.toHaveBeenCalled()
   })
@@ -104,15 +106,16 @@ describe('setLectureAbsenteesForPeriod', () => {
   it('returns false on missing args', async () => {
     mockSupabase()
     const { slice } = makeStore()
-    expect(await slice.setLectureAbsenteesForPeriod('', 'Maths', ['LWS-001'])).toBe(false)
-    expect(await slice.setLectureAbsenteesForPeriod('2026-05-21', '', ['LWS-001'])).toBe(false)
-    expect(await slice.setLectureAbsenteesForPeriod('2026-05-21', 'Maths', null)).toBe(false)
+    expect(await slice.setLectureAbsenteesForPeriod('',           'slot_abc', 'Maths', ['LWS-001'])).toBe(false)
+    expect(await slice.setLectureAbsenteesForPeriod('2026-05-21', '',         'Maths', ['LWS-001'])).toBe(false)
+    expect(await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', '',      ['LWS-001'])).toBe(false)
+    expect(await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', 'Maths', null)).toBe(false)
   })
 
   it('tags rows with the authenticated user email as created_by', async () => {
     const { builder } = mockSupabase()
     const { slice } = makeStore()
-    await slice.setLectureAbsenteesForPeriod('2026-05-21', 'Maths', ['LWS-001'])
+    await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', 'Maths', ['LWS-001'])
     const rows = builder.insert.mock.calls[0][0]
     expect(rows[0].created_by).toBe('admin@lws')
   })
@@ -120,7 +123,7 @@ describe('setLectureAbsenteesForPeriod', () => {
   it('returns false when the insert errors', async () => {
     mockSupabase({ insertError: { message: 'boom' } })
     const { slice } = makeStore()
-    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'Maths', ['LWS-001'])
+    const ok = await slice.setLectureAbsenteesForPeriod('2026-05-21', 'slot_abc', 'Maths', ['LWS-001'])
     expect(ok).toBe(false)
   })
 })
