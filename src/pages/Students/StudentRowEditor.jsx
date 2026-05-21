@@ -10,6 +10,7 @@ export default function StudentRowEditor({
   batches:            initialBatches = [],
   availableBranches   = [],
   availableBatches    = [],
+  batchBranches       = null,
   onSave,
   onCancel,
   onDelete,
@@ -19,7 +20,13 @@ export default function StudentRowEditor({
   const [pendingBatch, setPendingBatch] = useState('')
 
   const branchOptions = Array.from(new Set([initialBranch, ...availableBranches].filter(Boolean)))
-  const batchOptions  = availableBatches.filter(b => !batches.includes(b))
+  // When batchBranches is provided, narrow the add-batch dropdown to entries whose
+  // central branch matches the row's draft branch — prevents APJ batches from being
+  // assigned to an LWS student and vice-versa.
+  const branchFilteredBatches = batchBranches
+    ? availableBatches.filter(b => batchBranches[b] === branch)
+    : availableBatches
+  const batchOptions  = branchFilteredBatches.filter(b => !batches.includes(b))
 
   function removeBatch(name) {
     setBatches(batches.filter(b => b !== name))

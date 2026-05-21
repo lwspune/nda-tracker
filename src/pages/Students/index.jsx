@@ -8,13 +8,16 @@ import ImportStudentsModal from '../../components/students/ImportStudentsModal'
 import ManageBatchBranchModal from './ManageBatchBranchModal'
 
 export default function StudentsPage() {
-  const exams              = useStore(s => s.exams)
-  const studentList        = useStore(s => s.studentList)
-  const studentProfiles    = useStore(s => s.studentProfiles)
-  const activeStudent      = useStore(s => s.activeStudent)
-  const setActiveStudent   = useStore(s => s.setActiveStudent)
-  const updateBranchBatch  = useStore(s => s.updateStudentBranchBatch)
-  const deleteStudent      = useStore(s => s.deleteStudent)
+  const exams                  = useStore(s => s.exams)
+  const studentList            = useStore(s => s.studentList)
+  const studentProfiles        = useStore(s => s.studentProfiles)
+  const activeStudent          = useStore(s => s.activeStudent)
+  const setActiveStudent       = useStore(s => s.setActiveStudent)
+  const updateBranchBatch      = useStore(s => s.updateStudentBranchBatch)
+  const deleteStudent          = useStore(s => s.deleteStudent)
+  const branches               = useStore(s => s.branches)
+  const syllabusBatches        = useStore(s => s.syllabusBatches)
+  const syllabusBatchBranches  = useStore(s => s.syllabusBatchBranches)
 
   const mode = useMode()
   const isAdmin = mode === 'admin'
@@ -104,6 +107,9 @@ export default function StudentsPage() {
           onEdit={(lwsId, name, patch) => updateBranchBatch(lwsId, name, patch)}
           onDelete={isAdmin ? (lwsId) => deleteStudent(lwsId) : undefined}
           isAdmin={isAdmin}
+          centralBranches={branches}
+          centralBatches={syllabusBatches}
+          batchBranchMap={syllabusBatchBranches}
         />
       )}
 

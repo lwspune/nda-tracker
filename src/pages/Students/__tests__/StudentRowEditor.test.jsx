@@ -132,6 +132,51 @@ describe('StudentRowEditor — Cancel', () => {
   })
 })
 
+describe('StudentRowEditor — batch filtering by branch', () => {
+  it('filters availableBatches by current branch using batchBranches map', () => {
+    render(<StudentRowEditor {...makeProps({
+      branch: 'LWS Pune',
+      batches: [],
+      availableBranches: ['LWS Pune', 'APJ'],
+      availableBatches: ['LWS_Batch', 'APJ_Batch'],
+      batchBranches: { LWS_Batch: 'LWS Pune', APJ_Batch: 'APJ' },
+    })} />)
+    const addSelect = screen.getByLabelText(/add batch/i)
+    const options = within(addSelect).getAllByRole('option').map(o => o.value).filter(Boolean)
+    expect(options).toContain('LWS_Batch')
+    expect(options).not.toContain('APJ_Batch')
+  })
+
+  it('updates the batch dropdown when the user changes branch', async () => {
+    const user = userEvent.setup()
+    render(<StudentRowEditor {...makeProps({
+      branch: 'LWS Pune',
+      batches: [],
+      availableBranches: ['LWS Pune', 'APJ'],
+      availableBatches: ['LWS_Batch', 'APJ_Batch'],
+      batchBranches: { LWS_Batch: 'LWS Pune', APJ_Batch: 'APJ' },
+    })} />)
+    await user.selectOptions(screen.getByLabelText(/branch/i), 'APJ')
+    const addSelect = screen.getByLabelText(/add batch/i)
+    const options = within(addSelect).getAllByRole('option').map(o => o.value).filter(Boolean)
+    expect(options).not.toContain('LWS_Batch')
+    expect(options).toContain('APJ_Batch')
+  })
+
+  it('without batchBranches prop, shows all availableBatches regardless of branch', () => {
+    render(<StudentRowEditor {...makeProps({
+      branch: 'LWS Pune',
+      batches: [],
+      availableBatches: ['LWS_Batch', 'APJ_Batch'],
+      // no batchBranches passed
+    })} />)
+    const addSelect = screen.getByLabelText(/add batch/i)
+    const options = within(addSelect).getAllByRole('option').map(o => o.value).filter(Boolean)
+    expect(options).toContain('LWS_Batch')
+    expect(options).toContain('APJ_Batch')
+  })
+})
+
 describe('StudentRowEditor — Delete', () => {
   it('renders a Delete button when onDelete is provided', () => {
     render(<StudentRowEditor {...makeProps({ onDelete: vi.fn() })} />)

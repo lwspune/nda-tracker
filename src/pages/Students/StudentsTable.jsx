@@ -36,13 +36,30 @@ export default function StudentsTable({
   onEdit,
   onDelete,
   isAdmin = false,
+  centralBranches = [],
+  centralBatches = [],
+  batchBranchMap = {},
 }) {
   const [search, setSearch]         = useState('')
   const [branchFilter, setBranch]   = useState('all')
   const [batchFilter, setBatchF]    = useState('all')
   const [statusFilter, setStatus]   = useState('all')
+  const [alignFilter, setAlignF]    = useState('all')
   const [page, setPage]             = useState(1)
   const [editingId, setEditingId]   = useState(null)
+
+  // Central-batch set for O(1) alignment checks. When the caller doesn't pass
+  // centralBatches (e.g. legacy tests), alignment is treated as "off" — no rows
+  // get the needs-review pill and the filter is a no-op.
+  const centralSet  = useMemo(() => new Set(centralBatches), [centralBatches])
+  const showAlign   = centralBatches.length > 0
+
+  function isAligned(student) {
+    if (!showAlign) return true
+    const list = student.batches || []
+    if (list.length === 0) return false
+    return list.every(b => centralSet.has(b))
+  }
 
   // Distinct filter options
   const allBranches = useMemo(
@@ -64,6 +81,8 @@ export default function StudentsTable({
       if (branchFilter !== 'all' && s.branch !== branchFilter) return false
       if (batchFilter  !== 'all' && !(s.batches || []).includes(batchFilter)) return false
       if (statusFilter !== 'all' && s.accountStatus !== statusFilter) return false
+      if (alignFilter  === 'aligned'   && !isAligned(s)) return false
+      if (alignFilter  === 'unaligned' &&  isAligned(s)) return false
       if (q) {
         const haystack = [
           s.name,
@@ -74,7 +93,8 @@ export default function StudentsTable({
       }
       return true
     })
-  }, [students, search, branchFilter, batchFilter, statusFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students, search, branchFilter, batchFilter, statusFilter, alignFilter, centralSet, showAlign])
 
   // Reset to page 1 whenever a filter changes — useMemo above changes identity, page state below resets
   // (Use a derived clamp so we don't need a useEffect with `set` inside.)
@@ -136,6 +156,19 @@ export default function StudentsTable({
           <option value="Quit">Quit</option>
         </select>
 
+        {showAlign && (
+          <select
+            aria-label="Alignment filter"
+            value={alignFilter}
+            onChange={e => { setAlignF(e.target.value); resetPage() }}
+            className="form-input text-[12px] w-auto"
+          >
+            <option value="all">All alignment</option>
+            <option value="aligned">✓ Aligned</option>
+            <option value="unaligned">⚠ Needs review</option>
+          </select>
+        )}
+
         <span className="text-[11px] font-mono text-ink-3 ml-auto">
           {filtered.length} of {students.length}
         </span>
@@ -152,6 +185,7 @@ export default function StudentsTable({
               <th className="px-3 py-2">Batch(es)</th>
               <th className="px-3 py-2 hidden md:table-cell">Mobile</th>
               <th className="px-3 py-2">Status</th>
+              {showAlign && <th className="px-3 py-2">Aligned</th>}
               <th className="px-3 py-2 hidden md:table-cell text-right">Exams</th>
               <th className="px-3 py-2 hidden md:table-cell">Last activity</th>
               {isAdmin && <th className="px-3 py-2"></th>}
@@ -160,7 +194,7 @@ export default function StudentsTable({
           <tbody>
             {pageItems.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-ink-3 italic">
+                <td colSpan={showAlign ? 10 : 9} className="px-4 py-8 text-center text-ink-3 italic">
                   No students match the current filters.
                 </td>
               </tr>
@@ -208,6 +242,15 @@ export default function StudentsTable({
                         {s.accountStatus || '—'}
                       </Badge>
                     </td>
+                    {showAlign && (
+                      <td className="px-3 py-2">
+                        {isAligned(s) ? (
+                          <span aria-label="Aligned"><Badge variant="green">✓</Badge></span>
+                        ) : (
+                          <span aria-label="Needs review"><Badge variant="yellow">⚠</Badge></span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 font-mono text-ink-2 text-right hidden md:table-cell">{examCount}</td>
                     <td className="px-3 py-2 font-mono text-ink-3 hidden md:table-cell">{lastDate || '—'}</td>
                     {isAdmin && (
@@ -223,14 +266,15 @@ export default function StudentsTable({
                   </tr>
                   {isEditing && (
                     <tr key={`${s.lwsId}-editor`}>
-                      <td colSpan={9} className="p-0">
+                      <td colSpan={showAlign ? 10 : 9} className="p-0">
                         <StudentRowEditor
                           lwsId={s.lwsId}
                           name={s.name}
                           branch={s.branch || ''}
                           batches={s.batches || []}
-                          availableBranches={allBranches}
-                          availableBatches={allBatches}
+                          availableBranches={centralBranches.length ? centralBranches : allBranches}
+                          availableBatches={centralBatches.length ? centralBatches : allBatches}
+                          batchBranches={Object.keys(batchBranchMap).length ? batchBranchMap : null}
                           onSave={(patch) => {
                             onEdit && onEdit(s.lwsId, s.name, patch)
                             setEditingId(null)

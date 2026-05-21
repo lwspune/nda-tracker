@@ -1,16 +1,19 @@
 // Tests for StudentsTable — the filtered, paginated student browser at the top of the Students page.
 // Click a name → onSelect(name). Click Edit → expands the row with StudentRowEditor.
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // StudentRowEditor is stubbed — it has its own test file and we don't want to test its internals here.
 vi.mock('../StudentRowEditor', () => ({
-  default: ({ branch, batches, onSave, onCancel }) => (
+  default: ({ branch, batches, availableBranches, availableBatches, batchBranches, onSave, onCancel }) => (
     <div data-testid="row-editor"
          data-branch={branch}
-         data-batches={batches.join('|')}>
+         data-batches={batches.join('|')}
+         data-available-branches={(availableBranches || []).join('|')}
+         data-available-batches={(availableBatches || []).join('|')}
+         data-batch-branches={JSON.stringify(batchBranches || {})}>
       <button onClick={() => onSave({ branch: 'NEW', batches: ['X'] })}>EditorSave</button>
       <button onClick={() => onCancel()}>EditorCancel</button>
     </div>
@@ -229,6 +232,85 @@ describe('StudentsTable — click handlers', () => {
     await user.click(screen.getByText('EditorCancel'))
     expect(onEdit).not.toHaveBeenCalled()
     expect(screen.queryByTestId('row-editor')).not.toBeInTheDocument()
+  })
+})
+
+// ── Alignment column + filter ─────────────────────────────────────────────────
+
+describe('StudentsTable — alignment column', () => {
+  it('shows aligned indicator when student batches are all in centralBatches', () => {
+    render(<StudentsTable {...makeProps({
+      students: [makeStudent({ lwsId: 'LWS-001', name: 'Aligned Stu', batches: ['CB1', 'CB2'] })],
+      centralBatches: ['CB1', 'CB2', 'CB3'],
+    })} />)
+    const row = screen.getByText('Aligned Stu').closest('tr')
+    expect(within(row).getByLabelText(/aligned/i)).toBeInTheDocument()
+  })
+
+  it('shows needs-review indicator when student batches contain a non-central batch', () => {
+    render(<StudentsTable {...makeProps({
+      students: [makeStudent({ lwsId: 'LWS-001', name: 'Unaligned Stu', batches: ['HR_Batch'] })],
+      centralBatches: ['CB1'],
+    })} />)
+    const row = screen.getByText('Unaligned Stu').closest('tr')
+    expect(within(row).getByLabelText(/needs review/i)).toBeInTheDocument()
+  })
+
+  it('shows needs-review indicator when student batches is empty', () => {
+    render(<StudentsTable {...makeProps({
+      students: [makeStudent({ lwsId: 'LWS-001', name: 'Empty Stu', batches: [] })],
+      centralBatches: ['CB1'],
+    })} />)
+    const row = screen.getByText('Empty Stu').closest('tr')
+    expect(within(row).getByLabelText(/needs review/i)).toBeInTheDocument()
+  })
+
+  it('alignment filter "needs review" shows only unaligned students', async () => {
+    const user = userEvent.setup()
+    render(<StudentsTable {...makeProps({
+      students: [
+        makeStudent({ lwsId: 'LWS-001', name: 'Aligned Stu',   batches: ['CB1'] }),
+        makeStudent({ lwsId: 'LWS-002', name: 'Unaligned Stu', batches: ['HR_Batch'] }),
+      ],
+      centralBatches: ['CB1'],
+    })} />)
+    await user.selectOptions(screen.getByLabelText(/alignment/i), 'unaligned')
+    expect(screen.queryByText('Aligned Stu')).not.toBeInTheDocument()
+    expect(screen.getByText('Unaligned Stu')).toBeInTheDocument()
+  })
+
+  it('alignment filter "aligned" shows only aligned students', async () => {
+    const user = userEvent.setup()
+    render(<StudentsTable {...makeProps({
+      students: [
+        makeStudent({ lwsId: 'LWS-001', name: 'Aligned Stu',   batches: ['CB1'] }),
+        makeStudent({ lwsId: 'LWS-002', name: 'Unaligned Stu', batches: ['HR_Batch'] }),
+      ],
+      centralBatches: ['CB1'],
+    })} />)
+    await user.selectOptions(screen.getByLabelText(/alignment/i), 'aligned')
+    expect(screen.getByText('Aligned Stu')).toBeInTheDocument()
+    expect(screen.queryByText('Unaligned Stu')).not.toBeInTheDocument()
+  })
+
+  it('without centralBatches prop, every student counts as aligned (no work-in-progress signal)', () => {
+    render(<StudentsTable {...makeProps()} />)
+    // No centralBatches passed; the alignment indicator stays off all rows
+    expect(screen.queryByLabelText(/needs review/i)).not.toBeInTheDocument()
+  })
+
+  it('forwards centralBranches, centralBatches, and batchBranchMap to the row editor', async () => {
+    const user = userEvent.setup()
+    render(<StudentsTable {...makeProps({
+      centralBranches: ['LWS Pune', 'APJ'],
+      centralBatches:  ['CB1', 'CB2'],
+      batchBranchMap:  { CB1: 'LWS Pune', CB2: 'APJ' },
+    })} />)
+    await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+    const editor = screen.getByTestId('row-editor')
+    expect(editor).toHaveAttribute('data-available-branches', 'LWS Pune|APJ')
+    expect(editor).toHaveAttribute('data-available-batches',  'CB1|CB2')
+    expect(JSON.parse(editor.getAttribute('data-batch-branches'))).toEqual({ CB1: 'LWS Pune', CB2: 'APJ' })
   })
 })
 
