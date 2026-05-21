@@ -94,12 +94,12 @@ describe('send-lecture-absences', () => {
     expect(res.body.sent).toBe(2) // student + 1 parent
     const lastCall = fetch.mock.calls.at(-1)
     const payload = JSON.parse(lastCall[1].body)
-    // Multiple subjects → newline-prefixed dashed list; no parens around
-    // time (Meta drops messages with paren+colon patterns in variables).
+    // Multiple subjects → comma-joined, single line. Meta drops messages
+    // whose template variables contain newlines or paren+colon patterns.
     expect(payload.variables).toEqual([
       'Arjun Sharma',
       '21 May 2026',
-      '\n- Maths 9:00 AM to 10:00 AM\n- Physics 10:00 AM to 11:00 AM',
+      'Maths 9:00 AM to 10:00 AM, Physics 10:00 AM to 11:00 AM',
     ])
   })
 

@@ -106,20 +106,15 @@ export default async function handler(req, res) {
       : []
     if (entries.length === 0) { lines.push(`  SKIP ${name} — no subjects`); skipped++; continue }
 
-    // ASCII-only, no parentheses. Meta's WhatsApp template parameter
-    // validation silently drops messages whose variable values contain
-    // patterns that look like rich formatting (unicode dashes, brackets,
-    // parens with colons inside). Plain "Subject HH:MM AM to HH:MM PM"
-    // is the safest shape that's still readable.
+    // ASCII-only, no parentheses, no newlines. Meta's WhatsApp template
+    // parameter validation silently drops messages whose variable values
+    // contain rich-formatting patterns (unicode dashes, parens with
+    // colons inside) OR newlines/tabs. Single line with comma-joined
+    // "Subject HH:MM AM to HH:MM PM" items is the shape that delivers.
     const fmt = e => (e.startTime && e.endTime)
       ? `${e.subject} ${e.startTime} to ${e.endTime}`
       : e.subject
-    // Smart layout: single entry inline, 2+ as a newline-prefixed dashed list
-    // so the message reads "Subjects: Maths (...)" for one, or
-    // "Subjects:\n- Maths (...)\n- Physics (...)" for many.
-    const subjectsVar = entries.length === 1
-      ? fmt(entries[0])
-      : '\n' + entries.map(e => `- ${fmt(e)}`).join('\n')
+    const subjectsVar = entries.map(fmt).join(', ')
 
     const variables = [name, dateLabel, subjectsVar]
 
