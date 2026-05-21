@@ -361,7 +361,12 @@ Key coverage: analytics filters, GAT routing, tag validation, dashboard filters,
 
 ## Lint
 
-`npm run lint` — `eslint.config.js` (flat config). Current state: **11 errors** (all pre-existing — `'global' is not defined` in test files using `global.fetch`, plus 3 intentional `setState in effect` rule violations in `Sidebar.jsx` / `LoginPage.jsx`), **13 warnings** (all `react-hooks/exhaustive-deps` — intentional). Node-only scripts (`api/*`, `migrate_*.js`, `sync_*.js`) additionally report `'process' is not defined`; environment-level, not code issues.
+`npm run lint` — `eslint.config.js` (flat config). Current state (2026-05-21): **82 errors, 13 warnings**. Breakdown:
+- **69** `'process' is not defined` — Node-only scripts (`api/*`, `migrate_*.js`, `sync_*.js`). Environment-level, not code issues.
+- **8** `'global' is not defined` — test files using `global.fetch`. Pre-existing.
+- **6** `Calling setState synchronously within an effect` — intentional in `App.jsx` (session-check gate) and `pages/Students/StudentView.jsx` (auto-select). Use `// eslint-disable-next-line react-hooks/set-state-in-effect` on individual lines as needed.
+- **2** `no-unused-vars` — `sourceResults`, `allNamesLower`. Genuine dead variables; clean up next time touching those files.
+- **13** warnings — all `react-hooks/exhaustive-deps`. Intentional (auto-select / sync-with-external patterns).
 
 **Config structure:**
 - Browser globals + React/react-hooks/react-refresh plugins for all source files.
@@ -371,8 +376,9 @@ Key coverage: analytics filters, GAT routing, tag validation, dashboard filters,
 - `react-hooks/preserve-manual-memoization` disabled globally (React Compiler rule, not applicable here).
 
 **Intentional `eslint-disable` comments in source:**
-- `SyllabusPage.jsx` and `ExamScheduleView.jsx`: `react-hooks/set-state-in-effect` — auto-select first item when the list changes; the pattern is deliberate.
+- `SyllabusPage.jsx`, `ExamScheduleView.jsx`, `LoginPage.jsx`: `react-hooks/set-state-in-effect` — auto-select first item when the list changes, or reset state on flag change; the pattern is deliberate.
 - `LoginPage.jsx` and `StudentLogin.jsx`: `react-refresh/only-export-components` — session-clear helpers are co-located with the component that owns the session; splitting would be artificial.
+- `App.jsx` and `pages/Students/StudentView.jsx` have `setState synchronously within an effect` errors that are NOT yet suppressed with `eslint-disable` comments — the pattern is intentional but the disables haven't been added. Add `// eslint-disable-next-line react-hooks/set-state-in-effect` if you touch those lines.
 
 ---
 
