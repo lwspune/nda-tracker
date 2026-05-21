@@ -90,17 +90,38 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     }
   }
 
-  // Per-student subject list for the Send button
+  // subject → { startTime, endTime } for today's lectures (used to enrich the
+  // send payload). Falls back to undefined when a subject was logged but no
+  // longer matches a slot in today's timetable.
+  const subjectTimes = useMemo(() => {
+    const map = {}
+    for (const lec of lectures) {
+      if (lec.subject && !map[lec.subject]) {
+        map[lec.subject] = { startTime: lec.startTime, endTime: lec.endTime }
+      }
+    }
+    return map
+  }, [lectures])
+
+  // Per-student missed-subject list, each entry enriched with time info from
+  // the timetable. Shape: { lwsId: [{ subject, startTime?, endTime? }] }
   const absencesByLwsId = useMemo(() => {
     const out = {}
     for (const [subject, ids] of Object.entries(absencesBySubject)) {
+      const times = subjectTimes[subject]
       for (const id of ids) {
         if (!out[id]) out[id] = []
-        if (!out[id].includes(subject)) out[id].push(subject)
+        if (!out[id].some(e => e.subject === subject)) {
+          out[id].push({
+            subject,
+            startTime: times?.startTime,
+            endTime:   times?.endTime,
+          })
+        }
       }
     }
     return out
-  }, [absencesBySubject])
+  }, [absencesBySubject, subjectTimes])
 
   const totalAbsences = Object.values(absencesBySubject).reduce((acc, ids) => acc + ids.length, 0)
 

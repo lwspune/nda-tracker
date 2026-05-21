@@ -179,11 +179,17 @@ describe('LectureLogTab — send button', () => {
     const sendBtn = screen.getByRole('button', { name: /send lecture-miss notifications/i })
     expect(sendBtn).not.toBeDisabled()
     fireEvent.click(sendBtn)
-    // onSend receives (absencesByLwsId, date)
+    // onSend receives (absencesByLwsId, date). Each entry is now an object
+    // enriched with time info from the timetable.
     expect(onSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        'LWS-001': expect.arrayContaining(['Maths', 'Physics']),
-        'LWS-002': ['Maths'],
+        'LWS-001': expect.arrayContaining([
+          expect.objectContaining({ subject: 'Maths',   startTime: '9:00 AM',  endTime: '10:00 AM' }),
+          expect.objectContaining({ subject: 'Physics', startTime: '10:00 AM', endTime: '11:00 AM' }),
+        ]),
+        'LWS-002': [
+          expect.objectContaining({ subject: 'Maths', startTime: '9:00 AM', endTime: '10:00 AM' }),
+        ],
       }),
       THURSDAY,
     )

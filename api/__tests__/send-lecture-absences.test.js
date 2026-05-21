@@ -81,14 +81,67 @@ describe('send-lecture-absences', () => {
     const { res } = await call({
       date: '2026-05-21',
       students: [
-        { name: 'Arjun Sharma', mobile: '9876543210', parentMobiles: ['9876543211'], subjects: ['Maths', 'Physics'] },
+        {
+          name: 'Arjun Sharma', mobile: '9876543210', parentMobiles: ['9876543211'],
+          subjects: [
+            { subject: 'Maths',   startTime: '9:00 AM',  endTime: '10:00 AM' },
+            { subject: 'Physics', startTime: '10:00 AM', endTime: '11:00 AM' },
+          ],
+        },
       ],
     })
     expect(res.statusCode).toBe(200)
     expect(res.body.sent).toBe(2) // student + 1 parent
     const lastCall = fetch.mock.calls.at(-1)
     const payload = JSON.parse(lastCall[1].body)
-    expect(payload.variables).toEqual(['Arjun Sharma', '21 May 2026', 'Maths, Physics'])
+    // Multiple subjects → newline-prefixed dashed list with en-dash times
+    expect(payload.variables).toEqual([
+      'Arjun Sharma',
+      '21 May 2026',
+      '\n- Maths (9:00 AM – 10:00 AM)\n- Physics (10:00 AM – 11:00 AM)',
+    ])
+  })
+
+  it('renders a single subject inline (no dashed list)', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    await call({
+      date: '2026-05-21',
+      students: [
+        {
+          name: 'Arjun Sharma', mobile: '9876543210', parentMobiles: [],
+          subjects: [{ subject: 'Maths', startTime: '9:00 AM', endTime: '10:00 AM' }],
+        },
+      ],
+    })
+    const payload = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(payload.variables[2]).toBe('Maths (9:00 AM – 10:00 AM)')
+  })
+
+  it('falls back to the bare subject when time info is missing (drift case)', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    await call({
+      date: '2026-05-21',
+      students: [
+        {
+          name: 'Arjun Sharma', mobile: '9876543210', parentMobiles: [],
+          subjects: [{ subject: 'English' }], // no times
+        },
+      ],
+    })
+    const payload = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(payload.variables[2]).toBe('English')
+  })
+
+  it('accepts legacy string subjects without breaking (no time, inline)', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    await call({
+      date: '2026-05-21',
+      students: [
+        { name: 'Arjun Sharma', mobile: '9876543210', parentMobiles: [], subjects: ['English'] },
+      ],
+    })
+    const payload = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(payload.variables[2]).toBe('English')
   })
 
   it('counts Wabridge failures as skipped', async () => {

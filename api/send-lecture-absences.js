@@ -96,10 +96,27 @@ export default async function handler(req, res) {
   for (const row of students) {
     const name = (row.name || '').trim()
     if (!name) continue
-    const subjects = Array.isArray(row.subjects) ? row.subjects.join(', ') : ''
-    if (!subjects) { lines.push(`  SKIP ${name} — no subjects`); skipped++; continue }
 
-    const variables = [name, dateLabel, subjects]
+    // subjects entries can be either { subject, startTime?, endTime? } objects
+    // (new shape, carries time) or plain strings (legacy fallback).
+    const entries = Array.isArray(row.subjects)
+      ? row.subjects
+          .map(s => typeof s === 'string' ? { subject: s } : s)
+          .filter(e => e?.subject)
+      : []
+    if (entries.length === 0) { lines.push(`  SKIP ${name} — no subjects`); skipped++; continue }
+
+    const fmt = e => (e.startTime && e.endTime)
+      ? `${e.subject} (${e.startTime} – ${e.endTime})`
+      : e.subject
+    // Smart layout: single entry inline, 2+ as a newline-prefixed dashed list
+    // so the message reads "Subjects: Maths (...)" for one, or
+    // "Subjects:\n- Maths (...)\n- Physics (...)" for many.
+    const subjectsVar = entries.length === 1
+      ? fmt(entries[0])
+      : '\n' + entries.map(e => `- ${fmt(e)}`).join('\n')
+
+    const variables = [name, dateLabel, subjectsVar]
 
     const destStudent = redirectNorm || normMobile(row.mobile)
     if (destStudent) {

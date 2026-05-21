@@ -20,12 +20,16 @@ beforeEach(() => {
 })
 
 describe('LectureMissPreviewModal', () => {
+  // Each subject entry is now an object with time info derived from the timetable
   const ABSENCES = {
-    'LWS-001': ['Maths', 'Physics'],
-    'LWS-002': ['English'],
+    'LWS-001': [
+      { subject: 'Maths',   startTime: '9:00 AM',  endTime: '10:00 AM' },
+      { subject: 'Physics', startTime: '10:00 AM', endTime: '11:00 AM' },
+    ],
+    'LWS-002': [{ subject: 'English', startTime: '11:00 AM', endTime: '12:00 PM' }],
   }
 
-  it('renders one row per student with their missed subjects listed', () => {
+  it('renders one row per student with their missed subjects listed (formatted with time)', () => {
     render(
       <LectureMissPreviewModal
         date="2026-05-21"
@@ -36,11 +40,12 @@ describe('LectureMissPreviewModal', () => {
     )
     expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
     expect(screen.getByText('Ravi Kumar')).toBeInTheDocument()
-    expect(screen.getByText(/Maths, Physics/)).toBeInTheDocument()
-    expect(screen.getByText('English')).toBeInTheDocument()
+    // Comma-joined with time in parens, en-dash separator
+    expect(screen.getByText(/Maths \(9:00 AM – 10:00 AM\).+Physics \(10:00 AM – 11:00 AM\)/)).toBeInTheDocument()
+    expect(screen.getByText(/English \(11:00 AM – 12:00 PM\)/)).toBeInTheDocument()
   })
 
-  it('confirm passes rows with subjects to onConfirm', () => {
+  it('confirm passes rows with the object-shaped subjects to onConfirm', () => {
     const onConfirm = vi.fn()
     render(
       <LectureMissPreviewModal
@@ -56,16 +61,33 @@ describe('LectureMissPreviewModal', () => {
         expect.objectContaining({
           lwsId: 'LWS-001',
           name: 'Arjun Sharma',
-          subjects: ['Maths', 'Physics'],
+          subjects: [
+            expect.objectContaining({ subject: 'Maths',   startTime: '9:00 AM',  endTime: '10:00 AM' }),
+            expect.objectContaining({ subject: 'Physics', startTime: '10:00 AM', endTime: '11:00 AM' }),
+          ],
         }),
         expect.objectContaining({
           lwsId: 'LWS-002',
           name: 'Ravi Kumar',
-          subjects: ['English'],
+          subjects: [expect.objectContaining({ subject: 'English' })],
         }),
       ]),
       ''
     )
+  })
+
+  it('accepts legacy string-only subjects without breaking display', () => {
+    const legacy = { 'LWS-001': ['Maths', 'Physics'] }
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={legacy}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    // No times available → bare subjects joined
+    expect(screen.getByText('Maths, Physics')).toBeInTheDocument()
   })
 
   it('redirect-to field is forwarded', () => {

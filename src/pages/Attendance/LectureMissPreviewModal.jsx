@@ -9,19 +9,32 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// `subjects` items are now objects: { subject, startTime?, endTime? }.
+// Accept both shapes (string or object) so legacy callers don't break the UI.
+function normaliseEntry(item) {
+  if (typeof item === 'string') return { subject: item }
+  return { subject: item.subject, startTime: item.startTime, endTime: item.endTime }
+}
+
+function formatSubjectWithTime(entry) {
+  const { subject, startTime, endTime } = entry
+  if (!startTime || !endTime) return subject
+  return `${subject} (${startTime} – ${endTime})`
+}
+
 function buildRows(absencesByLwsId, studentProfiles) {
   const byLwsId = {}
   for (const p of Object.values(studentProfiles)) {
     if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
   }
-  return Object.entries(absencesByLwsId).map(([lwsId, subjects]) => {
+  return Object.entries(absencesByLwsId).map(([lwsId, items]) => {
     const p = byLwsId[lwsId]
     return {
       lwsId,
       name:          p?.name ?? lwsId,
       mobile:        p?.mobile ?? '',
       parentMobiles: (p?.parentMobiles ?? []).join(', '),
-      subjects:      [...subjects],
+      subjects:      items.map(normaliseEntry),
     }
   })
 }
@@ -77,7 +90,7 @@ export default function LectureMissPreviewModal({ date, absencesByLwsId, onConfi
                 <div key={r.lwsId} className="card px-4 py-3">
                   <div className="flex items-baseline justify-between gap-2 mb-2">
                     <div className="font-semibold text-[13px] text-ink">{r.name}</div>
-                    <div className="text-[12px] text-red-400 font-mono">{r.subjects.join(', ')}</div>
+                    <div className="text-[12px] text-red-400 font-mono">{r.subjects.map(formatSubjectWithTime).join(', ')}</div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                     <label className="flex flex-col gap-1">
