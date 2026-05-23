@@ -262,7 +262,6 @@ export default function ExamsPage() {
             const pct = v => maxMarks > 0 ? Math.round(v / maxMarks * 100) : 0
             const avgPct = pct(avgScore)
             const pctColor = p => p >= 70 ? 'text-success' : p >= 45 ? 'text-warning' : 'text-danger'
-            const chapters = [...new Set(exam.questions.map(q => q.chapter))]
 
             const isExpanded = expandedExamId === exam.id
 
@@ -281,11 +280,6 @@ export default function ExamsPage() {
                       <span>·</span>
                       <span>+{exam.marking.correct}/{exam.marking.wrong}</span>
                       {exam.batch && <><span>·</span><span className="text-accent">{exam.batch}</span></>}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {chapters.map(c => (
-                        <span key={c} className="text-[10px] font-mono bg-accent-soft text-accent px-2 py-0.5 rounded-full">{c}</span>
-                      ))}
                     </div>
                   </div>
 
