@@ -102,19 +102,32 @@ export default async function handler(req, res) {
     // Positional variables — Meta-approved template body uses {{1}}, {{2}}.
     const variables = [name, cleanExamName]
 
+    // Student leg — message goes to the student themselves as an accountability
+    // signal ("your parents are being informed"). Template wording addresses the
+    // parent ("Your ward was absent") but the student-copy is intentional.
+    const destStudent = redirectNorm || normMobile(row.mobile)
+    if (destStudent) {
+      console.log(`[exam-absence] → ${name} student dest=${destStudent} redirect=${redirectNorm ?? 'none'} vars=${JSON.stringify(variables)}`)
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, variables)
+      if (ok) { lines.push(`  SENT → ${name} (student → ${destStudent})`); sent++ }
+      else    { lines.push(`  FAIL → ${name} (student → ${destStudent}): ${detail}`); skipped++ }
+    } else {
+      lines.push(`  SKIP ${name} — no mobile`); skipped++
+    }
+
+    // Parent leg
     const parents = row.parentMobiles || []
     if (parents.length === 0) {
       lines.push(`  SKIP ${name} — no parent mobile`); skipped++
-      continue
-    }
-
-    for (const parentRaw of parents) {
-      const destParent = redirectNorm || normMobile(parentRaw)
-      if (!destParent) { lines.push(`  SKIP ${name} parent ${parentRaw} — unrecognised format`); skipped++; continue }
-      console.log(`[exam-absence] → ${name} parent dest=${destParent} redirect=${redirectNorm ?? 'none'} vars=${JSON.stringify(variables)}`)
-      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, variables)
-      if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
-      else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
+    } else {
+      for (const parentRaw of parents) {
+        const destParent = redirectNorm || normMobile(parentRaw)
+        if (!destParent) { lines.push(`  SKIP ${name} parent ${parentRaw} — unrecognised format`); skipped++; continue }
+        console.log(`[exam-absence] → ${name} parent dest=${destParent} redirect=${redirectNorm ?? 'none'} vars=${JSON.stringify(variables)}`)
+        const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, variables)
+        if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
+        else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
+      }
     }
   }
 

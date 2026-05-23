@@ -71,10 +71,17 @@ describe('ExamAbsencePreviewModal — render & cohort', () => {
     expect(screen.getByText('Mock #5')).toBeInTheDocument()
   })
 
-  it('does NOT render a student-mobile field (parents-only flow)', () => {
+  it('renders both a student-mobile field and a parent-mobiles field per row (student + parent recipients)', () => {
     renderModal()
-    expect(screen.queryByText(/^Mobile$/i)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Parent mobiles/i).length).toBeGreaterThan(0)
+    // First absentee has a Mobile and a Parent mobiles input
+    expect(screen.getAllByLabelText(/^Mobile$/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText(/Parent mobiles/i).length).toBeGreaterThan(0)
+  })
+
+  it('pre-fills the student mobile field from the profile', () => {
+    renderModal()
+    const studentInput = screen.getAllByLabelText(/^Mobile$/i)[0]
+    expect(studentInput.value).toBe('9000000001')
   })
 
   it('pre-fills parent_mobiles editable field with comma-joined value', () => {
@@ -101,7 +108,7 @@ describe('ExamAbsencePreviewModal — render & cohort', () => {
 })
 
 describe('ExamAbsencePreviewModal — confirm flow', () => {
-  it('Confirm calls onConfirm with cleaned rows (parentMobiles digits only) and the exam', async () => {
+  it('Confirm calls onConfirm with cleaned rows (mobile + parentMobiles digits only)', async () => {
     const user = userEvent.setup()
     const { onConfirm } = renderModal()
     await user.click(screen.getByRole('button', { name: /confirm/i }))
@@ -109,20 +116,23 @@ describe('ExamAbsencePreviewModal — confirm flow', () => {
     const [rows, redirectTo] = onConfirm.mock.calls[0]
     expect(rows).toHaveLength(2)
     expect(rows[0].name).toBe('Aarav Sharma')
+    expect(rows[0].mobile).toBe('9000000001')
     expect(rows[0].parentMobiles).toEqual(['9000000100', '9000000200'])
     expect(redirectTo).toBe('')
   })
 
-  it('Confirm persists edits via bulkUpdateStudentContacts before send', async () => {
+  it('Confirm persists mobile + parent edits via bulkUpdateStudentContacts', async () => {
     const user = userEvent.setup()
     renderModal()
-    const parentInput = screen.getAllByLabelText(/Parent mobiles/i)[0]
-    await user.clear(parentInput)
-    await user.type(parentInput, '9888888888')
+    const studentInput = screen.getAllByLabelText(/^Mobile$/i)[0]
+    const parentInput  = screen.getAllByLabelText(/Parent mobiles/i)[0]
+    await user.clear(studentInput); await user.type(studentInput, '9111111111')
+    await user.clear(parentInput);  await user.type(parentInput,  '9888888888')
     await user.click(screen.getByRole('button', { name: /confirm/i }))
     expect(mockBulkUpdate).toHaveBeenCalled()
-    const persistedRows = mockBulkUpdate.mock.calls[0][0]
-    const arav = persistedRows.find(r => r.name === 'Aarav Sharma')
+    const persisted = mockBulkUpdate.mock.calls[0][0]
+    const arav = persisted.find(r => r.name === 'Aarav Sharma')
+    expect(arav.mobile).toBe('9111111111')
     expect(arav.parentMobiles).toEqual(['9888888888'])
   })
 

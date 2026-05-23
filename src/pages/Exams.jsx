@@ -60,13 +60,14 @@ export default function ExamsPage() {
     return [...names]
   }
 
-  // Absence flow log format is parents-only (no `student` lines). Also captures
-  // `SKIP Name parent ...` for malformed parent numbers.
+  // Absence flow log format mirrors late/lecture-miss — captures FAIL on either
+  // leg (`(student` / `(parent`), SKIP for no-mobile (`— no mobile` / `— no parent mobile`),
+  // and SKIP for malformed parent numbers (`parent NUMBER —`).
   function parseFailedNamesAbsence(lines) {
     const names = new Set()
     ;(lines || []).forEach(line => {
       const t = line.trim()
-      const fail = t.match(/^FAIL → (.+?) \(parent/)
+      const fail = t.match(/^FAIL → (.+?) \((student|parent)/)
       if (fail) { names.add(fail[1]); return }
       const skipParent = t.match(/^SKIP (.+?) parent /)
       if (skipParent) { names.add(skipParent[1]); return }
@@ -496,7 +497,6 @@ export default function ExamsPage() {
       {examAbsenceResult && (
         <WhatsAppResultsModal
           result={examAbsenceResult}
-          recipientLabel="parents only"
           onClose={() => setExamAbsenceResult(null)}
         />
       )}

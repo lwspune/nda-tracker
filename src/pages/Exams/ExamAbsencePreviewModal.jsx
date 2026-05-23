@@ -6,6 +6,7 @@ function buildRows(absentees) {
   return absentees.map(p => ({
     lwsId:         p.lwsId || '',
     name:          p.name,
+    mobile:        p.mobile || '',
     parentMobiles: (p.parentMobiles || []).join(', '),
   }))
 }
@@ -45,6 +46,7 @@ export default function ExamAbsencePreviewModal({
     const cleaned = visibleRows.map(r => ({
       lwsId: r.lwsId,
       name:  r.name,
+      mobile: r.mobile.replace(/\D/g, '').slice(-10),
       parentMobiles: r.parentMobiles
         .split(',').map(p => p.trim().replace(/\D/g, '').slice(-10)).filter(Boolean),
     }))
@@ -118,15 +120,26 @@ export default function ExamAbsencePreviewModal({
                 return (
                   <div key={r.lwsId || r.name} className="card px-4 py-3">
                     <div className="font-semibold text-[13px] text-ink mb-2">{r.name}</div>
-                    <label className="flex flex-col gap-1 text-[12px]">
-                      <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Parent mobiles (comma-separated)</span>
-                      <input
-                        type="text"
-                        value={r.parentMobiles}
-                        onChange={e => updateRow(idx, 'parentMobiles', e.target.value)}
-                        className="form-input text-[12px] min-h-[40px] px-2"
-                      />
-                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Mobile</span>
+                        <input
+                          type="text"
+                          value={r.mobile}
+                          onChange={e => updateRow(idx, 'mobile', e.target.value)}
+                          className="form-input text-[12px] min-h-[40px] px-2"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Parent mobiles (comma-separated)</span>
+                        <input
+                          type="text"
+                          value={r.parentMobiles}
+                          onChange={e => updateRow(idx, 'parentMobiles', e.target.value)}
+                          className="form-input text-[12px] min-h-[40px] px-2"
+                        />
+                      </label>
+                    </div>
                   </div>
                 )
               })}

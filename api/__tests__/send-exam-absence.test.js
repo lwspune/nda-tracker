@@ -92,7 +92,7 @@ describe('send-exam-absence', () => {
     expect((await call({ students: [] })).res.statusCode).toBe(400)
   })
 
-  it('sends to parents only (NOT to students themselves) — "Your ward" template', async () => {
+  it('sends to student AND parents (accountability — student knows parents are informed)', async () => {
     setEnv(); setAuthOk(); mockWabridge(true)
     const { res } = await call({
       examName: 'Mock #5',
@@ -103,14 +103,12 @@ describe('send-exam-absence', () => {
     })
     expect(res.statusCode).toBe(200)
     expect(res.body.ok).toBe(true)
-    expect(res.body.sent).toBe(3) // 2 parents for Arjun + 1 for Ravi; NO student sends
-    expect(fetch).toHaveBeenCalledTimes(3)
-    // None of the calls should be to the students' own mobiles
-    for (const [, init] of fetch.mock.calls) {
-      const payload = JSON.parse(init.body)
-      expect(payload.destination_number).not.toBe('919876543210')
-      expect(payload.destination_number).not.toBe('919876543212')
-    }
+    expect(res.body.sent).toBe(5) // Arjun: 1 student + 2 parents; Ravi: 1 student + 1 parent
+    expect(fetch).toHaveBeenCalledTimes(5)
+    // Both student mobiles should appear among the destinations
+    const destinations = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).destination_number)
+    expect(destinations).toContain('919876543210')
+    expect(destinations).toContain('919876543212')
   })
 
   it('sends template variables as positional [name, examName]', async () => {
@@ -136,13 +134,13 @@ describe('send-exam-absence', () => {
     expect(payload.variables[1]).toBe('Mock-#5-final test 2026')
   })
 
-  it('redirectTo overrides parent destinations', async () => {
+  it('redirectTo overrides student AND parent destinations', async () => {
     setEnv(); setAuthOk(); mockWabridge(true)
     await call({
       examName: 'Mock #5',
       redirectTo: '7777777777',
       students: [
-        { name: 'Arjun', parentMobiles: ['9876543211', '9876543299'] },
+        { name: 'Arjun', mobile: '9876543210', parentMobiles: ['9876543211', '9876543299'] },
       ],
     })
     for (const [, init] of fetch.mock.calls) {
@@ -151,38 +149,51 @@ describe('send-exam-absence', () => {
     }
   })
 
-  it('skips students with no parent mobiles (logs SKIP)', async () => {
+  it('skips student leg when no student mobile, still sends to parents', async () => {
     setEnv(); setAuthOk(); mockWabridge(true)
     const { res } = await call({
       examName: 'Mock #5',
       students: [
-        { name: 'Arjun', parentMobiles: [] },
-        { name: 'Ravi',  parentMobiles: ['9876543213'] },
+        { name: 'Arjun', mobile: '',           parentMobiles: ['9876543211'] },
       ],
     })
     expect(res.body.sent).toBe(1)
     expect(res.body.skipped).toBe(1)
-    expect(res.body.lines.some(l => /SKIP.*Arjun/i.test(l))).toBe(true)
+    expect(res.body.lines.some(l => /SKIP Arjun —.*no mobile/i.test(l))).toBe(true)
   })
 
-  it('counts Wabridge failures as skipped and logs FAIL with parent destination', async () => {
+  it('skips parent legs when no parent mobiles, still sends to student', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    const { res } = await call({
+      examName: 'Mock #5',
+      students: [
+        { name: 'Arjun', mobile: '9876543210', parentMobiles: [] },
+      ],
+    })
+    expect(res.body.sent).toBe(1)
+    expect(res.body.skipped).toBe(1)
+    expect(res.body.lines.some(l => /SKIP Arjun —.*no parent mobile/i.test(l))).toBe(true)
+  })
+
+  it('counts Wabridge failures as skipped and logs FAIL with student + parent destinations', async () => {
     setEnv(); setAuthOk(); mockWabridge(false)
     const { res } = await call({
       examName: 'Mock #5',
-      students: [{ name: 'Arjun', parentMobiles: ['9876543211'] }],
+      students: [{ name: 'Arjun', mobile: '9876543210', parentMobiles: ['9876543211'] }],
     })
     expect(res.body.sent).toBe(0)
-    expect(res.body.skipped).toBe(1)
-    expect(res.body.lines.some(l => /FAIL.*Arjun.*parent/i.test(l))).toBe(true)
+    expect(res.body.skipped).toBe(2)
+    expect(res.body.lines.some(l => /FAIL → Arjun \(student/.test(l))).toBe(true)
+    expect(res.body.lines.some(l => /FAIL → Arjun \(parent/.test(l))).toBe(true)
   })
 
-  it('log lines match the parseFailedNames regex (FAIL → / SKIP)', async () => {
+  it('log lines match the parseFailedNames regex (FAIL → / SKIP) for both legs', async () => {
     setEnv(); setAuthOk(); mockWabridge(false)
     const { res } = await call({
       examName: 'Mock #5',
       students: [
-        { name: 'Arjun', parentMobiles: ['9876543211'] }, // FAIL → Arjun (parent → ...)
-        { name: 'Ravi',  parentMobiles: [] },             // SKIP Ravi — no parent mobile
+        { name: 'Arjun', mobile: '9876543210', parentMobiles: ['9876543211'] }, // FAIL on both legs
+        { name: 'Ravi',  mobile: '',           parentMobiles: [] },             // SKIP on both legs
       ],
     })
     expect(res.body.lines.some(l => l.includes('FAIL → Arjun'))).toBe(true)
