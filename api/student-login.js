@@ -140,9 +140,11 @@ export default async function handler(req, res) {
     .select('date, status')
     .eq('lws_id', student.lws_id)
 
-  // ── 5a. Load recent lecture absences (last 30 days) for the incidents strip
+  // ── 5a. Load lecture + exam absences for the last 12 months ──────────────
+  // 12-month window matches AttendanceRings' monthly chips; RecentIncidents
+  // narrows to 30 days client-side.
   const since = new Date()
-  since.setDate(since.getDate() - 30)
+  since.setMonth(since.getMonth() - 12)
   const sinceIso = `${since.getFullYear()}-${String(since.getMonth()+1).padStart(2,'0')}-${String(since.getDate()).padStart(2,'0')}`
   const { data: lectureRows } = await supabase
     .from('lecture_absences')
@@ -151,13 +153,25 @@ export default async function handler(req, res) {
     .gte('date', sinceIso)
     .order('date', { ascending: false })
 
-  // ── 5a-ii. Recent exam absences (last 30 days) — for MissedExams + RecentIncidents
   const { data: examAbsenceRows } = await supabase
     .from('exam_absences')
     .select('exam_id, marked_at, notified_at')
     .eq('lws_id', student.lws_id)
     .gte('marked_at', sinceIso + 'T00:00:00.000Z')
     .order('marked_at', { ascending: false })
+
+  // ── 5a-ii. Fetch metadata for ABSENT exams (the student didn't sit them,
+  // so they're not in `exams` above). Without this, the student-portal join
+  // in MissedExams / RecentIncidents / AttendanceRings would drop all rows.
+  const absentExamIds = [...new Set((examAbsenceRows || []).map(r => r.exam_id))]
+  let absentExamMetaById = new Map()
+  if (absentExamIds.length > 0) {
+    const { data: absentExamMeta } = await supabase
+      .from('exams')
+      .select('id, name, date, batch')
+      .in('id', absentExamIds)
+    absentExamMetaById = new Map((absentExamMeta || []).map(e => [e.id, e]))
+  }
 
   // ── 5b. Record login event (fire-and-forget) ─────────────────────────────
   supabase.from('student_logins').insert({ lws_id: student.lws_id }).then(() => {})
@@ -197,7 +211,18 @@ export default async function handler(req, res) {
     exams,
     attendance:       attendanceRows || [],
     lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
-    examAbsences:     (examAbsenceRows || []).map(r => ({ lws_id: student.lws_id, exam_id: r.exam_id, marked_at: r.marked_at, notified_at: r.notified_at })),
+    examAbsences:     (examAbsenceRows || []).map(r => {
+      const meta = absentExamMetaById.get(r.exam_id)
+      return {
+        lws_id:      student.lws_id,
+        exam_id:     r.exam_id,
+        marked_at:   r.marked_at,
+        notified_at: r.notified_at,
+        exam_name:   meta?.name  ?? null,
+        exam_date:   meta?.date  ?? null,
+        exam_batch:  meta?.batch ?? null,
+      }
+    }),
     ndaFreqBySubject: stateRow.data?.ndaFreqBySubject || {},
   })
 }

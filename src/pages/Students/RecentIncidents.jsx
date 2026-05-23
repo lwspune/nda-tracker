@@ -56,8 +56,14 @@ export default function RecentIncidents({
     return () => { cancelled = true }
   }, [lwsId, sinceDate, getExamAbsencesForStudent, examAbsencesProp])
 
-  const lectureRows = lectureAbsencesProp !== null ? lectureAbsencesProp : fetchedLecture
-  const examRows    = examAbsencesProp    !== null ? examAbsencesProp    : fetchedExam
+  // Prop-supplied data may span up to 12 months (student portal serves the wider
+  // window for AttendanceRings); narrow client-side to the strip's 30-day window.
+  const rawLectureRows = lectureAbsencesProp !== null ? lectureAbsencesProp : fetchedLecture
+  const rawExamRows    = examAbsencesProp    !== null ? examAbsencesProp    : fetchedExam
+  const lectureRows = useMemo(
+    () => (rawLectureRows || []).filter(r => r?.date && r.date >= sinceDate),
+    [rawLectureRows, sinceDate]
+  )
 
   // L markers from attendance prop (last 30 days)
   const lateRows = useMemo(() => {
@@ -67,18 +73,22 @@ export default function RecentIncidents({
       .map(r => ({ kind: 'late', date: r.date }))
   }, [attendance, sinceDate])
 
-  // Exam-absence items — enriched with exam name from the exams prop, sorted
-  // and de-duped (one row per exam even if the table grew a duplicate).
+  // Exam-absence items — prefer name/date attached to the row (student portal
+  // serves them pre-joined), fall back to the exams[] lookup (admin/teacher
+  // have full exams[] in store). Then narrow to 30 days client-side.
   const examItems = useMemo(() => {
     const byId = new Map(exams.map(e => [e.id, e]))
-    return examRows
+    const items = (rawExamRows || [])
       .map(r => {
-        const e = byId.get(r.exam_id)
-        if (!e) return null
-        return { kind: 'exam-miss', date: e.date, examName: e.name }
+        const meta     = byId.get(r.exam_id)
+        const date     = meta?.date ?? r.exam_date ?? ''
+        const examName = meta?.name ?? r.exam_name ?? ''
+        if (!date || !examName) return null
+        return { kind: 'exam-miss', date, examName }
       })
       .filter(Boolean)
-  }, [examRows, exams])
+    return items.filter(r => r.date >= sinceDate)
+  }, [rawExamRows, exams, sinceDate])
 
   const items = useMemo(() => {
     const lectureItems = lectureRows.map(r => ({

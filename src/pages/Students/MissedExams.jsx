@@ -27,18 +27,25 @@ export default function MissedExams({ lwsId, exams = [], examAbsencesProp = null
     return () => { cancelled = true }
   }, [lwsId, examAbsencesProp, getExamAbsencesForStudent])
 
-  // Build exam_id → metadata lookup, then enrich + drop rows whose exam was
-  // deleted (or never reached this client's exams[] snapshot).
+  // Resolve display name/date from either side:
+  //   - admin/teacher: exams[] has the full set including absent ones
+  //   - student portal: row already carries exam_name + exam_date (api/student-login
+  //     enriches absence rows server-side because the portal's exams[] only
+  //     contains attended exams)
+  // Drop rows that are unresolvable from BOTH sides.
   const examById = new Map(exams.map(e => [e.id, e]))
   const enriched = rows
     .map(r => {
-      const exam = examById.get(r.exam_id)
-      if (!exam) return null
+      const exam     = examById.get(r.exam_id)
+      const examName = exam?.name  ?? r.exam_name  ?? ''
+      const examDate = exam?.date  ?? r.exam_date  ?? ''
+      const examBatch = exam?.batch ?? r.exam_batch ?? ''
+      if (!examName || !examDate) return null
       return {
         examId:     r.exam_id,
-        examName:   exam.name,
-        examDate:   exam.date,
-        examBatch:  exam.batch,
+        examName,
+        examDate,
+        examBatch,
         notifiedAt: r.notified_at ?? null,
       }
     })

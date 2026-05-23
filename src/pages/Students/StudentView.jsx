@@ -62,6 +62,34 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   }, [profile?.lwsId, attendanceProp])
   const attendance = attendanceProp !== null ? attendanceProp : fetchedAttendance
 
+  // Lecture absences + exam absences — admin/teacher fetch from slice, student
+  // portal supplies via prop (no Supabase session). Full history; consumers
+  // narrow client-side as needed.
+  const getLectureAbsencesForStudent = useStore(s => s.getLectureAbsencesForStudent)
+  const getExamAbsencesForStudent    = useStore(s => s.getExamAbsencesForStudent)
+  const [fetchedLectureAbsences, setFetchedLectureAbsences] = useState([])
+  const [fetchedExamAbsences,    setFetchedExamAbsences]    = useState([])
+  useEffect(() => {
+    if (lectureAbsencesProp !== null) { setFetchedLectureAbsences([]); return }
+    if (!profile?.lwsId || typeof getLectureAbsencesForStudent !== 'function') { setFetchedLectureAbsences([]); return }
+    let cancelled = false
+    getLectureAbsencesForStudent(profile.lwsId).then(rows => {
+      if (!cancelled) setFetchedLectureAbsences(rows || [])
+    })
+    return () => { cancelled = true }
+  }, [profile?.lwsId, lectureAbsencesProp, getLectureAbsencesForStudent])
+  useEffect(() => {
+    if (examAbsencesProp !== null) { setFetchedExamAbsences([]); return }
+    if (!profile?.lwsId || typeof getExamAbsencesForStudent !== 'function') { setFetchedExamAbsences([]); return }
+    let cancelled = false
+    getExamAbsencesForStudent(profile.lwsId).then(rows => {
+      if (!cancelled) setFetchedExamAbsences(rows || [])
+    })
+    return () => { cancelled = true }
+  }, [profile?.lwsId, examAbsencesProp, getExamAbsencesForStudent])
+  const lectureAbsences = lectureAbsencesProp !== null ? lectureAbsencesProp : fetchedLectureAbsences
+  const examAbsences    = examAbsencesProp    !== null ? examAbsencesProp    : fetchedExamAbsences
+
   // Login stats — faculty/teacher only; must be before early returns
   const [loginStats, setLoginStats] = useState(null)
   useEffect(() => {
@@ -230,7 +258,12 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       {attendance.length > 0 && (
         <Card>
           <CardTitle>Attendance</CardTitle>
-          <AttendanceRings attendance={attendance} />
+          <AttendanceRings
+            attendance={attendance}
+            lectureAbsences={lectureAbsences}
+            examAbsences={examAbsences}
+            exams={normalizedExams}
+          />
         </Card>
       )}
 

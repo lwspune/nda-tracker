@@ -111,7 +111,7 @@ describe('RecentIncidents', () => {
     expect(mockStore.getExamAbsencesForStudent).not.toHaveBeenCalled()
   })
 
-  it('drops exam-absence rows for exams not in the exams prop (e.g. deleted exam)', async () => {
+  it('drops exam-absence rows for exams not in the exams prop (e.g. deleted exam, no metadata on row)', async () => {
     const today = isoDaysAgo(2)
     mockStore.getExamAbsencesForStudent.mockResolvedValue([
       { lws_id: 'LWS-001', exam_id: 'missing-exam', marked_at: today + 'T10:00Z', notified_at: null },
@@ -119,5 +119,60 @@ describe('RecentIncidents', () => {
     const { container } = render(<RecentIncidents lwsId="LWS-001" attendance={[]} exams={[]} />)
     await waitFor(() => expect(mockStore.getExamAbsencesForStudent).toHaveBeenCalled())
     expect(container.querySelector('.card, [class*="card"]')).toBeNull()
+  })
+
+  it('uses row.exam_name + row.exam_date when present (student portal path, no exams[] join needed)', async () => {
+    const today = isoDaysAgo(2)
+    render(
+      <RecentIncidents
+        lwsId="LWS-001"
+        attendance={[]}
+        exams={[]}                                   // student portal exams[] may not include absent exams
+        examAbsencesProp={[
+          { lws_id: 'LWS-001', exam_id: 'e1', marked_at: today + 'T10:00Z', notified_at: null,
+            exam_name: 'Mock #9', exam_date: today },
+        ]}
+      />
+    )
+    expect(await screen.findByText(/Missed exam.*Mock #9/i)).toBeInTheDocument()
+  })
+
+  it('narrows examAbsencesProp to the last 30 days even when the prop contains more', async () => {
+    const recent = isoDaysAgo(5)
+    const stale  = isoDaysAgo(60)
+    const exams  = [
+      { id: 'e1', name: 'Recent', date: recent },
+      { id: 'e2', name: 'Old',    date: stale  },
+    ]
+    render(
+      <RecentIncidents
+        lwsId="LWS-001"
+        attendance={[]}
+        exams={exams}
+        examAbsencesProp={[
+          { lws_id: 'LWS-001', exam_id: 'e1', marked_at: recent + 'T10:00Z', notified_at: null },
+          { lws_id: 'LWS-001', exam_id: 'e2', marked_at: stale  + 'T10:00Z', notified_at: null },
+        ]}
+      />
+    )
+    expect(await screen.findByText(/Missed exam.*Recent/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Missed exam.*Old/i)).not.toBeInTheDocument()
+  })
+
+  it('narrows lectureAbsencesProp to the last 30 days client-side', async () => {
+    const recent = isoDaysAgo(5)
+    const stale  = isoDaysAgo(60)
+    render(
+      <RecentIncidents
+        lwsId="LWS-001"
+        attendance={[]}
+        lectureAbsencesProp={[
+          { lws_id: 'LWS-001', date: recent, subject: 'RecentMaths' },
+          { lws_id: 'LWS-001', date: stale,  subject: 'OldEnglish'  },
+        ]}
+      />
+    )
+    expect(await screen.findByText(/Missed RecentMaths/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Missed OldEnglish/i)).not.toBeInTheDocument()
   })
 })

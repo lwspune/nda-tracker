@@ -61,17 +61,22 @@ const MOCK_STATE = {
 //   faculty_state → from().select().eq().single()   (ndaFreqBySubject only)
 
 function makeMockClient({
-  students      = [MOCK_STUDENT],
-  resultRows    = [MOCK_RESULT_ROW],
-  examRows      = [MOCK_EXAM_ROW],
-  stateData     = MOCK_STATE,
-  examAbsences  = [],
-  studentsError = null,
-  resultsError  = null,
-  examsError    = null,
-  stateError    = null,
+  students         = [MOCK_STUDENT],
+  resultRows       = [MOCK_RESULT_ROW],
+  examRows         = [MOCK_EXAM_ROW],
+  stateData        = MOCK_STATE,
+  examAbsences     = [],
+  absentExamMeta   = null, // null = reuse examRows; pass [] for "no rows found"
+  studentsError    = null,
+  resultsError     = null,
+  examsError       = null,
+  stateError       = null,
   loginInsertError = null,
 } = {}) {
+  // Track sequential `exams` table calls — first call resolves attended-exam ids,
+  // second call resolves absent-exam metadata. Tests can pass `absentExamMeta`
+  // separately from the attended `examRows`.
+  let examsCallCount = 0
   const loginInsert = vi.fn().mockResolvedValue({ error: loginInsertError })
   const client = {
     from: vi.fn(table => {
@@ -88,9 +93,16 @@ function makeMockClient({
         }
       }
       if (table === 'exams') {
+        examsCallCount++
+        // First call: resolves the attended-exam ids from resultRows.
+        // Second call (when present): resolves absent-exam metadata for the
+        // exam-absence enrichment in the response.
+        const data = examsCallCount === 1
+          ? examRows
+          : (absentExamMeta ?? examRows)
         return {
           select: vi.fn().mockReturnValue({
-            in: vi.fn().mockResolvedValue({ data: examRows, error: examsError }),
+            in: vi.fn().mockResolvedValue({ data, error: examsError }),
           }),
         }
       }
@@ -356,5 +368,39 @@ describe('POST /api/student-login', () => {
     const res = await call({ mobile: '9876543210' })
     const result = res.json.mock.calls[0][0]
     expect(result.examAbsences).toEqual([])
+  })
+
+  it('enriches each examAbsences row with exam_name + exam_date + exam_batch from the exams table', async () => {
+    // Absences reference an exam the student never sat — must still appear with
+    // metadata so the student portal can render the name (otherwise the modal
+    // / chip / strip would drop the row on join).
+    const rows = [
+      { exam_id: 'e-missed', marked_at: '2026-05-22T10:00:00Z', notified_at: null },
+    ]
+    const absentExamMeta = [{ id: 'e-missed', name: 'Mock #99', date: '2026-05-22', batch: 'APJ_NDA_2Y_(26-28)' }]
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      examAbsences:      rows,
+      absentExamMeta,
+    }))
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(result.examAbsences[0]).toMatchObject({
+      exam_id:    'e-missed',
+      exam_name:  'Mock #99',
+      exam_date:  '2026-05-22',
+      exam_batch: 'APJ_NDA_2Y_(26-28)',
+    })
+  })
+
+  it('returns null exam_name when the exam row could not be found (deleted exam)', async () => {
+    const rows = [{ exam_id: 'gone', marked_at: '2026-05-22T10:00:00Z', notified_at: null }]
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      examAbsences:   rows,
+      absentExamMeta: [],
+    }))
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(result.examAbsences[0].exam_name).toBeNull()
+    expect(result.examAbsences[0].exam_date).toBeNull()
   })
 })

@@ -107,6 +107,44 @@ describe('MissedExams — prop bypass (student portal)', () => {
   })
 })
 
+describe('MissedExams — exam name resolution', () => {
+  it('uses exam_name + exam_date directly off the row when present (student portal post-fix)', async () => {
+    render(
+      <MissedExams
+        lwsId="LWS-001"
+        exams={[]}                                       // student portal exams[] may not include absent exams
+        examAbsencesProp={[
+          { exam_id: 'e1', lws_id: 'LWS-001', marked_at: '2026-05-10T10:00Z', notified_at: null,
+            exam_name: 'Mock #42', exam_date: '2026-05-10', exam_batch: 'B1' },
+        ]}
+      />
+    )
+    expect(await screen.findByText('Mock #42')).toBeInTheDocument()
+  })
+
+  it('falls back to exams[] lookup when row carries only exam_id (admin/teacher path)', async () => {
+    mockExamAbsenceRows = [
+      { exam_id: 'e1', lws_id: 'LWS-001', marked_at: '2026-05-10T10:00Z', notified_at: null },
+    ]
+    render(<MissedExams lwsId="LWS-001" exams={[{ id: 'e1', name: 'Mock #1', date: '2026-05-10' }]} />)
+    expect(await screen.findByText('Mock #1')).toBeInTheDocument()
+  })
+
+  it('drops rows that are unresolvable from BOTH paths (exam not in exams[] AND no exam_name on row)', async () => {
+    const { container } = render(
+      <MissedExams
+        lwsId="LWS-001"
+        exams={[]}
+        examAbsencesProp={[
+          { exam_id: 'gone', lws_id: 'LWS-001', marked_at: '2026-05-10T10:00Z', notified_at: null },
+        ]}
+      />
+    )
+    // No card rendered when zero resolvable rows
+    expect(container.querySelector('h3, h2')).toBeNull()
+  })
+})
+
 describe('MissedExams — sort order', () => {
   it('renders most recently missed exam first (by exam date)', async () => {
     mockExamAbsenceRows = [
