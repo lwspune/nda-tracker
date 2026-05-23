@@ -7,6 +7,7 @@ const REASON_LABELS = {
   branch_required: 'Branch is required.',
   unknown_branch:  'Branch is not in the central branch list.',
   duplicate_name:  'A batch with this name already exists.',
+  comma_in_name:   'Batch names cannot contain commas (reserved as exam-batch separator).',
 }
 
 export default function BatchesTab() {

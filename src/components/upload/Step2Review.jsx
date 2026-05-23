@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Alert } from '../ui'
-import { getAllBatches } from '../../lib/matchStudents'
 import { SUBJECTS } from '../../lib/ndaFreq'
+import { getExamBatches } from '../../lib/analytics'
 import useStore from '../../store/useStore'
 
 export default function Step2Review({ state, onChange, onNext, onBack }) {
@@ -9,7 +9,7 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
     tagsSource, hasNegative, students, totalQs,
     examName, examDate, markCorrect, markWrong, subject,
     detectedBatch, batchConfidence, batchMatchedCount,
-    batchTotalCount, batchCounts, batch, branch,
+    batchTotalCount, batch, branch,
   } = state
 
   // Guard: if state.subject is set to something not in SUBJECTS (e.g. "2"
@@ -22,13 +22,25 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
     }
   }, [subject, onChange])
 
-  const studentProfiles = useStore(s => s.studentProfiles)
-  const allBatches      = getAllBatches(studentProfiles)
-  const hasProfiles     = Object.keys(studentProfiles).length > 0
+  const studentProfiles  = useStore(s => s.studentProfiles)
+  const syllabusBatches  = useStore(s => s.syllabusBatches) || []
+  const hasProfiles      = Object.keys(studentProfiles).length > 0
+  const hasCentralBatches = syllabusBatches.length > 0
 
-  // Current selected batch — use manually set or detected
-  const currentBatch   = batch !== undefined ? batch : (detectedBatch || '')
-  const currentBranch  = branch || ''
+  // Current selected batches — parsed from the comma-joined state.batch field.
+  // Auto-detect is used as the initial pre-selection only when state.batch is unset.
+  const initialBatch  = batch !== undefined ? batch : (detectedBatch || '')
+  const selectedSet   = new Set(getExamBatches({ batch: initialBatch }))
+  const currentBranch = branch || ''
+
+  function toggleBatch(name) {
+    const next = new Set(selectedSet)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+    // Preserve syllabusBatches[] order so the joined string is stable.
+    const joined = syllabusBatches.filter(b => next.has(b)).join(', ')
+    onChange({ batch: joined })
+  }
 
   // Unique branches from student profiles
   const allBranches = [...new Set(
@@ -122,66 +134,51 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
         </select>
       </div>
 
-      {/* ── Batch detection ──────────────────────────────── */}
+      {/* ── Batch multi-select (central-only, comma-joined) ─ */}
       <div className="mb-5">
-        <label className="form-label">
-          Batch
+        <label className="form-label" id="batch-label">
+          Batches
           {detectedBatch && (
             <span className={`ml-2 text-[10px] font-bold font-mono normal-case tracking-normal ${confColor}`}>
               auto-detected · {confPct}% confidence ({batchMatchedCount}/{batchTotalCount} students matched)
             </span>
           )}
-          {!hasProfiles && (
-            <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-ink-3">
-              import Students DB to enable auto-detection
-            </span>
-          )}
+          <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-ink-3">
+            pick one or more — two batches can share the same exam
+          </span>
         </label>
 
-        {hasProfiles ? (
-          <div className="flex gap-2 items-start">
-            <select
-              className="form-input flex-1"
-              value={currentBatch}
-              onChange={e => onChange({ batch: e.target.value })}
-            >
-              <option value="">— No batch assigned —</option>
-              {allBatches.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-              {/* Add detected batch if not in list */}
-              {detectedBatch && !allBatches.includes(detectedBatch) && (
-                <option value={detectedBatch}>{detectedBatch}</option>
-              )}
-            </select>
-          </div>
-        ) : (
-          <input
-            className="form-input"
-            value={currentBatch}
-            onChange={e => onChange({ batch: e.target.value })}
-            placeholder="e.g. 11&12th Integrated 2-Year (25-27) - A"
-          />
-        )}
-
-        {/* Show all detected batches if multiple */}
-        {batchCounts && Object.keys(batchCounts).length > 1 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {Object.entries(batchCounts)
-              .sort((a, b) => b[1] - a[1])
-              .map(([b, count]) => (
-                <button
+        {hasCentralBatches ? (
+          <div
+            role="group"
+            aria-labelledby="batch-label"
+            className="flex flex-wrap gap-2 p-2 border border-border rounded-lg bg-surface-2"
+          >
+            {syllabusBatches.map(b => {
+              const checked = selectedSet.has(b)
+              return (
+                <label
                   key={b}
-                  onClick={() => onChange({ batch: b })}
-                  className={`text-[10px] font-mono px-2.5 py-1 rounded-full border transition-colors
-                    ${currentBatch === b
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-mono border cursor-pointer transition-colors min-h-[36px]
+                    ${checked
                       ? 'bg-accent text-white border-accent'
-                      : 'bg-surface-2 text-ink-2 border-border hover:border-accent hover:text-accent'
+                      : 'bg-surface text-ink-2 border-border hover:border-accent hover:text-accent'
                     }`}
                 >
-                  {b} · {count} students
-                </button>
-              ))}
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBatch(b)}
+                    className="accent-current"
+                  />
+                  <span>{b}</span>
+                </label>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-[12px] text-ink-3 italic px-3 py-2 border border-dashed border-border rounded-lg">
+            No central batches yet. Add one in Settings → Batches.
           </div>
         )}
       </div>

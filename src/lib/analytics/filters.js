@@ -64,6 +64,49 @@ function buildProfileLookup(studentProfiles) {
   return map
 }
 
+// Parses an exam's batch field into a string[] of trimmed central batch names.
+// `exam.batch` is stored comma-joined when an exam was sat by multiple batches
+// (single batch is just the bare name with no comma).
+export function getExamBatches(exam) {
+  if (!exam || !exam.batch) return []
+  return String(exam.batch)
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+// Returns absentees for an exam — profiles whose batches[] intersect exam.batches
+// (the central tag set) but whose canonical name (or any name_variant) does NOT
+// appear in exam.students[]. Used to drive the exam-absence WhatsApp flow.
+//
+// `studentProfiles` is the canonical map keyed by name; entries keyed by a variant
+// are filtered out by `p.name === key`, so each profile contributes at most once.
+export function getExamAbsentees(exam, studentProfiles) {
+  if (!studentProfiles) return []
+  const examBatches = getExamBatches(exam)
+  if (examBatches.length === 0) return []
+
+  const examBatchSet = new Set(examBatches)
+  const attendeeNamesLower = new Set(
+    (exam.students || []).map(s => (s.name || '').toLowerCase().trim()).filter(Boolean)
+  )
+
+  const absentees = []
+  for (const [key, p] of Object.entries(studentProfiles)) {
+    if (!p || p.name !== key) continue              // skip variant-keyed entries
+    const batches = p.batches || []
+    if (!batches.some(b => examBatchSet.has(b))) continue
+
+    const nameLower = (p.name || '').toLowerCase().trim()
+    const variantSet = (p.nameVariants || []).map(v => (v || '').toLowerCase().trim())
+    const present = attendeeNamesLower.has(nameLower) || variantSet.some(v => attendeeNamesLower.has(v))
+    if (present) continue
+
+    absentees.push(p)
+  }
+  return absentees
+}
+
 // Unique batch options for a set of exams, derived primarily from profile.batches[].
 // Falls back to exam.batch only for exams where no student has a profile.
 export function getBatchOptions(exams, studentProfiles) {

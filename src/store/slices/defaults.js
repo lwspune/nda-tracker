@@ -25,6 +25,7 @@ export const DEFAULTS = {
   whatsappSendHistory: {},
   lateSendHistory: {},
   lectureMissSendHistory: {},
+  examAbsenceSendHistory: {},
   branches: [],
 }
 

@@ -9,11 +9,13 @@
 // Fix: Step2Review must normalize an invalid subject to a known one
 // (calling onChange) on mount.
 
-import { render } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+let mockStoreState = { studentProfiles: {}, syllabusBatches: [] }
 vi.mock('../../../store/useStore', () => ({
-  default: (selector) => selector({ studentProfiles: {} }),
+  default: (selector) => selector(mockStoreState),
 }))
 
 import Step2Review from '../Step2Review'
@@ -27,7 +29,8 @@ const baseState = {
   tagsSource: null, batch: '', branch: '',
 }
 
-function renderWith(stateOverrides) {
+function renderWith(stateOverrides, storeOverrides = {}) {
+  mockStoreState = { studentProfiles: {}, syllabusBatches: [], ...storeOverrides }
   const onChange = vi.fn()
   render(
     <Step2Review
@@ -68,5 +71,77 @@ describe('Step2Review — subject normalization', () => {
   it('auto-corrects another bogus subject ("5") to Maths', () => {
     const { onChange } = renderWith({ subject: '5' })
     expect(onChange).toHaveBeenCalledWith({ subject: 'Maths' })
+  })
+})
+
+// ── Batch multi-select (central-only, comma-joined) ─────────────────────────
+
+describe('Step2Review — batch multi-select', () => {
+  it('renders one checkbox per central syllabus batch', () => {
+    renderWith({}, { syllabusBatches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A'] })
+    const group = screen.getByRole('group', { name: /batch/i })
+    expect(within(group).getByLabelText('APJ_NDA_2Y_(26-28)')).toBeInTheDocument()
+    expect(within(group).getByLabelText('LWS_NDA_2Y_(26-28)_A')).toBeInTheDocument()
+  })
+
+  it('does NOT source batches from studentProfiles (central list is the only source)', () => {
+    renderWith({}, {
+      syllabusBatches: ['APJ_NDA_2Y_(26-28)'],
+      studentProfiles: { 'A': { name: 'A', batches: ['HR_Batch_Old'] } },
+    })
+    expect(screen.queryByLabelText('HR_Batch_Old')).not.toBeInTheDocument()
+  })
+
+  it('checking a single batch writes the bare name to state.batch (no comma)', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderWith({}, { syllabusBatches: ['APJ_NDA_2Y_(26-28)', 'LWS_X'] })
+    await user.click(screen.getByLabelText('APJ_NDA_2Y_(26-28)'))
+    expect(onChange).toHaveBeenLastCalledWith({ batch: 'APJ_NDA_2Y_(26-28)' })
+  })
+
+  it('checking two batches joins them with ", " in state.batch', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderWith(
+      { batch: 'APJ_NDA_2Y_(26-28)' },
+      { syllabusBatches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A'] },
+    )
+    await user.click(screen.getByLabelText('LWS_NDA_2Y_(26-28)_A'))
+    expect(onChange).toHaveBeenLastCalledWith({ batch: 'APJ_NDA_2Y_(26-28), LWS_NDA_2Y_(26-28)_A' })
+  })
+
+  it('unchecking a batch removes it from the comma-joined string', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderWith(
+      { batch: 'APJ_NDA_2Y_(26-28), LWS_NDA_2Y_(26-28)_A' },
+      { syllabusBatches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A'] },
+    )
+    await user.click(screen.getByLabelText('APJ_NDA_2Y_(26-28)'))
+    expect(onChange).toHaveBeenLastCalledWith({ batch: 'LWS_NDA_2Y_(26-28)_A' })
+  })
+
+  it('unchecking the last selected batch leaves state.batch empty', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderWith(
+      { batch: 'APJ_NDA_2Y_(26-28)' },
+      { syllabusBatches: ['APJ_NDA_2Y_(26-28)'] },
+    )
+    await user.click(screen.getByLabelText('APJ_NDA_2Y_(26-28)'))
+    expect(onChange).toHaveBeenLastCalledWith({ batch: '' })
+  })
+
+  it('pre-selects checkboxes from existing comma-joined state.batch', () => {
+    renderWith(
+      { batch: 'APJ_NDA_2Y_(26-28), LWS_NDA_2Y_(26-28)_A' },
+      { syllabusBatches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A', 'LWS_NDA_2Y_(25-27)_A'] },
+    )
+    expect(screen.getByLabelText('APJ_NDA_2Y_(26-28)')).toBeChecked()
+    expect(screen.getByLabelText('LWS_NDA_2Y_(26-28)_A')).toBeChecked()
+    expect(screen.getByLabelText('LWS_NDA_2Y_(25-27)_A')).not.toBeChecked()
+  })
+
+  it('shows empty-state when no central batches exist (no free-text fallback)', () => {
+    renderWith({}, { syllabusBatches: [] })
+    expect(screen.queryByRole('group', { name: /batch/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/Settings → Batches/i)).toBeInTheDocument()
   })
 })

@@ -91,6 +91,8 @@ export const createConfigSlice = (set, get) => ({
     const trimmed = (name ?? '').trim()
     const branchValue = (branch ?? '').trim()
     if (!trimmed)      return { ok: false, reason: 'name_required' }
+    if (trimmed.includes(','))
+                       return { ok: false, reason: 'comma_in_name' }
     if (!branchValue)  return { ok: false, reason: 'branch_required' }
     const s = get()
     if (!s.branches.includes(branchValue)) return { ok: false, reason: 'unknown_branch' }

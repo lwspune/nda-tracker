@@ -243,6 +243,20 @@ describe('addBatch', () => {
     expect(get().syllabusBatches).toEqual(['Y'])
     expect(get().syllabusBatchBranches['Y']).toBe('APJ')
   })
+
+  it('rejects name containing a comma (comma is the exam.batch separator)', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    const result = slice.addBatch('Foo, Bar', 'APJ')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('comma_in_name')
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  it('rejects name with comma even when other validations would pass', () => {
+    const { slice } = makeStore({ branches: ['APJ'] })
+    expect(slice.addBatch('A,B', 'APJ').reason).toBe('comma_in_name')
+    expect(slice.addBatch(' ,X', 'APJ').reason).toBe('comma_in_name')
+  })
 })
 
 describe('renameBatch', () => {

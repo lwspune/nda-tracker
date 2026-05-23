@@ -9,6 +9,7 @@ import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
 import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
 import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
+import ExamAbsencePreviewModal from './Exams/ExamAbsencePreviewModal'
 import { downloadExamPdf }         from '../lib/examPdf'
 import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
 
@@ -20,6 +21,8 @@ export default function ExamsPage() {
   const bulkUpdateStudentContacts  = useStore(s => s.bulkUpdateStudentContacts)
   const whatsappSendHistory        = useStore(s => s.whatsappSendHistory)
   const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
+  const examAbsenceSendHistory     = useStore(s => s.examAbsenceSendHistory)
+  const setExamAbsenceSendHistory  = useStore(s => s.setExamAbsenceSendHistory)
   const mode = useMode()
 
   const [subjectFilter, setSubjectFilter] = useState('all')
@@ -37,6 +40,9 @@ export default function ExamsPage() {
   const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
   const [whatsappSending, setWhatsappSending]         = useState(false)
   const [whatsappResult, setWhatsappResult]           = useState(null)
+  const [examAbsencePreviewExam, setExamAbsencePreviewExam] = useState(null)
+  const [examAbsenceSending, setExamAbsenceSending]         = useState(false)
+  const [examAbsenceResult, setExamAbsenceResult]           = useState(null)
 
   function toggleInsights(id) {
     setExpandedExamId(prev => prev === id ? null : id)
@@ -52,6 +58,55 @@ export default function ExamsPage() {
       if (fail) names.add(fail[1])
     })
     return [...names]
+  }
+
+  // Absence flow log format is parents-only (no `student` lines). Also captures
+  // `SKIP Name parent ...` for malformed parent numbers.
+  function parseFailedNamesAbsence(lines) {
+    const names = new Set()
+    ;(lines || []).forEach(line => {
+      const t = line.trim()
+      const fail = t.match(/^FAIL → (.+?) \(parent/)
+      if (fail) { names.add(fail[1]); return }
+      const skipParent = t.match(/^SKIP (.+?) parent /)
+      if (skipParent) { names.add(skipParent[1]); return }
+      const skip = t.match(/^SKIP (.+?) —/)
+      if (skip) names.add(skip[1])
+    })
+    return [...names]
+  }
+
+  async function handleExamAbsenceConfirm(edits, redirectTo) {
+    const exam = examAbsencePreviewExam
+    setExamAbsenceSending(true)
+    try {
+      const body = { examName: exam.name, students: edits }
+      if (redirectTo) body.redirectTo = redirectTo
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const headers = { 'Content-Type': 'application/json' }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
+      const res = await fetch('/api/send-exam-absence', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      })
+      const result = await res.json()
+      if (result.ok) {
+        setExamAbsenceSendHistory(exam.id, {
+          sentAt:      new Date().toISOString(),
+          sent:        result.sent,
+          skipped:     result.skipped,
+          failedNames: parseFailedNamesAbsence(result.lines),
+        })
+      }
+      setExamAbsencePreviewExam(null)
+      setExamAbsenceResult({ examName: exam.name, ...result })
+    } catch (e) {
+      setExamAbsencePreviewExam(null)
+      setExamAbsenceResult({ examName: exam.name, ok: false, error: e.message })
+    } finally {
+      setExamAbsenceSending(false)
+    }
   }
 
   async function handleWhatsAppConfirm(edits, redirectTo, studentNames) {
@@ -331,6 +386,21 @@ export default function ExamsPage() {
                             </button>
                           )
                         })()}
+                        {(() => {
+                          const history = examAbsenceSendHistory[exam.id]
+                          return (
+                            <button
+                              onClick={() => setExamAbsencePreviewExam(exam)}
+                              className="btn btn-sm btn-secondary text-[11px] min-h-[44px]
+                                         hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                              title={history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp absence alert to parents'}
+                            >
+                              {history
+                                ? `📵 Sent ${history.sent}✓ ${history.skipped}✗ · Resend`
+                                : '📵 Send Absent Alert'}
+                            </button>
+                          )
+                        })()}
                         <button
                           onClick={() => setReuploadResultsExam(exam)}
                           className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
@@ -417,6 +487,23 @@ export default function ExamsPage() {
         <WhatsAppResultsModal
           result={whatsappResult}
           onClose={() => setWhatsappResult(null)}
+        />
+      )}
+
+      {examAbsencePreviewExam && (
+        <ExamAbsencePreviewModal
+          exam={examAbsencePreviewExam}
+          sending={examAbsenceSending}
+          onClose={() => !examAbsenceSending && setExamAbsencePreviewExam(null)}
+          onConfirm={handleExamAbsenceConfirm}
+          failedNames={examAbsenceSendHistory[examAbsencePreviewExam.id]?.failedNames ?? null}
+        />
+      )}
+      {examAbsenceResult && (
+        <WhatsAppResultsModal
+          result={examAbsenceResult}
+          recipientLabel="parents only"
+          onClose={() => setExamAbsenceResult(null)}
         />
       )}
     </div>

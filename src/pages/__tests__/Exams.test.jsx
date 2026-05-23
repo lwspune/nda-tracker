@@ -10,10 +10,12 @@ const mockStore = {
   exams: [],
   studentProfiles: {},
   whatsappSendHistory: {},
+  examAbsenceSendHistory: {},
   deleteExam: vi.fn(),
   openUploadModal: vi.fn(),
   bulkUpdateStudentContacts: vi.fn(),
   setWhatsappSendHistory: vi.fn(),
+  setExamAbsenceSendHistory: vi.fn(),
 }
 
 vi.mock('../../store/useStore', () => ({

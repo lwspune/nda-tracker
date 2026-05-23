@@ -20,7 +20,7 @@ function LogLine({ line }) {
   )
 }
 
-export default function WhatsAppResultsModal({ result, onClose }) {
+export default function WhatsAppResultsModal({ result, onClose, recipientLabel = 'students + parents' }) {
   const logRef = useRef(null)
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function WhatsAppResultsModal({ result, onClose }) {
                 <div className="text-[22px] font-extrabold font-mono text-ink-3">{result.skipped}</div>
               </div>
               <div className="ml-auto text-[11px] text-ink-3">
-                students + parents
+                {recipientLabel}
               </div>
             </>
           ) : (

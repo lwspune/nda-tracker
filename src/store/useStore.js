@@ -234,6 +234,13 @@ const useStore = create((set, get) => ({
     get()._save()
   },
 
+  // ── Exam-absence send history (admin only, persisted, keyed by examId) ──────
+  setExamAbsenceSendHistory(examId, record) {
+    if (!examId) return
+    set(s => ({ examAbsenceSendHistory: { ...s.examAbsenceSendHistory, [examId]: record } }))
+    get()._save()
+  },
+
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
   ...createStudentSlice(set, get),
