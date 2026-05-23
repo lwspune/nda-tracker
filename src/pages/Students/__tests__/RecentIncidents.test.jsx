@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
   getLectureAbsencesForStudent: vi.fn(),
+  getExamAbsencesForStudent:    vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -20,6 +21,7 @@ function isoDaysAgo(n) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockStore.getLectureAbsencesForStudent.mockResolvedValue([])
+  mockStore.getExamAbsencesForStudent.mockResolvedValue([])
 })
 
 describe('RecentIncidents', () => {
@@ -82,5 +84,40 @@ describe('RecentIncidents', () => {
     render(<RecentIncidents lwsId="LWS-001" attendance={[{ date: oldDate, status: 'L' }]} />)
     await waitFor(() => expect(mockStore.getLectureAbsencesForStudent).toHaveBeenCalled())
     expect(screen.queryByText('Late')).not.toBeInTheDocument()
+  })
+
+  it('shows exam-absence rows fetched from the store as "Missed exam"', async () => {
+    const today = isoDaysAgo(2)
+    mockStore.getExamAbsencesForStudent.mockResolvedValue([
+      { lws_id: 'LWS-001', exam_id: 'e1', marked_at: today + 'T10:00Z', notified_at: null },
+    ])
+    const exams = [{ id: 'e1', name: 'Mock #1', date: today }]
+    render(<RecentIncidents lwsId="LWS-001" attendance={[]} exams={exams} />)
+    expect(await screen.findByText(/Missed exam.*Mock #1/i)).toBeInTheDocument()
+  })
+
+  it('uses examAbsencesProp without fetching (student portal path)', async () => {
+    const today = isoDaysAgo(2)
+    const exams = [{ id: 'e1', name: 'Mock #1', date: today }]
+    render(
+      <RecentIncidents
+        lwsId="LWS-001"
+        attendance={[]}
+        exams={exams}
+        examAbsencesProp={[{ lws_id: 'LWS-001', exam_id: 'e1', marked_at: today + 'T10:00Z', notified_at: null }]}
+      />
+    )
+    expect(await screen.findByText(/Missed exam.*Mock #1/i)).toBeInTheDocument()
+    expect(mockStore.getExamAbsencesForStudent).not.toHaveBeenCalled()
+  })
+
+  it('drops exam-absence rows for exams not in the exams prop (e.g. deleted exam)', async () => {
+    const today = isoDaysAgo(2)
+    mockStore.getExamAbsencesForStudent.mockResolvedValue([
+      { lws_id: 'LWS-001', exam_id: 'missing-exam', marked_at: today + 'T10:00Z', notified_at: null },
+    ])
+    const { container } = render(<RecentIncidents lwsId="LWS-001" attendance={[]} exams={[]} />)
+    await waitFor(() => expect(mockStore.getExamAbsencesForStudent).toHaveBeenCalled())
+    expect(container.querySelector('.card, [class*="card"]')).toBeNull()
   })
 })

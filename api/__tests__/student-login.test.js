@@ -65,6 +65,7 @@ function makeMockClient({
   resultRows    = [MOCK_RESULT_ROW],
   examRows      = [MOCK_EXAM_ROW],
   stateData     = MOCK_STATE,
+  examAbsences  = [],
   studentsError = null,
   resultsError  = null,
   examsError    = null,
@@ -113,6 +114,17 @@ function makeMockClient({
           gte:    vi.fn(() => builder),
           order:  vi.fn(() => builder),
           then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+        }
+        return builder
+      }
+      if (table === 'exam_absences') {
+        // chain: .select(...).eq('lws_id', X).gte('marked_at', X).order(...) — await
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          gte:    vi.fn(() => builder),
+          order:  vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: examAbsences, error: null }).then(resolve),
         }
         return builder
       }
@@ -318,5 +330,31 @@ describe('POST /api/student-login', () => {
     vi.mocked(createClient).mockReturnValue(client)
     const res = await call({ mobile: '9876543210' })
     expect(res.status).toHaveBeenCalledWith(200)
+  })
+
+  // ── Exam absences (last 30 days) ──────────────────────────────────────────
+
+  it('returns examAbsences[] in the response, scoped to the student', async () => {
+    const rows = [
+      { exam_id: 'e1', marked_at: '2026-05-22T10:00:00Z', notified_at: null },
+      { exam_id: 'e2', marked_at: '2026-05-20T10:00:00Z', notified_at: '2026-05-20T11:00:00Z' },
+    ]
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ examAbsences: rows }))
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(Array.isArray(result.examAbsences)).toBe(true)
+    expect(result.examAbsences).toHaveLength(2)
+    expect(result.examAbsences[0]).toMatchObject({
+      lws_id:     'LWS001',
+      exam_id:    'e1',
+      marked_at:  '2026-05-22T10:00:00Z',
+      notified_at: null,
+    })
+  })
+
+  it('returns empty examAbsences[] when the student has no absences', async () => {
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(result.examAbsences).toEqual([])
   })
 })

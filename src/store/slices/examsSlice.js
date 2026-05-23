@@ -12,6 +12,7 @@ export const createExamsSlice = (set, get) => ({
     const normalised = { ...exam, batch: exam.batch || null, branch: exam.branch || null }
     set(s => ({ exams: [...s.exams, normalised] }))
     get()._save()
+    get().syncExamAbsences?.(normalised.id)
     getSession().then(session => {
       if (session) upsertExam(supabase, normalised).catch(e => console.error('[exams] addExam Supabase write failed:', e))
     })
@@ -20,6 +21,7 @@ export const createExamsSlice = (set, get) => ({
   replaceExam(id, exam) {
     set(s => ({ exams: s.exams.map(e => e.id === id ? exam : e) }))
     get()._save()
+    get().syncExamAbsences?.(id)
     getSession().then(session => {
       if (session) upsertExam(supabase, exam).catch(e => console.error('[exams] replaceExam Supabase write failed:', e))
     })

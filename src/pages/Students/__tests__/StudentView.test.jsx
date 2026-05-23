@@ -12,8 +12,9 @@ const mockStore = {
   studentProfiles: {},
   savedInsights: { classReport: null, studentPlans: {} },
   ndaFreqBySubject: {},
-  // RecentIncidents reads this; in tests it just resolves to no data.
+  // RecentIncidents + MissedExams read these; in tests they just resolve to no data.
   getLectureAbsencesForStudent: vi.fn().mockResolvedValue([]),
+  getExamAbsencesForStudent:    vi.fn().mockResolvedValue([]),
 }
 
 vi.mock('../../../store/useStore', () => ({

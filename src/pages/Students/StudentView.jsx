@@ -5,6 +5,7 @@ import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import AttendanceRings from '../Attendance/AttendanceRings'
 import RecentIncidents from './RecentIncidents'
+import MissedExams from './MissedExams'
 import {
   getStudentExams, filterValidExams,
   computeStudentChapterStats,
@@ -20,7 +21,7 @@ import { ProfileCard, ImprovementPlan } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
-export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null }) {
+export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const savedInsights      = useStore(s => s.savedInsights)
@@ -237,7 +238,9 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       <RecentIncidents
         lwsId={profile?.lwsId}
         attendance={attendance}
+        exams={normalizedExams}
         lectureAbsencesProp={lectureAbsencesProp}
+        examAbsencesProp={examAbsencesProp}
       />
 
 
@@ -327,6 +330,13 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
 
       {/* Exam history */}
       <ExamHistoryTable scores={scores} />
+
+      {/* Missed exams — hidden when zero absences */}
+      <MissedExams
+        lwsId={profile?.lwsId}
+        exams={normalizedExams}
+        examAbsencesProp={examAbsencesProp}
+      />
 
       {/* Wrong Answer Audit — all modes */}
       {wrongAudit.length > 0 && (

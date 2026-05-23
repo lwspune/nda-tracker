@@ -151,6 +151,14 @@ export default async function handler(req, res) {
     .gte('date', sinceIso)
     .order('date', { ascending: false })
 
+  // ── 5a-ii. Recent exam absences (last 30 days) — for MissedExams + RecentIncidents
+  const { data: examAbsenceRows } = await supabase
+    .from('exam_absences')
+    .select('exam_id, marked_at, notified_at')
+    .eq('lws_id', student.lws_id)
+    .gte('marked_at', sinceIso + 'T00:00:00.000Z')
+    .order('marked_at', { ascending: false })
+
   // ── 5b. Record login event (fire-and-forget) ─────────────────────────────
   supabase.from('student_logins').insert({ lws_id: student.lws_id }).then(() => {})
 
@@ -189,6 +197,7 @@ export default async function handler(req, res) {
     exams,
     attendance:       attendanceRows || [],
     lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
+    examAbsences:     (examAbsenceRows || []).map(r => ({ lws_id: student.lws_id, exam_id: r.exam_id, marked_at: r.marked_at, notified_at: r.notified_at })),
     ndaFreqBySubject: stateRow.data?.ndaFreqBySubject || {},
   })
 }

@@ -16,6 +16,7 @@ const mockStore = {
   bulkUpdateStudentContacts: vi.fn(),
   setWhatsappSendHistory: vi.fn(),
   setExamAbsenceSendHistory: vi.fn(),
+  markExamAbsencesNotified: vi.fn(),
 }
 
 vi.mock('../../store/useStore', () => ({

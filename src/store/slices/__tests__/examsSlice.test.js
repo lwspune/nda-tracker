@@ -9,10 +9,11 @@ vi.mock('../../../lib/supabase', () => ({ supabase: null }))
 function makeStore(initialExams = []) {
   let state = { exams: initialExams }
   const save = vi.fn()
-  const get  = () => ({ ...state, _save: save })
+  const syncExamAbsences = vi.fn().mockResolvedValue({ added: 0, removed: 0, kept: 0 })
+  const get  = () => ({ ...state, _save: save, syncExamAbsences })
   const set  = fn  => { state = { ...state, ...(typeof fn === 'function' ? fn(state) : fn) } }
   const slice = createExamsSlice(set, get)
-  return { slice, state: () => state, save }
+  return { slice, state: () => state, save, syncExamAbsences }
 }
 
 function makeExam(overrides = {}) {
@@ -68,6 +69,12 @@ describe('addExam', () => {
     expect(state().exams).toHaveLength(2)
     expect(state().exams[0].id).toBe('exam_0')
   })
+
+  it('triggers syncExamAbsences(examId) so the absence audit log reflects the new exam', () => {
+    const { slice, syncExamAbsences } = makeStore()
+    slice.addExam(makeExam({ id: 'exam_99' }))
+    expect(syncExamAbsences).toHaveBeenCalledWith('exam_99')
+  })
 })
 
 // ── replaceExam ───────────────────────────────────────────────────────────────
@@ -92,6 +99,12 @@ describe('replaceExam', () => {
     const { slice, save } = makeStore([makeExam()])
     slice.replaceExam('exam_1', makeExam())
     expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('triggers syncExamAbsences so an attended-now student loses their stale absent row', () => {
+    const { slice, syncExamAbsences } = makeStore([makeExam()])
+    slice.replaceExam('exam_1', makeExam({ name: 'Updated' }))
+    expect(syncExamAbsences).toHaveBeenCalledWith('exam_1')
   })
 })
 

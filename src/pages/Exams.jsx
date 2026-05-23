@@ -23,6 +23,7 @@ export default function ExamsPage() {
   const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
   const examAbsenceSendHistory     = useStore(s => s.examAbsenceSendHistory)
   const setExamAbsenceSendHistory  = useStore(s => s.setExamAbsenceSendHistory)
+  const markExamAbsencesNotified   = useStore(s => s.markExamAbsencesNotified)
   const mode = useMode()
 
   const [subjectFilter, setSubjectFilter] = useState('all')
@@ -93,12 +94,20 @@ export default function ExamsPage() {
       })
       const result = await res.json()
       if (result.ok) {
+        const failedSet = new Set(parseFailedNamesAbsence(result.lines))
         setExamAbsenceSendHistory(exam.id, {
           sentAt:      new Date().toISOString(),
           sent:        result.sent,
           skipped:     result.skipped,
-          failedNames: parseFailedNamesAbsence(result.lines),
+          failedNames: [...failedSet],
         })
+        // Mark exam_absences.notified_at for students with no failed leg.
+        const notifiedLwsIds = edits
+          .filter(e => e.lwsId && !failedSet.has(e.name))
+          .map(e => e.lwsId)
+        if (notifiedLwsIds.length > 0 && typeof markExamAbsencesNotified === 'function') {
+          markExamAbsencesNotified(exam.id, notifiedLwsIds)
+        }
       }
       setExamAbsencePreviewExam(null)
       setExamAbsenceResult({ examName: exam.name, ...result })

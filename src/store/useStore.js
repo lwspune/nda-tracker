@@ -12,6 +12,7 @@ import { createSyllabusSlice } from './slices/syllabusSlice'
 import { createTimetableSlice } from './slices/timetableSlice'
 import { createAttendanceSlice } from './slices/attendanceSlice'
 import { createLectureAbsenceSlice } from './slices/lectureAbsenceSlice'
+import { createExamAbsenceSlice }    from './slices/examAbsenceSlice'
 import { createConfigSlice } from './slices/configSlice'
 
 const useStore = create((set, get) => ({
@@ -250,6 +251,7 @@ const useStore = create((set, get) => ({
   ...createTimetableSlice(set, get),
   ...createAttendanceSlice(set, get),
   ...createLectureAbsenceSlice(set, get),
+  ...createExamAbsenceSlice(set, get),
   ...createConfigSlice(set, get),
 }))
 

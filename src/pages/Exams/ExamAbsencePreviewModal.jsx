@@ -1,14 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
-import { getExamAbsentees } from '../../lib/analytics'
 
-function buildRows(absentees) {
-  return absentees.map(p => ({
-    lwsId:         p.lwsId || '',
-    name:          p.name,
-    mobile:        p.mobile || '',
-    parentMobiles: (p.parentMobiles || []).join(', '),
-  }))
+// Joins exam_absences rows with studentProfiles to produce the editable list.
+// Each row carries name, mobile, parent_mobiles (for editing) + notified_at
+// (for display only — drives the "Notified" badge).
+function joinRows(absenceRows, studentProfiles) {
+  // Build lwsId → profile lookup once. studentProfiles is keyed by name (and
+  // every name_variant); collapse by lwsId so we don't hit a profile twice.
+  const byLwsId = {}
+  for (const p of Object.values(studentProfiles || {})) {
+    if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
+  }
+  return (absenceRows || []).map(r => {
+    const p = byLwsId[r.lws_id]
+    return {
+      lwsId:         r.lws_id,
+      name:          p?.name ?? r.lws_id,
+      mobile:        p?.mobile ?? '',
+      parentMobiles: (p?.parentMobiles ?? []).join(', '),
+      notifiedAt:    r.notified_at ?? null,
+    }
+  })
 }
 
 // failedNames: string[] from previous send; null = first send.
@@ -19,24 +31,44 @@ export default function ExamAbsencePreviewModal({
   failedNames = null,
   sending = false,
 }) {
-  const studentProfiles = useStore(s => s.studentProfiles)
+  const studentProfiles           = useStore(s => s.studentProfiles)
   const bulkUpdateStudentContacts = useStore(s => s.bulkUpdateStudentContacts)
+  const getExamAbsencesForExam    = useStore(s => s.getExamAbsencesForExam)
+  const syncExamAbsences          = useStore(s => s.syncExamAbsences)
 
-  const absentees = useMemo(
-    () => getExamAbsentees(exam, studentProfiles),
-    [exam, studentProfiles],
-  )
+  const [rows, setRows]             = useState([])
+  const [loaded, setLoaded]         = useState(false)
+  const [redirectTo, setRedirectTo] = useState('')
+
+  // On mount: read absentees from the slice. If empty (legacy exam never synced),
+  // run a one-time sync and re-fetch. Self-heals without manual backfill.
+  useEffect(() => {
+    let cancelled = false
+    let synced    = false
+    async function load() {
+      let data = await getExamAbsencesForExam?.(exam.id) ?? []
+      if (data.length === 0 && !synced && typeof syncExamAbsences === 'function') {
+        synced = true
+        await syncExamAbsences(exam.id)
+        data = await getExamAbsencesForExam?.(exam.id) ?? []
+      }
+      if (cancelled) return
+      setRows(joinRows(data, studentProfiles))
+      setLoaded(true)
+    }
+    load()
+    return () => { cancelled = true }
+    // Intentional: re-run when exam id changes, not when profiles tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exam.id])
 
   const isResend = failedNames !== null && failedNames !== undefined
   const failedSet = useMemo(() => new Set(failedNames || []), [failedNames])
-
-  const [rows, setRows] = useState(() => buildRows(absentees))
-  const [redirectTo, setRedirectTo] = useState('')
   const [scopeAll, setScopeAll] = useState(!isResend)
 
   const failedRows  = useMemo(() => rows.filter(r => failedSet.has(r.name)), [rows, failedSet])
   const visibleRows = scopeAll ? rows : failedRows
-  const empty = visibleRows.length === 0
+  const empty = loaded && visibleRows.length === 0
 
   function updateRow(idx, field, value) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
@@ -77,7 +109,6 @@ export default function ExamAbsencePreviewModal({
           <button onClick={onClose} disabled={sending} className="text-ink-3 hover:text-ink text-[20px] leading-none">×</button>
         </div>
 
-        {/* Scope toggle — only shown on resend */}
         {isResend && (
           <div className="px-5 py-3 bg-amber-50 border-b border-border flex-shrink-0 flex items-center gap-4 flex-wrap">
             <span className="text-[12px] text-amber-800 font-medium">Resend to:</span>
@@ -113,13 +144,22 @@ export default function ExamAbsencePreviewModal({
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
           {empty ? (
             <div className="text-[13px] text-ink-3 italic py-6 text-center">No absentees detected.</div>
+          ) : !loaded ? (
+            <div className="text-[13px] text-ink-3 italic py-6 text-center">Loading absentees…</div>
           ) : (
             <div className="space-y-2">
               {visibleRows.map((r) => {
                 const idx = rows.indexOf(r)
                 return (
                   <div key={r.lwsId || r.name} className="card px-4 py-3">
-                    <div className="font-semibold text-[13px] text-ink mb-2">{r.name}</div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="font-semibold text-[13px] text-ink">{r.name}</div>
+                      {r.notifiedAt && (
+                        <span className="text-[10px] font-mono bg-green-50 text-success border border-green-200 rounded-full px-2 py-0.5">
+                          Notified
+                        </span>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                       <label className="flex flex-col gap-1">
                         <span className="text-ink-3 font-mono uppercase tracking-widest text-[10px]">Mobile</span>
@@ -164,7 +204,7 @@ export default function ExamAbsencePreviewModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={empty || sending}
+            disabled={empty || !loaded || sending}
             className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {sending ? 'Sending…' : 'Confirm send'}
