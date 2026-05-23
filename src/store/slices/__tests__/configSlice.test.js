@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createConfigSlice } from '../configSlice'
 import { createTimetableSlice } from '../timetableSlice'
 import { createSyllabusSlice } from '../syllabusSlice'
+
+// Spy on the Supabase cascade — the in-memory JSONB renames are tested
+// directly; the Supabase cascade is fire-and-forget and just verifies the
+// helper is called with the right args.
+const mockCascade = vi.fn().mockResolvedValue({ studentBatchRows: 0, examRows: 0 })
+vi.mock('../batchSupabase', () => ({
+  cascadeBatchRenameToSupabase: (...args) => mockCascade(...args),
+}))
+beforeEach(() => mockCascade.mockClear())
 
 // Compose configSlice with the syllabus + timetable slices so the cascade
 // behaviour (renameBatch / deleteBatch / renameBranch) can be exercised
@@ -304,6 +313,28 @@ describe('renameBatch', () => {
     slice.addTimetable('APJ', 'TimetableOnly')
     slice.renameBatch('TimetableOnly', 'Renamed')
     expect(get().timetables[0].batchName).toBe('Renamed')
+  })
+
+  it('fires the Supabase cascade (student_batches + exams.batch) with old + new names', () => {
+    const { slice } = makeStore()
+    slice.addSyllabusBatch('OldName')
+    slice.renameBatch('OldName', 'NewName')
+    expect(mockCascade).toHaveBeenCalledWith(expect.anything(), 'OldName', 'NewName')
+  })
+
+  it('does NOT fire the cascade for a no-op rename (oldName equals newName)', () => {
+    const { slice } = makeStore()
+    slice.addSyllabusBatch('Same')
+    slice.renameBatch('Same', 'Same')
+    expect(mockCascade).not.toHaveBeenCalled()
+  })
+
+  it('does NOT fire the cascade when the rename is rejected (newName already exists)', () => {
+    const { slice } = makeStore()
+    slice.addSyllabusBatch('A')
+    slice.addSyllabusBatch('B')
+    slice.renameBatch('A', 'B')   // both already in syllabusBatches → rename is rejected
+    expect(mockCascade).not.toHaveBeenCalled()
   })
 })
 

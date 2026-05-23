@@ -10,6 +10,9 @@
 // key — they delegate to the existing syllabus + timetable slice actions
 // so a rename in one place can't miss the other.
 
+import { supabase } from '../../lib/supabase'
+import { cascadeBatchRenameToSupabase } from './batchSupabase'
+
 export const createConfigSlice = (set, get) => ({
   branches: [],
 
@@ -106,9 +109,31 @@ export const createConfigSlice = (set, get) => ({
   // Delegate to both syllabus + timetable rename actions so the two stores
   // can't diverge after a rename through this path. Either side may be
   // empty for the given oldName — each delegate is independently no-op-safe.
+  //
+  // Also fires a fire-and-forget Supabase cascade for student_batches and
+  // exams.batch (the normalised tables the JSONB cascade can't reach). The
+  // cascade is guarded behind the same validity checks as the delegates so
+  // a rejected rename (e.g. newName already exists) doesn't silently merge
+  // rows in Supabase while the local stores stay unchanged.
   renameBatch(oldName, newName) {
-    get().renameSyllabusBatch(oldName, newName)
-    get().renameTimetableBatch(oldName, newName)
+    const oldTrim = (oldName ?? '').trim()
+    const newTrim = (newName ?? '').trim()
+    if (!oldTrim || !newTrim || oldTrim === newTrim) return
+    const s = get()
+    const newAlreadyExists =
+      s.syllabusBatches.includes(newTrim) ||
+      s.timetables.some(t => t.batchName === newTrim)
+    if (newAlreadyExists) return
+    const exists =
+      s.syllabusBatches.includes(oldTrim) ||
+      s.timetables.some(t => t.batchName === oldTrim)
+    if (!exists) return
+
+    get().renameSyllabusBatch(oldTrim, newTrim)
+    get().renameTimetableBatch(oldTrim, newTrim)
+
+    cascadeBatchRenameToSupabase(supabase, oldTrim, newTrim)
+      .catch(e => console.error('[configSlice] cascadeBatchRenameToSupabase failed:', e))
   },
 
   batchInUseBy(name) {
