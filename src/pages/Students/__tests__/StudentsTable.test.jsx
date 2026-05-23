@@ -235,6 +235,33 @@ describe('StudentsTable — click handlers', () => {
   })
 })
 
+// ── Batch filter dropdown — central-only when provided ───────────────────────
+
+describe('StudentsTable — batch filter dropdown', () => {
+  it('shows only centralBatches in the dropdown when provided, hiding student-derived HR names', () => {
+    render(<StudentsTable {...makeProps({
+      students: [
+        makeStudent({ lwsId: 'LWS-001', name: 'Aarav',  batches: ['HR_Batch_Old'] }),
+        makeStudent({ lwsId: 'LWS-002', name: 'Bina',   batches: ['CB1'] }),
+        makeStudent({ lwsId: 'LWS-003', name: 'Chetan', batches: ['CDS-AFCAT - APR 2026'] }),
+      ],
+      centralBatches: ['CB1', 'CB2', 'CB3'],
+    })} />)
+    const select = screen.getByLabelText(/batch filter/i)
+    const options = within(select).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual(['All batches', 'CB1', 'CB2', 'CB3'])
+    expect(options).not.toContain('HR_Batch_Old')
+    expect(options).not.toContain('CDS-AFCAT - APR 2026')
+  })
+
+  it('falls back to student-derived batches when centralBatches prop is empty (legacy)', () => {
+    render(<StudentsTable {...makeProps()} />)
+    const select = screen.getByLabelText(/batch filter/i)
+    const options = within(select).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual(['All batches', 'B1', 'B2'])
+  })
+})
+
 // ── Alignment column + filter ─────────────────────────────────────────────────
 
 describe('StudentsTable — alignment column', () => {

@@ -71,6 +71,13 @@ export default function StudentsTable({
     [students]
   )
 
+  // Dropdown shows central batches when provided (Settings is the source of truth);
+  // falls back to student-derived batches for legacy callers that don't pass centralBatches.
+  const batchOptions = useMemo(
+    () => (centralBatches.length > 0 ? [...centralBatches].sort() : allBatches),
+    [centralBatches, allBatches]
+  )
+
   // Activity counts
   const activity = useMemo(() => buildActivityIndex(exams, students), [exams, students])
 
@@ -142,7 +149,7 @@ export default function StudentsTable({
           className="form-input text-[12px] w-auto max-w-[220px]"
         >
           <option value="all">All batches</option>
-          {allBatches.map(b => <option key={b} value={b}>{b}</option>)}
+          {batchOptions.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
 
         <select
