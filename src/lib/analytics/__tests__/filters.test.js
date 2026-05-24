@@ -152,4 +152,45 @@ describe('getExamAbsentees', () => {
     const result = getExamAbsentees(exam, legacyProfiles)
     expect(result.map(r => r.name)).toEqual(['Alice'])
   })
+
+  it('excludes students whose regDate is after the exam date (not yet enrolled)', () => {
+    const datedProfiles = {
+      ...profiles,
+      'Alice': { ...profiles['Alice'], regDate: '2026-01-01' },     // enrolled before exam
+      'Bob':   { ...profiles['Bob'],   regDate: '2026-03-01' },     // enrolled AFTER exam
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', date: '2026-02-15', students: [] }
+    const result = getExamAbsentees(exam, datedProfiles)
+    expect(result.map(r => r.name)).toEqual(['Alice'])
+  })
+
+  it('includes students whose regDate equals the exam date (boundary — enrolled that day)', () => {
+    const datedProfiles = {
+      ...profiles,
+      'Alice': { ...profiles['Alice'], regDate: '2026-02-15' },
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', date: '2026-02-15', students: [] }
+    const result = getExamAbsentees(exam, datedProfiles)
+    expect(result.map(r => r.name)).toContain('Alice')
+  })
+
+  it('does not apply regDate filter when profile has no regDate (permissive — matches filterValidExams)', () => {
+    const noDateProfiles = {
+      ...profiles,
+      'Bob': { ...profiles['Bob'], regDate: '' },
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', date: '2026-02-15', students: [] }
+    const result = getExamAbsentees(exam, noDateProfiles)
+    expect(result.map(r => r.name).sort()).toEqual(['Alice', 'Bob'])
+  })
+
+  it('does not apply regDate filter when exam has no date', () => {
+    const datedProfiles = {
+      ...profiles,
+      'Bob': { ...profiles['Bob'], regDate: '2099-01-01' },
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', students: [] } // no date
+    const result = getExamAbsentees(exam, datedProfiles)
+    expect(result.map(r => r.name).sort()).toEqual(['Alice', 'Bob'])
+  })
 })

@@ -95,6 +95,7 @@ export function getExamAbsentees(exam, studentProfiles) {
   for (const [key, p] of Object.entries(studentProfiles)) {
     if (!p || p.name !== key) continue              // skip variant-keyed entries
     if (p.accountStatus !== 'Active') continue      // skip Block / quit / batch-over / legacy
+    if (p.regDate && exam.date && exam.date < p.regDate) continue  // not yet enrolled
     const batches = p.batches || []
     if (!batches.some(b => examBatchSet.has(b))) continue
 
