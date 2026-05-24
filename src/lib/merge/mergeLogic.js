@@ -28,12 +28,13 @@ function candidateOf(s) {
  * Existing student (matched at any step):
  *   - Updates UPDATABLE_FIELDS (and eis_reg_no when matched via steps 2/3) when
  *     the Excel value is non-empty and differs
- *   - Merges the Excel batch into batches[] (no duplicates)
  *   - Adds canonical_name to name_variants[] if not already present
  *   - Appends guardian_mobile to parent_mobiles[] (no duplicates)
+ *   - batches[] is NEVER modified — XLS Batch column is intentionally discarded.
+ *     Faculty assigns batches manually via the Students row editor.
  *
  * No match:
- *   - With non-empty EIS → insert as new
+ *   - With non-empty EIS → insert as new (with batches: [], to be assigned manually)
  *   - With blank EIS → skip (preserves the safety net: don't create students
  *     without an EIS, since EIS is the canonical identifier)
  *
