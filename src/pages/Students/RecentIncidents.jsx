@@ -107,13 +107,13 @@ export default function RecentIncidents({
           let label, cls
           if (item.kind === 'late') {
             label = 'Late'
-            cls   = 'bg-yellow-400/10 border-yellow-400/30 text-yellow-300'
+            cls   = 'bg-yellow-50 border-yellow-200 text-warning'
           } else if (item.kind === 'missed') {
             label = `Missed ${item.subject}`
-            cls   = 'bg-red-400/10 border-red-400/30 text-red-300'
+            cls   = 'bg-red-50 border-red-200 text-danger'
           } else {
             label = `Missed exam · ${item.examName}`
-            cls   = 'bg-red-500/15 border-red-500/40 text-red-200'
+            cls   = 'bg-red-100 border-red-300 text-red-900'
           }
           return (
             <span

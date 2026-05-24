@@ -17,16 +17,18 @@ function fmtDayMonth(iso) {
 }
 
 function Chip({ label, expanded, onToggle, listTestId, items, tone }) {
-  // tone: 'late' (yellow) | 'lecture' (red) | 'exam' (red darker)
+  // tone: 'late' (yellow) | 'lecture' (red) | 'exam' (red darker).
+  // Light-mode tuned — the app's surface is white/pale; earlier dark-mode
+  // greys made these chips unreadable.
   const tones = {
-    late:    'bg-yellow-400/10 border-yellow-400/30 text-yellow-300 hover:bg-yellow-400/20',
-    lecture: 'bg-red-400/10 border-red-400/30 text-red-300 hover:bg-red-400/20',
-    exam:    'bg-red-500/15 border-red-500/40 text-red-200 hover:bg-red-500/25',
+    late:    'bg-yellow-50 border-yellow-200 text-warning hover:bg-yellow-100',
+    lecture: 'bg-red-50 border-red-200 text-danger hover:bg-red-100',
+    exam:    'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
   }
   const listColor = {
-    late:    'text-yellow-200/90',
-    lecture: 'text-red-200/90',
-    exam:    'text-red-200/90',
+    late:    'text-yellow-800',
+    lecture: 'text-red-800',
+    exam:    'text-red-900',
   }
   return (
     <>
