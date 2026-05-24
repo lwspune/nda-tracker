@@ -114,6 +114,50 @@ describe('syncExamAbsences', () => {
     expect(deleteBuilder.in).toHaveBeenCalledWith('lws_id', ['LWS-002'])
   })
 
+  it('preserves rows for students who LEFT the cohort but did NOT attend (batch-move protection)', async () => {
+    // Bob was correctly captured as absent on first upload. Bob then switched
+    // batches (B1 → B2). On re-upload, Bob is no longer expected for this exam.
+    // The historical absence is FACTUAL — preserve it. Only DELETE if Bob now
+    // appears in exam.students[] (i.e. re-upload reveals he attended after all).
+    mockSession(true)
+    const existingBuilder = makeBuilder({ data: [{ lws_id: 'LWS-002' }, { lws_id: 'LWS-003' }] })
+    mockFromQueue([existingBuilder])  // Only SELECT — no DELETE expected
+
+    const profiles = fixtureProfiles()
+    profiles['Bob'] = { ...profiles['Bob'], batches: ['B2'] }  // moved out of B1
+
+    const { slice } = makeStore({
+      exams: [{ id: 'e1', batch: 'B1', students: [{ name: 'Alice' }] }],
+      studentProfiles: profiles,
+    })
+
+    const result = await slice.syncExamAbsences('e1')
+    expect(result.removed).toBe(0)  // Bob's row preserved — he didn't attend
+    expect(result.kept).toBe(1)     // Cara still in target + in DB
+    // No second from('exam_absences') call (no DELETE issued)
+    expect(supabase.from).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves rows for students no longer in studentProfiles (deleted student)', async () => {
+    // If a student was deleted from the profiles map, we can't tell whether
+    // they attended — leave the historical row alone (no DELETE).
+    mockSession(true)
+    const existingBuilder = makeBuilder({ data: [{ lws_id: 'LWS-999' }, { lws_id: 'LWS-003' }] })
+    mockFromQueue([existingBuilder])  // SELECT only — no DELETE, no INSERT
+
+    const { slice } = makeStore({
+      // Bob + Alice attended → only Cara still in target. Cara already in DB.
+      // LWS-999 is in DB but not in profiles (deleted student).
+      exams: [{ id: 'e1', batch: 'B1', students: [{ name: 'Alice' }, { name: 'Bob' }] }],
+      studentProfiles: fixtureProfiles(),
+    })
+
+    const result = await slice.syncExamAbsences('e1')
+    expect(result.removed).toBe(0)
+    expect(result.added).toBe(0)
+    expect(supabase.from).toHaveBeenCalledTimes(1)
+  })
+
   it('preserves rows for students still absent (no INSERT, no DELETE)', async () => {
     mockSession(true)
     const existingBuilder = makeBuilder({ data: [{ lws_id: 'LWS-002' }, { lws_id: 'LWS-003' }] })

@@ -9,10 +9,11 @@ async function getSession() {
 
 export const createExamAbsenceSlice = (_set, get) => ({
   // Recomputes the absentee set for an exam from in-memory state and reconciles
-  // it with `exam_absences`. Rows for students who turn out to have attended
-  // (re-upload correction) are DELETEd; new absentees are INSERTed. Rows for
-  // students who remain absent are LEFT IN PLACE — preserving `notified_at`
-  // across re-uploads so the audit trail isn't lost.
+  // it with `exam_absences`. Rows are DELETEd ONLY for students who now appear
+  // in `exam.students[]` (i.e. re-upload reveals they attended after all). Rows
+  // are LEFT IN PLACE for students who simply fell out of the cohort (batch
+  // moves, profile deletions) — those historical absences are still factual
+  // and must not be silently lost. New absentees are INSERTed.
   //
   // Returns { added, removed, kept } so the caller can log / surface a banner.
   async syncExamAbsences(examId) {
@@ -40,9 +41,34 @@ export const createExamAbsenceSlice = (_set, get) => ({
     }
     const currentIds = new Set((existing ?? []).map(r => r.lws_id))
 
-    const toRemove = [...currentIds].filter(id => !targetIds.has(id))
-    const toAdd    = [...targetIds].filter(id => !currentIds.has(id))
-    const kept     = [...targetIds].filter(id =>  currentIds.has(id)).length
+    // Build lwsId → canonical profile lookup so we can check whether an
+    // already-in-DB absence row's student now appears in exam.students[].
+    // studentProfiles is keyed by canonical name AND every variant; only
+    // canonical entries (p.name === key) carry the lwsId once.
+    const lwsIdToProfile = new Map()
+    for (const [key, p] of Object.entries(state.studentProfiles || {})) {
+      if (!p?.lwsId || p.name !== key) continue
+      if (!lwsIdToProfile.has(p.lwsId)) lwsIdToProfile.set(p.lwsId, p)
+    }
+    const attendeeNamesLower = new Set(
+      (exam.students || []).map(s => (s.name || '').toLowerCase().trim()).filter(Boolean)
+    )
+
+    // DELETE only for students whose canonical or variant name now appears
+    // as an attendee — that's the "they attended after all" case. Students
+    // who fell out of the cohort but didn't attend keep their historical row.
+    const toRemove = []
+    for (const lwsId of currentIds) {
+      const profile = lwsIdToProfile.get(lwsId)
+      if (!profile) continue // student deleted from store — leave row alone
+      const names = [
+        (profile.name || '').toLowerCase().trim(),
+        ...(profile.nameVariants || []).map(v => (v || '').toLowerCase().trim()),
+      ].filter(Boolean)
+      if (names.some(n => attendeeNamesLower.has(n))) toRemove.push(lwsId)
+    }
+    const toAdd = [...targetIds].filter(id => !currentIds.has(id))
+    const kept  = [...targetIds].filter(id =>  currentIds.has(id)).length
 
     if (toRemove.length > 0) {
       const { error } = await supabase
