@@ -9,6 +9,13 @@ vi.mock('../../../lib/monthlyReportPdf', () => ({
   downloadMonthlyReportPdf: (...args) => mockDownload(...args),
 }))
 
+const mockZipDownload = vi.fn(() => Promise.resolve('reports.zip'))
+const mockZipFilename = vi.fn((batch, label) => `${batch}_${label}_Reports.zip`)
+vi.mock('../../../lib/monthlyReportZip', () => ({
+  downloadMonthlyReportsZip: (...args) => mockZipDownload(...args),
+  zipFilename: (...args) => mockZipFilename(...args),
+}))
+
 // Mock the store.
 const mockFetch = vi.fn()
 let mockState = {}
@@ -105,6 +112,57 @@ describe('MonthlyReportsPage', () => {
     expect(reportArg.meta.name).toBeTruthy()
     expect(reportArg.meta.month).toMatch(/^\d{4}-\d{2}$/)
     expect(optsArg).toEqual({ remark: '' })
+  })
+
+  it('typed remarks are passed through to downloadMonthlyReportPdf per student', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await user.type(screen.getByLabelText(/Remark for Alice/i), 'Solid start.')
+    const downloadBtns = screen.getAllByRole('button', { name: /download pdf/i })
+    await user.click(downloadBtns[0])
+
+    await waitFor(() => expect(mockDownload).toHaveBeenCalled())
+    expect(mockDownload.mock.calls[0][1]).toEqual({ remark: 'Solid start.' })
+  })
+
+  it('clicking "Download all as ZIP" calls downloadMonthlyReportsZip with one item per cohort student', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /download all as zip/i }))
+    await waitFor(() => expect(mockZipDownload).toHaveBeenCalledTimes(1))
+
+    const [items, zipName] = mockZipDownload.mock.calls[0]
+    expect(items).toHaveLength(2)
+    expect(items.map(i => i.report.meta.name).sort()).toEqual(['Alice', 'Bob'])
+    expect(items.every(i => i.filename.endsWith('.pdf'))).toBe(true)
+    expect(zipName).toMatch(/_Reports\.zip$/)
+  })
+
+  it('typed remarks land in the ZIP payload per student', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await user.type(screen.getByLabelText(/Remark for Alice/i), 'Solid start.')
+    await user.type(screen.getByLabelText(/Remark for Bob/i),   'Needs review.')
+    await user.click(screen.getByRole('button', { name: /download all as zip/i }))
+
+    await waitFor(() => expect(mockZipDownload).toHaveBeenCalled())
+    const [items] = mockZipDownload.mock.calls[0]
+    const byName = Object.fromEntries(items.map(i => [i.report.meta.name, i.remark]))
+    expect(byName).toEqual({ Alice: 'Solid start.', Bob: 'Needs review.' })
+  })
+
+  it('"Download all as ZIP" button does not appear before Generate', () => {
+    render(<MonthlyReportsPage />)
+    expect(screen.queryByRole('button', { name: /download all as zip/i })).not.toBeInTheDocument()
   })
 
   it('shows an error banner when fetchMonthlyReportData returns null', async () => {

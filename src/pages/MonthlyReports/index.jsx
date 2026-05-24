@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { buildMonthlyReport, getMonthlyReportCohort } from '../../lib/monthlyReportBuilder'
 import { downloadMonthlyReportPdf } from '../../lib/monthlyReportPdf'
+import { downloadMonthlyReportsZip, zipFilename } from '../../lib/monthlyReportZip'
 import ReportRow from './ReportRow'
+
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 // 'YYYY-MM' for the previous calendar month — the default when the page opens.
 function previousMonth(today = new Date()) {
@@ -10,6 +13,12 @@ function previousMonth(today = new Date()) {
   const m = today.getMonth()     // 0–11 of current month
   const prev = new Date(y, m - 1, 1)
   return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+}
+
+// 'YYYY-MM' → 'Jan 2026'
+function monthLabel(month) {
+  const [y, m] = month.split('-')
+  return `${SHORT_MONTHS[Number(m) - 1]} ${y}`
 }
 
 export default function MonthlyReportsPage() {
@@ -24,6 +33,8 @@ export default function MonthlyReportsPage() {
   const [batch, setBatch] = useState(syllabusBatches[0] || '')
   const [generated, setGenerated] = useState(null)   // { dataByLwsId } | null
   const [generating, setGenerating] = useState(false)
+  const [remarks, setRemarks] = useState({})        // { [lwsId]: string }, transient
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState('')
 
   const cohort = useMemo(() =>
@@ -66,14 +77,41 @@ export default function MonthlyReportsPage() {
     })
   }
 
-  async function handleDownload(profile, remark) {
+  async function handleDownload(profile) {
     const report = reportFor(profile)
-    await downloadMonthlyReportPdf(report, { remark })
+    await downloadMonthlyReportPdf(report, { remark: remarks[profile.lwsId] || '' })
+  }
+
+  function safeFile(s) {
+    return (s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+  }
+
+  async function handleBulkZip() {
+    if (!generated || cohort.length === 0) return
+    setBulkBusy(true)
+    setError('')
+    try {
+      const label = monthLabel(month)
+      const items = cohort.map(profile => {
+        const report = reportFor(profile)
+        return {
+          report,
+          remark: remarks[profile.lwsId] || '',
+          filename: `${safeFile(profile.name)}_${safeFile(label)}_Report.pdf`,
+        }
+      })
+      await downloadMonthlyReportsZip(items, zipFilename(batch, label))
+    } catch (e) {
+      console.error(e)
+      setError('Failed to build the ZIP archive. Try again.')
+    } finally {
+      setBulkBusy(false)
+    }
   }
 
   // Reset preview when controls change so users don't see mismatched data.
-  function setMonthAndClear(v) { setMonth(v); setGenerated(null) }
-  function setBatchAndClear(v) { setBatch(v); setGenerated(null) }
+  function setMonthAndClear(v) { setMonth(v); setGenerated(null); setRemarks({}) }
+  function setBatchAndClear(v) { setBatch(v); setGenerated(null); setRemarks({}) }
 
   return (
     <div>
@@ -138,14 +176,27 @@ export default function MonthlyReportsPage() {
       {/* Preview list */}
       {generated && cohort.length > 0 && (
         <div>
-          <div className="text-[11px] font-mono uppercase tracking-[1.5px] text-ink-3 mb-2">
-            Preview · {cohort.length} report{cohort.length !== 1 ? 's' : ''}
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="text-[11px] font-mono uppercase tracking-[1.5px] text-ink-3">
+              Preview · {cohort.length} report{cohort.length !== 1 ? 's' : ''}
+            </div>
+            <button
+              type="button"
+              onClick={handleBulkZip}
+              disabled={bulkBusy}
+              className="btn btn-primary text-[12px] min-h-[40px] px-4
+                         disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {bulkBusy ? `Building ZIP… (${cohort.length} files)` : `Download all as ZIP (${cohort.length})`}
+            </button>
           </div>
           {cohort.map(profile => (
             <ReportRow
               key={profile.lwsId}
               profile={profile}
               report={reportFor(profile)}
+              remark={remarks[profile.lwsId] || ''}
+              onRemarkChange={(value) => setRemarks(r => ({ ...r, [profile.lwsId]: value }))}
               onDownload={handleDownload}
             />
           ))}

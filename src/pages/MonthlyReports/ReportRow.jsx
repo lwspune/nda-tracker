@@ -1,14 +1,11 @@
 import { useState } from 'react'
 
-// Per-student card in the Monthly Reports preview list. Owns the transient
-// remark text (not persisted — re-typed if the user re-generates). Calls
-// onDownload(profile, remark) when the user clicks Download.
-//
-// `report` is the sections object from buildMonthlyReport — used here only
-// for the small at-a-glance summary (counts). The full report is re-passed
-// to the PDF lib on download.
-export default function ReportRow({ profile, report, onDownload }) {
-  const [remark, setRemark] = useState('')
+// Per-student card in the Monthly Reports preview list. The transient remark
+// text lives in the parent page (so the bulk-ZIP path can collect all
+// remarks at once); this row is a controlled component for that input.
+// Calls onDownload(profile) when the user clicks Download — the parent
+// already has the remark.
+export default function ReportRow({ profile, report, remark, onRemarkChange, onDownload }) {
   const [busy, setBusy] = useState(false)
 
   const examCount = report.examTable.filter(r => r.attended).length
@@ -18,7 +15,7 @@ export default function ReportRow({ profile, report, onDownload }) {
   async function handleDownload() {
     setBusy(true)
     try {
-      await onDownload(profile, remark)
+      await onDownload(profile)
     } finally {
       setBusy(false)
     }
@@ -62,7 +59,7 @@ export default function ReportRow({ profile, report, onDownload }) {
       </label>
       <textarea
         value={remark}
-        onChange={e => setRemark(e.target.value)}
+        onChange={e => onRemarkChange(e.target.value)}
         placeholder="One-line note included in the PDF…"
         rows={2}
         className="form-input text-[12px] w-full resize-none"

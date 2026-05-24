@@ -23,53 +23,68 @@ function report(over = {}) {
   }
 }
 
+function renderRow(over = {}) {
+  const props = {
+    profile: profile(),
+    report: report(),
+    remark: '',
+    onRemarkChange: vi.fn(),
+    onDownload: vi.fn(),
+    ...over,
+  }
+  render(<ReportRow {...props} />)
+  return props
+}
+
 describe('ReportRow', () => {
-  it('renders name + lws id + at-a-glance counts (exams taken, missed exams, attendance, late)', () => {
-    render(<ReportRow profile={profile()} report={report()} onDownload={vi.fn()} />)
+  it('renders name + lws id + at-a-glance counts', () => {
+    renderRow()
     expect(screen.getByText('Aksheet Patil')).toBeInTheDocument()
     expect(screen.getByText('LWS-001')).toBeInTheDocument()
-    // exam stats — Exams taken (1 attended), Missed (1)
     expect(screen.getByText('Exams taken')).toBeInTheDocument()
     expect(screen.getByText('Missed exams')).toBeInTheDocument()
     expect(screen.getByText('96%')).toBeInTheDocument()
   })
 
   it('shows "—" for attendance when there are no working days', () => {
-    const r = report({
-      attendance: { present: 0, absent: 0, late: 0, missedLectures: 0, totalWorkingDays: 0, attendancePercentage: 0, lateDates: [], missedLectureDetails: [] },
+    renderRow({
+      report: report({
+        attendance: { present: 0, absent: 0, late: 0, missedLectures: 0,
+                      totalWorkingDays: 0, attendancePercentage: 0,
+                      lateDates: [], missedLectureDetails: [] },
+      }),
     })
-    render(<ReportRow profile={profile()} report={r} onDownload={vi.fn()} />)
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
-  it('calls onDownload with the profile + current remark when Download is clicked', async () => {
+  it('calls onRemarkChange as the user types in the remark box (controlled input)', async () => {
     const user = userEvent.setup()
-    const onDownload = vi.fn()
-    render(<ReportRow profile={profile()} report={report()} onDownload={onDownload} />)
-
-    const remarkBox = screen.getByLabelText(/Remark for Aksheet Patil/i)
-    await user.type(remarkBox, 'Steady month; focus on conics.')
-    await user.click(screen.getByRole('button', { name: /download pdf/i }))
-
-    expect(onDownload).toHaveBeenCalledTimes(1)
-    const [profArg, remarkArg] = onDownload.mock.calls[0]
-    expect(profArg.lwsId).toBe('LWS-001')
-    expect(remarkArg).toBe('Steady month; focus on conics.')
+    const onRemarkChange = vi.fn()
+    renderRow({ onRemarkChange })
+    await user.type(screen.getByLabelText(/Remark for Aksheet Patil/i), 'X')
+    // Controlled — each keystroke fires onRemarkChange with the appended value.
+    expect(onRemarkChange).toHaveBeenCalledWith('X')
   })
 
-  it('passes an empty remark when nothing was typed', async () => {
+  it('displays the parent-supplied remark value', () => {
+    renderRow({ remark: 'Strong improvement this month.' })
+    expect(screen.getByLabelText(/Remark for Aksheet Patil/i).value).toBe('Strong improvement this month.')
+  })
+
+  it('calls onDownload(profile) when Download is clicked (parent already holds the remark)', async () => {
     const user = userEvent.setup()
     const onDownload = vi.fn()
-    render(<ReportRow profile={profile()} report={report()} onDownload={onDownload} />)
+    renderRow({ onDownload })
     await user.click(screen.getByRole('button', { name: /download pdf/i }))
-    expect(onDownload.mock.calls[0][1]).toBe('')
+    expect(onDownload).toHaveBeenCalledTimes(1)
+    expect(onDownload.mock.calls[0][0].lwsId).toBe('LWS-001')
   })
 
   it('disables the download button while a download is in flight', async () => {
     const user = userEvent.setup()
     let resolve
     const onDownload = vi.fn(() => new Promise(r => { resolve = r }))
-    render(<ReportRow profile={profile()} report={report()} onDownload={onDownload} />)
+    renderRow({ onDownload })
     const btn = screen.getByRole('button', { name: /download pdf/i })
     await user.click(btn)
     expect(btn).toBeDisabled()
