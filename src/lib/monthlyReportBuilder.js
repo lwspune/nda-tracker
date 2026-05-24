@@ -28,6 +28,13 @@ function dateInMonth(dateStr, month) {
   return typeof dateStr === 'string' && dateStr.startsWith(month + '-')
 }
 
+// 'YYYY-MM' → 'YYYY-MM-31' (last day; handles month length + leap years).
+function lastDayOf(month) {
+  const [y, m] = month.split('-').map(Number)
+  const date = new Date(y, m, 0)   // day=0 of next month → last day of this month
+  return `${y}-${String(m).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 // 'YYYY-MM-DD' → 'D Mon' (e.g. '2026-01-03' → '3 Jan')
 function shortDate(dateStr) {
   const [, m, d] = dateStr.split('-')
@@ -225,4 +232,22 @@ export function buildMonthlyReport({
     weakestChapter,
     nextMonthFocus,
   }
+}
+
+// Returns the list of student profiles that should receive a monthly report
+// for the given (batch, month). Cohort = Active accountStatus + batches[]
+// contains batchName + regDate ≤ last day of month. Skips variant-keyed
+// entries (p.name !== key). Sorted by name. Empty when batchName is falsy.
+export function getMonthlyReportCohort(studentProfiles, batchName, month) {
+  if (!batchName) return []
+  const cutoff = lastDayOf(month)
+  const out = []
+  for (const [key, p] of Object.entries(studentProfiles || {})) {
+    if (!p || p.name !== key) continue
+    if (p.accountStatus !== 'Active') continue
+    if (!Array.isArray(p.batches) || !p.batches.includes(batchName)) continue
+    if (p.regDate && p.regDate > cutoff) continue
+    out.push(p)
+  }
+  return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 }

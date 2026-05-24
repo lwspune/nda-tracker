@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildMonthlyReport } from '../monthlyReportBuilder'
+import { buildMonthlyReport, getMonthlyReportCohort } from '../monthlyReportBuilder'
 
 // ── Minimal fixture factory ──────────────────────────────────────────────────
 
@@ -522,5 +522,80 @@ describe('buildMonthlyReport — next month focus', () => {
     })
     expect(r.nextMonthFocus.monthLabel).toBe('Jan 2027')
     expect(r.nextMonthFocus.chapters).toEqual([{ subject: 'Maths', chapter: 'Limits' }])
+  })
+})
+
+// ── getMonthlyReportCohort ──────────────────────────────────────────────────
+
+describe('getMonthlyReportCohort', () => {
+  const month = '2026-01'
+  const target = 'LWS_NDA_2Y_(26-28)_A'
+
+  function p(over = {}) {
+    return {
+      lwsId: 'LWS-001', name: 'Alice', accountStatus: 'Active',
+      batches: [target], regDate: '2025-11-01', nameVariants: ['Alice'],
+      ...over,
+    }
+  }
+
+  it('includes Active students whose batch matches and regDate is on or before month-end', () => {
+    const profiles = {
+      Alice: p({ lwsId: 'LWS-001', name: 'Alice' }),
+      Bob:   p({ lwsId: 'LWS-002', name: 'Bob' }),
+    }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name)).toEqual(['Alice', 'Bob'])
+  })
+
+  it('excludes students whose accountStatus is not Active', () => {
+    const profiles = {
+      Alice: p({ name: 'Alice' }),
+      Bob:   p({ lwsId: 'LWS-002', name: 'Bob', accountStatus: 'Block' }),
+    }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name)).toEqual(['Alice'])
+  })
+
+  it('excludes students whose batches[] does not include the target batch', () => {
+    const profiles = {
+      Alice: p({ name: 'Alice' }),
+      Bob:   p({ lwsId: 'LWS-002', name: 'Bob', batches: ['APJ_NDA_2Y_(26-28)'] }),
+    }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name)).toEqual(['Alice'])
+  })
+
+  it('excludes students whose regDate is after the last day of the month', () => {
+    const profiles = {
+      Alice: p({ name: 'Alice' }),
+      Bob:   p({ lwsId: 'LWS-002', name: 'Bob', regDate: '2026-02-15' }),
+      Cara:  p({ lwsId: 'LWS-003', name: 'Cara', regDate: '2026-01-31' }),  // boundary — included
+    }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name).sort()).toEqual(['Alice', 'Cara'])
+  })
+
+  it('skips variant-keyed entries (only counts canonical p.name === key)', () => {
+    const alice = p({ name: 'Alice', nameVariants: ['Alice', 'Alicia'] })
+    const profiles = { Alice: alice, Alicia: alice }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name)).toEqual(['Alice'])
+  })
+
+  it('returns an empty array when no batch is supplied', () => {
+    const profiles = { Alice: p({ name: 'Alice' }) }
+    expect(getMonthlyReportCohort(profiles, '', month)).toEqual([])
+    expect(getMonthlyReportCohort(profiles, null, month)).toEqual([])
+  })
+
+  it('sorts the cohort by name', () => {
+    const profiles = {
+      Zara: p({ lwsId: 'LWS-099', name: 'Zara' }),
+      Bob:  p({ lwsId: 'LWS-002', name: 'Bob' }),
+      Alice: p({ name: 'Alice' }),
+    }
+    const cohort = getMonthlyReportCohort(profiles, target, month)
+    expect(cohort.map(s => s.name)).toEqual(['Alice', 'Bob', 'Zara'])
   })
 })

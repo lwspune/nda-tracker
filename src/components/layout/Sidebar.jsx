@@ -11,9 +11,10 @@ const NAV = [
   { id: 'toppers',    icon: '🏆', label: 'Toppers' },
   { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
-  { id: 'insights',  icon: '🧠', label: 'Insights', adminOnly: true },
-  { id: 'costs',     icon: '💰', label: 'API Costs', adminOnly: true },
-  { id: 'settings',  icon: '⚙', label: 'Settings', adminOnly: true },
+  { id: 'insights',       icon: '🧠', label: 'Insights', adminOnly: true },
+  { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
+  { id: 'costs',          icon: '💰', label: 'API Costs', adminOnly: true },
+  { id: 'settings',       icon: '⚙', label: 'Settings', adminOnly: true },
 ]
 
 // Returns true if exams exist that post-date the last deploy run.
