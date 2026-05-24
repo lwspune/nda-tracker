@@ -47,11 +47,11 @@ describe('getExamBatches', () => {
 
 describe('getExamAbsentees', () => {
   const profiles = {
-    'Alice': { lwsId: 'LWS-001', name: 'Alice', branch: 'APJ', batches: ['APJ_NDA_2Y_(26-28)'], mobile: '111', parentMobiles: ['100'], nameVariants: [] },
-    'Bob':   { lwsId: 'LWS-002', name: 'Bob',   branch: 'APJ', batches: ['APJ_NDA_2Y_(26-28)'], mobile: '222', parentMobiles: ['200'], nameVariants: [] },
-    'Cara':  { lwsId: 'LWS-003', name: 'Cara',  branch: 'LWS Pune', batches: ['LWS_NDA_2Y_(26-28)_A'], mobile: '333', parentMobiles: ['300'], nameVariants: [] },
-    'Drew':  { lwsId: 'LWS-004', name: 'Drew',  branch: 'APJ', batches: ['LWS_NDA_2Y_(25-27)_A'], mobile: '444', parentMobiles: ['400'], nameVariants: [] },
-    'Eli':   { lwsId: 'LWS-005', name: 'Eli',   branch: 'APJ', batches: [], mobile: '555', parentMobiles: ['500'], nameVariants: [] },
+    'Alice': { lwsId: 'LWS-001', name: 'Alice', branch: 'APJ', batches: ['APJ_NDA_2Y_(26-28)'], mobile: '111', parentMobiles: ['100'], nameVariants: [], accountStatus: 'Active' },
+    'Bob':   { lwsId: 'LWS-002', name: 'Bob',   branch: 'APJ', batches: ['APJ_NDA_2Y_(26-28)'], mobile: '222', parentMobiles: ['200'], nameVariants: [], accountStatus: 'Active' },
+    'Cara':  { lwsId: 'LWS-003', name: 'Cara',  branch: 'LWS Pune', batches: ['LWS_NDA_2Y_(26-28)_A'], mobile: '333', parentMobiles: ['300'], nameVariants: [], accountStatus: 'Active' },
+    'Drew':  { lwsId: 'LWS-004', name: 'Drew',  branch: 'APJ', batches: ['LWS_NDA_2Y_(25-27)_A'], mobile: '444', parentMobiles: ['400'], nameVariants: [], accountStatus: 'Active' },
+    'Eli':   { lwsId: 'LWS-005', name: 'Eli',   branch: 'APJ', batches: [], mobile: '555', parentMobiles: ['500'], nameVariants: [], accountStatus: 'Active' },
   }
 
   it('returns expected attendees minus those in exam.students[] (single batch)', () => {
@@ -114,7 +114,7 @@ describe('getExamAbsentees', () => {
 
   it('returns each absentee once even if multiple batches both include them', () => {
     const dualBatchProfiles = {
-      'Alice': { lwsId: 'LWS-001', name: 'Alice', batches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A'], parentMobiles: [], nameVariants: [] },
+      'Alice': { lwsId: 'LWS-001', name: 'Alice', batches: ['APJ_NDA_2Y_(26-28)', 'LWS_NDA_2Y_(26-28)_A'], parentMobiles: [], nameVariants: [], accountStatus: 'Active' },
     }
     const exam = { batch: 'APJ_NDA_2Y_(26-28), LWS_NDA_2Y_(26-28)_A', students: [] }
     const result = getExamAbsentees(exam, dualBatchProfiles)
@@ -129,6 +129,27 @@ describe('getExamAbsentees', () => {
     }
     const exam = { batch: 'APJ_NDA_2Y_(26-28)', students: [] }
     const result = getExamAbsentees(exam, dupedProfiles)
+    expect(result.map(r => r.name)).toEqual(['Alice'])
+  })
+
+  it('excludes profiles whose accountStatus is not Active (Block, quit, batch-over)', () => {
+    const mixedProfiles = {
+      ...profiles,
+      'Bob': { ...profiles['Bob'], accountStatus: 'Block' },
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', students: [] }
+    const result = getExamAbsentees(exam, mixedProfiles)
+    // Alice expected (Active); Bob excluded (Block)
+    expect(result.map(r => r.name)).toEqual(['Alice'])
+  })
+
+  it('excludes profiles with missing accountStatus (legacy / unregistered)', () => {
+    const legacyProfiles = {
+      ...profiles,
+      'Bob': { ...profiles['Bob'], accountStatus: undefined },
+    }
+    const exam = { batch: 'APJ_NDA_2Y_(26-28)', students: [] }
+    const result = getExamAbsentees(exam, legacyProfiles)
     expect(result.map(r => r.name)).toEqual(['Alice'])
   })
 })

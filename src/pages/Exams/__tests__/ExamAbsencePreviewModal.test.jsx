@@ -29,7 +29,7 @@ function makeProfile(over = {}) {
   return {
     lwsId: 'LWS-001', name: 'Aarav Sharma', mobile: '9000000001',
     parentMobiles: ['9000000100', '9000000200'], batches: ['APJ_NDA_2Y_(26-28)'],
-    nameVariants: [], ...over,
+    nameVariants: [], accountStatus: 'Active', ...over,
   }
 }
 
@@ -138,6 +138,27 @@ describe('ExamAbsencePreviewModal — render & cohort', () => {
     renderModal()
     expect(await screen.findByText(/No absentees/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /confirm/i })).toBeDisabled()
+  })
+
+  it('hides absence rows for now-Block students (historical absences for inactive students)', async () => {
+    mockStudentProfiles = {
+      'Aarav Sharma': makeProfile({ accountStatus: 'Block' }),
+      'Carl Kumar':   makeProfile({ lwsId: 'LWS-003', name: 'Carl Kumar', parentMobiles: ['9000000301'] }),
+    }
+    renderModal()
+    await screen.findByText('Carl Kumar')
+    expect(screen.queryByText('Aarav Sharma')).not.toBeInTheDocument()
+  })
+
+  it('hides absence rows when no matching profile is found (deleted / orphaned)', async () => {
+    mockStudentProfiles = {
+      'Carl Kumar': makeProfile({ lwsId: 'LWS-003', name: 'Carl Kumar', parentMobiles: ['9000000301'] }),
+      // LWS-001 (Aarav) profile removed entirely
+    }
+    renderModal()
+    await screen.findByText('Carl Kumar')
+    expect(screen.queryByText('LWS-001')).not.toBeInTheDocument()
+    expect(screen.queryByText('Aarav Sharma')).not.toBeInTheDocument()
   })
 
   it('shows a Notified badge on rows whose notified_at is set', async () => {

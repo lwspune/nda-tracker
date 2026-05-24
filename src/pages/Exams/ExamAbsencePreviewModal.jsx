@@ -4,6 +4,9 @@ import useStore from '../../store/useStore'
 // Joins exam_absences rows with studentProfiles to produce the editable list.
 // Each row carries name, mobile, parent_mobiles (for editing) + notified_at
 // (for display only — drives the "Notified" badge).
+// Rows whose profile is missing OR whose accountStatus is not 'Active' are
+// dropped — we never send absence alerts to non-EIS or non-Active students,
+// even when historical absence rows exist for them.
 function joinRows(absenceRows, studentProfiles) {
   // Build lwsId → profile lookup once. studentProfiles is keyed by name (and
   // every name_variant); collapse by lwsId so we don't hit a profile twice.
@@ -11,16 +14,20 @@ function joinRows(absenceRows, studentProfiles) {
   for (const p of Object.values(studentProfiles || {})) {
     if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
   }
-  return (absenceRows || []).map(r => {
+  const out = []
+  for (const r of absenceRows || []) {
     const p = byLwsId[r.lws_id]
-    return {
+    if (!p) continue
+    if (p.accountStatus !== 'Active') continue
+    out.push({
       lwsId:         r.lws_id,
-      name:          p?.name ?? r.lws_id,
-      mobile:        p?.mobile ?? '',
-      parentMobiles: (p?.parentMobiles ?? []).join(', '),
+      name:          p.name,
+      mobile:        p.mobile ?? '',
+      parentMobiles: (p.parentMobiles ?? []).join(', '),
       notifiedAt:    r.notified_at ?? null,
-    }
-  })
+    })
+  }
+  return out
 }
 
 // failedNames: string[] from previous send; null = first send.

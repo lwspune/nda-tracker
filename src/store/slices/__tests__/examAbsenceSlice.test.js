@@ -60,10 +60,10 @@ function makeStore(overrides = {}) {
 // Minimal studentProfiles fixture used across tests
 function fixtureProfiles() {
   return {
-    'Alice': { lwsId: 'LWS-001', name: 'Alice', batches: ['B1'], nameVariants: [] },
-    'Bob':   { lwsId: 'LWS-002', name: 'Bob',   batches: ['B1'], nameVariants: [] },
-    'Cara':  { lwsId: 'LWS-003', name: 'Cara',  batches: ['B1'], nameVariants: [] },
-    'Drew':  { lwsId: 'LWS-004', name: 'Drew',  batches: ['B2'], nameVariants: [] },
+    'Alice': { lwsId: 'LWS-001', name: 'Alice', batches: ['B1'], nameVariants: [], accountStatus: 'Active' },
+    'Bob':   { lwsId: 'LWS-002', name: 'Bob',   batches: ['B1'], nameVariants: [], accountStatus: 'Active' },
+    'Cara':  { lwsId: 'LWS-003', name: 'Cara',  batches: ['B1'], nameVariants: [], accountStatus: 'Active' },
+    'Drew':  { lwsId: 'LWS-004', name: 'Drew',  batches: ['B2'], nameVariants: [], accountStatus: 'Active' },
   }
 }
 
