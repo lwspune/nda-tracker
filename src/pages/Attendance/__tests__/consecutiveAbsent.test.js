@@ -139,4 +139,62 @@ describe('buildConsecutiveAbsent', () => {
     const result = buildConsecutiveAbsent(records, NAMES, 1)
     expect(result[0].name).toBe('L999')
   })
+
+  // ── streak walks past N — true since-date ────────────────────
+
+  it('flags a student absent for MORE than n days, with since at the true streak start', () => {
+    // n=2 but student absent 4 consecutive non-Sunday days.
+    // Walk-back from latest counts all four As, so since must reach the earliest.
+    const records = rec('L001', [
+      ['2026-05-04', 'A'], ['2026-05-05', 'A'],
+      ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+    ])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result).toHaveLength(1)
+    expect(result[0].since).toBe('2026-05-04')
+  })
+
+  it('does not extend the streak across a P/L break', () => {
+    // Pattern (oldest → latest): A, P, A, A. Walk back from latest: A(7) A(6)
+    // P(5) ⇒ stop. Streak = 2, since = May 6 (NOT May 4, even though it is A).
+    const records = rec('L001', [
+      ['2026-05-04', 'A'], ['2026-05-05', 'P'],
+      ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+    ])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result[0].since).toBe('2026-05-06')
+  })
+
+  it('does not extend the streak across a missing record', () => {
+    // Alice has records only on 6 + 7; dataset spans 4-7 via Bob (kept all P
+    // so he does not enter the result). Walk-back for Alice: A(7) A(6) miss(5)
+    // ⇒ stop. Streak = 2, since = May 6.
+    const records = [
+      ...rec('L002', [
+        ['2026-05-04', 'P'], ['2026-05-05', 'P'],
+        ['2026-05-06', 'P'], ['2026-05-07', 'P'],
+      ]),
+      ...rec('L001', [['2026-05-06', 'A'], ['2026-05-07', 'A']]),
+    ]
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    const alice = result.find(r => r.name === 'Alice')
+    expect(alice).toBeDefined()
+    expect(alice.since).toBe('2026-05-06')
+  })
+
+  it('per-student since may differ even when both qualify under the same n', () => {
+    // n=2: Alice absent 6+7, Bob absent 4+5+6+7. Same N gate, different since.
+    const records = [
+      ...rec('L001', [['2026-05-06', 'A'], ['2026-05-07', 'A']]),
+      ...rec('L002', [
+        ['2026-05-04', 'A'], ['2026-05-05', 'A'],
+        ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+      ]),
+    ]
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    const alice = result.find(r => r.name === 'Alice')
+    const bob   = result.find(r => r.name === 'Bob')
+    expect(alice.since).toBe('2026-05-06')
+    expect(bob.since).toBe('2026-05-04')
+  })
 })

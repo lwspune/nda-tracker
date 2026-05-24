@@ -355,14 +355,14 @@ export default function AttendancePage() {
               consecutive days (excl. Sundays)
             </span>
             {consecutiveAbsent.length > 0 && (
-              <span className="ml-auto text-[12px] font-semibold text-red-400">
+              <span className="ml-auto text-[12px] font-semibold text-danger">
                 {consecutiveAbsent.length} student{consecutiveAbsent.length !== 1 ? 's' : ''}
               </span>
             )}
           </div>
 
           {consecutiveAbsent.length === 0 ? (
-            <div className="text-[13px] text-green-500 font-semibold">✓ No consecutive absences</div>
+            <div className="text-[13px] text-success font-semibold">✓ No consecutive absences</div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {consecutiveAbsent.map(s => {
@@ -370,16 +370,16 @@ export default function AttendancePage() {
                 const content = (
                   <>
                     <span className="text-[13px] font-semibold text-ink">{s.name}</span>
-                    <span className="text-[11px] font-mono text-red-400">since {fmtDate(s.since)}</span>
+                    <span className="text-[11px] font-mono text-danger">since {fmtDate(s.since)}</span>
                   </>
                 )
-                const baseCls = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-red-400/10 border border-red-400/20'
+                const baseCls = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200'
                 return hasProfile ? (
                   <button
                     key={s.lwsId}
                     type="button"
                     onClick={() => setActiveStudent(s.name)}
-                    className={`${baseCls} hover:bg-red-400/20 focus:outline-none
+                    className={`${baseCls} hover:bg-red-100 focus:outline-none
                                 focus-visible:ring-2 focus-visible:ring-accent/40`}
                   >
                     {content}
