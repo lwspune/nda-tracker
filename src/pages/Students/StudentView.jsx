@@ -138,28 +138,39 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const studentSubjects = [...new Set([...nonGATSubjects, ...gatQuestionSubjects, ...gatFallback])].sort()
   const isMultiSubject  = studentSubjects.length > 1
 
+  // Snap the hardcoded 'Maths' default to 'all' for students who don't have
+  // Maths exams. Without this, <select value="Maths"> with no matching option
+  // visually falls back to its first option ("All Subjects") while the state
+  // stays 'Maths' — the empty-state then reads "No Maths exam records" and
+  // the user is stranded on a dead-end screen that contradicts the dropdown.
+  const effectiveFilter = (subjectFilter !== 'all'
+                           && studentSubjects.length > 0
+                           && !studentSubjects.includes(subjectFilter))
+    ? 'all'
+    : subjectFilter
+
   // Apply subject filter to valid exams.
   // When a specific subject is chosen, include both same-subject exams AND GAT exams
   // (whose questions will be filtered to that subject in analytics).
-  const examData = subjectFilter === 'all'
+  const examData = effectiveFilter === 'all'
     ? validExamData
     : validExamData.filter(({ exam }) => {
-        if ((exam.subject || 'Maths') === subjectFilter) return true
+        if ((exam.subject || 'Maths') === effectiveFilter) return true
         // Include GAT exams when filtering by a per-question subject
-        if (exam.subject === 'GAT' && subjectFilter !== 'GAT') {
-          return (exam.questions || []).some(q => q.subject === subjectFilter)
+        if (exam.subject === 'GAT' && effectiveFilter !== 'GAT') {
+          return (exam.questions || []).some(q => q.subject === effectiveFilter)
         }
         return false
       })
 
   // qSubject: passed to analytics so only matching questions are counted from GAT exams.
   // null when 'all' or 'GAT' (no question-level filter needed).
-  const qSubject = (subjectFilter !== 'all' && subjectFilter !== 'GAT') ? subjectFilter : null
+  const qSubject = (effectiveFilter !== 'all' && effectiveFilter !== 'GAT') ? effectiveFilter : null
 
   // When a subject is explicitly selected use it directly;
   // otherwise infer from whichever subject the student has taken most valid exams in.
-  const primarySubject = subjectFilter !== 'all'
-    ? subjectFilter
+  const primarySubject = effectiveFilter !== 'all'
+    ? effectiveFilter
     : (() => {
         const counts = {}
         validExamData.forEach(({ exam }) => {
@@ -235,7 +246,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         <div>
           <select
             aria-label="Subject filter"
-            value={subjectFilter}
+            value={effectiveFilter}
             onChange={e => setSubjectFilter(e.target.value)}
             className="form-input w-auto text-[13px] pr-8 cursor-pointer"
             style={{ minWidth: '160px' }}
@@ -244,7 +255,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
             {studentSubjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <EmptyState icon="🔍" title="No data" sub={`No ${subjectFilter} exam records found for "${name}"`} />
+        <EmptyState icon="🔍" title="No data" sub={`No ${effectiveFilter} exam records found for "${name}"`} />
       </>
     )
   }
@@ -294,7 +305,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         <div>
           <select
             aria-label="Subject filter"
-            value={subjectFilter}
+            value={effectiveFilter}
             onChange={e => setSubjectFilter(e.target.value)}
             className="form-input w-auto text-[13px] pr-8 cursor-pointer"
             style={{ minWidth: '160px' }}

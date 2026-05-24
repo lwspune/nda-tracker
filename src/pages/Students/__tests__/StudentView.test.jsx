@@ -103,21 +103,37 @@ describe('StudentView — empty state', () => {
   })
 })
 
-// ── Subject dropdown — filtered empty state ───────────────────────────────────
+// ── Auto-redirect when default 'Maths' filter has no matches ──────────────────
+// Without this, the <select value="Maths"> falls back to displaying its first
+// option ("All Subjects") visually while the state remains 'Maths' — confusing
+// users into thinking they're seeing "All Subjects" with no data.
 
-describe('StudentView — subject dropdown when all exams are filtered out', () => {
-  it('shows subject selector when student has only GAT exams and Maths filter is active', () => {
-    setExams([makeExam({ subject: 'GAT' })])
+describe('StudentView — auto-redirect away from default Maths filter when no match', () => {
+  it('renders exam content directly when student has only GAT exams (no dead-end empty state)', () => {
+    setExams([makeExam({ subject: 'GAT', examName: 'GAT Mock 1' })])
     renderView()
-    expect(getSubjectSelect()).toBeInTheDocument()
-    expect(screen.getByText(/no data/i)).toBeInTheDocument()
+    expect(screen.getByText('GAT Mock 1')).toBeInTheDocument()
+    expect(screen.queryByText(/no data/i)).not.toBeInTheDocument()
   })
 
-  it('includes All Subjects option so user can escape the default Maths filter', () => {
-    setExams([makeExam({ subject: 'GAT' })])
+  it('renders all exams when student has only Physics + English (no Maths to default to)', () => {
+    setExams([
+      makeExam({ subject: 'Physics', examName: 'Physics Test 1' }),
+      makeExam({ subject: 'English', examName: 'English Test 1' }),
+    ])
     renderView()
-    const opts = within(getSubjectSelect()).getAllByRole('option').map(o => o.value)
-    expect(opts).toContain('all')
+    expect(screen.getByText('Physics Test 1')).toBeInTheDocument()
+    expect(screen.getByText('English Test 1')).toBeInTheDocument()
+    expect(screen.queryByText(/no data/i)).not.toBeInTheDocument()
+  })
+
+  it('dropdown displays "all" (not stale "Maths") when student has no Maths exams', () => {
+    setExams([
+      makeExam({ subject: 'Physics', examName: 'Physics Test 1' }),
+      makeExam({ subject: 'English', examName: 'English Test 1' }),
+    ])
+    renderView()
+    expect(getSubjectSelect()).toHaveValue('all')
   })
 })
 
