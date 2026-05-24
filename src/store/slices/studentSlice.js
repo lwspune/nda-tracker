@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import { mergeStudentRecords } from '../../lib/mergeStudents'
 import { loadExistingStudents } from '../../lib/students/loadExistingStudents'
+import { cleanStaleAbsencesForVariant } from './absenceCleanup'
 
 // ── Supabase helpers (online admin mode only) ──────────────────
 
@@ -250,6 +251,10 @@ export const createStudentSlice = (set, get) => ({
         await supabase.from('students')
           .update({ name_variants: [...variants, variantName], updated_at: new Date().toISOString() })
           .eq('lws_id', lwsId)
+        // Sweep any pre-link exam_absences rows where this student attended
+        // under the just-added variant. Without this, the audit log keeps a
+        // stale "absent" entry for an exam the student actually sat.
+        await cleanStaleAbsencesForVariant(supabase, lwsId, variantName)
         await refreshStudents(get)
       } catch (_) { /* no-op */ }
     } else {

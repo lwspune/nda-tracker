@@ -116,7 +116,7 @@ Batch dropdown options and filter logic use **`profile.batches[]` as primary** (
 - Used by Dashboard, Exams, and Toppers pages. Do not revert to filtering on `exam.batch` directly.
 
 ### Valid students & regDate filtering
-Valid student = `studentProfiles` entry with non-empty `regDate`. Valid exam = `exam.date >= profile.regDate`. Students without `regDate` are excluded from class-level analytics. `accountStatus` is display-only.
+Valid student = `studentProfiles` entry with non-empty `regDate`. Valid exam = `exam.date >= profile.regDate`. Students without `regDate` are excluded from class-level analytics. `accountStatus` drives the exam-absence cohort gate (only `'Active'` students are flagged; see the EIS+Active gate in `getExamAbsentees` below); class-level analytics still ignore it.
 Analytics functions (`getAllStudents`, `computeChapterStats`, `getAtRisk`, `getHardestQuestions`, `getToppers`) accept optional `validNames: Set | null` (`null` = no filter).
 
 ### Students page browser
@@ -443,7 +443,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component-level visibility.
 ## Tests
 
 Setup: `src/test/setup.js`. `ModeContext` defaults to `'admin'` — no Provider needed in tests.
-Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **991 Vitest tests passing** (2026-05-24). **39 Python tests** in `tests/test_subtopic_merge.py`. For test-infrastructure detail (mock patterns, growth log, chainable Supabase builder) see memory `project_testing.md`.
+Test files mirror source paths under `__tests__/`. Python tests under `tests/`. **1003 Vitest tests passing** (2026-05-24). **39 Python tests** in `tests/test_subtopic_merge.py`. For test-infrastructure detail (mock patterns, growth log, chainable Supabase builder) see memory `project_testing.md`.
 Key coverage: analytics filters, GAT routing, tag validation, dashboard filters, Exams/Students/StudentView pages, re-upload modals, mergeStudents (incl. dedup signals, exam-name candidates, `addNameVariant`), split script, send_schedule (44 tests), timetableSlice (44 tests), configSlice (36 tests), studentSlice (6 tests), insightsSlice + insightsSupabase (21 tests covering save/clear dual-path + table helpers), persist.js (Supabase load/save/pagination), useStore loadExamsFromSupabase action, Exams pagination (11 tests), attendance parse (8 tests), attendanceSlice (20 tests covering import + L-protection + markLate/unmarkLate/getLateStudentsForDate), AttendanceRings (12 tests including the clickable Days-late badge), student-login login tracking + lecture-absences (2+ tests), consecutiveAbsent (18 tests — incl. 4 covering streak > N), migrate_insights (11 tests), subtopic rename (39 Python tests), `getTodaysLectures` pure helper (12 tests), `lectureAbsenceSlice` (15 tests, slot_id signature), `LateMarkingWidget` (12 tests covering 3 button states), `MarkAbsenteesModal` (9 tests), `LectureLogTab` (13 tests including two-same-subject-slots regression), `LateNotificationPreviewModal` (12 tests covering resend-failed scope toggle + `bulkUpdateStudentContacts` persistence), `LectureMissPreviewModal` (6 tests, time-formatted subjects), `RecentIncidents` (6 tests), `parseFailedNames` (8 tests), `send-late-notifications` endpoint (8 tests), `send-lecture-absences` endpoint (8 tests).
 
 **Mock completeness rules** (omitting these causes silent "0 tests" or TypeError at setup):
@@ -623,6 +623,7 @@ Captures the *why* behind non-obvious architectural choices so they aren't re-li
 - `findDuplicateCandidates` with no `branchFilter` does a flat cross-branch scan — do not revert to per-branch-group iteration.
 - The `name_subset` signal requires `shorter.length >= 2` — do not remove this guard (prevents false positives on shared single-word surnames).
 - `addNameVariant` deduplicates before appending — do not change to unconditional push.
+- `addNameVariant` (Supabase path only) calls `cleanStaleAbsencesForVariant(supabase, lwsId, variantName)` after the variant is persisted but before `refreshStudents`. This sweeps `exam_absences` rows for the student where `exam_results` already has the just-linked variant as an attendee — pre-link audit rows that are now factually wrong (the student attended under a spelling the system didn't yet recognise). Do NOT remove — without it, every Find-Duplicates → Link-as-variant action leaves a stale "Missed exam" chip on the student's RecentIncidents + MissedExams surfaces.
 - Search list shows only canonical names — do not add variant names (keys where key ≠ `profile.name`) back into the search list; they would create duplicate entries for the same student.
 - `StudentView` normalizes exam records in-memory via `normalizedExams` — do not remove this or revert `getStudentExams` to using raw `exams`; doing so breaks analytics for students whose exam records are stored under a variant spelling.
 - Timetable Excel export uses `xlsx-js-style` — do not change the import back to `xlsx`.
