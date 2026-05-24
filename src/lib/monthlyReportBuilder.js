@@ -1,0 +1,228 @@
+// Pure builder for the monthly report card. Given a student profile, a month
+// ('YYYY-MM'), and the relevant arrays (already filtered to this student where
+// applicable), returns a sections object the PDF lib renders. Compute-on-demand
+// — no persistence; re-running with the same inputs returns the same output.
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const WEAKEST_CHAPTER_MIN_QS = 3
+
+function monthLabel(month /* 'YYYY-MM' */) {
+  const [y, m] = month.split('-')
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`
+}
+
+function previousMonth(month) {
+  const [y, m] = month.split('-').map(Number)
+  if (m === 1) return `${y - 1}-12`
+  return `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
+function nextMonth(month) {
+  const [y, m] = month.split('-').map(Number)
+  if (m === 12) return `${y + 1}-01`
+  return `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
+function dateInMonth(dateStr, month) {
+  return typeof dateStr === 'string' && dateStr.startsWith(month + '-')
+}
+
+// 'YYYY-MM-DD' → 'D Mon' (e.g. '2026-01-03' → '3 Jan')
+function shortDate(dateStr) {
+  const [, m, d] = dateStr.split('-')
+  return `${Number(d)} ${MONTH_NAMES[Number(m) - 1]}`
+}
+
+function maxMarks(exam) {
+  return (exam.questions?.length || 0) * (exam.marking?.correct || 0)
+}
+
+// Resolves the student's row inside exam.students[] using canonical name +
+// all known nameVariants (case-sensitive, matches the existing lookup pattern).
+function findEntry(exam, profile) {
+  if (!exam.students?.length) return null
+  const names = new Set([profile.name, ...(profile.nameVariants || [])].filter(Boolean))
+  return exam.students.find(s => names.has(s.name)) || null
+}
+
+export function buildMonthlyReport({
+  profile,
+  month,
+  exams,
+  attendance,
+  lectureAbsences,
+  examAbsences,
+  batchChapterTimelines,
+  syllabusPrograms,
+}) {
+  const batch = (profile.batches || [])[0] || ''
+  const regDate = profile.regDate || ''
+
+  // ── examTable ──────────────────────────────────────────────────────────
+  const tableRows = []
+  for (const exam of exams) {
+    if (!dateInMonth(exam.date, month)) continue
+    if (regDate && exam.date < regDate) continue
+    const entry = findEntry(exam, profile)
+    if (entry) {
+      const max = maxMarks(exam)
+      tableRows.push({
+        examId: exam.id,
+        examName: exam.name,
+        subject: exam.subject || '',
+        date: exam.date,
+        marks: entry.totalMarks,
+        percentage: max > 0 ? Math.round((entry.totalMarks / max) * 100) : null,
+        attended: true,
+      })
+    }
+  }
+  // Append ABSENT rows from exam_absences
+  const examById = new Map(exams.map(e => [e.id, e]))
+  for (const row of examAbsences || []) {
+    const exam = examById.get(row.exam_id)
+    if (!exam) continue
+    if (!dateInMonth(exam.date, month)) continue
+    if (regDate && exam.date < regDate) continue
+    tableRows.push({
+      examId: exam.id,
+      examName: exam.name,
+      subject: exam.subject || '',
+      date: exam.date,
+      marks: null,
+      percentage: null,
+      attended: false,
+    })
+  }
+  tableRows.sort((a, b) => a.date.localeCompare(b.date))
+
+  // ── attendance ─────────────────────────────────────────────────────────
+  let present = 0, absent = 0, late = 0
+  const lateDates = []
+  for (const row of attendance || []) {
+    if (!dateInMonth(row.date, month)) continue
+    if (row.status === 'P') present++
+    else if (row.status === 'A') absent++
+    else if (row.status === 'L') { late++; lateDates.push(shortDate(row.date)) }
+    // '-' and others ignored
+  }
+  const totalWorkingDays = present + absent + late
+  const attendancePercentage = totalWorkingDays > 0
+    ? Math.round(((present + late) / totalWorkingDays) * 100)
+    : 0
+  const missedLectureRows = (lectureAbsences || [])
+    .filter(r => dateInMonth(r.date, month))
+    .map(r => ({ date: shortDate(r.date), subject: r.subject || '' }))
+
+  // ── subject summary ────────────────────────────────────────────────────
+  // Avg percentage per subject (attended rows only) for this month + previous month.
+  const thisMonthBySubject = {}
+  const prevMonth = previousMonth(month)
+  const prevMonthBySubject = {}
+  for (const exam of exams) {
+    if (regDate && exam.date < regDate) continue
+    const entry = findEntry(exam, profile)
+    if (!entry) continue
+    const max = maxMarks(exam)
+    if (max <= 0) continue
+    const pct = Math.round((entry.totalMarks / max) * 100)
+    if (dateInMonth(exam.date, month)) {
+      const subj = exam.subject || ''
+      ;(thisMonthBySubject[subj] = thisMonthBySubject[subj] || []).push(pct)
+    } else if (dateInMonth(exam.date, prevMonth)) {
+      const subj = exam.subject || ''
+      ;(prevMonthBySubject[subj] = prevMonthBySubject[subj] || []).push(pct)
+    }
+  }
+  const avg = arr => Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
+  const subjectSummary = Object.keys(thisMonthBySubject).sort().map(subj => {
+    const thisMonth = avg(thisMonthBySubject[subj])
+    const prev = prevMonthBySubject[subj]
+    const lastMonth = prev ? avg(prev) : null
+    let direction
+    if (lastMonth === null) direction = 'new'
+    else if (thisMonth > lastMonth) direction = 'up'
+    else if (thisMonth < lastMonth) direction = 'down'
+    else direction = 'flat'
+    return { subject: subj, thisMonth, lastMonth, direction }
+  })
+
+  // ── weakest chapter ────────────────────────────────────────────────────
+  // For each (chapter) across attended exams in this month: count correct vs total.
+  const chapterStats = {}    // { [chapter]: { correct, total } }
+  for (const exam of exams) {
+    if (!dateInMonth(exam.date, month)) continue
+    if (regDate && exam.date < regDate) continue
+    const entry = findEntry(exam, profile)
+    if (!entry) continue
+    const responses = entry.responses || {}
+    for (const q of (exam.questions || [])) {
+      const chapter = q.chapter
+      if (!chapter) continue
+      const stat = chapterStats[chapter] || { correct: 0, total: 0 }
+      stat.total++
+      if (responses[q.q] === q.answer) stat.correct++
+      chapterStats[chapter] = stat
+    }
+  }
+  let weakestChapter = null
+  for (const [chapter, { correct, total }] of Object.entries(chapterStats)) {
+    if (total < WEAKEST_CHAPTER_MIN_QS) continue
+    const accuracy = correct / total
+    if (!weakestChapter || accuracy < weakestChapter.accuracy) {
+      weakestChapter = { chapter, accuracy, totalQuestions: total }
+    }
+  }
+
+  // ── next month focus ───────────────────────────────────────────────────
+  let nextMonthFocus = null
+  if (batch) {
+    const next = nextMonth(month)
+    const batchTimelines = (batchChapterTimelines || {})[batch] || {}
+    const chapters = []
+    for (const [programId, subjects] of Object.entries(batchTimelines)) {
+      const program = (syllabusPrograms || []).find(p => p.id === programId)
+      if (!program) continue
+      for (const [subjectId, chaps] of Object.entries(subjects)) {
+        const subject = (program.subjects || []).find(s => s.id === subjectId)
+        if (!subject) continue
+        for (const [chapterId, scheduledMonth] of Object.entries(chaps)) {
+          if (scheduledMonth !== next) continue
+          const chapter = (subject.chapters || []).find(c => c.id === chapterId)
+          if (!chapter) continue
+          chapters.push({ subject: subject.name || '', chapter: chapter.name || '' })
+        }
+      }
+    }
+    chapters.sort((a, b) =>
+      a.subject.localeCompare(b.subject) || a.chapter.localeCompare(b.chapter))
+    if (chapters.length > 0) {
+      nextMonthFocus = { monthLabel: monthLabel(next), chapters }
+    }
+  }
+
+  return {
+    meta: {
+      lwsId: profile.lwsId || '',
+      name: profile.name || '',
+      rollNo: profile.rollNo || '',
+      branch: profile.branch || '',
+      batch,
+      month,
+      monthLabel: monthLabel(month),
+    },
+    examTable: tableRows,
+    attendance: {
+      present, absent, late,
+      missedLectures: missedLectureRows.length,
+      totalWorkingDays,
+      attendancePercentage,
+      lateDates,
+      missedLectureDetails: missedLectureRows,
+    },
+    subjectSummary,
+    weakestChapter,
+    nextMonthFocus,
+  }
+}
