@@ -9,7 +9,6 @@ const C = {
   ink2:     [71,  85, 105],
   ink3:     [148, 163, 184],
   border:   [180, 180, 180],
-  surface2: [241, 245, 249],
   success:  [22,  163, 74],
   warning:  [202, 138, 4],
   danger:   [220, 38,  38],
@@ -27,13 +26,6 @@ function pctColor(p) {
   if (p >= 70) return C.success
   if (p >= 45) return C.warning
   return C.danger
-}
-
-function directionGlyph(d) {
-  if (d === 'up')   return '↑'   // ↑
-  if (d === 'down') return '↓'   // ↓
-  if (d === 'flat') return '—'   // —
-  return 'new'
 }
 
 // 'YYYY-MM-DD' → '3rd Jan 2026' to match the screenshot format
@@ -76,7 +68,7 @@ function drawHeader(doc, report) {
   doc.setFontSize(10)
   doc.text('LWS PUNE', W - M.right, M.top + 4, { align: 'right' })
 
-  // Three-line meta block (left)
+  // Two-line meta block (left): Name + Month
   const labelX = M.left
   const valueX = M.left + 30
   let y = M.top + 14
@@ -85,16 +77,14 @@ function drawHeader(doc, report) {
   doc.setFontSize(9)
   doc.setTextColor(...C.ink2)
   doc.text('Name:', labelX, y)
-  doc.text('Roll No:', labelX, y + 5)
-  doc.text('Month:', labelX, y + 10)
+  doc.text('Month:', labelX, y + 5)
 
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...C.ink)
   doc.text(report.meta.name || '—', valueX, y)
-  doc.text(String(report.meta.rollNo || '—'), valueX, y + 5)
-  doc.text(report.meta.monthLabel || '', valueX, y + 10)
+  doc.text(report.meta.monthLabel || '', valueX, y + 5)
 
-  return y + 16     // y position to continue from
+  return y + 11     // y position to continue from
 }
 
 async function drawExamTable(doc, y, report, autoTable) {
@@ -142,10 +132,21 @@ async function drawExamTable(doc, y, report, autoTable) {
   return doc.lastAutoTable.finalY + 4
 }
 
+// Always show present (even when 0), and only the others when non-zero.
+// Avoids a noisy line full of zeros for students with a clean month.
+// Exported for unit testing — caller uses it implicitly through drawAttendance.
+export function attendanceDescriptor(a) {
+  const parts = [`${a.present} present`]
+  if (a.absent > 0)         parts.push(`${a.absent} absent`)
+  if (a.late > 0)           parts.push(`${a.late} late`)
+  if (a.missedLectures > 0) parts.push(`${a.missedLectures} missed lecture${a.missedLectures !== 1 ? 's' : ''}`)
+  return parts.join(' \xB7 ')   // " · " (U+00B7, inside WinAnsi)
+}
+
 function drawAttendance(doc, y, report, autoTable) {
   const a = report.attendance
   const row = [
-    `${a.present} present · ${a.absent} absent · ${a.late} late · ${a.missedLectures} missed lecture${a.missedLectures !== 1 ? 's' : ''}`,
+    attendanceDescriptor(a),
     `${a.present + a.late} / ${a.totalWorkingDays}`,
     `${a.attendancePercentage}%`,
   ]
@@ -189,63 +190,6 @@ function drawAttendance(doc, y, report, autoTable) {
   }
 
   return nextY + 2
-}
-
-function drawSubjectSummary(doc, y, report, autoTable) {
-  if (report.subjectSummary.length === 0) return y
-
-  const rows = report.subjectSummary.map(r => [
-    r.subject,
-    `${r.thisMonth}%`,
-    r.lastMonth != null ? `${r.lastMonth}%` : '—',
-    directionGlyph(r.direction),
-  ])
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Subject', 'This month', 'Last month', 'Trend']],
-    body: rows,
-    margin: { left: M.left, right: M.right },
-    styles: { fontSize: 9, cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 } },
-    headStyles: { fillColor: C.surface2, textColor: C.ink, fontStyle: 'bold', fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 'auto' },
-      1: { halign: 'right', cellWidth: 30 },
-      2: { halign: 'right', cellWidth: 30 },
-      3: { halign: 'center', cellWidth: 20 },
-    },
-    didParseCell: (data) => {
-      if (data.section !== 'body') return
-      const row = report.subjectSummary[data.row.index]
-      if (data.column.index === 1) {
-        data.cell.styles.textColor = pctColor(row.thisMonth)
-        data.cell.styles.fontStyle = 'bold'
-      }
-      if (data.column.index === 3) {
-        if (row.direction === 'up')   data.cell.styles.textColor = C.success
-        if (row.direction === 'down') data.cell.styles.textColor = C.danger
-      }
-    },
-  })
-
-  return doc.lastAutoTable.finalY + 4
-}
-
-function drawWeakestChapter(doc, y, report) {
-  if (!report.weakestChapter) return y
-  const wc = report.weakestChapter
-  const accPct = Math.round(wc.accuracy * 100)
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.setTextColor(...C.ink)
-  doc.text('Weakest chapter:', M.left, y + 4)
-
-  doc.setFont('helvetica', 'normal')
-  doc.text(`${wc.chapter}  ·  ${accPct}% across ${wc.totalQuestions} question${wc.totalQuestions !== 1 ? 's' : ''}`,
-    M.left + 32, y + 4)
-
-  return y + 9
 }
 
 function drawRemark(doc, y, remark) {
@@ -306,8 +250,6 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
   let y = drawHeader(doc, report)
   y = await drawExamTable(doc, y, report, autoTable)
   y = drawAttendance(doc, y, report, autoTable)
-  y = drawSubjectSummary(doc, y, report, autoTable)
-  y = drawWeakestChapter(doc, y, report)
   y = drawRemark(doc, y, remark)
   y = drawNextMonthFocus(doc, y, report)
   drawFooter(doc)

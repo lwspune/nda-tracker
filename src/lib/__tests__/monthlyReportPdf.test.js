@@ -3,14 +3,13 @@
 // on the realistic input shapes (empty report, full report with all sections).
 
 import { describe, it, expect } from 'vitest'
-import { downloadMonthlyReportPdf, buildMonthlyReportPdfBlob } from '../monthlyReportPdf'
+import { downloadMonthlyReportPdf, buildMonthlyReportPdfBlob, attendanceDescriptor } from '../monthlyReportPdf'
 
 function sampleReport(over = {}) {
   return {
     meta: {
       lwsId: 'LWS-001',
       name: 'Aksheet Patil',
-      rollNo: '56',
       branch: 'LWS Pune',
       batch: 'LWS_NDA_2Y_(26-28)_A',
       month: '2026-01',
@@ -32,12 +31,6 @@ function sampleReport(over = {}) {
         { date: '12 Jan', subject: 'Maths' },
       ],
     },
-    subjectSummary: [
-      { subject: 'Geog',    thisMonth: 68, lastMonth: 70,   direction: 'down' },
-      { subject: 'Maths',   thisMonth: 35, lastMonth: 50,   direction: 'down' },
-      { subject: 'Physics', thisMonth: 40, lastMonth: null, direction: 'new'  },
-    ],
-    weakestChapter: { chapter: 'Conic Sections', accuracy: 0.13, totalQuestions: 8 },
     nextMonthFocus: {
       monthLabel: 'Feb 2026',
       chapters: [
@@ -61,8 +54,6 @@ describe('buildMonthlyReportPdfBlob — smoke', () => {
     const empty = sampleReport({
       examTable: [],
       attendance: { present: 0, absent: 0, late: 0, missedLectures: 0, totalWorkingDays: 0, attendancePercentage: 0, lateDates: [], missedLectureDetails: [] },
-      subjectSummary: [],
-      weakestChapter: null,
       nextMonthFocus: null,
     })
     const blob = await buildMonthlyReportPdfBlob(empty, { remark: '' })
@@ -87,9 +78,44 @@ describe('buildMonthlyReportPdfBlob — smoke', () => {
   })
 })
 
+describe('attendanceDescriptor', () => {
+  it('includes every segment when all four counts are non-zero', () => {
+    expect(attendanceDescriptor({ present: 22, absent: 1, late: 3, missedLectures: 2 }))
+      .toBe('22 present \xB7 1 absent \xB7 3 late \xB7 2 missed lectures')
+  })
+
+  it('omits absent/late/missed segments when zero, keeps present', () => {
+    expect(attendanceDescriptor({ present: 22, absent: 0, late: 0, missedLectures: 0 }))
+      .toBe('22 present')
+  })
+
+  it('only includes the segments that are non-zero (sparse mix)', () => {
+    expect(attendanceDescriptor({ present: 20, absent: 2, late: 0, missedLectures: 1 }))
+      .toBe('20 present \xB7 2 absent \xB7 1 missed lecture')
+  })
+
+  it("uses singular 'missed lecture' when count is 1", () => {
+    expect(attendanceDescriptor({ present: 22, absent: 0, late: 0, missedLectures: 1 }))
+      .toBe('22 present \xB7 1 missed lecture')
+  })
+
+  it("shows '0 present' when there are no working days (the row never reads empty)", () => {
+    expect(attendanceDescriptor({ present: 0, absent: 0, late: 0, missedLectures: 0 }))
+      .toBe('0 present')
+  })
+})
+
 describe('downloadMonthlyReportPdf — file-name shape', () => {
   it('returns the filename used when saving', async () => {
     const filename = await downloadMonthlyReportPdf(sampleReport(), { remark: '', save: false })
     expect(filename).toBe('Aksheet_Patil_Jan_2026_Report.pdf')
+  })
+})
+
+describe('PDF smoke — Roll No removed', () => {
+  it('renders cleanly even though the report has no rollNo field', async () => {
+    const noRoll = sampleReport({ meta: { ...sampleReport().meta, rollNo: undefined } })
+    const blob = await buildMonthlyReportPdfBlob(noRoll, { remark: '' })
+    expect(blob.size).toBeGreaterThan(800)
   })
 })

@@ -5,17 +5,10 @@
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const WEAKEST_CHAPTER_MIN_QS = 3
 
 function monthLabel(month /* 'YYYY-MM' */) {
   const [y, m] = month.split('-')
   return `${MONTH_NAMES[Number(m) - 1]} ${y}`
-}
-
-function previousMonth(month) {
-  const [y, m] = month.split('-').map(Number)
-  if (m === 1) return `${y - 1}-12`
-  return `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
 function nextMonth(month) {
@@ -122,66 +115,6 @@ export function buildMonthlyReport({
     .filter(r => dateInMonth(r.date, month))
     .map(r => ({ date: shortDate(r.date), subject: r.subject || '' }))
 
-  // ── subject summary ────────────────────────────────────────────────────
-  // Avg percentage per subject (attended rows only) for this month + previous month.
-  const thisMonthBySubject = {}
-  const prevMonth = previousMonth(month)
-  const prevMonthBySubject = {}
-  for (const exam of exams) {
-    if (regDate && exam.date < regDate) continue
-    const entry = findEntry(exam, profile)
-    if (!entry) continue
-    const max = maxMarks(exam)
-    if (max <= 0) continue
-    const pct = Math.round((entry.totalMarks / max) * 100)
-    if (dateInMonth(exam.date, month)) {
-      const subj = exam.subject || ''
-      ;(thisMonthBySubject[subj] = thisMonthBySubject[subj] || []).push(pct)
-    } else if (dateInMonth(exam.date, prevMonth)) {
-      const subj = exam.subject || ''
-      ;(prevMonthBySubject[subj] = prevMonthBySubject[subj] || []).push(pct)
-    }
-  }
-  const avg = arr => Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
-  const subjectSummary = Object.keys(thisMonthBySubject).sort().map(subj => {
-    const thisMonth = avg(thisMonthBySubject[subj])
-    const prev = prevMonthBySubject[subj]
-    const lastMonth = prev ? avg(prev) : null
-    let direction
-    if (lastMonth === null) direction = 'new'
-    else if (thisMonth > lastMonth) direction = 'up'
-    else if (thisMonth < lastMonth) direction = 'down'
-    else direction = 'flat'
-    return { subject: subj, thisMonth, lastMonth, direction }
-  })
-
-  // ── weakest chapter ────────────────────────────────────────────────────
-  // For each (chapter) across attended exams in this month: count correct vs total.
-  const chapterStats = {}    // { [chapter]: { correct, total } }
-  for (const exam of exams) {
-    if (!dateInMonth(exam.date, month)) continue
-    if (regDate && exam.date < regDate) continue
-    const entry = findEntry(exam, profile)
-    if (!entry) continue
-    const responses = entry.responses || {}
-    for (const q of (exam.questions || [])) {
-      const chapter = q.chapter
-      if (!chapter) continue
-      const stat = chapterStats[chapter] || { correct: 0, total: 0 }
-      stat.total++
-      if (responses[q.q] === q.answer) stat.correct++
-      chapterStats[chapter] = stat
-    }
-  }
-  let weakestChapter = null
-  for (const [chapter, { correct, total }] of Object.entries(chapterStats)) {
-    if (total < WEAKEST_CHAPTER_MIN_QS) continue
-    const accuracy = correct / total
-    if (!weakestChapter || accuracy < weakestChapter.accuracy) {
-      weakestChapter = { chapter, accuracy, totalQuestions: total }
-    }
-  }
-
   // ── next month focus ───────────────────────────────────────────────────
   let nextMonthFocus = null
   if (batch) {
@@ -228,8 +161,6 @@ export function buildMonthlyReport({
       lateDates,
       missedLectureDetails: missedLectureRows,
     },
-    subjectSummary,
-    weakestChapter,
     nextMonthFocus,
   }
 }
