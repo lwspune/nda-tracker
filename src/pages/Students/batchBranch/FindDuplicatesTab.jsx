@@ -7,10 +7,12 @@ import {
 import { uniqueSorted } from './helpers'
 
 const REASON_LABELS = {
-  name_similar: { label: 'similar name',     color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
-  name_subset:  { label: 'first+last match', color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
-  same_mobile:  { label: 'same mobile',      color: 'bg-red-50 text-red-700 border-red-200' },
-  same_eis:     { label: 'same EIS',         color: 'bg-red-50 text-red-700 border-red-200' },
+  name_similar:      { label: 'similar name',     color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  name_subset:       { label: 'first+last match', color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  name_token_edit:   { label: 'typo distance',    color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  name_token_prefix: { label: 'first-name only',  color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  same_mobile:       { label: 'same mobile',      color: 'bg-red-50 text-red-700 border-red-200' },
+  same_eis:          { label: 'same EIS',         color: 'bg-red-50 text-red-700 border-red-200' },
 }
 
 function ReasonBadges({ reasons }) {

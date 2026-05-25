@@ -1071,6 +1071,142 @@ describe('findExamNameCandidates', () => {
   })
 })
 
+// ── findExamNameCandidates — name_token_edit signal ───────────
+//
+// Token-anchored edit-distance: when N-1 tokens match exactly and the
+// remaining token differs by Levenshtein ≤ 2, surface as candidate.
+// Catches the V/W and l/i swaps that sit just under Jaccard 0.75
+// (the four 2026-05-24 cases — Neel Vardhamane, Sharwari mane,
+// Sumit Gawli, plus the Aaditya/Aditya class).
+
+describe('findExamNameCandidates — name_token_edit signal', () => {
+  function findFor(exam, profiles) {
+    return findExamNameCandidates([exam], profiles)
+  }
+
+  it('catches V/W swap: "Neel Vardhamane" vs "Neel Wardhamane"', () => {
+    const profiles = [{ lws_id: 'LWS-154', canonical_name: 'Neel Wardhamane', branch: '', mobile: '' }]
+    const result = findFor('Neel Vardhamane', profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_token_edit')
+  })
+
+  it('catches l/i swap with distance 2: "Sumit Gawli" vs "Sumit Gawai"', () => {
+    const profiles = [{ lws_id: 'LWS-477', canonical_name: 'Sumit Gawai', branch: '', mobile: '' }]
+    const result = findFor('Sumit Gawli', profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_token_edit')
+  })
+
+  it('catches first-name swap with case variance: "Sharwari mane" vs "Sharvari Mane"', () => {
+    const profiles = [{ lws_id: 'LWS-471', canonical_name: 'Sharvari Mane', branch: '', mobile: '' }]
+    const result = findFor('Sharwari mane', profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_token_edit')
+  })
+
+  it('catches Aaditya/Aditya class: "Aaditya Suryawanshi" vs "Aditya Suryawanshi"', () => {
+    const profiles = [{ lws_id: 'LWS-366', canonical_name: 'Aditya Suryawanshi', branch: '', mobile: '' }]
+    const result = findFor('Aaditya Suryawanshi', profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_token_edit')
+  })
+
+  it('is order-independent: "Mane Sharvari" vs "Sharvari Mane" still uses shared "Sharvari/Mane" tokens', () => {
+    const profiles = [{ lws_id: 'LWS-471', canonical_name: 'Sharvari Mane', branch: '', mobile: '' }]
+    // Exact-rearranged-but-same-tokens has 0 unique tokens → does NOT fire token_edit
+    // (no actual edit to flag). Only true variant spellings fire.
+    const result = findFor('Mane Sharvari', profiles)
+    // Should still surface via name_subset (all tokens of shorter in longer)
+    expect(result.length).toBeGreaterThan(0)
+    expect(result[0].reasons).toContain('name_subset')
+  })
+
+  it('does NOT fire when more than one token differs (different people sharing one token)', () => {
+    const profiles = [{ lws_id: 'LWS-099', canonical_name: 'Vilas Patil', branch: '', mobile: '' }]
+    const result = findFor('Aksheet Patil', profiles)
+    // Only "Patil" shared; Aksheet vs Vilas are entirely different — no signal should fire
+    expect(result).toHaveLength(0)
+  })
+
+  it('does NOT fire on short tokens (min length 5 floor — protects Anil/Amit/Sunil class)', () => {
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Sunil Patel', branch: '', mobile: '' }]
+    const result = findFor('Anil Patel', profiles)
+    // Anil/Sunil are both ≤ 5 chars; distance 2. Could be the same student
+    // typo'd OR two completely different people. Conservative: don't surface.
+    const hit = result.find(r => r.reasons.includes('name_token_edit'))
+    expect(hit).toBeUndefined()
+  })
+
+  it('DOES surface Patil/Patel as a candidate (the documented trade-off)', () => {
+    // Patil and Patel are both length 5; distance 1. The rule will flag them.
+    // This is intentional — surfaces for review, never auto-links. Faculty
+    // can Skip if they're genuinely different students.
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Rohit Patel', branch: '', mobile: '' }]
+    const result = findFor('Rohit Patil', profiles)
+    expect(result[0].reasons).toContain('name_token_edit')
+  })
+
+  it('does NOT fire when the edit distance exceeds 2 (Gawli vs Gangal — completely different)', () => {
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Sumit Gangal', branch: '', mobile: '' }]
+    const result = findFor('Sumit Gawli', profiles)
+    const hit = (result[0]?.reasons || []).includes('name_token_edit')
+    expect(hit).toBe(false)
+  })
+})
+
+// ── findExamNameCandidates — name_token_prefix signal ─────────
+//
+// Single-token exam name (e.g. "Rajivkumar") that exactly matches a token
+// in a multi-token profile (e.g. "Rajivkumar Singh"). Required because the
+// existing name_subset rule needs ≥ 2 shorter tokens, so 1-token names
+// are structurally invisible to it.
+
+describe('findExamNameCandidates — name_token_prefix signal', () => {
+  it('catches the single-token-vs-fullname case: "Rajivkumar" vs "Rajivkumar Singh"', () => {
+    const profiles = [{ lws_id: 'LWS-406', canonical_name: 'Rajivkumar Singh', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Rajivkumar'], profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_token_prefix')
+  })
+
+  it('surfaces every multi-token profile whose tokens include the single exam-name token', () => {
+    // Exam record "Rohit" with multiple Rohit profiles in the roster.
+    const profiles = [
+      { lws_id: 'LWS-001', canonical_name: 'Rohit Shinde', branch: '', mobile: '' },
+      { lws_id: 'LWS-002', canonical_name: 'Rohit Patel',  branch: '', mobile: '' },
+      { lws_id: 'LWS-003', canonical_name: 'Vikas Sharma', branch: '', mobile: '' },   // no match
+    ]
+    const result = findExamNameCandidates(['Rohit'], profiles)
+    const prefixed = result.filter(r => r.reasons.includes('name_token_prefix'))
+    expect(prefixed).toHaveLength(2)
+    expect(prefixed.map(r => r.profile.lws_id).sort()).toEqual(['LWS-001', 'LWS-002'])
+  })
+
+  it('does NOT fire when the single exam token has no exact match in any profile', () => {
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Vikas Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Rohit'], profiles)
+    expect(result).toHaveLength(0)
+  })
+
+  it('does NOT fire on very short single tokens (length < 4 — protects Om/Raj/Anu class)', () => {
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Anu Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Anu'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_token_prefix')
+    expect(hit).toBe(false)
+  })
+
+  it('does NOT fire when the profile is itself single-token (true identity, not prefix)', () => {
+    // Profile "Rajivkumar" (no surname) vs exam "Rajivkumar" → same name, would be matched
+    // by getUnmatchedExamNames before reaching findExamNameCandidates. But defensively
+    // the prefix rule requires profileTokens.length >= 2 so we don't surface trivial dupes here.
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Rajivkumar', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Rajivkumar'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_token_prefix')
+    expect(hit).toBe(false)
+  })
+})
+
 // ── mergeStudents — Layer 2 tiered match ──────────────────────
 //
 // Match order:

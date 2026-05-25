@@ -2,6 +2,33 @@
 import { similarity } from '../validateTags'
 
 const DEDUP_NAME_THRESHOLD = 0.75  // Jaccard — catches single-letter typos
+const TOKEN_EDIT_MIN_LEN   = 5     // protects Anil/Sunil/Amit class from false positives
+const TOKEN_EDIT_MAX_DIST  = 2     // catches V/W, l/i, double-letter swaps
+const TOKEN_PREFIX_MIN_LEN = 4     // protects Anu/Raj/Om from matching every Anu* profile
+
+// Levenshtein distance — small DP. Used by the name_token_edit signal to
+// surface candidates whose Jaccard score sits below 0.75 because the
+// differing letters appear twice in the bigram window (V/W in "Vardhamane"
+// vs "Wardhamane" flips both " v"/"va" and " w"/"wa" — Jaccard 0.73).
+function levenshtein(a, b) {
+  if (a === b) return 0
+  const m = a.length, n = b.length
+  if (m === 0) return n
+  if (n === 0) return m
+  let prev = new Array(n + 1)
+  let curr = new Array(n + 1)
+  for (let j = 0; j <= n; j++) prev[j] = j
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j - 1], prev[j], curr[j - 1])
+    }
+    ;[prev, curr] = [curr, prev]
+  }
+  return prev[n]
+}
 
 /**
  * Returns exam-appearing names that have no entry in studentProfiles.
@@ -30,8 +57,15 @@ export function getUnmatchedExamNames(exams, studentProfiles) {
  * For each unmatched exam name, finds registered profiles whose name is similar
  * enough to suggest they are the same person.
  *
- * Signals: name_similar (Jaccard bigram ≥ threshold) and name_subset (all tokens
- * of the shorter name appear as tokens in the longer name, ≥ 2 tokens required).
+ * Signals:
+ *   - name_similar     — Jaccard bigram ≥ threshold (default 0.75)
+ *   - name_subset      — all tokens of shorter name appear in longer (≥ 2 tokens)
+ *   - name_token_edit  — ≥ 2 tokens on each side; exactly 1 unique token per side;
+ *                        Levenshtein ≤ 2 on the unique pair; min(token len) ≥ 5
+ *   - name_token_prefix — single-token exam name (length ≥ 4) that exactly matches
+ *                         one of a multi-token profile's tokens
+ *
+ * Multiple signals can fire on the same pair; the UI badge list shows all.
  *
  * @param {string[]} unmatchedNames   output of getUnmatchedExamNames
  * @param {Array}    snakeProfiles    snake_case profile objects ({ lws_id, canonical_name, … })
@@ -61,6 +95,33 @@ export function findExamNameCandidates(unmatchedNames, snakeProfiles, opts = {})
         : [profileTokens, examTokens]
       if (shorter.length >= 2 && shorter.every(t => longer.includes(t))) {
         reasons.push('name_subset')
+      }
+
+      // name_token_edit — order-independent, token-anchored fuzzy match.
+      // Both sides need ≥ 2 tokens, exactly one token unique to each side,
+      // Levenshtein ≤ 2, and min length ≥ 5 to avoid Anil/Sunil-class noise.
+      if (examTokens.length >= 2 && profileTokens.length >= 2) {
+        const examSet    = new Set(examTokens)
+        const profileSet = new Set(profileTokens)
+        const examOnly    = examTokens.filter(t => !profileSet.has(t))
+        const profileOnly = profileTokens.filter(t => !examSet.has(t))
+        if (examOnly.length === 1 && profileOnly.length === 1) {
+          const a = examOnly[0], b = profileOnly[0]
+          if (Math.min(a.length, b.length) >= TOKEN_EDIT_MIN_LEN
+              && levenshtein(a, b) <= TOKEN_EDIT_MAX_DIST) {
+            reasons.push('name_token_edit')
+          }
+        }
+      }
+
+      // name_token_prefix — single-token exam name that matches some token in
+      // a multi-token profile. Required because name_subset needs ≥ 2 shorter
+      // tokens, so 1-token exam records (e.g. "Rajivkumar") are invisible to it.
+      if (examTokens.length === 1
+          && examTokens[0].length >= TOKEN_PREFIX_MIN_LEN
+          && profileTokens.length >= 2
+          && profileTokens.includes(examTokens[0])) {
+        reasons.push('name_token_prefix')
       }
 
       if (reasons.length > 0) candidates.push({ examName, profile, score, reasons })
