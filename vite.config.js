@@ -163,6 +163,7 @@ function localDataPlugin() {
       server.middlewares.use('/api/send-late-notifications', makeApiShim('./api/send-late-notifications.js'))
       server.middlewares.use('/api/send-lecture-absences',   makeApiShim('./api/send-lecture-absences.js'))
       server.middlewares.use('/api/send-exam-absence',       makeApiShim('./api/send-exam-absence.js'))
+      server.middlewares.use('/api/teacher-account',         makeApiShim('./api/teacher-account.js'))
 
       // POST /api/send-whatsapp  { examName? }
       // Spawns send_results_whatsapp.py and returns { ok, sent, skipped, lines[] }
