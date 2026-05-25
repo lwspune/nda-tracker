@@ -21,7 +21,7 @@ function parseTimeToMinutes(str) {
   return null
 }
 
-export default function TimetableGrid({ timetable, mappings, onCellClick, readOnly = false }) {
+export default function TimetableGrid({ timetable, mappings, teachers = [], onCellClick, readOnly = false }) {
   if (!timetable) return null
 
   const { grid } = timetable
@@ -33,14 +33,24 @@ export default function TimetableGrid({ timetable, mappings, onCellClick, readOn
     return mappings.find(m => m.id === mappingId) ?? null
   }
 
+  function getTeacherName(teacherId) {
+    if (!teacherId) return null
+    return teachers.find(t => t.id === teacherId)?.name ?? null
+  }
+
   function cellContent(slotId, day) {
     const cell = grid[slotId]?.[day]
     if (!cell) return null
     if (cell.type === 'class') {
       const m = getMapping(cell.mappingId)
-      return m ? m.label : '—'
+      if (!m) return { kind: 'class', subject: '—', teacher: null }
+      return {
+        kind: 'class',
+        subject: m.subject || m.label,
+        teacher: getTeacherName(m.teacherId),
+      }
     }
-    if (cell.type === 'break') return cell.label || 'Break'
+    if (cell.type === 'break') return { kind: 'break', label: cell.label || 'Break' }
     return null
   }
 
@@ -109,8 +119,16 @@ export default function TimetableGrid({ timetable, mappings, onCellClick, readOn
                         `}
                         onClick={!readOnly ? () => onCellClick?.(slot.id, day, grid[slot.id]?.[day]) : undefined}
                       >
-                        {content && (
-                          <span className="text-[11px] font-medium leading-snug">{content}</span>
+                        {content?.kind === 'class' && (
+                          <>
+                            <div className="text-[11px] font-medium leading-snug">{content.subject}</div>
+                            {content.teacher && (
+                              <div className="text-[10px] text-ink-3 leading-snug mt-0.5">{content.teacher}</div>
+                            )}
+                          </>
+                        )}
+                        {content?.kind === 'break' && (
+                          <span className="text-[11px] font-medium leading-snug">{content.label}</span>
                         )}
                       </td>
                     )

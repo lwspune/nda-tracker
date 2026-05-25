@@ -147,6 +147,22 @@ describe('updateTimetable', () => {
     slice.updateTimetable(id, { batchName: 'New' })
     expect(get().timetables[0].batchName).toBe('New')
   })
+
+  it('round-trips footnotes via patch', () => {
+    const { get, slice, saves } = makeStore()
+    const id = slice.addTimetable('APJ', 'Std')
+    slice.updateTimetable(id, { footnotes: 'PT optional Sat\nLibrary 3-4 PM Wed' })
+    expect(get().timetables[0].footnotes).toBe('PT optional Sat\nLibrary 3-4 PM Wed')
+    expect(saves.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('clears footnotes when set to empty string', () => {
+    const { get, slice } = makeStore()
+    const id = slice.addTimetable('APJ', 'Std')
+    slice.updateTimetable(id, { footnotes: 'note' })
+    slice.updateTimetable(id, { footnotes: '' })
+    expect(get().timetables[0].footnotes).toBe('')
+  })
 })
 
 describe('renameTimetableBatch', () => {

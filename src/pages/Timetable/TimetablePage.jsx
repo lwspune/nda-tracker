@@ -88,7 +88,7 @@ function detectClashes(rows) {
   return summaries
 }
 
-function downloadTimetableExcel(timetable, mappings) {
+function downloadTimetableExcel(timetable, mappings, teachers = []) {
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const FONT = 'Times New Roman'
   const BORDER = { style: 'thin', color: { rgb: '000000' } }
@@ -154,21 +154,54 @@ function downloadTimetableExcel(timetable, mappings) {
         ...Array(5).fill(cell('', spanLabelStyle)),
       ])
       merges.push({ s: { r, c: 1 }, e: { r, c: 6 } })
+      rowHeights.push({ hpt: 22 })
     } else {
       const row = [cell(timeLabel, timeStyle)]
+      let hasTeacherLine = false
       for (const day of DAYS) {
         const c = grid[slot.id]?.[day]
         if (!c) { row.push(cell('', bodyStyle)); continue }
         if (c.type === 'class') {
           const m = mappings.find(m => m.id === c.mappingId)
-          row.push(cell(m ? m.label : '', bodyStyle))
+          if (!m) { row.push(cell('', bodyStyle)); continue }
+          const subjectText = m.subject || m.label
+          const teacherName = m.teacherId ? (teachers.find(t => t.id === m.teacherId)?.name ?? null) : null
+          const text = teacherName ? `${subjectText}\n${teacherName}` : subjectText
+          if (teacherName) hasTeacherLine = true
+          row.push(cell(text, bodyStyle))
         } else {
           row.push(cell(c.label || 'Break', bodyStyle))
         }
       }
       rows.push(row)
+      rowHeights.push({ hpt: hasTeacherLine ? 32 : 22 })
     }
-    rowHeights.push({ hpt: 22 })
+  }
+
+  // Footnotes — append "Notes" header + one row per line
+  const footnoteLines = (timetable.footnotes ?? '')
+    .split('\n').map(l => l.trim()).filter(Boolean)
+  if (footnoteLines.length > 0) {
+    const notesHeaderStyle = {
+      font: { name: FONT, bold: true, sz: 10 },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      border,
+    }
+    const notesBodyStyle = {
+      font: { name: FONT, sz: 10 },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      border,
+    }
+    const headerRow = rows.length
+    rows.push([cell('Notes', notesHeaderStyle), ...Array(6).fill(cell('', notesHeaderStyle))])
+    merges.push({ s: { r: headerRow, c: 0 }, e: { r: headerRow, c: 6 } })
+    rowHeights.push({ hpt: 20 })
+    footnoteLines.forEach((line, i) => {
+      const r = rows.length
+      rows.push([cell(`${i + 1}. ${line}`, notesBodyStyle), ...Array(6).fill(cell('', notesBodyStyle))])
+      merges.push({ s: { r, c: 0 }, e: { r, c: 6 } })
+      rowHeights.push({ hpt: 20 })
+    })
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -201,9 +234,10 @@ export default function TimetablePage() {
   const mode      = useMode()
   const isAdmin = mode === 'admin'
 
-  const timetables = useStore(s => s.timetables)
-  const teachers   = useStore(s => s.timetableTeachers)
-  const mappings   = useStore(s => s.timetableMappings)
+  const timetables    = useStore(s => s.timetables)
+  const teachers      = useStore(s => s.timetableTeachers)
+  const mappings      = useStore(s => s.timetableMappings)
+  const updateTimetable = useStore(s => s.updateTimetable)
 
   const branches = [...new Set(timetables.map(t => t.branch))].sort()
 
@@ -220,6 +254,7 @@ export default function TimetablePage() {
   const [slotModal, setSlotModal]                   = useState(null)
   // sendSchedule: null | { teacherId: string|null }
   const [sendSchedule, setSendSchedule]             = useState(null)
+  const [footnotesDraft, setFootnotesDraft]         = useState(null)
 
   useEffect(() => {
     if (branches.length && (!selectedBranch || !branches.includes(selectedBranch))) {
@@ -323,6 +358,30 @@ export default function TimetablePage() {
     titleBar.appendChild(subEl)
     wrapper.appendChild(titleBar)
     wrapper.appendChild(clone)
+
+    const footnoteLines = (activeTT.footnotes ?? '')
+      .split('\n').map(l => l.trim()).filter(Boolean)
+    if (footnoteLines.length > 0) {
+      const notesBlock = document.createElement('div')
+      notesBlock.style.cssText = 'margin-top: 18px; padding-top: 12px; border-top: 1px solid #e0e7ff;'
+
+      const notesHeader = document.createElement('div')
+      notesHeader.style.cssText = 'font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;'
+      notesHeader.textContent = 'Notes'
+      notesBlock.appendChild(notesHeader)
+
+      const ol = document.createElement('ol')
+      ol.style.cssText = 'margin: 0; padding-left: 22px; font-size: 11px; color: #334155; line-height: 1.5;'
+      for (const line of footnoteLines) {
+        const li = document.createElement('li')
+        li.textContent = line
+        li.style.cssText = 'margin-bottom: 2px;'
+        ol.appendChild(li)
+      }
+      notesBlock.appendChild(ol)
+      wrapper.appendChild(notesBlock)
+    }
+
     document.body.appendChild(wrapper)
 
     try {
@@ -454,10 +513,60 @@ export default function TimetablePage() {
                     <TimetableGrid
                       timetable={activeTT}
                       mappings={mappings}
+                      teachers={teachers}
                       onCellClick={isAdmin ? handleCellClick : undefined}
                       readOnly={!isAdmin}
                     />
+                    {activeTT.footnotes?.trim() && (
+                      <div data-testid="timetable-footnotes" className="mt-3 px-1">
+                        <div className="text-[10px] font-bold text-ink-3 uppercase tracking-wide mb-1">Notes</div>
+                        <ol className="list-decimal pl-5 text-[11px] text-ink-2 space-y-0.5">
+                          {activeTT.footnotes.split('\n').map((line, i) => {
+                            const trimmed = line.trim()
+                            if (!trimmed) return null
+                            return <li key={i}>{trimmed}</li>
+                          })}
+                        </ol>
+                      </div>
+                    )}
                   </div>
+
+                  {isAdmin && (
+                    footnotesDraft === null ? (
+                      <button
+                        className="mt-3 text-[11px] px-2 py-1 rounded border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
+                        onClick={() => setFootnotesDraft(activeTT.footnotes ?? '')}
+                      >
+                        {activeTT.footnotes?.trim() ? '✎ Edit notes' : '+ Add notes'}
+                      </button>
+                    ) : (
+                      <div className="mt-3 max-w-xl">
+                        <label className="block text-[10px] font-bold text-ink-3 uppercase tracking-wide mb-1">
+                          Notes (one per line)
+                        </label>
+                        <textarea
+                          className="input w-full text-[12px] min-h-[88px]"
+                          autoFocus
+                          value={footnotesDraft}
+                          onChange={e => setFootnotesDraft(e.target.value)}
+                          placeholder="e.g. PT optional on Saturday&#10;Library 3-4 PM Wed"
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            className="btn btn-primary text-[12px] px-3 py-1.5"
+                            onClick={() => {
+                              updateTimetable(activeTT.id, { footnotes: footnotesDraft })
+                              setFootnotesDraft(null)
+                            }}
+                          >Save notes</button>
+                          <button
+                            className="btn text-[12px] px-3 py-1.5 border border-border text-ink-3"
+                            onClick={() => setFootnotesDraft(null)}
+                          >Cancel</button>
+                        </div>
+                      </div>
+                    )
+                  )}
 
                   <div className="mt-4 flex flex-wrap gap-2 items-center">
                     {isAdmin && (
@@ -482,7 +591,7 @@ export default function TimetablePage() {
                         </button>
                         <button
                           className="btn text-[12px] px-3 py-1.5 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
-                          onClick={() => downloadTimetableExcel(activeTT, mappings)}
+                          onClick={() => downloadTimetableExcel(activeTT, mappings, teachers)}
                         >
                           ⬇ Excel
                         </button>
