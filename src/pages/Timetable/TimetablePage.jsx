@@ -16,6 +16,13 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 // ── Helpers ───────────────────────────────────────────────
 
+function getTimetableTitle(tt) {
+  if (!tt) return ''
+  const custom = tt.title?.trim()
+  if (custom) return custom
+  return `${tt.branch} — ${tt.batchName}`
+}
+
 function parseTimeToMinutes(str) {
   if (!str) return null
   const s = str.trim().toUpperCase()
@@ -130,9 +137,9 @@ function downloadTimetableExcel(timetable, mappings, teachers = []) {
   const merges = []
   const rowHeights = []
 
-  // Row 0: title
+  // Row 0: title (custom title if set, else branch — batchName)
   rows.push([
-    cell(`${timetable.branch} — ${timetable.batchName}`, titleStyle),
+    cell(getTimetableTitle(timetable), titleStyle),
     ...Array(6).fill(cell('', titleStyle)),
   ])
   merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } })
@@ -164,7 +171,7 @@ function downloadTimetableExcel(timetable, mappings, teachers = []) {
         if (c.type === 'class') {
           const m = mappings.find(m => m.id === c.mappingId)
           if (!m) { row.push(cell('', bodyStyle)); continue }
-          const subjectText = m.subject || m.label
+          const subjectText = m.label
           const teacherName = m.teacherId ? (teachers.find(t => t.id === m.teacherId)?.name ?? null) : null
           const text = teacherName ? `${subjectText}\n${teacherName}` : subjectText
           if (teacherName) hasTeacherLine = true
@@ -348,7 +355,7 @@ export default function TimetablePage() {
 
     const titleEl = document.createElement('div')
     titleEl.style.cssText = 'font-size: 17px; font-weight: 700; color: #1e1b4b; letter-spacing: -0.4px;'
-    titleEl.textContent = `${activeTT.branch} — ${activeTT.batchName}`
+    titleEl.textContent = getTimetableTitle(activeTT)
 
     const subEl = document.createElement('div')
     subEl.style.cssText = 'font-size: 11px; color: #9ca3af; margin-top: 3px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em;'
@@ -418,7 +425,7 @@ export default function TimetablePage() {
       <PageHeader
         title="Timetable"
         sub={
-          view === 'grid'    ? (selectedBranch ? `${selectedBranch} — ${activeTT?.batchName ?? 'Select a batch'}` : 'No timetables yet')
+          view === 'grid'    ? (selectedBranch ? (activeTT ? getTimetableTitle(activeTT) : `${selectedBranch} — Select a batch`) : 'No timetables yet')
           : view === 'teacher' ? 'Teacher Schedule'
           : 'Exam Schedule'
         }

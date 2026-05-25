@@ -46,7 +46,7 @@ export default function TimetableGrid({ timetable, mappings, teachers = [], onCe
       if (!m) return { kind: 'class', subject: '—', teacher: null }
       return {
         kind: 'class',
-        subject: m.subject || m.label,
+        subject: m.label,
         teacher: getTeacherName(m.teacherId),
       }
     }

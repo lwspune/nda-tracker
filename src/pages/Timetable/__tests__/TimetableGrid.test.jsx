@@ -26,30 +26,32 @@ function makeTimetable(cellsByDay) {
   }
 }
 
-describe('TimetableGrid — teacher name below subject', () => {
-  it('renders subject on line 1 and teacher name on line 2 when both are set', () => {
+describe('TimetableGrid — label on line 1, teacher on line 2', () => {
+  it('renders label on line 1 and teacher name on line 2 when both are set', () => {
     const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm1' } })
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
-    expect(screen.getByText('Maths')).toBeInTheDocument()
+    expect(screen.getByText('Maths_12th_NDA')).toBeInTheDocument()
     expect(screen.getByText('Vilas Sir')).toBeInTheDocument()
+    // subject (coarse field) is NOT rendered
+    expect(screen.queryByText('Maths')).not.toBeInTheDocument()
   })
 
-  it('renders only subject (no teacher line) when teacherId is missing', () => {
+  it('renders only label (no teacher line) when teacherId is missing', () => {
     const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm2' } })
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
-    expect(screen.getByText('Physics')).toBeInTheDocument()
+    expect(screen.getByText('Physics_12th')).toBeInTheDocument()
     expect(screen.queryByText('Vilas Sir')).not.toBeInTheDocument()
     expect(screen.queryByText('Navneet Sir')).not.toBeInTheDocument()
   })
 
-  it('falls back to mapping.label when subject is null and shows teacher', () => {
+  it('uses label even when subject is null (label is the sole source)', () => {
     const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm3' } })
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
     expect(screen.getByText('Eng/GS_NDA')).toBeInTheDocument()
     expect(screen.getByText('Navneet Sir')).toBeInTheDocument()
   })
 
-  it('renders only label when both subject and teacherId are null', () => {
+  it('renders only label when teacherId is null and subject is null', () => {
     const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm4' } })
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
     expect(screen.getByText('Chemistry_NDA')).toBeInTheDocument()
@@ -57,10 +59,10 @@ describe('TimetableGrid — teacher name below subject', () => {
     expect(screen.queryByText('Navneet Sir')).not.toBeInTheDocument()
   })
 
-  it('handles missing teachers prop (renders subject only)', () => {
+  it('handles missing teachers prop (renders label only)', () => {
     const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm1' } })
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} />)
-    expect(screen.getByText('Maths')).toBeInTheDocument()
+    expect(screen.getByText('Maths_12th_NDA')).toBeInTheDocument()
     expect(screen.queryByText('Vilas Sir')).not.toBeInTheDocument()
   })
 

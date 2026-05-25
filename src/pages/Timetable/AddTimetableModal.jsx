@@ -31,6 +31,7 @@ export default function AddTimetableModal({ timetable, onClose }) {
 
   const [branch, setBranch]       = useState(timetable?.branch ?? branchOptions[0] ?? '')
   const [batchName, setBatchName] = useState(timetable?.batchName ?? '')
+  const [title, setTitle]         = useState(timetable?.title ?? '')
 
   // Batch options filtered to the selected branch. A timetable's branch and
   // its batch's branch must agree. Defensive: if the current batch is on a
@@ -56,12 +57,15 @@ export default function AddTimetableModal({ timetable, onClose }) {
 
   function handleSave() {
     if (!canSave) return
+    const trimmedTitle = title.trim()
     if (isEdit) {
       if (branch !== timetable.branch) updateTimetable(timetable.id, { branch })
       if (batchName !== timetable.batchName) renameTimetableBatch(timetable.batchName, batchName)
+      if (trimmedTitle !== (timetable.title ?? '')) updateTimetable(timetable.id, { title: trimmedTitle })
     } else {
       if (duplicateTimetable) return
-      addTimetable(branch, batchName)
+      const id = addTimetable(branch, batchName)
+      if (trimmedTitle && id) updateTimetable(id, { title: trimmedTitle })
     }
     onClose()
   }
@@ -120,6 +124,23 @@ export default function AddTimetableModal({ timetable, onClose }) {
           {!isEdit && duplicateTimetable && (
             <p className="text-[12px] text-red-500 mt-2">A timetable for {branch} — {batchName} already exists.</p>
           )}
+        </div>
+
+        {/* Title (optional) */}
+        <div>
+          <label className="block text-[11px] text-ink-3 uppercase tracking-wide mb-2">
+            Title (optional)
+          </label>
+          <input
+            type="text"
+            className="input w-full text-[13px]"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder={`e.g. ${branch || 'APJ'} — NDA ${batchName || '12th'} Class Schedule`}
+          />
+          <p className="text-[11px] text-ink-3 mt-1">
+            Shown on the page heading, Excel export, and PNG export. Falls back to <span className="font-mono">{branch || '—'} — {batchName || '—'}</span> if left blank.
+          </p>
         </div>
 
         {/* Actions */}

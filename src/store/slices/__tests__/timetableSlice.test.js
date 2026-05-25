@@ -163,6 +163,21 @@ describe('updateTimetable', () => {
     slice.updateTimetable(id, { footnotes: '' })
     expect(get().timetables[0].footnotes).toBe('')
   })
+
+  it('round-trips title via patch', () => {
+    const { get, slice } = makeStore()
+    const id = slice.addTimetable('APJ', 'APJ_NDA_12th_(26-27)')
+    slice.updateTimetable(id, { title: 'APJ Sainik School — NDA 12th (2026-27)' })
+    expect(get().timetables[0].title).toBe('APJ Sainik School — NDA 12th (2026-27)')
+  })
+
+  it('clears title when set to empty string', () => {
+    const { get, slice } = makeStore()
+    const id = slice.addTimetable('APJ', 'Std')
+    slice.updateTimetable(id, { title: 'Custom Title' })
+    slice.updateTimetable(id, { title: '' })
+    expect(get().timetables[0].title).toBe('')
+  })
 })
 
 describe('renameTimetableBatch', () => {
