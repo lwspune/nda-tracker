@@ -124,6 +124,29 @@ export function findExamNameCandidates(unmatchedNames, snakeProfiles, opts = {})
         reasons.push('name_token_prefix')
       }
 
+      // name_initial_match — middle-initial collapse (e.g. "Anant V. Sharma" vs
+      // "Anant Vijay Sharma"). Requires both sides ≥ 2 tokens, longer side ≥ 3
+      // tokens (need a real anchor — first + last name shared), exactly 1 unique
+      // token per side, one unique is initial-like (single letter, optional dot),
+      // and the other unique starts with that letter. Order-independent.
+      if (examTokens.length >= 2 && profileTokens.length >= 2
+          && Math.max(examTokens.length, profileTokens.length) >= 3) {
+        const examSet    = new Set(examTokens)
+        const profileSet = new Set(profileTokens)
+        const examOnly    = examTokens.filter(t => !profileSet.has(t))
+        const profileOnly = profileTokens.filter(t => !examSet.has(t))
+        if (examOnly.length === 1 && profileOnly.length === 1) {
+          const a = examOnly[0], b = profileOnly[0]
+          const aInitial = /^[a-z]\.?$/.test(a)
+          const bInitial = /^[a-z]\.?$/.test(b)
+          if (aInitial && !bInitial && b[0] === a[0]) {
+            reasons.push('name_initial_match')
+          } else if (bInitial && !aInitial && a[0] === b[0]) {
+            reasons.push('name_initial_match')
+          }
+        }
+      }
+
       if (reasons.length > 0) candidates.push({ examName, profile, score, reasons })
     }
   }

@@ -1207,6 +1207,73 @@ describe('findExamNameCandidates — name_token_prefix signal', () => {
   })
 })
 
+// ── findExamNameCandidates — name_initial_match signal ────────
+//
+// Middle-initial collapses: "Anant V. Sharma" vs "Anant Vijay Sharma".
+// Existing signals miss this because name_subset needs exact token equality
+// ("v." ≠ "vijay"), name_token_edit's 5-char floor rejects the 2-char "v.",
+// and Jaccard is dragged below 0.75 by the unique punctuation bigrams.
+//
+// Fires when both sides have ≥ 2 tokens, exactly one token unique to each side,
+// one of the unique tokens is initial-like (single letter, optional trailing dot),
+// and the other unique token starts with that initial letter (case-insensitive).
+
+describe('findExamNameCandidates — name_initial_match signal', () => {
+  it('catches the middle-initial case: "Anant V. Sharma" vs "Anant Vijay Sharma"', () => {
+    const profiles = [{ lws_id: 'LWS-402', canonical_name: 'Anant Vijay Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Anant V. Sharma'], profiles)
+    expect(result).toHaveLength(1)
+    expect(result[0].reasons).toContain('name_initial_match')
+  })
+
+  it('catches the initial without a period: "Rahul S Patil" vs "Rahul Suresh Patil"', () => {
+    const profiles = [{ lws_id: 'LWS-001', canonical_name: 'Rahul Suresh Patil', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Rahul S Patil'], profiles)
+    expect(result[0].reasons).toContain('name_initial_match')
+  })
+
+  it('direction-independent — initial may be on the profile side too', () => {
+    // Sometimes the profile has the initial and the exam name has the full middle name.
+    const profiles = [{ lws_id: 'LWS-002', canonical_name: 'Pooja R. Joshi', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Pooja Ravi Joshi'], profiles)
+    expect(result[0].reasons).toContain('name_initial_match')
+  })
+
+  it('does NOT fire when the first letter differs: "Anant V. Sharma" vs "Anant Kumar Sharma"', () => {
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Anant Kumar Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Anant V. Sharma'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_initial_match')
+    expect(hit).toBe(false)
+  })
+
+  it('does NOT fire when neither unique token is initial-like (both are full words)', () => {
+    // "Anant Vinay Sharma" vs "Anant Vijay Sharma" — both Vinay and Vijay are full names,
+    // not single-letter initials. The token-edit rule may catch this; the initial rule must not.
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Anant Vijay Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Anant Vinay Sharma'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_initial_match')
+    expect(hit).toBe(false)
+  })
+
+  it('does NOT fire when more than one token is unique per side (extra surname differs)', () => {
+    // "Anant V. Sharma" vs "Anant Vijay Kumar Sharma" — exam has 1 unique ("v."), profile
+    // has 2 unique ("vijay", "kumar"). Initial rule requires exactly 1 unique on each side.
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Anant Vijay Kumar Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['Anant V. Sharma'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_initial_match')
+    expect(hit).toBe(false)
+  })
+
+  it('does NOT fire when both sides have only 2 tokens (shared anchor too weak)', () => {
+    // "V. Sharma" vs "Vijay Sharma" — only "Sharma" anchors them; risk of mis-linking
+    // siblings or unrelated namesakes. Require ≥ 3 tokens on the longer side as the anchor.
+    const profiles = [{ lws_id: 'LWS-X', canonical_name: 'Vijay Sharma', branch: '', mobile: '' }]
+    const result = findExamNameCandidates(['V. Sharma'], profiles)
+    const hit = (result[0]?.reasons || []).includes('name_initial_match')
+    expect(hit).toBe(false)
+  })
+})
+
 // ── mergeStudents — Layer 2 tiered match ──────────────────────
 //
 // Match order:
