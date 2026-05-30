@@ -3,6 +3,7 @@
 // A streak is broken by the first 'P', 'L', or missing record.
 // `since` is the earliest 'A' in the actual streak (may go back further than n).
 // `count` is the streak length — recorded non-Sunday days marked 'A'.
+// Results are sorted by `count` descending (ties: name ascending).
 export function buildConsecutiveAbsent(records, lwsIdToName, n) {
   if (n < 1 || !records.length) return []
 
@@ -41,5 +42,6 @@ export function buildConsecutiveAbsent(records, lwsIdToName, n) {
       })
     }
   }
-  return result.sort((a, b) => a.name.localeCompare(b.name))
+  // Longest streak first; ties broken alphabetically by name.
+  return result.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }

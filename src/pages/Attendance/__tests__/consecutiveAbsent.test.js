@@ -124,7 +124,24 @@ describe('buildConsecutiveAbsent', () => {
     expect(result).toHaveLength(2)
   })
 
-  it('returns results sorted alphabetically by name', () => {
+  it('sorts by absent-day count descending', () => {
+    // Charlie absent 4 days, Alice 3, Bob 2 — expect longest streak first.
+    const records = [
+      ...rec('L001', [['2026-05-05', 'A'], ['2026-05-06', 'A'], ['2026-05-07', 'A']]),
+      ...rec('L002', [['2026-05-06', 'A'], ['2026-05-07', 'A']]),
+      ...rec('L003', [
+        ['2026-05-04', 'A'], ['2026-05-05', 'A'],
+        ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+      ]),
+    ]
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result.map(r => [r.name, r.count])).toEqual([
+      ['Charlie', 4], ['Alice', 3], ['Bob', 2],
+    ])
+  })
+
+  it('breaks count ties alphabetically by name', () => {
+    // All three have the same 2-day streak → fall back to name ascending.
     const records = [
       ...rec('L003', [['2026-05-06', 'A'], ['2026-05-07', 'A']]),
       ...rec('L001', [['2026-05-06', 'A'], ['2026-05-07', 'A']]),
