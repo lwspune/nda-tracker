@@ -197,4 +197,43 @@ describe('buildConsecutiveAbsent', () => {
     expect(alice.since).toBe('2026-05-06')
     expect(bob.since).toBe('2026-05-04')
   })
+
+  // ── count: recorded absent days in the streak ────────────────
+
+  it('reports count equal to the streak length when it equals n', () => {
+    const records = rec('L001', [['2026-05-06', 'A'], ['2026-05-07', 'A']])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result[0].count).toBe(2)
+  })
+
+  it('reports count equal to the true streak when it runs past n', () => {
+    // n=2 but 4 consecutive recorded absences.
+    const records = rec('L001', [
+      ['2026-05-04', 'A'], ['2026-05-05', 'A'],
+      ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+    ])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result[0].count).toBe(4)
+  })
+
+  it('count excludes Sundays (only recorded non-Sunday A days)', () => {
+    // 2026-05-03 is a Sunday — must not be counted.
+    const records = rec('L001', [
+      ['2026-05-03', 'A'], // Sunday — excluded
+      ['2026-05-04', 'A'],
+      ['2026-05-05', 'A'],
+    ])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result[0].count).toBe(2)
+  })
+
+  it('count stops at a P/L break (does not count As before the break)', () => {
+    // A, P, A, A → walk back counts 2 As then stops at P.
+    const records = rec('L001', [
+      ['2026-05-04', 'A'], ['2026-05-05', 'P'],
+      ['2026-05-06', 'A'], ['2026-05-07', 'A'],
+    ])
+    const result = buildConsecutiveAbsent(records, NAMES, 2)
+    expect(result[0].count).toBe(2)
+  })
 })

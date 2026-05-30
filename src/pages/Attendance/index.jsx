@@ -370,7 +370,9 @@ export default function AttendancePage() {
                 const content = (
                   <>
                     <span className="text-[13px] font-semibold text-ink">{s.name}</span>
-                    <span className="text-[11px] font-mono text-danger">since {fmtDate(s.since)}</span>
+                    <span className="text-[11px] font-mono text-danger">
+                      since {fmtDate(s.since)} ({s.count} day{s.count !== 1 ? 's' : ''})
+                    </span>
                   </>
                 )
                 const baseCls = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200'

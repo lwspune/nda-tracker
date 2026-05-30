@@ -2,6 +2,7 @@
 // non-Sunday date sequence backwards from the latest known date — is >= n.
 // A streak is broken by the first 'P', 'L', or missing record.
 // `since` is the earliest 'A' in the actual streak (may go back further than n).
+// `count` is the streak length — recorded non-Sunday days marked 'A'.
 export function buildConsecutiveAbsent(records, lwsIdToName, n) {
   if (n < 1 || !records.length) return []
 
@@ -36,6 +37,7 @@ export function buildConsecutiveAbsent(records, lwsIdToName, n) {
         lwsId,
         name: lwsIdToName[lwsId] || lwsId,
         since,
+        count: streak,         // recorded non-Sunday absent days in the streak
       })
     }
   }
