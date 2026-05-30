@@ -6,6 +6,17 @@ const PAGE_SIZE = 5
 
 // ── Helpers ───────────────────────────────────────────────────
 
+/**
+ * Format a marks total for the bracketed suffix beside a #-questions count.
+ * Positive → "+72", negative keeps its sign → "-2", zero → "0".
+ * Rounds to 2 dp to strip float noise from non-integer marking schemes.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function fmtMarks(total) {
+  const r = Math.round(total * 100) / 100
+  return r > 0 ? `+${r}` : String(r === 0 ? 0 : r)  // String(-0) is "0"; force 0 too
+}
+
 /** All wrong (-1) and skipped (0) questions for one exam + student pair. */
 function getIssues(exam, student) {
   return (exam.questions || [])
@@ -186,9 +197,22 @@ export default function ExamHistoryTable({ scores }) {
                     <td className="py-2 pr-3 pl-4 font-medium">{s.name}</td>
                     <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{s.date}</td>
                     <td className="py-2 pr-3 font-bold">{s.score}</td>
-                    <td className="py-2 pr-3 text-success font-mono">{s.correct}</td>
-                    <td className="py-2 pr-3 text-danger font-mono">{s.wrong}</td>
-                    <td className="py-2 pr-3 text-ink-3 font-mono">{s.na}</td>
+                    <td className="py-2 pr-3 text-success font-mono">
+                      {s.correct}
+                      {s.exam?.marking && (
+                        <span className="text-ink-3"> ({fmtMarks(s.correct * s.exam.marking.correct)})</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-danger font-mono">
+                      {s.wrong}
+                      {s.exam?.marking && (
+                        <span className="text-ink-3"> ({fmtMarks(s.wrong * s.exam.marking.wrong)})</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-ink-3 font-mono">
+                      {s.na}
+                      {s.exam?.marking && <span className="text-ink-3"> (0)</span>}
+                    </td>
                     <td className="py-2 pr-3">
                       <Badge variant={s.pct >= 0.7 ? 'green' : s.pct >= 0.45 ? 'yellow' : 'red'}>
                         {(s.pct * 100).toFixed(0)}%
