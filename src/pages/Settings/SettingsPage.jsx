@@ -3,11 +3,13 @@ import { PageHeader } from '../../components/ui'
 import BranchesTab from './BranchesTab'
 import BatchesTab from './BatchesTab'
 import TeachersTab from './TeachersTab'
+import NdaWeightageTab from './NdaWeightageTab'
 
 const TABS = [
-  { id: 'branches', label: 'Branches' },
-  { id: 'batches',  label: 'Batches' },
-  { id: 'teachers', label: 'Teachers' },
+  { id: 'branches',  label: 'Branches' },
+  { id: 'batches',   label: 'Batches' },
+  { id: 'teachers',  label: 'Teachers' },
+  { id: 'weightage', label: 'NDA Weightage' },
 ]
 
 export default function SettingsPage() {
@@ -31,9 +33,10 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'branches' && <BranchesTab />}
-      {tab === 'batches'  && <BatchesTab />}
-      {tab === 'teachers' && <TeachersTab />}
+      {tab === 'branches'  && <BranchesTab />}
+      {tab === 'batches'   && <BatchesTab />}
+      {tab === 'teachers'  && <TeachersTab />}
+      {tab === 'weightage' && <NdaWeightageTab />}
     </div>
   )
 }

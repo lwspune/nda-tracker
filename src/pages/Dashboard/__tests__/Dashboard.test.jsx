@@ -11,18 +11,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockStore = {
   exams: [],
   ndaFreqBySubject: {},
+  ndaMarksBySubject: {},
   setNdaFreq: vi.fn(),
   resetNdaFreq: vi.fn(),
   studentProfiles: {},
+  setActiveStudent: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
-}))
-
-// FrequencyTableEditor is a heavy sub-component — stub it out.
-vi.mock('../FrequencyTableEditor', () => ({
-  default: () => <div data-testid="freq-editor" />,
 }))
 
 import DashboardPage from '../index'
@@ -43,7 +40,7 @@ function makeExam(overrides = {}) {
       { q: 1, chapter: 'Algebra', subtopic: 'Equations', correct: 'A' },
     ],
     students: [
-      { name: 'Alice', totalMarks: 80, correct: 20, incorrect: 0, notAttempted: 0,
+      { name: 'Alice', totalMarks: 4, correct: 1, incorrect: 0, notAttempted: 0,
         responses: { 1: 1 } },
     ],
     createdAt: new Date().toISOString(),
@@ -145,30 +142,29 @@ describe('Dashboard — subject dropdown presence', () => {
   })
 })
 
-describe('Dashboard — subject filter changes stats', () => {
-  it('shows all exams in stat card when subject is "all"', () => {
-    setExams([
-      makeExam({ subject: 'Maths' }),
-      makeExam({ subject: 'Physics' }),
-    ])
+describe('Dashboard — command-center widgets', () => {
+  it('renders the new KPI strip (no meaningless raw "Avg Score")', () => {
+    setExams([makeExam()])
     renderDashboard()
-    // The "Exams" stat card should show 2
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('Latest Exam Avg')).toBeInTheDocument()
+    expect(screen.getByText('Avg Projected NDA')).toBeInTheDocument()
+    expect(screen.getByText('At-Risk')).toBeInTheDocument()
+    // The old raw-totalMarks KPI is gone
+    expect(screen.queryByText('Avg Score')).not.toBeInTheDocument()
   })
 
-  it('filters the Exams count when a subject is selected', async () => {
-    const user = userEvent.setup()
-    setExams([
-      makeExam({ subject: 'Maths' }),
-      makeExam({ subject: 'Maths' }),
-      makeExam({ subject: 'Physics' }),
-    ])
+  it('renders the performance-over-time and priority-chapters widgets', () => {
+    setExams([makeExam()])
     renderDashboard()
-    await user.selectOptions(getSubjectSelect(), 'Physics')
-    // Find the "Exams" stat card and confirm its value is 1
-    const examsLabel = screen.getByText('Exams')
-    const statCard   = examsLabel.closest('.stat-card')
-    expect(within(statCard).getByText('1')).toBeInTheDocument()
+    expect(screen.getByText(/Class Performance Over Time/i)).toBeInTheDocument()
+    expect(screen.getByText(/Priority Chapters/i)).toBeInTheDocument()
+  })
+
+  it('no longer renders the frequency-table editor on the dashboard', () => {
+    setExams([makeExam()])
+    renderDashboard()
+    expect(screen.queryByTestId('freq-editor')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chapter Frequency Table/i)).not.toBeInTheDocument()
   })
 })
 

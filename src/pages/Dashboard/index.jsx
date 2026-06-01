@@ -1,17 +1,23 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
-import { PageHeader, EmptyState, StatCard, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
-import { computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames, getBatchOptions, getExamsForBatch } from '../../lib/analytics'
-import FrequencyTableEditor from './FrequencyTableEditor'
+import { EmptyState, PageHeader, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
+import {
+  computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames,
+  getBatchOptions, getExamsForBatch, computeTrend,
+  getPerformanceSeries, getClassProjectedAvg, getPriorityChapters, getBatchComparison,
+} from '../../lib/analytics'
+import { getFreqForSubject, NDA_TOTAL_MARKS_BY_SUBJECT } from '../../lib/ndaFreq'
+import KpiStrip from './KpiStrip'
+import PerformanceTrend from './PerformanceTrend'
+import PriorityChapters from './PriorityChapters'
+import BatchComparison from './BatchComparison'
 
 export default function DashboardPage() {
   const exams              = useStore(s => s.exams)
   const ndaFreqBySubject   = useStore(s => s.ndaFreqBySubject)
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
-  const setNdaFreq         = useStore(s => s.setNdaFreq)
-  const resetNdaFreq       = useStore(s => s.resetNdaFreq)
-  const setSubjectTotalMarks = useStore(s => s.setSubjectTotalMarks)
   const studentProfiles    = useStore(s => s.studentProfiles)
+  const setActiveStudent   = useStore(s => s.setActiveStudent)
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -19,22 +25,18 @@ export default function DashboardPage() {
   const [filterVal, setFilterVal]         = useState('all')
 
   // ── Filter chain — computed unconditionally (hooks must not come after early returns) ──
-  // Subjects that actually have exams (sorted alphabetically)
   const availableSubjects = [...new Set(exams.map(e => e.subject || 'Maths'))].sort()
 
-  // Filter chain: subject → branch → batch → specific exam
   const subjectFiltered = subjectFilter === 'all'
     ? exams
     : exams.filter(e => (e.subject || 'Maths') === subjectFilter)
 
-  // Branches visible after subject filter
   const allBranches = [...new Set(subjectFiltered.map(e => e.branch).filter(Boolean))].sort()
 
   const branchFiltered = branchFilter === 'all'
     ? subjectFiltered
     : subjectFiltered.filter(e => e.branch === branchFilter)
 
-  // Batches visible after branch filter — derived from profile.batches[] (primary)
   const allBatches = getBatchOptions(branchFiltered, studentProfiles)
 
   const batchFiltered = batchFilter === 'all'
@@ -45,13 +47,15 @@ export default function DashboardPage() {
     ? batchFiltered
     : batchFiltered.filter(e => e.id === filterVal)
 
-  // Valid students: those whose matched profile has a regDate.
-  // null when no profiles are imported — analytics functions treat null as "no filter".
-  // useMemo must be called unconditionally before any early return (Rules of Hooks).
   const validNames = useMemo(() => {
     if (!Object.keys(studentProfiles).length) return null
     return getValidStudentNames(filtered, studentProfiles)
   }, [filtered, studentProfiles])
+
+  // Subject whose weightage table drives projection + priority chapters.
+  const prioritySubject = subjectFilter === 'all' ? 'Maths' : subjectFilter
+  const freq      = getFreqForSubject(ndaFreqBySubject, prioritySubject)
+  const totalMarks = ndaMarksBySubject?.[prioritySubject] ?? NDA_TOTAL_MARKS_BY_SUBJECT[prioritySubject] ?? 300
 
   if (!exams.length) {
     return (
@@ -66,23 +70,37 @@ export default function DashboardPage() {
   const chapterStats = computeChapterStats(filtered, validNames)
   const atRisk       = getAtRisk(filtered, validNames)
   const hardest      = getHardestQuestions(filtered, 8, validNames)
-
-  // Total names in exams — used to show "X registered of Y in exams"
   const totalInExams = validNames !== null ? getAllStudents(filtered).length : null
 
-  const avgScore  = filtered.length
-    ? filtered.reduce((s, e) =>
-        s + (e.students.length
-          ? e.students.reduce((ss, st) => ss + st.totalMarks, 0) / e.students.length
-          : 0), 0
-      ) / filtered.length
-    : 0
+  // Performance over time + KPI deltas (class avg %-of-max per exam, chronological)
+  const series       = getPerformanceSeries(filtered, validNames)
+  const classTrend   = computeTrend(series.map(p => p.avgPct))
+  const latestPct    = series.length ? series[series.length - 1].avgPct : null
+  const prevPct      = series.length >= 2 ? series[series.length - 2].avgPct : null
+
+  // At-risk change vs the class state before the most recent exam
+  const sortedByDate = [...filtered].sort((a, b) => a.date.localeCompare(b.date))
+  const atRiskPrior  = sortedByDate.length >= 2
+    ? getAtRisk(sortedByDate.slice(0, -1), validNames).length
+    : null
+
+  // Class projected NDA score (subject-scoped to prioritySubject)
+  const prioritySubjectExams = subjectFilter === 'all'
+    ? filtered.filter(e => (e.subject || 'Maths') === prioritySubject)
+    : filtered
+  const projected = getClassProjectedAvg(prioritySubjectExams, freq, totalMarks, { validNames, studentProfiles })
+
+  // Weak × high-yield priorities + per-batch comparison
+  const priorityRows = getPriorityChapters(prioritySubjectExams, freq, totalMarks, { validNames })
+  const batchRows    = getBatchComparison(prioritySubjectExams, studentProfiles, freq, totalMarks)
 
   const chapterRows = Object.entries(chapterStats).map(([ch, subs]) => {
     let correct = 0, total = 0
     Object.values(subs).forEach(s => { correct += s.correct; total += s.total })
     return { name: ch, pct: total > 0 ? correct / total : 0, correct, total }
   }).sort((a, b) => a.pct - b.pct)
+
+  const selectCls = 'form-input w-auto text-[13px] pr-8 cursor-pointer'
 
   return (
     <div>
@@ -93,56 +111,42 @@ export default function DashboardPage() {
           <p className="text-[13px] text-ink-2 mt-1">Class performance overview</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Subject filter */}
           <select
             aria-label="Subject filter"
             value={subjectFilter}
             onChange={e => { setSubjectFilter(e.target.value); setBranchFilter('all'); setBatchFilter('all'); setFilterVal('all') }}
-            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-            style={{ minWidth: '160px' }}
+            className={selectCls} style={{ minWidth: '160px' }}
           >
             <option value="all">All Subjects</option>
-            {availableSubjects.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {/* Branch filter */}
           {allBranches.length > 0 && (
             <select
               aria-label="Branch filter"
               value={branchFilter}
               onChange={e => { setBranchFilter(e.target.value); setBatchFilter('all'); setFilterVal('all') }}
-              className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-              style={{ minWidth: '160px' }}
+              className={selectCls} style={{ minWidth: '160px' }}
             >
               <option value="all">All Branches</option>
-              {allBranches.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
+              {allBranches.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           )}
-          {/* Batch filter */}
           {allBatches.length > 0 && (
             <select
               aria-label="Batch filter"
               value={batchFilter}
               onChange={e => { setBatchFilter(e.target.value); setFilterVal('all') }}
-              className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-              style={{ minWidth: '180px' }}
+              className={selectCls} style={{ minWidth: '180px' }}
             >
               <option value="all">All Batches</option>
-              {allBatches.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
+              {allBatches.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           )}
-          {/* Exam filter */}
           <select
             aria-label="Exam filter"
             value={filterVal}
             onChange={e => setFilterVal(e.target.value)}
-            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-            style={{ minWidth: '220px' }}
+            className={selectCls} style={{ minWidth: '220px' }}
           >
             <option value="all">All Exams</option>
             {[...batchFiltered].reverse().map(e => (
@@ -152,35 +156,59 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
-        <StatCard
-          label={validNames !== null ? 'Registered' : 'Students'}
-          value={students.length}
-          color="text-accent"
-          delta={totalInExams !== null && totalInExams !== students.length
-            ? `of ${totalInExams} in exams`
-            : null}
-          deltaUp={null}
-        />
-        <StatCard label="Exams"     value={filtered.length}      color="text-indigo-400" />
-        <StatCard label="Avg Score" value={avgScore.toFixed(1)}  color="text-success" />
-        <StatCard label="At-Risk"   value={atRisk.length}        color="text-danger" />
+      {/* KPI strip */}
+      <KpiStrip
+        registered={validNames !== null}
+        studentsCount={students.length}
+        totalInExams={totalInExams}
+        latestPct={latestPct}
+        prevPct={prevPct}
+        projectedAvg={projected.avg}
+        projectedCount={projected.count}
+        atRiskNow={atRisk.length}
+        atRiskPrior={atRiskPrior}
+      />
+
+      {/* Performance over time */}
+      <div className="mb-4 md:mb-5">
+        <PerformanceTrend series={series} trend={classTrend} />
       </div>
 
-      {/* Heatmap + At-risk */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <Card>
-          <CardTitle>Chapter Performance — Class Average</CardTitle>
-          <div className="flex flex-col gap-1.5">
-            {chapterRows.length === 0
-              ? <p className="text-[12px] text-ink-3">No chapter data for this filter.</p>
-              : chapterRows.map(ch => (
-                <HeatBar key={ch.name} pct={ch.pct} label={ch.name} count={`${ch.correct}/${ch.total}`} />
-              ))
-            }
-          </div>
-        </Card>
+      {/* Priority chapters + Batch comparison */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
+        <PriorityChapters rows={priorityRows} subject={prioritySubject} />
+        {batchRows.length > 1
+          ? <BatchComparison rows={batchRows} />
+          : (
+            <Card>
+              <CardTitle>Chapter Performance — Class Average</CardTitle>
+              <div className="flex flex-col gap-1.5">
+                {chapterRows.length === 0
+                  ? <p className="text-[12px] text-ink-3">No chapter data for this filter.</p>
+                  : chapterRows.map(ch => (
+                    <HeatBar key={ch.name} pct={ch.pct} label={ch.name} count={`${ch.correct}/${ch.total}`} />
+                  ))
+                }
+              </div>
+            </Card>
+          )}
+      </div>
+
+      {/* Chapter heatmap (when batch comparison took the slot above) + At-risk */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
+        {batchRows.length > 1 && (
+          <Card>
+            <CardTitle>Chapter Performance — Class Average</CardTitle>
+            <div className="flex flex-col gap-1.5">
+              {chapterRows.length === 0
+                ? <p className="text-[12px] text-ink-3">No chapter data for this filter.</p>
+                : chapterRows.map(ch => (
+                  <HeatBar key={ch.name} pct={ch.pct} label={ch.name} count={`${ch.correct}/${ch.total}`} />
+                ))
+              }
+            </div>
+          </Card>
+        )}
 
         <Card>
           <CardTitle>⚠️ At-Risk Students (Weak in 2+ Chapters)</CardTitle>
@@ -189,7 +217,14 @@ export default function DashboardPage() {
           ) : (
             <div className="flex flex-col divide-y divide-border">
               {atRisk.slice(0, 12).map(s => (
-                <div key={s.name} className="flex items-center justify-between py-2">
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => setActiveStudent(s.name)}
+                  className="flex items-center justify-between py-2 text-left hover:bg-surface-2 rounded
+                             focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  aria-label={`Open ${s.name} — weak in ${s.count} chapters`}
+                >
                   <div>
                     <div className="text-[12px] font-semibold text-ink">{s.name}</div>
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -199,7 +234,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <Badge variant="red">{s.count} weak</Badge>
-                </div>
+                </button>
               ))}
               {atRisk.length > 12 && (
                 <p className="text-[11px] text-ink-3 pt-2">+{atRisk.length - 12} more</p>
@@ -260,16 +295,6 @@ export default function DashboardPage() {
           </div>
         )}
       </Card>
-
-      {/* Chapter Frequency Table */}
-      <FrequencyTableEditor
-        exams={exams}
-        ndaFreqBySubject={ndaFreqBySubject}
-        setNdaFreq={setNdaFreq}
-        resetNdaFreq={resetNdaFreq}
-        ndaMarksBySubject={ndaMarksBySubject}
-        setSubjectTotalMarks={setSubjectTotalMarks}
-      />
     </div>
   )
 }
