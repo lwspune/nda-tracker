@@ -32,18 +32,26 @@ export default defineConfig([
       'react-hooks/preserve-manual-memoization': 'off',
     },
   },
-  // Node.js globals for Vite config (process, __dirname, etc.)
+  // Node.js globals for Vite config + serverless endpoints + migration/sync scripts
+  // (process, __dirname, Buffer, etc.). Browser globals kept too — api endpoints use fetch.
   {
-    files: ['vite.config.js'],
+    files: [
+      'vite.config.js',
+      'api/**/*.{js,jsx}',
+      'migrate_*.js',
+      'sync_*.js',
+      'create_teacher_account.js',
+    ],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
   },
-  // Vitest globals for test files (describe, it, expect, vi, etc.)
+  // Vitest globals for test files (describe, it, expect, vi, etc.) + Node globals (global.fetch)
   {
     files: ['**/__tests__/**/*.{js,jsx}', '**/*.test.{js,jsx}'],
     languageOptions: {
       globals: {
+        ...globals.node,
         describe:  'readonly',
         it:        'readonly',
         test:      'readonly',
