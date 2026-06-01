@@ -8,7 +8,7 @@ vi.mock('../../lib/supabase', () => ({
 }))
 
 import { supabase } from '../../lib/supabase'
-import { loadFromSupabase, loadExamsFromSupabase, saveToSupabase } from '../persist'
+import { loadFromSupabase, loadExamsFromSupabase, saveToSupabase, saveToStorage } from '../persist'
 
 describe('loadFromSupabase', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -91,6 +91,41 @@ describe('saveToSupabase', () => {
     await new Promise(r => setTimeout(r, 0))
 
     expect(mockUpdate).not.toHaveBeenCalled()
+  })
+})
+
+// ── saveToStorage allow-list ─────────────────────────────────────────────────
+// In the jsdom test env the hostname is `localhost`, so IS_DEV is true and
+// saveToStorage POSTs the data object to /api/data. We stub fetch and inspect
+// the serialized body to assert which store keys survive the allow-list.
+describe('saveToStorage allow-list (dev path)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function captureSavedPayload(state) {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+    saveToStorage(state)
+    const body = fetchMock.mock.calls[0][1].body
+    vi.unstubAllGlobals()
+    return JSON.parse(body)
+  }
+
+  it('persists send-history keys and branches (regression: silently stripped before 2026-06-01)', () => {
+    const state = {
+      exams: [], studentProfiles: {},
+      whatsappSendHistory: { exam1: { sentAt: 'x' } },
+      examAbsenceSendHistory: { exam1: { sentAt: 'y' } },
+      lateSendHistory: { '2026-06-01': { sentAt: 'z', sent: 5, skipped: 0, failedNames: [] } },
+      lectureMissSendHistory: { '2026-06-01|LWS_NDA_2Y_(26-28)': { sentAt: 'w', sent: 3 } },
+      branches: ['APJ', 'LWS Pune'],
+    }
+    const saved = captureSavedPayload(state)
+    expect(saved.lateSendHistory).toEqual(state.lateSendHistory)
+    expect(saved.lectureMissSendHistory).toEqual(state.lectureMissSendHistory)
+    expect(saved.branches).toEqual(state.branches)
+    // existing keys still round-trip
+    expect(saved.whatsappSendHistory).toEqual(state.whatsappSendHistory)
+    expect(saved.examAbsenceSendHistory).toEqual(state.examAbsenceSendHistory)
   })
 })
 
