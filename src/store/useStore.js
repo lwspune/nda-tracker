@@ -12,6 +12,7 @@ import { createSyllabusSlice } from './slices/syllabusSlice'
 import { createTimetableSlice } from './slices/timetableSlice'
 import { createAttendanceSlice } from './slices/attendanceSlice'
 import { createLectureAbsenceSlice } from './slices/lectureAbsenceSlice'
+import { createHomeworkSlice }       from './slices/homeworkSlice'
 import { createExamAbsenceSlice }    from './slices/examAbsenceSlice'
 import { createConfigSlice } from './slices/configSlice'
 import { createMonthlyReportSlice } from './slices/monthlyReportSlice'
@@ -243,6 +244,13 @@ const useStore = create((set, get) => ({
     get()._save()
   },
 
+  // ── Homework send history (admin only, persisted, keyed by `${date}|${batchName}`) ──────
+  setHomeworkSendHistory(key, record) {
+    if (!key) return
+    set(s => ({ homeworkSendHistory: { ...s.homeworkSendHistory, [key]: record } }))
+    get()._save()
+  },
+
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
   ...createStudentSlice(set, get),
@@ -252,6 +260,7 @@ const useStore = create((set, get) => ({
   ...createTimetableSlice(set, get),
   ...createAttendanceSlice(set, get),
   ...createLectureAbsenceSlice(set, get),
+  ...createHomeworkSlice(set, get),
   ...createExamAbsenceSlice(set, get),
   ...createConfigSlice(set, get),
   ...createMonthlyReportSlice(set, get),

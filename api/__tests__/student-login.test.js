@@ -140,6 +140,17 @@ function makeMockClient({
         }
         return builder
       }
+      if (table === 'homework_pending') {
+        // chain: .select(...).eq('lws_id', X).gte('date', X).order(...) — await
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          gte:    vi.fn(() => builder),
+          order:  vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+        }
+        return builder
+      }
       // faculty_state — ndaFreqBySubject only
       return {
         select: vi.fn().mockReturnValue({

@@ -15,6 +15,7 @@ const mockStore = {
   // RecentIncidents + MissedExams read these; in tests they just resolve to no data.
   getLectureAbsencesForStudent: vi.fn().mockResolvedValue([]),
   getExamAbsencesForStudent:    vi.fn().mockResolvedValue([]),
+  getHomeworkForStudent:        vi.fn().mockResolvedValue([]),
 }
 
 vi.mock('../../../store/useStore', () => ({

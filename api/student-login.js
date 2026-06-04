@@ -160,6 +160,15 @@ export default async function handler(req, res) {
     .gte('marked_at', sinceIso + 'T00:00:00.000Z')
     .order('marked_at', { ascending: false })
 
+  // Incomplete homework / notes (event log). Includes resolved rows so the
+  // student portal can render closure too; RecentIncidents narrows client-side.
+  const { data: homeworkRows } = await supabase
+    .from('homework_pending')
+    .select('id, date, subject, chapter, type, resolved_at, notified_at')
+    .eq('lws_id', student.lws_id)
+    .gte('date', sinceIso)
+    .order('date', { ascending: false })
+
   // ── 5a-ii. Fetch metadata for ABSENT exams (the student didn't sit them,
   // so they're not in `exams` above). Without this, the student-portal join
   // in MissedExams / RecentIncidents / AttendanceRings would drop all rows.
@@ -211,6 +220,7 @@ export default async function handler(req, res) {
     exams,
     attendance:       attendanceRows || [],
     lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
+    homeworkPending:  (homeworkRows || []).map(r => ({ lws_id: student.lws_id, ...r })),
     examAbsences:     (examAbsenceRows || []).map(r => {
       const meta = absentExamMetaById.get(r.exam_id)
       return {

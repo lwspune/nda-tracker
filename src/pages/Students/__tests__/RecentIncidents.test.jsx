@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockStore = {
   getLectureAbsencesForStudent: vi.fn(),
   getExamAbsencesForStudent:    vi.fn(),
+  getHomeworkForStudent:        vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -22,6 +23,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockStore.getLectureAbsencesForStudent.mockResolvedValue([])
   mockStore.getExamAbsencesForStudent.mockResolvedValue([])
+  mockStore.getHomeworkForStudent.mockResolvedValue([])
 })
 
 describe('RecentIncidents', () => {
@@ -174,5 +176,31 @@ describe('RecentIncidents', () => {
     )
     expect(await screen.findByText(/Missed RecentMaths/i)).toBeInTheDocument()
     expect(screen.queryByText(/Missed OldEnglish/i)).not.toBeInTheDocument()
+  })
+
+  it('shows unresolved homework rows fetched from the store, hides resolved', async () => {
+    const today = isoDaysAgo(0)
+    mockStore.getHomeworkForStudent.mockResolvedValue([
+      { id: 'h1', lws_id: 'LWS-001', date: today, subject: 'Maths', chapter: 'Trigonometry', type: 'both', resolved_at: null },
+      { id: 'h2', lws_id: 'LWS-001', date: today, subject: 'Physics', chapter: 'Kinematics', type: 'notes', resolved_at: '2026-06-05T10:00Z' },
+    ])
+    render(<RecentIncidents lwsId="LWS-001" attendance={[]} />)
+    expect(await screen.findByText(/Pending Maths · Trigonometry/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Pending Physics/i)).not.toBeInTheDocument()
+  })
+
+  it('uses homeworkPendingProp without fetching (student portal path)', async () => {
+    const today = isoDaysAgo(0)
+    render(
+      <RecentIncidents
+        lwsId="LWS-001"
+        attendance={[]}
+        homeworkPendingProp={[
+          { id: 'h1', lws_id: 'LWS-001', date: today, subject: 'Maths', chapter: 'Circles', type: 'homework', resolved_at: null },
+        ]}
+      />
+    )
+    expect(await screen.findByText(/Pending Maths · Circles/i)).toBeInTheDocument()
+    expect(mockStore.getHomeworkForStudent).not.toHaveBeenCalled()
   })
 })
