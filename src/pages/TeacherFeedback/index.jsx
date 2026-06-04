@@ -8,7 +8,23 @@ function fmtDate(iso) {
   if (!iso) return ''
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (!m) return ''
-  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// "2026-04-30…" → "Apr 2026"
+function monthLabel(iso) {
+  if (!iso) return ''
+  const m = String(iso).match(/^(\d{4})-(\d{2})/)
+  if (!m) return ''
+  return new Date(+m[1], +m[2] - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+}
+
+// Min/max submitted_at as a compact "Apr–May 2026" (or single month) range.
+function dateRange(isos) {
+  const valid = isos.filter(Boolean).sort()
+  if (valid.length === 0) return ''
+  const lo = monthLabel(valid[0]), hi = monthLabel(valid[valid.length - 1])
+  return lo === hi ? lo : `${lo} – ${hi}`
 }
 
 function scoreColor(v) {
@@ -25,7 +41,7 @@ function barColor(v) {
 }
 
 // Superadmin-only. Per-teacher feedback aggregates + trend + raw comments,
-// sourced from the RLS-gated teacher_feedback table.
+// sourced from the RLS-gated teacher_feedback table. Filterable by cycle and teacher.
 export default function TeacherFeedbackPage() {
   const isSuperadmin        = useStore(s => s.isSuperadmin)
   const loadTeacherFeedback = useStore(s => s.loadTeacherFeedback)
@@ -34,11 +50,10 @@ export default function TeacherFeedbackPage() {
   const [loading, setLoading]   = useState(true)
   const [importOpen, setImportOpen] = useState(false)
   const [cycle, setCycle]       = useState('all')
+  const [teacher, setTeacher]   = useState('all')
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    // Non-superadmins never reach the data view (render returns Restricted), so
-    // there's nothing to load or toggle for them.
     if (!isSuperadmin) return
     let cancelled = false
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -47,24 +62,59 @@ export default function TeacherFeedbackPage() {
     return () => { cancelled = true }
   }, [isSuperadmin, loadTeacherFeedback, refreshKey])
 
-  const cycles = useMemo(
-    () => [...new Set(rows.map(r => r.cycle).filter(Boolean))].sort().reverse(),
+  // Cycles with a derived month label + response count (latest first).
+  const cycleInfo = useMemo(() => {
+    const map = new Map()
+    for (const r of rows) {
+      if (!r.cycle) continue
+      if (!map.has(r.cycle)) map.set(r.cycle, { cycle: r.cycle, dates: [], count: 0 })
+      const e = map.get(r.cycle)
+      e.dates.push(r.submitted_at); e.count += 1
+    }
+    return [...map.values()]
+      .map(e => ({ cycle: e.cycle, label: monthLabel(e.dates.filter(Boolean).sort()[0]), count: e.count }))
+      .sort((a, b) => b.cycle.localeCompare(a.cycle))
+  }, [rows])
+
+  const teachers = useMemo(
+    () => [...new Set(rows.map(r => r.teacher_name).filter(Boolean))].sort(),
     [rows]
   )
+
   const filtered = useMemo(
-    () => cycle === 'all' ? rows : rows.filter(r => r.cycle === cycle),
-    [rows, cycle]
+    () => rows.filter(r =>
+      (cycle === 'all' || r.cycle === cycle) &&
+      (teacher === 'all' || r.teacher_name === teacher)
+    ),
+    [rows, cycle, teacher]
   )
+
   // Worst-first — surfaces who needs attention.
   const aggregates = useMemo(
     () => aggregateFeedback(filtered).sort((a, b) => (a.overall ?? 99) - (b.overall ?? 99)),
     [filtered]
   )
-  const trendByTeacher = useMemo(() => {
+
+  // Per-teacher feedback date range (within the active filter).
+  const dateRangeByTeacher = useMemo(() => {
     const map = {}
-    for (const t of feedbackTrend(rows)) map[t.teacher] = t.cycles
+    for (const r of filtered) {
+      if (!map[r.teacher_name]) map[r.teacher_name] = []
+      map[r.teacher_name].push(r.submitted_at)
+    }
+    return Object.fromEntries(Object.entries(map).map(([t, ds]) => [t, dateRange(ds)]))
+  }, [filtered])
+
+  // Trend is always computed over ALL rows (so it shows the full history even
+  // when a single cycle is selected), labelled with each cycle's month.
+  const trendByTeacher = useMemo(() => {
+    const cycToLabel = Object.fromEntries(cycleInfo.map(c => [c.cycle, c.label]))
+    const map = {}
+    for (const t of feedbackTrend(rows)) {
+      map[t.teacher] = t.cycles.map(c => ({ ...c, label: cycToLabel[c.cycle] || c.cycle }))
+    }
     return map
-  }, [rows])
+  }, [rows, cycleInfo])
 
   if (!isSuperadmin) {
     return <EmptyState icon="🔒" title="Restricted" sub="Teacher feedback is visible to the superadmin only." />
@@ -83,27 +133,49 @@ export default function TeacherFeedbackPage() {
         </button>
       </div>
 
-      {/* Cycle filter */}
-      {cycles.length > 0 && (
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3">Cycle</span>
-          <button
-            type="button"
-            onClick={() => setCycle('all')}
-            className={`text-[12px] px-3 py-1.5 rounded-full border ${cycle === 'all' ? 'border-accent text-accent bg-accent-soft/30' : 'border-border text-ink-3'}`}
-          >
-            All
-          </button>
-          {cycles.map(c => (
+      {/* Filters */}
+      {rows.length > 0 && (
+        <div className="flex flex-col gap-3 mb-5">
+          {/* Cycle filter — pills with month label + count */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3 w-16">Cycle</span>
             <button
-              key={c}
               type="button"
-              onClick={() => setCycle(c)}
-              className={`text-[12px] px-3 py-1.5 rounded-full border ${cycle === c ? 'border-accent text-accent bg-accent-soft/30' : 'border-border text-ink-3'}`}
+              onClick={() => setCycle('all')}
+              className={`text-[12px] px-3 py-1.5 rounded-full border ${cycle === 'all' ? 'border-accent text-accent bg-accent-soft/30' : 'border-border text-ink-3'}`}
             >
-              {c}
+              All
             </button>
-          ))}
+            {cycleInfo.map(c => (
+              <button
+                key={c.cycle}
+                type="button"
+                onClick={() => setCycle(c.cycle)}
+                className={`text-[12px] px-3 py-1.5 rounded-full border ${cycle === c.cycle ? 'border-accent text-accent bg-accent-soft/30' : 'border-border text-ink-3'}`}
+              >
+                {c.cycle}{c.label ? ` · ${c.label}` : ''} <span className="opacity-60">({c.count})</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Teacher filter — dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3 w-16">Teacher</span>
+            <select
+              value={teacher}
+              onChange={e => setTeacher(e.target.value)}
+              aria-label="Filter by teacher"
+              className="form-input text-[13px] min-h-[40px] px-3 max-w-[260px]"
+            >
+              <option value="all">All teachers ({teachers.length})</option>
+              {teachers.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {teacher !== 'all' && (
+              <button type="button" onClick={() => setTeacher('all')} className="text-[12px] text-ink-3 hover:text-ink underline">
+                clear
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -117,13 +189,19 @@ export default function TeacherFeedbackPage() {
             const cyc = trendByTeacher[t.teacher] || []
             return (
               <Card key={t.teacher}>
-                <div className="flex items-baseline justify-between gap-2 mb-3">
+                <div className="flex items-baseline justify-between gap-2 mb-1">
                   <CardTitle>{t.teacher}</CardTitle>
                   <div className="text-right">
                     <span className={`text-[22px] font-extrabold ${scoreColor(t.overall)}`}>{t.overall ?? '—'}</span>
                     <span className="text-[11px] text-ink-3 font-mono ml-1">/5 · n={t.n}</span>
                   </div>
                 </div>
+                {/* Feedback date range */}
+                {dateRangeByTeacher[t.teacher] && (
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-ink-3 mb-3">
+                    {dateRangeByTeacher[t.teacher]}
+                  </div>
+                )}
 
                 {/* Dimension bars */}
                 <div className="space-y-1.5 mb-3">
@@ -141,10 +219,10 @@ export default function TeacherFeedbackPage() {
                   })}
                 </div>
 
-                {/* Trend across cycles */}
+                {/* Trend across cycles (labelled by month) */}
                 {cyc.length > 1 && (
                   <div className="text-[11px] text-ink-3 font-mono mb-3">
-                    Trend: {cyc.map(c => `${c.cycle} ${c.overall ?? '—'}`).join(' → ')}
+                    Trend: {cyc.map(c => `${c.label} ${c.overall ?? '—'}`).join(' → ')}
                   </div>
                 )}
 
