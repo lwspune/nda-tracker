@@ -37,6 +37,12 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSupabaseSession(session)
       setSessionChecked(true)
+      // Recompute the superadmin flag on EVERY auth change (login / logout /
+      // initial restore), not just once in initStore — otherwise logging in
+      // after the page loaded logged-out never reveals the superadmin surfaces.
+      if (IS_READ_ONLY) {
+        useStore.setState({ isSuperadmin: session?.user?.user_metadata?.role === 'superadmin' })
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
