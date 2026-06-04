@@ -152,14 +152,14 @@ export function saveToStorage(state) {
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
-    whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, branches,
+    whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
   } = state
   const data = {
     exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
-    whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, branches,
+    whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
   }
 
   if (IS_DEV) {

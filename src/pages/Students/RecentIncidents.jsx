@@ -26,11 +26,14 @@ export default function RecentIncidents({
   exams = [],
   lectureAbsencesProp = null,
   examAbsencesProp    = null,
+  homeworkPendingProp = null,
 }) {
   const getLectureAbsencesForStudent = useStore(s => s.getLectureAbsencesForStudent)
   const getExamAbsencesForStudent    = useStore(s => s.getExamAbsencesForStudent)
+  const getHomeworkForStudent        = useStore(s => s.getHomeworkForStudent)
   const [fetchedLecture, setFetchedLecture] = useState([])
   const [fetchedExam,    setFetchedExam]    = useState([])
+  const [fetchedHomework, setFetchedHomework] = useState([])
   const sinceDate = useMemo(() => isoDaysAgo(30), [])
 
   useEffect(() => {
@@ -56,10 +59,22 @@ export default function RecentIncidents({
     return () => { cancelled = true }
   }, [lwsId, sinceDate, getExamAbsencesForStudent, examAbsencesProp])
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (homeworkPendingProp !== null) { setFetchedHomework([]); return }
+    if (!lwsId) { setFetchedHomework([]); return }
+    let cancelled = false
+    getHomeworkForStudent(lwsId, sinceDate).then(rows => {
+      if (!cancelled) setFetchedHomework(rows)
+    })
+    return () => { cancelled = true }
+  }, [lwsId, sinceDate, getHomeworkForStudent, homeworkPendingProp])
+
   // Prop-supplied data may span up to 12 months (student portal serves the wider
   // window for AttendanceRings); narrow client-side to the strip's 30-day window.
   const rawLectureRows = lectureAbsencesProp !== null ? lectureAbsencesProp : fetchedLecture
   const rawExamRows    = examAbsencesProp    !== null ? examAbsencesProp    : fetchedExam
+  const rawHomeworkRows = homeworkPendingProp !== null ? homeworkPendingProp : fetchedHomework
   const lectureRows = useMemo(
     () => (rawLectureRows || []).filter(r => r?.date && r.date >= sinceDate),
     [rawLectureRows, sinceDate]
@@ -90,12 +105,19 @@ export default function RecentIncidents({
     return items.filter(r => r.date >= sinceDate)
   }, [rawExamRows, exams, sinceDate])
 
+  // Unresolved homework / notes flagged in the last 30 days.
+  const homeworkItems = useMemo(() => {
+    return (rawHomeworkRows || [])
+      .filter(r => r?.date && r.date >= sinceDate && !r.resolved_at)
+      .map(r => ({ kind: 'homework', date: r.date, subject: r.subject, chapter: r.chapter, type: r.type }))
+  }, [rawHomeworkRows, sinceDate])
+
   const items = useMemo(() => {
     const lectureItems = lectureRows.map(r => ({
       kind: 'missed', date: r.date, subject: r.subject,
     }))
-    return [...lateRows, ...lectureItems, ...examItems].sort((a, b) => b.date.localeCompare(a.date))
-  }, [lateRows, lectureRows, examItems])
+    return [...lateRows, ...lectureItems, ...examItems, ...homeworkItems].sort((a, b) => b.date.localeCompare(a.date))
+  }, [lateRows, lectureRows, examItems, homeworkItems])
 
   if (items.length === 0) return null
 
@@ -111,13 +133,16 @@ export default function RecentIncidents({
           } else if (item.kind === 'missed') {
             label = `Missed ${item.subject}`
             cls   = 'bg-red-50 border-red-200 text-danger'
+          } else if (item.kind === 'homework') {
+            label = `Pending ${item.subject} · ${item.chapter}`
+            cls   = 'bg-orange-50 border-orange-200 text-orange-700'
           } else {
             label = `Missed exam · ${item.examName}`
             cls   = 'bg-red-100 border-red-300 text-red-900'
           }
           return (
             <span
-              key={`${item.kind}-${item.date}-${item.subject ?? item.examName ?? idx}`}
+              key={`${item.kind}-${item.date}-${item.subject ?? item.examName ?? ''}-${item.chapter ?? ''}-${idx}`}
               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[12px] ${cls}`}
             >
               <span className="font-semibold">{label}</span>

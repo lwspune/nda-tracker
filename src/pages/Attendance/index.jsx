@@ -7,8 +7,10 @@ import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
 import { buildConsecutiveAbsent } from './consecutiveAbsent'
 import LateMarkingWidget from './LateMarkingWidget'
 import LectureLogTab from './LectureLogTab'
+import HomeworkLogTab from './HomeworkLogTab'
 import LateNotificationPreviewModal from './LateNotificationPreviewModal'
 import LectureMissPreviewModal from './LectureMissPreviewModal'
+import HomeworkPreviewModal from './HomeworkPreviewModal'
 
 function todayIso() {
   const d = new Date()
@@ -86,6 +88,10 @@ export default function AttendancePage() {
   const setLateSendHistory = useStore(s => s.setLateSendHistory)
   const lectureMissSendHistory  = useStore(s => s.lectureMissSendHistory)
   const setLectureMissSendHistory = useStore(s => s.setLectureMissSendHistory)
+  const homeworkSendHistory     = useStore(s => s.homeworkSendHistory)
+  const setHomeworkSendHistory  = useStore(s => s.setHomeworkSendHistory)
+  const markHomeworkNotified    = useStore(s => s.markHomeworkNotified)
+  const getHomeworkForDate      = useStore(s => s.getHomeworkForDate)
   const mode = useMode()
 
   const [consecutiveDays, setConsecutiveDays] = useState(3)
@@ -101,6 +107,7 @@ export default function AttendancePage() {
 
   const [lateModal,     setLateModal]     = useState(null) // { date, lwsIds[] }
   const [lectureModal,  setLectureModal]  = useState(null) // { date, absencesByLwsId }
+  const [homeworkModal, setHomeworkModal] = useState(null) // { date, batchName, itemsByLwsId }
   const [sending,       setSending]       = useState(false)
   const [sendResult,    setSendResult]    = useState(null) // { kind, ok, sent, skipped, error? }
 
@@ -122,6 +129,18 @@ export default function AttendancePage() {
       date,
       batchName,
       absencesByLwsId,
+      failedNames: prior?.failedNames ?? null,
+    })
+  }
+
+  function handleSendHomework(itemsByLwsId, date, batchName) {
+    if (!itemsByLwsId || !Object.keys(itemsByLwsId).length) return
+    const key = batchName ? `${date}|${batchName}` : null
+    const prior = key ? homeworkSendHistory?.[key] : null
+    setHomeworkModal({
+      date,
+      batchName,
+      itemsByLwsId,
       failedNames: prior?.failedNames ?? null,
     })
   }
@@ -179,12 +198,37 @@ export default function AttendancePage() {
           failedNames,
         })
       }
+      // Homework: persist send summary + stamp notified_at on the rows whose
+      // student (and not a failed leg) was actually reached.
+      if (kind === 'homework' && homeworkModal?.date && homeworkModal?.batchName && r.ok) {
+        const failedNames = parseFailedNames(data.lines)
+        setHomeworkSendHistory(`${homeworkModal.date}|${homeworkModal.batchName}`, {
+          sentAt: Date.now(),
+          sent: data.sent ?? 0,
+          skipped: data.skipped ?? 0,
+          failedNames,
+        })
+        const failedSet = new Set(failedNames)
+        const notifiedLwsIds = new Set(
+          (payload.students || [])
+            .filter(s => !failedSet.has(s.name))
+            .map(s => s.lwsId)
+        )
+        if (notifiedLwsIds.size) {
+          const rows = await getHomeworkForDate(homeworkModal.date)
+          const ids = rows
+            .filter(row => !row.resolved_at && notifiedLwsIds.has(row.lws_id))
+            .map(row => row.id)
+          if (ids.length) markHomeworkNotified(ids)
+        }
+      }
     } catch (e) {
       setSendResult({ kind, error: e.message })
     } finally {
       setSending(false)
       setLateModal(null)
       setLectureModal(null)
+      setHomeworkModal(null)
     }
   }
 
@@ -328,10 +372,24 @@ export default function AttendancePage() {
         >
           Lecture log
         </button>
+        {mode === 'admin' && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'homework-log'}
+            onClick={() => setActiveTab('homework-log')}
+            className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+              ${activeTab === 'homework-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+          >
+            Homework / Notes
+          </button>
+        )}
       </div>
 
       {activeTab === 'lecture-log' ? (
         <LectureLogTab onSend={handleSendLectureMiss} />
+      ) : activeTab === 'homework-log' && mode === 'admin' ? (
+        <HomeworkLogTab onSend={handleSendHomework} />
       ) : (
         <>
           {mode === 'admin' && (
@@ -487,12 +545,12 @@ export default function AttendancePage() {
         <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 md:max-w-md z-[900]">
           {sendResult.error ? (
             <Alert type="error">
-              ❌ {sendResult.kind === 'late' ? 'Late' : 'Lecture-miss'} send failed: {sendResult.error}
+              ❌ {sendResult.kind === 'late' ? 'Late' : sendResult.kind === 'homework' ? 'Homework' : 'Lecture-miss'} send failed: {sendResult.error}
               <button onClick={() => setSendResult(null)} className="ml-3 text-[12px] underline">dismiss</button>
             </Alert>
           ) : (
             <Alert type="success">
-              ✓ {sendResult.kind === 'late' ? 'Late notifications' : 'Lecture-miss notifications'} sent: {sendResult.sent ?? 0} · skipped: {sendResult.skipped ?? 0}
+              ✓ {sendResult.kind === 'late' ? 'Late notifications' : sendResult.kind === 'homework' ? 'Homework notifications' : 'Lecture-miss notifications'} sent: {sendResult.sent ?? 0} · skipped: {sendResult.skipped ?? 0}
               {sendResult.preview && (
                 <div className="mt-1 text-[11px] font-mono opacity-75 break-all">{sendResult.preview}</div>
               )}
@@ -531,6 +589,22 @@ export default function AttendancePage() {
               '/api/send-lecture-absences',
               { date: lectureModal.date, redirectTo, students },
               'lecture-miss'
+            )
+          }
+        />
+      )}
+      {homeworkModal && (
+        <HomeworkPreviewModal
+          date={homeworkModal.date}
+          itemsByLwsId={homeworkModal.itemsByLwsId}
+          failedNames={homeworkModal.failedNames}
+          sending={sending}
+          onClose={() => !sending && setHomeworkModal(null)}
+          onConfirm={(students, redirectTo) =>
+            confirmSend(
+              '/api/send-homework-pending',
+              { date: homeworkModal.date, redirectTo, students },
+              'homework'
             )
           }
         />

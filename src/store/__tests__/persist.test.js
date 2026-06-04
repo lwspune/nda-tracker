@@ -117,11 +117,13 @@ describe('saveToStorage allow-list (dev path)', () => {
       examAbsenceSendHistory: { exam1: { sentAt: 'y' } },
       lateSendHistory: { '2026-06-01': { sentAt: 'z', sent: 5, skipped: 0, failedNames: [] } },
       lectureMissSendHistory: { '2026-06-01|LWS_NDA_2Y_(26-28)': { sentAt: 'w', sent: 3 } },
+      homeworkSendHistory: { '2026-06-04|LWS_NDA_2Y_(26-28)': { sentAt: 'h', sent: 2 } },
       branches: ['APJ', 'LWS Pune'],
     }
     const saved = captureSavedPayload(state)
     expect(saved.lateSendHistory).toEqual(state.lateSendHistory)
     expect(saved.lectureMissSendHistory).toEqual(state.lectureMissSendHistory)
+    expect(saved.homeworkSendHistory).toEqual(state.homeworkSendHistory)
     expect(saved.branches).toEqual(state.branches)
     // existing keys still round-trip
     expect(saved.whatsappSendHistory).toEqual(state.whatsappSendHistory)

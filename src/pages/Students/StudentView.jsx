@@ -21,7 +21,7 @@ import { ProfileCard, ImprovementPlan } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
-export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null }) {
+export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null, homeworkPendingProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const savedInsights      = useStore(s => s.savedInsights)
@@ -285,6 +285,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         exams={normalizedExams}
         lectureAbsencesProp={lectureAbsencesProp}
         examAbsencesProp={examAbsencesProp}
+        homeworkPendingProp={homeworkPendingProp}
       />
 
 

@@ -26,6 +26,7 @@ export const DEFAULTS = {
   lateSendHistory: {},
   lectureMissSendHistory: {},
   examAbsenceSendHistory: {},
+  homeworkSendHistory: {},
   branches: [],
 }
 
