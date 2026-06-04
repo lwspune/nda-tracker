@@ -15,6 +15,7 @@ const NAV = [
   { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
   { id: 'costs',          icon: '💰', label: 'API Costs', adminOnly: true },
   { id: 'settings',       icon: '⚙', label: 'Settings', adminOnly: true },
+  { id: 'teacherFeedback', icon: '🗣', label: 'Feedback', superadminOnly: true },
 ]
 
 // Returns true if exams exist that post-date the last deploy run.
@@ -24,6 +25,7 @@ export default function Sidebar({ onLogout }) {
   const setActivePage = useStore(s => s.setActivePage)
   const exams         = useStore(s => s.exams)
   const studentProfiles = useStore(s => s.studentProfiles)
+  const isSuperadmin    = useStore(s => s.isSuperadmin)
   const [mobileOpen, setMobileOpen] = useState(false)
   const mode = useMode()
 
@@ -34,7 +36,9 @@ export default function Sidebar({ onLogout }) {
     .filter((v, i, arr) => arr.findIndex(x => x.lwsId === v.lwsId) === i && v.lwsId)
     .length
 
-  const visibleNav = NAV.filter(n => !(mode !== 'admin' && n.adminOnly))
+  const visibleNav = NAV.filter(n =>
+    !(mode !== 'admin' && n.adminOnly) && !(n.superadminOnly && !isSuperadmin)
+  )
 
   function navigate(id) {
     setActivePage(id)

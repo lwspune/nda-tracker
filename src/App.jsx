@@ -17,6 +17,7 @@ import SyllabusPage from './pages/Syllabus/SyllabusPage'
 import TimetablePage from './pages/Timetable/TimetablePage'
 import SettingsPage from './pages/Settings/SettingsPage'
 import MonthlyReportsPage from './pages/MonthlyReports'
+import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 import AttendancePage from './pages/Attendance'
@@ -97,6 +98,7 @@ export default function App() {
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
     settings:        <SettingsPage />,
+    teacherFeedback: <TeacherFeedbackPage />,
   }
 
   return (
@@ -132,6 +134,7 @@ function OnlineAdminPortal({ onLogout }) {
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
     settings:        <SettingsPage />,
+    teacherFeedback: <TeacherFeedbackPage />,
   }
 
   return (
