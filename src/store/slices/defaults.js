@@ -14,6 +14,8 @@ export const DEFAULTS = {
   apiKey: '',
   lastDeployedAt: null,
   hydrated: IS_READ_ONLY,
+  isSuperadmin: false, // session-derived (user_metadata.role==='superadmin'); never persisted
+
   syllabusPrograms: [],
   syllabusBatches: [],
   syllabusBatchBranches: {},

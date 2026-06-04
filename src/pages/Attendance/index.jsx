@@ -362,16 +362,18 @@ export default function AttendancePage() {
         >
           Class metrics
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'lecture-log'}
-          onClick={() => setActiveTab('lecture-log')}
-          className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
-            ${activeTab === 'lecture-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
-        >
-          Lecture log
-        </button>
+        {mode === 'admin' && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'lecture-log'}
+            onClick={() => setActiveTab('lecture-log')}
+            className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+              ${activeTab === 'lecture-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+          >
+            Lecture log
+          </button>
+        )}
         {mode === 'admin' && (
           <button
             type="button"
@@ -386,7 +388,7 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {activeTab === 'lecture-log' ? (
+      {activeTab === 'lecture-log' && mode === 'admin' ? (
         <LectureLogTab onSend={handleSendLectureMiss} />
       ) : activeTab === 'homework-log' && mode === 'admin' ? (
         <HomeworkLogTab onSend={handleSendHomework} />

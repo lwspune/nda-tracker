@@ -33,11 +33,12 @@ This is a private internal application. To report a security issue, contact the 
 
 ## Authentication model
 
-Three distinct auth paths, each with different trust assumptions.
+Four distinct auth paths, each with different trust assumptions.
 
 | Mode | Auth mechanism | What it proves |
 |---|---|---|
 | Admin | Supabase Auth — email + password, JWT, no `user_metadata.role` | The session holder is a designated admin. Single shared account today. |
+| Superadmin | Supabase Auth — email + password, JWT, `user_metadata.role = 'superadmin'` | Admin powers **plus** access to teacher feedback (HR-sensitive). Single account (`vilas11shinde@gmail.com`). Routes through the admin portal; the extra surface is gated by the `isSuperadmin` flag + the `teacher_feedback` RLS role check. |
 | Teacher | Supabase Auth — email + password, JWT, `user_metadata.role = 'teacher'` | The session holder is a designated teacher with read-only intent. Individual accounts. |
 | Student | `POST /api/student-login` with mobile number, returns a session token stored in `localStorage` | The caller knows a mobile number that exists in `students.mobile`. No Supabase Auth session. |
 
@@ -53,9 +54,13 @@ The student "auth" is mobile-number-only — there is no password and no OTP. An
 | `students`, `student_batches`, `student_attendance`, `students_meta` | Enabled | Authenticated users only |
 | `exams`, `exam_results` | Enabled | Authenticated users only |
 | `class_reports`, `student_plans` | Enabled | Authenticated read / insert / delete |
+| `homework_pending` | Enabled | Authenticated users only |
+| **`teacher_feedback`** | Enabled | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The **first role-restricted policy** in the project: a normal admin (no role claim) cannot read or write it. This is a real DB-level boundary, not just a UI gate. |
 | **`student_logins`** | **Disabled** | **Exposed to anon + authenticated** (see Known gaps) |
 
-Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the admin data — it can read everything authenticated users can read; the teacher mode is read-only by UI convention, not by RLS.
+Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` / the `isSuperadmin` store flag and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the admin data — it can read everything authenticated users can read; teacher mode is read-only by UI convention, not by RLS. **`teacher_feedback` is the exception**: because its policy checks the `superadmin` role claim, the `isSuperadmin` UI gate is backed by a true RLS boundary — a normal admin who navigates to the page (or queries the table directly) gets nothing.
+
+**Superadmin account provenance:** `vilas11shinde@gmail.com` was created directly in `auth.users` + `auth.identities` via SQL (the local env had no service-role key for the Admin API), mirroring an existing working row, with `raw_user_meta_data = {"role":"superadmin"}` and a bcrypt password. Password resets / future superadmins should go through the Supabase dashboard or the Admin API, not more hand-rolled SQL.
 
 ---
 

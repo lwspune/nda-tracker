@@ -337,3 +337,17 @@ function cell(row, idx) {
   if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '') return null
   return String(row[idx]).trim()
 }
+
+// ============================================================
+// PARSE TEACHER FEEDBACK (Google Form responses export — XLSX or CSV)
+// Returns the raw matrix (array of arrays): matrix[0] = header, matrix[1..] = data.
+// The wide per-teacher block structure is interpreted by src/lib/teacherFeedback.js
+// (reshapeFeedbackMatrix), since the teacher identity lives in the form's section
+// titles and must be mapped at import time.
+// ============================================================
+export async function parseFeedbackExcel(file) {
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  return XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' })
+}

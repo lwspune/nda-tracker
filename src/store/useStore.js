@@ -13,6 +13,7 @@ import { createTimetableSlice } from './slices/timetableSlice'
 import { createAttendanceSlice } from './slices/attendanceSlice'
 import { createLectureAbsenceSlice } from './slices/lectureAbsenceSlice'
 import { createHomeworkSlice }       from './slices/homeworkSlice'
+import { createTeacherFeedbackSlice } from './slices/teacherFeedbackSlice'
 import { createExamAbsenceSlice }    from './slices/examAbsenceSlice'
 import { createConfigSlice } from './slices/configSlice'
 import { createMonthlyReportSlice } from './slices/monthlyReportSlice'
@@ -41,7 +42,10 @@ const useStore = create((set, get) => ({
       if (supabase) {
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          set({ hydrated: false })
+          set({
+            hydrated: false,
+            isSuperadmin: session.user?.user_metadata?.role === 'superadmin',
+          })
           const saved = await loadFromDisk()
           if (saved) {
             // exams are now in normalised tables — exclude stale JSONB copy
@@ -84,6 +88,10 @@ const useStore = create((set, get) => ({
       return
     }
 
+    // Dev (localhost) admin has full local access — including the superadmin-only
+    // Teacher Feedback surface (data still comes from Supabase under RLS, so it's
+    // empty in dev unless a superadmin session exists).
+    set({ isSuperadmin: true })
     let saved = await loadFromDisk()
 
     // First-run migration: carry over localStorage data to disk and clear it
@@ -261,6 +269,7 @@ const useStore = create((set, get) => ({
   ...createAttendanceSlice(set, get),
   ...createLectureAbsenceSlice(set, get),
   ...createHomeworkSlice(set, get),
+  ...createTeacherFeedbackSlice(set, get),
   ...createExamAbsenceSlice(set, get),
   ...createConfigSlice(set, get),
   ...createMonthlyReportSlice(set, get),
