@@ -54,15 +54,53 @@ The Monthly Reports page (shipped 2026-05-24) downloads PDFs to the admin's mach
 
 ---
 
-### Decide Jaccard threshold for `findExamNameCandidates` (or document the status quo)
+### ~~Decide Jaccard threshold for `findExamNameCandidates`~~ — **DONE 2026-05-25**
 
-The dedup scan's `DEDUP_NAME_THRESHOLD = 0.75` misses single-letter swaps where the differing letters appear twice in the bigram window (`V`/`W` in "Neel Vardhamane" vs "Neel Wardhamane" scores 0.73). Four manual variant-link SQLs in the 2026-05-24 session (Neel, Sharwari, Rajivkumar, Sumit) are a leading indicator.
+Picked Shape A (token-level signals, threshold unchanged). Shipped in two commits: `17d9079` (`name_token_edit` + `name_token_prefix`) and `03f3698` (`name_initial_match` for the middle-initial collapse). Decision rationale captured in `memory/project_dedup_threshold_decision.md`.
 
-**Why:** without a decision, future V/W or l/i swaps will keep falling through the scan and require manual SQL; that pattern isn't going to change shape on its own. A short doc capturing the trade-off prevents the analysis from being re-derived from scratch next time someone asks.
+---
+
+### Pick AI-insights cadence trigger (carry-forward, still pending)
+
+Same shape as the 2026-05-21 entry above — manual / post-test / calendar. Carried into 2026-05-25 because the teacher auth account loop just shipped, which closes the last piece of admin scaffolding the post-test auto-flow would need (admin-gated endpoint pattern + service-role client setup are now both proven in `api/teacher-account.js`).
+
+**Why now:** the supporting infrastructure (insights tables in production since 2026-05-20, Saurabh's plan written by hand, admin-gated endpoint pattern proven, Claude API SDK available) is all in place. The blocker is purely the trigger decision — once locked, the build is small (post-test = one server hook + Claude API call; manual = nothing to build).
+
+**How to apply:**
+- One question, three options — do not lead with stratification, schema, or two-row-types. Memory `project_ai_insights_cadence.md` documents why the earlier conversation overwhelmed (and the "manual / post-test / calendar" framing that worked).
+- Lock the choice in `project_ai_insights_cadence.md` with a DECIDED date before opening any secondary design.
+- If Manual: close the question — nothing to build.
+
+---
+
+### Reshape or drop demo mode given Monthly Reports exists
+
+`memory/project_demo_mode.md` (April 2026) proposed a `?demo=true` URL serving a sanitised single-student `StudentView` to prospective parents. NOT YET IMPLEMENTED. Monthly Reports (shipped 2026-05-24) is now the primary parent-facing surface — covers most of the "show parents what they get" intent the demo plan was designed for, but is a PDF rather than a portal.
+
+**Why now:** the original demo plan's premises are partly stale. Choices needed:
+- Is the prospective-parent showcase still wanted at all?
+- If yes, is a sanitised live portal the right shape, or would a sample Monthly Report PDF be a better fit (matches what real parents receive, fewer moving parts, no portal session wiring)?
+- The two could coexist (portal demo for analytical depth, report demo for the take-home artifact), but only if there's a real audience for both.
 
 **How to apply:**
 - Pick one of:
-  1. **Status quo + document** — keep 0.75, write `memory/project_dedup_threshold_decision.md` explaining the trade-off (Patel/Patil + Rohit/Mohit false positives if lowered) and that occasional manual SQL is acceptable.
-  2. **Lower to 0.70** — simplest fix; catches all four 2026-05-24 cases. Expect ~1-3 more "Skip" clicks per scan from common-Indian-surname pairs.
-  3. **Shape A — add a token-level edit-distance signal** — narrowest fix: if N-1 tokens match exactly and the remaining token has Levenshtein ≤ 2 (or for the 1-token case, exact match against any longer token), flag as candidate. Doesn't lower Jaccard. ~30 LOC + tests. Surfaced earlier session; not yet shipped.
-- Either way, capture the decision in `memory/project_dedup_threshold_decision.md` (or a one-line note in CLAUDE.md if you pick #1).
+  1. **Build as designed** — sanitised `?demo=true` StudentView per `project_demo_mode.md`. ~1 dev session. Original use case unchanged.
+  2. **Switch to a sample Monthly Report PDF** — a single hosted PDF (or a "Generate sample" button on a public page) using anonymised cohort data. Same showcase intent, no portal session / no fetch wiring. Smaller surface to maintain.
+  3. **Drop demo mode entirely** — delete `project_demo_mode.md`. Use the real product (sample login or screenshots) when showcasing. Removes a permanent surface.
+- Whichever path: update or delete `memory/project_demo_mode.md` to match the decision.
+
+---
+
+## 2026-06-05
+
+### Branch filter on the Teacher Feedback page
+
+The Feedback page (`src/pages/TeacherFeedback/index.jsx`) now has cycle + teacher filters, but no **branch** filter. `teacher_feedback.branch` holds `LWS Pune` / `APJ`, and `teacher_name` is shared across branches where a teacher works both (today: **Akash Rathod Sir** appears in LWS cycles *and* `03 APJ`). So the default "All cycles" card blends his LWS + APJ feedback into one overall score, and his trend line interleaves both branches' cycles.
+
+**Why:** as more teachers span both branches (or APJ accumulates its own cycle history), the blended view gets misleading — you can't read "how is this teacher doing *at APJ*" without manually picking teacher + a specific APJ cycle. A branch filter keeps "All cycles" meaningful per branch. Low urgency today (only one shared-name teacher), rising as APJ data grows.
+
+**How to apply:**
+- Add a `branch` filter (pills or dropdown, sourced from `[...new Set(rows.map(r => r.branch))]`) alongside the existing cycle + teacher filters in `TeacherFeedbackPage`.
+- Thread it into the `filtered` memo (`(branch === 'all' || r.branch === branchSel)`), same pattern as the cycle/teacher predicates.
+- Decide trend scope: either keep the trend over ALL rows (current) or scope it to the selected branch — scoping is more honest once branches diverge. The cycle labels (`03 APJ` vs `03 LWS Pune`) already disambiguate, so a branch-scoped trend mainly removes cross-branch interleave.
+- No schema change — `branch` is already on every row.
