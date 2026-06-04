@@ -42,10 +42,11 @@ const useStore = create((set, get) => ({
       if (supabase) {
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          set({
-            hydrated: false,
-            isSuperadmin: session.user?.user_metadata?.role === 'superadmin',
-          })
+          // Derived once and re-applied in EVERY set below — the data-load set()
+          // spreads ...DEFAULTS (isSuperadmin:false), which would otherwise clobber
+          // the flag once loadFromDisk resolves (it's intentionally not persisted).
+          const isSuperadmin = session.user?.user_metadata?.role === 'superadmin'
+          set({ hydrated: false, isSuperadmin })
           const saved = await loadFromDisk()
           if (saved) {
             // exams are now in normalised tables — exclude stale JSONB copy
@@ -69,6 +70,7 @@ const useStore = create((set, get) => ({
               timetables:              saved.timetables || [],
               examSchedules:           saved.examSchedules || [],
               branches:                seedBranches(saved),
+              isSuperadmin,
               hydrated: true,
             })
             // Load fresh data from normalised Supabase tables.
@@ -128,6 +130,7 @@ const useStore = create((set, get) => ({
         timetables:              saved.timetables || [],
         examSchedules:           saved.examSchedules || [],
         branches:                seedBranches(saved),
+        isSuperadmin:            true,
         hydrated: true,
       })
     } else {
