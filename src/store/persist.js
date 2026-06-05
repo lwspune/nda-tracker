@@ -105,12 +105,35 @@ export async function loadExamsFromSupabase() {
   }))
 }
 
+// Loads all quiz rows from the normalised `quizzes` table → camelCase, matching
+// the in-store shape (mirrors loadExamsFromSupabase). Attempts are NOT loaded here
+// (per-quiz fetch in the response dashboard, Phase 3).
+export async function loadQuizzesFromSupabase() {
+  if (!supabase) return null
+  const { data, error } = await fetchAllRows('quizzes')
+  if (error) return null
+  return data.map(row => ({
+    id:        row.id,
+    title:     row.title,
+    subject:   row.subject,
+    batch:     row.batch,
+    branch:    row.branch,
+    marking:   row.marking   ?? { correct: 1, wrong: 0 },
+    questions: row.questions ?? [],
+    opensAt:   row.opens_at,
+    closesAt:  row.closes_at,
+    status:    row.status,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }))
+}
+
 export function saveToSupabase(data) {
   if (!supabase) return
   supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (!session) return
-    // exams + savedInsights live in normalised tables — exclude from the JSONB blob
-    const { exams: _exams, savedInsights: _insights, ...rest } = data
+    // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
+    const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
     const { error } = await supabase.from('faculty_state')
       .update({ data: rest, updated_at: new Date().toISOString() })
       .eq('id', 1)
@@ -148,14 +171,14 @@ export async function loadFromDisk() {
 // apiKey is intentionally excluded — kept in memory only.
 export function saveToStorage(state) {
   const {
-    exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
     whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
   } = state
   const data = {
-    exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,

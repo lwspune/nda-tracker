@@ -8,6 +8,7 @@ import Sidebar from './components/layout/Sidebar'
 import ApiBar from './components/layout/ApiBar'
 import UploadModal from './components/upload/UploadModal'
 import ExamsPage from './pages/Exams'
+import QuizzesPage from './pages/Quizzes'
 import DashboardPage from './pages/Dashboard'
 import StudentsPage from './pages/Students'
 import ToppersPage from './pages/Toppers'
@@ -20,6 +21,7 @@ import MonthlyReportsPage from './pages/MonthlyReports'
 import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
+import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
 import AttendancePage from './pages/Attendance'
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -95,6 +97,7 @@ export default function App() {
   const pages = {
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
@@ -131,6 +134,7 @@ function OnlineAdminPortal({ onLogout }) {
   const pages = {
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
@@ -164,16 +168,18 @@ function OnlineAdminPortal({ onLogout }) {
 // Syllabus/timetable/settings come from faculty_state JSONB;
 // exams come from normalised tables via loadExamsFromSupabase.
 function TeacherPortal({ onLogout }) {
-  const loadRemoteData        = useStore(s => s.loadRemoteData)
-  const loadExamsFromSupabase = useStore(s => s.loadExamsFromSupabase)
-  const activePage            = useStore(s => s.activePage)
-  const [loaded, setLoaded]   = useState(false)
+  const loadRemoteData          = useStore(s => s.loadRemoteData)
+  const loadExamsFromSupabase   = useStore(s => s.loadExamsFromSupabase)
+  const loadQuizzesFromSupabase = useStore(s => s.loadQuizzesFromSupabase)
+  const activePage              = useStore(s => s.activePage)
+  const [loaded, setLoaded]     = useState(false)
 
   useEffect(() => {
     async function loadAll() {
       const data = await loadFromSupabase()
       if (data) loadRemoteData(data)
       await loadExamsFromSupabase()
+      await loadQuizzesFromSupabase()
       setLoaded(true)
     }
     loadAll()
@@ -182,6 +188,7 @@ function TeacherPortal({ onLogout }) {
   const pages = {
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
@@ -244,6 +251,7 @@ function StudentPortal({ data, onLogout }) {
         </div>
 
         <div className="pt-[72px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
+          <StudentQuizzes mobile={data.profile?.mobile} />
           <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} />
         </div>
       </div>

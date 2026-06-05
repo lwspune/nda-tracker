@@ -38,6 +38,7 @@ describe('initStore — isSuperadmin survives the DEFAULTS-spread data load (pro
       isSuperadmin: false,
       loadStudentsFromSupabase: vi.fn(),
       loadExamsFromSupabase:    vi.fn(),
+      loadQuizzesFromSupabase:  vi.fn(),
       loadInsightsFromSupabase: vi.fn(),
     })
   })

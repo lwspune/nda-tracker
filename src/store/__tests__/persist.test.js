@@ -74,11 +74,12 @@ describe('saveToSupabase', () => {
       data: { session: { user: { id: 'faculty-id' } } },
     })
 
-    saveToSupabase({ exams: [{ id: 'exam1' }], studentProfiles: { Alice: {} } })
+    saveToSupabase({ exams: [{ id: 'exam1' }], quizzes: [{ id: 'q1' }], studentProfiles: { Alice: {} } })
     await new Promise(r => setTimeout(r, 0))
 
     const savedData = mockUpdate.mock.calls[0][0].data
     expect(savedData).not.toHaveProperty('exams')
+    expect(savedData).not.toHaveProperty('quizzes')
     expect(savedData).toHaveProperty('studentProfiles')
   })
 
@@ -112,7 +113,7 @@ describe('saveToStorage allow-list (dev path)', () => {
 
   it('persists send-history keys and branches (regression: silently stripped before 2026-06-01)', () => {
     const state = {
-      exams: [], studentProfiles: {},
+      exams: [], quizzes: [{ id: 'q1', title: 'Daily 1' }], studentProfiles: {},
       whatsappSendHistory: { exam1: { sentAt: 'x' } },
       examAbsenceSendHistory: { exam1: { sentAt: 'y' } },
       lateSendHistory: { '2026-06-01': { sentAt: 'z', sent: 5, skipped: 0, failedNames: [] } },
@@ -121,6 +122,7 @@ describe('saveToStorage allow-list (dev path)', () => {
       branches: ['APJ', 'LWS Pune'],
     }
     const saved = captureSavedPayload(state)
+    expect(saved.quizzes).toEqual(state.quizzes) // dev disk persists quizzes; prod strips them (own table)
     expect(saved.lateSendHistory).toEqual(state.lateSendHistory)
     expect(saved.lectureMissSendHistory).toEqual(state.lectureMissSendHistory)
     expect(saved.homeworkSendHistory).toEqual(state.homeworkSendHistory)

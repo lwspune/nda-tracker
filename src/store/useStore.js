@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase } from './persist'
+import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
 import { IS_READ_ONLY } from '../config'
 import { migrateFreq, exportDB, importDB } from '../lib/persistence'
 import { DEFAULTS, hydrate, seedBranches } from './slices/defaults'
 import { createExamsSlice } from './slices/examsSlice'
+import { createQuizSlice } from './slices/quizSlice'
 import { createStudentSlice } from './slices/studentSlice'
 import { createInsightsSlice } from './slices/insightsSlice'
 import { createNdaSlice } from './slices/ndaSlice'
@@ -49,8 +50,8 @@ const useStore = create((set, get) => ({
           set({ hydrated: false, isSuperadmin })
           const saved = await loadFromDisk()
           if (saved) {
-            // exams are now in normalised tables — exclude stale JSONB copy
-            const { apiKey: _dropped, exams: _staleExams, ...safeFields } = saved
+            // exams + quizzes are now in normalised tables — exclude stale JSONB copies
+            const { apiKey: _dropped, exams: _staleExams, quizzes: _staleQuizzes, ...safeFields } = saved
             set({
               ...DEFAULTS,
               ...safeFields,
@@ -76,11 +77,13 @@ const useStore = create((set, get) => ({
             // Load fresh data from normalised Supabase tables.
             get().loadStudentsFromSupabase()
             get().loadExamsFromSupabase()
+            get().loadQuizzesFromSupabase()
             get().loadInsightsFromSupabase()
           } else {
             set({ hydrated: true })
             get().loadStudentsFromSupabase()
             get().loadExamsFromSupabase()
+            get().loadQuizzesFromSupabase()
             get().loadInsightsFromSupabase()
           }
           return
@@ -176,6 +179,12 @@ const useStore = create((set, get) => ({
     if (exams !== null) set({ exams })
   },
 
+  // ── Load quizzes from normalised Supabase table ──────────
+  async loadQuizzesFromSupabase() {
+    const quizzes = await fetchQuizzesFromSupabase()
+    if (quizzes !== null) set({ quizzes })
+  },
+
   // ── Load insights from normalised Supabase tables ─────────
   async loadInsightsFromSupabase() {
     const insights = await fetchInsightsFromSupabase()
@@ -264,6 +273,7 @@ const useStore = create((set, get) => ({
 
   // ── Domain slices ─────────────────────────────────────────
   ...createExamsSlice(set, get),
+  ...createQuizSlice(set, get),
   ...createStudentSlice(set, get),
   ...createInsightsSlice(set, get),
   ...createNdaSlice(set, get),

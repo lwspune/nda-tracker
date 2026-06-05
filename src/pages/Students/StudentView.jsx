@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import AttendanceRings from '../Attendance/AttendanceRings'
 import RecentIncidents from './RecentIncidents'
 import MissedExams from './MissedExams'
+import StudentQuizHistory from './StudentQuizHistory'
 import {
   getStudentExams, filterValidExams,
   computeStudentChapterStats,
@@ -287,6 +288,9 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         examAbsencesProp={examAbsencesProp}
         homeworkPendingProp={homeworkPendingProp}
       />
+
+      {/* Daily-quiz history — admin/teacher only (student portal has the live quiz section) */}
+      {mode !== 'student' && <StudentQuizHistory lwsId={profile?.lwsId} />}
 
 
       {/* Pre-registration exclusion notice — faculty/teacher only */}
