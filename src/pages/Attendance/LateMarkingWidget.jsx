@@ -48,6 +48,12 @@ export default function LateMarkingWidget({ date, onSend }) {
 
   const lateSet = useMemo(() => new Set(lateIds), [lateIds])
 
+  // Who has already been notified today (persisted from prior sends). "Pending" =
+  // marked-late chips that haven't been successfully notified yet — covers both
+  // never-sent (added after a send) and previously-failed students.
+  const notifiedSet = useMemo(() => new Set(history?.notifiedLwsIds || []), [history])
+  const pendingIds = useMemo(() => lateIds.filter(id => !notifiedSet.has(id)), [lateIds, notifiedSet])
+
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
@@ -77,44 +83,46 @@ export default function LateMarkingWidget({ date, onSend }) {
           Today's late arrivals
         </h3>
         {(() => {
-          const hasFailures = (history?.failedNames?.length ?? 0) > 0
-          if (history && hasFailures) {
+          // No send yet today → first-send button.
+          if (!history) {
             return (
               <button
                 type="button"
                 onClick={() => onSend?.(lateIds)}
                 disabled={lateIds.length === 0 || loading}
                 className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label={`Sent ${history.sent} · Failed ${history.skipped} · Resend`}
+                aria-label="Send Morning Late Notifications"
               >
-                Sent ✓{history.sent} · Failed ✗{history.skipped} · Resend
-              </button>
-            )
-          }
-          if (history) {
-            return (
-              <button
-                type="button"
-                onClick={() => onSend?.(lateIds)}
-                disabled={lateIds.length === 0 || loading}
-                className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Sent today · Resend all"
-              >
-                ✓ Sent today · Resend all
+                Send Morning Late Notifications
                 {lateIds.length > 0 && <span className="ml-2 opacity-80">({lateIds.length})</span>}
               </button>
             )
           }
+          // A send happened, but some marked-late students aren't notified yet
+          // (added afterwards, or a leg failed) → primary "Notify N pending".
+          if (pendingIds.length > 0) {
+            return (
+              <button
+                type="button"
+                onClick={() => onSend?.(lateIds)}
+                disabled={loading}
+                className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label={`Notify ${pendingIds.length} pending`}
+              >
+                Notify {pendingIds.length} pending
+              </button>
+            )
+          }
+          // Everyone currently marked late has been notified.
           return (
             <button
               type="button"
               onClick={() => onSend?.(lateIds)}
               disabled={lateIds.length === 0 || loading}
-              className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Send Morning Late Notifications"
+              className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="All notified · Resend all"
             >
-              Send Morning Late Notifications
-              {lateIds.length > 0 && <span className="ml-2 opacity-80">({lateIds.length})</span>}
+              ✓ All {lateIds.length} notified · Resend all
             </button>
           )
         })()}
@@ -158,11 +166,14 @@ export default function LateMarkingWidget({ date, onSend }) {
           {lateIds.map(id => {
             const p = lwsIdToProfile[id]
             const name = p?.name ?? id
+            const notified = notifiedSet.has(id)
             return (
               <span
                 key={id}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-400/10 border border-yellow-400/30 text-yellow-300"
+                title={notified ? 'Notified' : 'Not notified yet'}
               >
+                {notified && <span className="text-[12px] text-green-600" aria-label="notified">✓</span>}
                 <span className="text-[13px] font-semibold text-ink">{name}</span>
                 <button
                   type="button"

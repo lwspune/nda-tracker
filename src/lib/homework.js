@@ -18,3 +18,10 @@ export function formatHomeworkItem(item) {
 export function homeworkItemKey(subject, chapter, type) {
   return `${subject}|||${chapter}|||${type}`
 }
+
+// Per-(student, item) key used to track which homework notifications have already
+// been sent — homework is item-level (one message per student per item), so the
+// "pending" set is computed at this granularity, not per student.
+export function homeworkNotifyKey(lwsId, subject, chapter, type) {
+  return `${lwsId}|||${subject}|||${chapter}|||${type}`
+}

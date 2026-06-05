@@ -3,6 +3,7 @@ import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import { parseAttendanceExcel } from '../../lib/excel'
+import { homeworkNotifyKey } from '../../lib/homework'
 import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
 import { buildConsecutiveAbsent } from './consecutiveAbsent'
 import LateMarkingWidget from './LateMarkingWidget'
@@ -117,7 +118,7 @@ export default function AttendancePage() {
     setLateModal({
       date: today,
       lwsIds,
-      failedNames: prior?.failedNames ?? null,
+      notifiedLwsIds: prior ? (prior.notifiedLwsIds ?? []) : null,
     })
   }
 
@@ -129,7 +130,7 @@ export default function AttendancePage() {
       date,
       batchName,
       absencesByLwsId,
-      failedNames: prior?.failedNames ?? null,
+      notifiedLwsIds: prior ? (prior.notifiedLwsIds ?? []) : null,
     })
   }
 
@@ -141,7 +142,7 @@ export default function AttendancePage() {
       date,
       batchName,
       itemsByLwsId,
-      failedNames: prior?.failedNames ?? null,
+      notifiedItemKeys: prior ? (prior.notifiedItemKeys ?? []) : null,
     })
   }
 
@@ -180,40 +181,68 @@ export default function AttendancePage() {
       // surface "Resend N failed" on subsequent opens.
       if (kind === 'late' && lateModal?.date && r.ok) {
         const failedNames = parseFailedNames(data.lines)
+        const failedSet = new Set(failedNames)
+        // Students reached on this send (no failed leg), merged with prior sends so
+        // the widget can show who's still pending.
+        const newlyNotified = (payload.students || [])
+          .filter(s => !failedSet.has(s.name))
+          .map(s => s.lwsId)
+        const prior = lateSendHistory?.[lateModal.date]
+        const notifiedLwsIds = [...new Set([...(prior?.notifiedLwsIds || []), ...newlyNotified])]
         setLateSendHistory(lateModal.date, {
           sentAt: Date.now(),
           sent: data.sent ?? 0,
           skipped: data.skipped ?? 0,
           failedNames,
+          notifiedLwsIds,
         })
       }
       // Same for lecture-miss, keyed by compound (date|batchName) so two
       // batches sent on the same day stay independent.
       if (kind === 'lecture-miss' && lectureModal?.date && lectureModal?.batchName && r.ok) {
         const failedNames = parseFailedNames(data.lines)
-        setLectureMissSendHistory(`${lectureModal.date}|${lectureModal.batchName}`, {
+        const failedSet = new Set(failedNames)
+        const newlyNotified = (payload.students || [])
+          .filter(s => !failedSet.has(s.name))
+          .map(s => s.lwsId)
+        const key = `${lectureModal.date}|${lectureModal.batchName}`
+        const prior = lectureMissSendHistory?.[key]
+        const notifiedLwsIds = [...new Set([...(prior?.notifiedLwsIds || []), ...newlyNotified])]
+        setLectureMissSendHistory(key, {
           sentAt: Date.now(),
           sent: data.sent ?? 0,
           skipped: data.skipped ?? 0,
           failedNames,
+          notifiedLwsIds,
         })
       }
       // Homework: persist send summary + stamp notified_at on the rows whose
       // student (and not a failed leg) was actually reached.
       if (kind === 'homework' && homeworkModal?.date && homeworkModal?.batchName && r.ok) {
         const failedNames = parseFailedNames(data.lines)
-        setHomeworkSendHistory(`${homeworkModal.date}|${homeworkModal.batchName}`, {
+        const failedSet = new Set(failedNames)
+        // Per-(student, item) keys reached on this send (no failed leg), merged with
+        // prior sends so the tab can show item-level pending.
+        const newlyNotifiedKeys = []
+        const notifiedLwsIds = new Set()
+        for (const s of (payload.students || [])) {
+          if (failedSet.has(s.name)) continue
+          notifiedLwsIds.add(s.lwsId)
+          for (const it of (s.items || [])) {
+            newlyNotifiedKeys.push(homeworkNotifyKey(s.lwsId, it.subject, it.chapter, it.type))
+          }
+        }
+        const key = `${homeworkModal.date}|${homeworkModal.batchName}`
+        const prior = homeworkSendHistory?.[key]
+        const notifiedItemKeys = [...new Set([...(prior?.notifiedItemKeys || []), ...newlyNotifiedKeys])]
+        setHomeworkSendHistory(key, {
           sentAt: Date.now(),
           sent: data.sent ?? 0,
           skipped: data.skipped ?? 0,
           failedNames,
+          notifiedItemKeys,
         })
-        const failedSet = new Set(failedNames)
-        const notifiedLwsIds = new Set(
-          (payload.students || [])
-            .filter(s => !failedSet.has(s.name))
-            .map(s => s.lwsId)
-        )
+        // Also stamp the server-side notified_at audit on the reached rows.
         if (notifiedLwsIds.size) {
           const rows = await getHomeworkForDate(homeworkModal.date)
           const ids = rows
@@ -567,7 +596,7 @@ export default function AttendancePage() {
         <LateNotificationPreviewModal
           date={lateModal.date}
           lateLwsIds={lateModal.lwsIds}
-          failedNames={lateModal.failedNames}
+          notifiedLwsIds={lateModal.notifiedLwsIds}
           sending={sending}
           onClose={() => !sending && setLateModal(null)}
           onConfirm={(students, redirectTo) =>
@@ -583,7 +612,7 @@ export default function AttendancePage() {
         <LectureMissPreviewModal
           date={lectureModal.date}
           absencesByLwsId={lectureModal.absencesByLwsId}
-          failedNames={lectureModal.failedNames}
+          notifiedLwsIds={lectureModal.notifiedLwsIds}
           sending={sending}
           onClose={() => !sending && setLectureModal(null)}
           onConfirm={(students, redirectTo) =>
@@ -599,7 +628,7 @@ export default function AttendancePage() {
         <HomeworkPreviewModal
           date={homeworkModal.date}
           itemsByLwsId={homeworkModal.itemsByLwsId}
-          failedNames={homeworkModal.failedNames}
+          notifiedItemKeys={homeworkModal.notifiedItemKeys}
           sending={sending}
           onClose={() => !sending && setHomeworkModal(null)}
           onConfirm={(students, redirectTo) =>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
-import { formatHomeworkItem } from '../../lib/homework'
+import { formatHomeworkItem, homeworkNotifyKey } from '../../lib/homework'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -27,13 +27,14 @@ function buildRows(itemsByLwsId, studentProfiles) {
   })
 }
 
-// Pre-send review for homework/notes pending alerts. Mirrors LectureMissPreviewModal:
-// editable mobile + parent_mobiles per row, redirect-to test field, failed-only
-// resend scope toggle, and bulkUpdateStudentContacts persistence before send.
+// Pre-send review for homework/notes pending alerts. Mirrors LectureMissPreviewModal,
+// but pending is computed at ITEM granularity (one message per student per item):
+// notifiedItemKeys holds the (student, item) pairs already sent, so a new item added
+// to an already-notified student still shows as pending.
 export default function HomeworkPreviewModal({
   date,
   itemsByLwsId,
-  failedNames = null,
+  notifiedItemKeys = null,
   onConfirm,
   onClose,
   sending = false,
@@ -41,15 +42,20 @@ export default function HomeworkPreviewModal({
   const studentProfiles = useStore(s => s.studentProfiles)
   const bulkUpdateStudentContacts = useStore(s => s.bulkUpdateStudentContacts)
 
-  const isResend = failedNames !== null && failedNames !== undefined
-  const failedSet = useMemo(() => new Set(failedNames || []), [failedNames])
+  const isResend = notifiedItemKeys !== null && notifiedItemKeys !== undefined
+  const notifiedSet = useMemo(() => new Set(notifiedItemKeys || []), [notifiedItemKeys])
 
   const [rows, setRows] = useState(() => buildRows(itemsByLwsId, studentProfiles))
   const [redirectTo, setRedirectTo] = useState('')
+  // On a resend, default to pending (un-notified) items only.
   const [scopeAll, setScopeAll] = useState(!isResend)
 
-  const failedRows = useMemo(() => rows.filter(r => failedSet.has(r.name)), [rows, failedSet])
-  const visibleRows = scopeAll ? rows : failedRows
+  // The un-notified items for a student row (row identity is preserved so the
+  // mobile/parent edit inputs keep working under either scope).
+  const pendingItemsFor = (r) => (r.items || []).filter(it => !notifiedSet.has(homeworkNotifyKey(r.lwsId, it.subject, it.chapter, it.type)))
+  const itemsToSend = (r) => scopeAll ? (r.items || []) : pendingItemsFor(r)
+  const pendingRows = useMemo(() => rows.filter(r => pendingItemsFor(r).length > 0), [rows, notifiedSet]) // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleRows = scopeAll ? rows : pendingRows
   const empty = visibleRows.length === 0
 
   function updateRow(idx, field, value) {
@@ -63,7 +69,7 @@ export default function HomeworkPreviewModal({
       mobile: r.mobile.replace(/\D/g, '').slice(-10),
       parentMobiles: r.parentMobiles
         .split(',').map(p => p.trim().replace(/\D/g, '').slice(-10)).filter(Boolean),
-      items: r.items,
+      items: itemsToSend(r),
     }))
     if (cleaned.length > 0 && typeof bulkUpdateStudentContacts === 'function') {
       bulkUpdateStudentContacts(cleaned)
@@ -94,17 +100,17 @@ export default function HomeworkPreviewModal({
 
         {isResend && (
           <div className="px-5 py-3 bg-amber-50 border-b border-border flex-shrink-0 flex items-center gap-4 flex-wrap">
-            <span className="text-[12px] text-amber-800 font-medium">Resend to:</span>
+            <span className="text-[12px] text-amber-800 font-medium">Send to:</span>
             <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
               <input
                 type="radio"
                 checked={!scopeAll}
                 onChange={() => setScopeAll(false)}
                 disabled={sending}
-                aria-label={`Failed & skipped only (${failedRows.length})`}
+                aria-label={`Pending only (${pendingRows.length})`}
                 className="accent-amber-600"
               />
-              <span className="text-amber-900 font-medium">Failed &amp; skipped only ({failedRows.length})</span>
+              <span className="text-amber-900 font-medium">Pending only ({pendingRows.length})</span>
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
               <input
@@ -132,7 +138,7 @@ export default function HomeworkPreviewModal({
                     <div className="flex items-baseline justify-between gap-2 mb-2">
                       <div className="font-semibold text-[13px] text-ink">{r.name}</div>
                       <div className="text-[12px] text-red-400 font-mono text-right">
-                        {r.items.map(formatHomeworkItem).join(', ')}
+                        {itemsToSend(r).map(formatHomeworkItem).join(', ')}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">

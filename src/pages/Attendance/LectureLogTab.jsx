@@ -158,45 +158,49 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
         <div className="ml-auto">
           {(() => {
             const history = batchName ? lectureMissSendHistory?.[`${date}|${batchName}`] : null
-            const hasFailures = (history?.failedNames?.length ?? 0) > 0
             const disabled = totalAbsences === 0
-            if (history && hasFailures) {
+            const notifiedSet = new Set(history?.notifiedLwsIds || [])
+            const absentIds = Object.keys(absencesByLwsId)
+            const pendingCount = absentIds.filter(id => !notifiedSet.has(id)).length
+            // No send yet → first-send button.
+            if (!history) {
               return (
                 <button
                   type="button"
                   onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                   disabled={disabled}
                   className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label={`Sent ${history.sent} · Failed ${history.skipped} · Resend`}
+                  aria-label="Send Lecture-Miss Notifications"
                 >
-                  Sent ✓{history.sent} · Failed ✗{history.skipped} · Resend
+                  Send Lecture-Miss Notifications
+                  {totalAbsences > 0 && <span className="ml-2 opacity-80">({absentIds.length})</span>}
                 </button>
               )
             }
-            if (history) {
+            // Some absentees not yet notified (added after send, or failed leg).
+            if (pendingCount > 0) {
               return (
                 <button
                   type="button"
                   onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                   disabled={disabled}
-                  className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Sent today · Resend all"
+                  className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={`Notify ${pendingCount} pending`}
                 >
-                  ✓ Sent today · Resend all
-                  {totalAbsences > 0 && <span className="ml-2 opacity-80">({Object.keys(absencesByLwsId).length})</span>}
+                  Notify {pendingCount} pending
                 </button>
               )
             }
+            // Everyone with a logged absence has been notified.
             return (
               <button
                 type="button"
                 onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                 disabled={disabled}
-                className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Send Lecture-Miss Notifications"
+                className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="All notified · Resend all"
               >
-                Send Lecture-Miss Notifications
-                {totalAbsences > 0 && <span className="ml-2 opacity-80">({Object.keys(absencesByLwsId).length})</span>}
+                ✓ All {absentIds.length} notified · Resend all
               </button>
             )
           })()}

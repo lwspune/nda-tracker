@@ -131,34 +131,42 @@ describe('LateMarkingWidget — send button', () => {
   })
 })
 
-describe('LateMarkingWidget — resend states', () => {
-  it('shows the original button label when no history exists for this date', async () => {
+describe('LateMarkingWidget — pending-aware send states', () => {
+  it('shows the first-send button when no history exists for this date', async () => {
     mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
     render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
     await screen.findByText('Arjun Sharma')
     expect(screen.getByRole('button', { name: /send morning late notifications/i })).toBeInTheDocument()
   })
 
-  it('shows "Sent ... Failed ... Resend" when history has failures and a failed name is still marked', async () => {
+  it('shows "Notify N pending" when a marked student is not yet notified (failed leg)', async () => {
     mockStore.lateSendHistory = {
-      '2026-05-21': { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'] },
+      '2026-05-21': { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'], notifiedLwsIds: [] },
     }
     mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
     render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
     await screen.findByText('Arjun Sharma')
-    const btn = screen.getByRole('button', { name: /resend/i })
-    expect(btn).toBeInTheDocument()
-    expect(btn.textContent).toMatch(/Sent.*1.*Failed.*1/i)
+    expect(screen.getByRole('button', { name: /notify 1 pending/i })).toBeInTheDocument()
   })
 
-  it('shows "Sent today · Resend all" when history has no failures', async () => {
+  it('counts a student added AFTER the send as pending (the gap this fixes)', async () => {
     mockStore.lateSendHistory = {
-      '2026-05-21': { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [] },
+      '2026-05-21': { sentAt: Date.now(), sent: 1, skipped: 0, failedNames: [], notifiedLwsIds: ['LWS-001'] },
+    }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001', 'LWS-002'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Ravi Kumar')
+    // LWS-001 notified, LWS-002 added after → 1 pending
+    expect(screen.getByRole('button', { name: /notify 1 pending/i })).toBeInTheDocument()
+  })
+
+  it('shows "All notified · Resend all" once everyone marked has been notified', async () => {
+    mockStore.lateSendHistory = {
+      '2026-05-21': { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [], notifiedLwsIds: ['LWS-001'] },
     }
     mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
     render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
     await screen.findByText('Arjun Sharma')
-    const btn = screen.getByRole('button', { name: /resend all/i })
-    expect(btn).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all notified · resend all/i })).toBeInTheDocument()
   })
 })

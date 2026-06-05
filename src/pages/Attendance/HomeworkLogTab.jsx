@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
-import { formatHomeworkItem, homeworkTypeLabel, homeworkItemKey } from '../../lib/homework'
+import { formatHomeworkItem, homeworkTypeLabel, homeworkItemKey, homeworkNotifyKey } from '../../lib/homework'
 import MarkDefaultersModal from './MarkDefaultersModal'
 
 function todayIso() {
@@ -158,9 +158,14 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
 
   const sendKey = batchName ? `${date}|${batchName}` : null
   const history = sendKey ? homeworkSendHistory?.[sendKey] : null
-  const hasFailures = (history?.failedNames?.length ?? 0) > 0
   const sendDisabled = totalUnresolved === 0
   const recipientCount = Object.keys(itemsByLwsId).length
+  // Students with at least one unresolved item that hasn't been notified yet
+  // (added after the send, or a failed leg). Item-level granularity.
+  const notifiedKeys = new Set(history?.notifiedItemKeys || [])
+  const pendingStudentCount = Object.entries(itemsByLwsId).filter(([lwsId, items]) =>
+    items.some(it => !notifiedKeys.has(homeworkNotifyKey(lwsId, it.subject, it.chapter, it.type)))
+  ).length
 
   return (
     <div>
@@ -193,14 +198,18 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
             type="button"
             onClick={() => onSend?.(itemsByLwsId, date, batchName)}
             disabled={sendDisabled}
-            className={`btn ${history && !hasFailures ? '' : 'btn-primary'} text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed`}
-            aria-label="Send homework notifications"
+            className={`btn ${history && pendingStudentCount === 0 ? '' : 'btn-primary'} text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed`}
+            aria-label={
+              !history ? 'Send homework notifications'
+                : pendingStudentCount > 0 ? `Notify ${pendingStudentCount} pending`
+                  : 'All notified · Resend all'
+            }
           >
-            {history && hasFailures
-              ? `Sent ✓${history.sent} · Failed ✗${history.skipped} · Resend`
-              : history
-                ? '✓ Sent today · Resend all'
-                : 'Send Homework / Notes Alerts'}
+            {!history
+              ? 'Send Homework / Notes Alerts'
+              : pendingStudentCount > 0
+                ? `Notify ${pendingStudentCount} pending`
+                : '✓ All notified · Resend all'}
             {!history && recipientCount > 0 && <span className="ml-2 opacity-80">({recipientCount})</span>}
           </button>
         </div>

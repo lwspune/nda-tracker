@@ -149,45 +149,42 @@ describe('LateNotificationPreviewModal', () => {
     expect(onConfirm).toHaveBeenCalled()
   })
 
-  // ── Resend mode (failedNames non-null) ────────────────────
+  // ── Resend mode (notifiedLwsIds non-null) — pending-aware ──
 
-  it('does not render the scope banner when failedNames is null (first send)', () => {
+  it('does not render the scope banner when notifiedLwsIds is null (first send)', () => {
     render(
       <LateNotificationPreviewModal
         date="2026-05-21"
         lateLwsIds={['LWS-001', 'LWS-002']}
-        failedNames={null}
+        notifiedLwsIds={null}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
       />
     )
-    expect(screen.queryByText(/resend to/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/pending only/i)).not.toBeInTheDocument()
   })
 
-  it('shows the scope banner with correct counts when failedNames is non-null', () => {
+  it('shows the scope banner with pending vs all counts on a resend', () => {
     render(
       <LateNotificationPreviewModal
         date="2026-05-21"
         lateLwsIds={['LWS-001', 'LWS-002']}
-        failedNames={['Arjun Sharma']}
+        notifiedLwsIds={['LWS-002']}  // Ravi notified → Arjun pending
         onConfirm={vi.fn()}
         onClose={vi.fn()}
       />
     )
-    expect(screen.getByText(/resend to/i)).toBeInTheDocument()
-    // Failed-only count: 1 (Arjun in failedNames)
-    expect(screen.getByLabelText(/failed.*1/i)).toBeChecked()
-    // All-students count: 2
+    expect(screen.getByLabelText(/pending only.*1/i)).toBeChecked()
     expect(screen.getByLabelText(/all students.*2/i)).not.toBeChecked()
   })
 
-  it('defaults to failed-only scope and sends only failed names on confirm', () => {
+  it('defaults to pending-only and sends only the un-notified on confirm', () => {
     const onConfirm = vi.fn()
     render(
       <LateNotificationPreviewModal
         date="2026-05-21"
         lateLwsIds={['LWS-001', 'LWS-002']}
-        failedNames={['Arjun Sharma']}
+        notifiedLwsIds={['LWS-002']}
         onConfirm={onConfirm}
         onClose={vi.fn()}
       />
@@ -198,13 +195,13 @@ describe('LateNotificationPreviewModal', () => {
     expect(sentRows[0].name).toBe('Arjun Sharma')
   })
 
-  it('switching scope to "All students" sends all rows on confirm', () => {
+  it('switching scope to "All students" re-sends to everyone on confirm', () => {
     const onConfirm = vi.fn()
     render(
       <LateNotificationPreviewModal
         date="2026-05-21"
         lateLwsIds={['LWS-001', 'LWS-002']}
-        failedNames={['Arjun Sharma']}
+        notifiedLwsIds={['LWS-002']}
         onConfirm={onConfirm}
         onClose={vi.fn()}
       />
@@ -216,18 +213,17 @@ describe('LateNotificationPreviewModal', () => {
     expect(sentRows.map(r => r.name)).toEqual(['Arjun Sharma', 'Ravi Kumar'])
   })
 
-  it('only the in-scope rows are visible when failedNames is set', () => {
+  it('only the pending (un-notified) rows are visible by default on a resend', () => {
     render(
       <LateNotificationPreviewModal
         date="2026-05-21"
         lateLwsIds={['LWS-001', 'LWS-002']}
-        failedNames={['Arjun Sharma']}
+        notifiedLwsIds={['LWS-002']}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
       />
     )
-    // Only Arjun (the failed one) is visible
-    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
-    expect(screen.queryByText('Ravi Kumar')).not.toBeInTheDocument()
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()   // pending
+    expect(screen.queryByText('Ravi Kumar')).not.toBeInTheDocument() // already notified
   })
 })

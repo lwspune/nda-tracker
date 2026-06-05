@@ -241,30 +241,27 @@ describe('LectureLogTab — resend states (read lectureMissSendHistory)', () => 
     expect(screen.getByRole('button', { name: /send lecture-miss notifications/i })).toBeInTheDocument()
   })
 
-  it('shows "Sent ... Failed ... Resend" when history has failures', async () => {
+  it('shows "Notify N pending" when an absentee is not yet notified', async () => {
     mockStore.lectureMissSendHistory = {
-      [HISTORY_KEY]: { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'] },
+      [HISTORY_KEY]: { sentAt: Date.now(), sent: 1, skipped: 1, failedNames: ['Arjun Sharma'], notifiedLwsIds: [] },
     }
     mockStore.getLectureAbsencesForDate.mockResolvedValue([
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
     ])
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
     await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
-    const btn = screen.getByRole('button', { name: /resend/i })
-    expect(btn).toBeInTheDocument()
-    expect(btn.textContent).toMatch(/Sent.*1.*Failed.*1/i)
+    expect(screen.getByRole('button', { name: /notify 1 pending/i })).toBeInTheDocument()
   })
 
-  it('shows "Sent today · Resend all" when history has no failures', async () => {
+  it('shows "All notified · Resend all" once every absentee has been notified', async () => {
     mockStore.lectureMissSendHistory = {
-      [HISTORY_KEY]: { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [] },
+      [HISTORY_KEY]: { sentAt: Date.now(), sent: 2, skipped: 0, failedNames: [], notifiedLwsIds: ['LWS-001'] },
     }
     mockStore.getLectureAbsencesForDate.mockResolvedValue([
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
     ])
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
     await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
-    const btn = screen.getByRole('button', { name: /resend all/i })
-    expect(btn).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all notified · resend all/i })).toBeInTheDocument()
   })
 })

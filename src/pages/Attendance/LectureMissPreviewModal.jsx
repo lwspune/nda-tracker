@@ -43,11 +43,11 @@ function buildRows(absencesByLwsId, studentProfiles) {
   })
 }
 
-// failedNames: string[] from previous send; null = first send.
+// notifiedLwsIds: string[] of already-notified students from prior sends; null = first send.
 export default function LectureMissPreviewModal({
   date,
   absencesByLwsId,
-  failedNames = null,
+  notifiedLwsIds = null,
   onConfirm,
   onClose,
   sending = false,
@@ -55,15 +55,16 @@ export default function LectureMissPreviewModal({
   const studentProfiles = useStore(s => s.studentProfiles)
   const bulkUpdateStudentContacts = useStore(s => s.bulkUpdateStudentContacts)
 
-  const isResend = failedNames !== null && failedNames !== undefined
-  const failedSet = useMemo(() => new Set(failedNames || []), [failedNames])
+  const isResend = notifiedLwsIds !== null && notifiedLwsIds !== undefined
+  const notifiedSet = useMemo(() => new Set(notifiedLwsIds || []), [notifiedLwsIds])
 
   const [rows, setRows] = useState(() => buildRows(absencesByLwsId, studentProfiles))
   const [redirectTo, setRedirectTo] = useState('')
+  // On a resend, default to pending (un-notified) students only.
   const [scopeAll, setScopeAll] = useState(!isResend)
 
-  const failedRows = useMemo(() => rows.filter(r => failedSet.has(r.name)), [rows, failedSet])
-  const visibleRows = scopeAll ? rows : failedRows
+  const pendingRows = useMemo(() => rows.filter(r => !notifiedSet.has(r.lwsId)), [rows, notifiedSet])
+  const visibleRows = scopeAll ? rows : pendingRows
   const empty = visibleRows.length === 0
 
   function updateRow(idx, field, value) {
@@ -111,18 +112,18 @@ export default function LectureMissPreviewModal({
         {/* Scope toggle — only shown on resend */}
         {isResend && (
           <div className="px-5 py-3 bg-amber-50 border-b border-border flex-shrink-0 flex items-center gap-4 flex-wrap">
-            <span className="text-[12px] text-amber-800 font-medium">Resend to:</span>
+            <span className="text-[12px] text-amber-800 font-medium">Send to:</span>
             <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
               <input
                 type="radio"
                 checked={!scopeAll}
                 onChange={() => setScopeAll(false)}
                 disabled={sending}
-                aria-label={`Failed & skipped only (${failedRows.length})`}
+                aria-label={`Pending only (${pendingRows.length})`}
                 className="accent-amber-600"
               />
               <span className="text-amber-900 font-medium">
-                Failed &amp; skipped only ({failedRows.length})
+                Pending only ({pendingRows.length})
               </span>
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer text-[12px]">
