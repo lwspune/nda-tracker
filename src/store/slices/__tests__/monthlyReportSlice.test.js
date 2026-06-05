@@ -64,6 +64,7 @@ describe('fetchMonthlyReportData — no-op cases', () => {
       attendanceByLwsId: {},
       lectureAbsencesByLwsId: {},
       examAbsencesByLwsId: {},
+      homeworkByLwsId: {},
     })
     expect(mockClient.from).not.toHaveBeenCalled()
   })

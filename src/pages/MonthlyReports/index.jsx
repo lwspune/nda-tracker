@@ -57,6 +57,7 @@ export default function MonthlyReportsPage() {
         attendanceByLwsId:      data.attendanceByLwsId,
         lectureAbsencesByLwsId: data.lectureAbsencesByLwsId,
         examAbsencesByLwsId:    data.examAbsencesByLwsId,
+        homeworkByLwsId:        data.homeworkByLwsId,
       })
     } finally {
       setGenerating(false)
@@ -72,6 +73,7 @@ export default function MonthlyReportsPage() {
       attendance:      generated?.attendanceByLwsId?.[lwsId]      || [],
       lectureAbsences: generated?.lectureAbsencesByLwsId?.[lwsId] || [],
       examAbsences:    generated?.examAbsencesByLwsId?.[lwsId]    || [],
+      homework:        generated?.homeworkByLwsId?.[lwsId]        || [],
       batchChapterTimelines,
       syllabusPrograms,
     })

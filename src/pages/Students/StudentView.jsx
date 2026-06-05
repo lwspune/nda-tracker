@@ -91,6 +91,23 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const lectureAbsences = lectureAbsencesProp !== null ? lectureAbsencesProp : fetchedLectureAbsences
   const examAbsences    = examAbsencesProp    !== null ? examAbsencesProp    : fetchedExamAbsences
 
+  // Homework (full history, all statuses) — admin/teacher fetch from slice,
+  // student portal supplies via prop. Feeds the AttendanceRings homework chip
+  // (counts all flagged that month) and RecentIncidents (narrows + unresolved).
+  const getHomeworkForStudent = useStore(s => s.getHomeworkForStudent)
+  const [fetchedHomework, setFetchedHomework] = useState([])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (homeworkPendingProp !== null) { setFetchedHomework([]); return }
+    if (!profile?.lwsId || typeof getHomeworkForStudent !== 'function') { setFetchedHomework([]); return }
+    let cancelled = false
+    getHomeworkForStudent(profile.lwsId).then(rows => {
+      if (!cancelled) setFetchedHomework(rows || [])
+    })
+    return () => { cancelled = true }
+  }, [profile?.lwsId, homeworkPendingProp, getHomeworkForStudent])
+  const homework = homeworkPendingProp !== null ? homeworkPendingProp : fetchedHomework
+
   // Login stats — faculty/teacher only; must be before early returns
   const [loginStats, setLoginStats] = useState(null)
   useEffect(() => {
@@ -275,18 +292,21 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
             lectureAbsences={lectureAbsences}
             examAbsences={examAbsences}
             exams={normalizedExams}
+            homework={homework}
           />
         </Card>
       )}
 
-      {/* Recent late + lecture-miss incidents (last 30 days) */}
+      {/* Recent late + lecture-miss incidents (last 30 days). homework={homework}
+          (fetched-or-prop) so RecentIncidents reuses StudentView's fetch instead
+          of running its own. */}
       <RecentIncidents
         lwsId={profile?.lwsId}
         attendance={attendance}
         exams={normalizedExams}
         lectureAbsencesProp={lectureAbsencesProp}
         examAbsencesProp={examAbsencesProp}
-        homeworkPendingProp={homeworkPendingProp}
+        homeworkPendingProp={homework}
       />
 
       {/* Daily-quiz history — admin/teacher only (student portal has the live quiz section) */}

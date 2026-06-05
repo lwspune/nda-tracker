@@ -21,14 +21,16 @@ function Chip({ label, expanded, onToggle, listTestId, items, tone }) {
   // Light-mode tuned — the app's surface is white/pale; earlier dark-mode
   // greys made these chips unreadable.
   const tones = {
-    late:    'bg-yellow-50 border-yellow-200 text-warning hover:bg-yellow-100',
-    lecture: 'bg-red-50 border-red-200 text-danger hover:bg-red-100',
-    exam:    'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
+    late:     'bg-yellow-50 border-yellow-200 text-warning hover:bg-yellow-100',
+    lecture:  'bg-red-50 border-red-200 text-danger hover:bg-red-100',
+    exam:     'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
+    homework: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100',
   }
   const listColor = {
-    late:    'text-yellow-800',
-    lecture: 'text-red-800',
-    exam:    'text-red-900',
+    late:     'text-yellow-800',
+    lecture:  'text-red-800',
+    exam:     'text-red-900',
+    homework: 'text-orange-800',
   }
   return (
     <>
@@ -61,6 +63,7 @@ function Ring({
   lateCount, lateDates,
   lectureMissCount, lectureMisses,
   examMissCount, examMisses,
+  homeworkCount, homeworkItems,
   expandedKind, onToggle,
 }) {
   const filled = (pct / 100) * C
@@ -124,6 +127,17 @@ function Ring({
           tone="exam"
         />
       )}
+
+      {homeworkCount > 0 && (
+        <Chip
+          label={`Homework: ${homeworkCount}`}
+          expanded={expandedKind === 'homework'}
+          onToggle={() => onToggle('homework')}
+          listTestId={`homework-list-${month}`}
+          items={homeworkItems.map(r => `${fmtDayMonth(r.date)} ${r.subject}${r.chapter ? ' · ' + r.chapter : ''}`)}
+          tone="homework"
+        />
+      )}
     </div>
   )
 }
@@ -144,7 +158,7 @@ function enrichExamAbsences(examAbsences, exams) {
   return out
 }
 
-function buildMonthStats(attendance, lectureAbsences, examMissesEnriched) {
+function buildMonthStats(attendance, lectureAbsences, examMissesEnriched, homework) {
   const months = {}
   const ensure = m => {
     if (!months[m]) months[m] = {
@@ -152,6 +166,7 @@ function buildMonthStats(attendance, lectureAbsences, examMissesEnriched) {
       lateDates: [],
       lectureMisses: [],
       examMisses: [],
+      homeworkItems: [],
     }
     return months[m]
   }
@@ -176,6 +191,14 @@ function buildMonthStats(attendance, lectureAbsences, examMissesEnriched) {
     ensure(m).examMisses.push(r)
   }
 
+  // All homework / notes flagged that month (resolved or not — a factual record,
+  // like the lecture/exam miss chips).
+  for (const r of (homework || [])) {
+    if (!r?.date) continue
+    const m = r.date.slice(0, 7)
+    ensure(m).homeworkItems.push({ date: r.date, subject: r.subject || '', chapter: r.chapter || '', type: r.type || '' })
+  }
+
   return Object.entries(months)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([month, b]) => {
@@ -186,6 +209,7 @@ function buildMonthStats(attendance, lectureAbsences, examMissesEnriched) {
       const lateDates     = [...b.lateDates].sort((x, y) => y.localeCompare(x))
       const lectureMisses = [...b.lectureMisses].sort((x, y) => y.date.localeCompare(x.date))
       const examMisses    = [...b.examMisses].sort((x, y) => y.date.localeCompare(x.date))
+      const homeworkItems = [...b.homeworkItems].sort((x, y) => y.date.localeCompare(x.date))
       return {
         month, pct, label,
         lateCount:        lateDates.length,
@@ -194,6 +218,8 @@ function buildMonthStats(attendance, lectureAbsences, examMissesEnriched) {
         lectureMisses,
         examMissCount:    examMisses.length,
         examMisses,
+        homeworkCount:    homeworkItems.length,
+        homeworkItems,
       }
     })
 }
@@ -203,9 +229,10 @@ export default function AttendanceRings({
   lectureAbsences  = [],
   examAbsences     = [],
   exams            = [],
+  homework         = [],
 }) {
   const examMissesEnriched = enrichExamAbsences(examAbsences, exams)
-  const stats = buildMonthStats(attendance, lectureAbsences, examMissesEnriched)
+  const stats = buildMonthStats(attendance, lectureAbsences, examMissesEnriched, homework)
 
   // Single-open across the whole component: clicking a chip in any month sets
   // (month, kind); a second click on the same chip (or any other chip in any
@@ -238,6 +265,8 @@ export default function AttendanceRings({
               lectureMisses={s.lectureMisses}
               examMissCount={s.examMissCount}
               examMisses={s.examMisses}
+              homeworkCount={s.homeworkCount}
+              homeworkItems={s.homeworkItems}
               expandedKind={expanded?.month === s.month ? expanded.kind : null}
               onToggle={(kind) => setExpanded(prev =>
                 prev?.month === s.month && prev?.kind === kind ? null : { month: s.month, kind }

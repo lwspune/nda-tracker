@@ -36,6 +36,7 @@ export const createMonthlyReportSlice = (_set, _get) => ({
         attendanceByLwsId: {},
         lectureAbsencesByLwsId: {},
         examAbsencesByLwsId: {},
+        homeworkByLwsId: {},
       }
     }
 
@@ -45,6 +46,7 @@ export const createMonthlyReportSlice = (_set, _get) => ({
       { data: attendance,      error: attErr },
       { data: lectureAbsences, error: lecErr },
       { data: examAbsences,    error: exaErr },
+      { data: homework,        error: hwErr },
     ] = await Promise.all([
       supabase.from('student_attendance')
         .select('lws_id, date, status')
@@ -57,10 +59,14 @@ export const createMonthlyReportSlice = (_set, _get) => ({
       supabase.from('exam_absences')
         .select('lws_id, exam_id, marked_at, notified_at')
         .in('lws_id', cohortLwsIds),
+      supabase.from('homework_pending')
+        .select('lws_id, date, subject, chapter, type, resolved_at')
+        .in('lws_id', cohortLwsIds)
+        .like('date', monthLike),
     ])
 
-    if (attErr || lecErr || exaErr) {
-      console.error('[monthlyReport] fetch failed:', attErr || lecErr || exaErr)
+    if (attErr || lecErr || exaErr || hwErr) {
+      console.error('[monthlyReport] fetch failed:', attErr || lecErr || exaErr || hwErr)
       return null
     }
 
@@ -68,6 +74,7 @@ export const createMonthlyReportSlice = (_set, _get) => ({
       attendanceByLwsId:      groupBy(attendance,      'lws_id'),
       lectureAbsencesByLwsId: groupBy(lectureAbsences, 'lws_id'),
       examAbsencesByLwsId:    groupBy(examAbsences,    'lws_id'),
+      homeworkByLwsId:        groupBy(homework,        'lws_id'),
     }
   },
 })

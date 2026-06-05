@@ -218,6 +218,37 @@ describe('AttendanceRings', () => {
     expect(text).toMatch(/22 May.*Mock #5.+8 May.*Mock #3/)
   })
 
+  // ── Homework badge ─────────────────────────────────────────────
+
+  it('shows "Homework: N" badge for months that have flagged homework (resolved or not)', () => {
+    const attendance = [{ date: '2026-06-01', status: 'P' }]
+    const homework = [
+      { date: '2026-06-04', subject: 'Maths', chapter: 'Statistic', type: 'homework', resolved_at: '2026-06-04T17:00:00Z' },
+      { date: '2026-06-10', subject: 'Physics', chapter: 'Laws', type: 'notes', resolved_at: null },
+    ]
+    render(<AttendanceRings attendance={attendance} homework={homework} />)
+    // counts the resolved one too
+    expect(screen.getByRole('button', { name: /homework: 2/i })).toBeInTheDocument()
+  })
+
+  it('hides the Homework badge when a month has zero homework rows', () => {
+    render(<AttendanceRings attendance={[{ date: '2026-06-01', status: 'P' }]} homework={[]} />)
+    expect(screen.queryByText(/homework:/i)).not.toBeInTheDocument()
+  })
+
+  it('clicking Homework reveals subject · chapter with dates, latest-first', () => {
+    const attendance = [{ date: '2026-06-01', status: 'P' }]
+    const homework = [
+      { date: '2026-06-04', subject: 'Maths', chapter: 'Statistic', type: 'homework', resolved_at: null },
+      { date: '2026-06-12', subject: 'Physics', chapter: 'Laws', type: 'notes', resolved_at: null },
+    ]
+    render(<AttendanceRings attendance={attendance} homework={homework} />)
+    fireEvent.click(screen.getByRole('button', { name: /homework: 2/i }))
+    const list = screen.getByTestId('homework-list-2026-06')
+    const text = list.textContent.replace(/\s+/g, ' ')
+    expect(text).toMatch(/12 Jun.*Physics.*Laws.+4 Jun.*Maths.*Statistic/)
+  })
+
   // ── Single-open expansion (B1) ─────────────────────────────────
 
   it('opening Missed Lectures auto-collapses Days Late in the same month', () => {

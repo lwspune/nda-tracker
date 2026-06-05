@@ -192,6 +192,31 @@ function drawAttendance(doc, y, report, autoTable) {
   return nextY + 2
 }
 
+// All homework / notes flagged this month (resolved or not). Compact wrapped
+// line, only drawn when there's at least one item.
+function drawHomework(doc, y, report) {
+  const items = report.homeworkFlagged || []
+  if (items.length === 0) return y
+  const W = doc.internal.pageSize.getWidth()
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8.5)
+  doc.setTextColor(...C.ink)
+  doc.text('Homework / Notes flagged:', M.left, y + 4)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...C.ink2)
+  const list = items.map(h => {
+    const t = h.type === 'both' ? 'Homework + Notes' : h.type === 'notes' ? 'Notes' : 'Homework'
+    const head = [h.subject, h.chapter].filter(Boolean).join(' \xB7 ')
+    return `${h.date} ${head} (${t})`
+  }).join(', ')
+  const wrapped = doc.splitTextToSize(list, W - M.left - M.right - 44)
+  doc.text(wrapped, M.left + 44, y + 4)
+
+  return y + 5 + wrapped.length * 3.5
+}
+
 function drawRemark(doc, y, remark) {
   if (!remark || !remark.trim()) return y
   const W = doc.internal.pageSize.getWidth()
@@ -250,6 +275,7 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
   let y = drawHeader(doc, report)
   y = await drawExamTable(doc, y, report, autoTable)
   y = drawAttendance(doc, y, report, autoTable)
+  y = drawHomework(doc, y, report)
   y = drawRemark(doc, y, remark)
   y = drawNextMonthFocus(doc, y, report)
   drawFooter(doc)

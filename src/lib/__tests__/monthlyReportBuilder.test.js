@@ -349,6 +349,40 @@ describe('buildMonthlyReport — next month focus', () => {
   })
 })
 
+// ── homework flagged ────────────────────────────────────────────────────────
+
+describe('buildMonthlyReport — homework flagged', () => {
+  const base = {
+    profile: profile(), month: '2026-06', exams: [], attendance: [],
+    lectureAbsences: [], examAbsences: [], batchChapterTimelines: {}, syllabusPrograms: [],
+  }
+
+  it('includes all homework flagged that month (resolved or not), sorted by date', () => {
+    const r = buildMonthlyReport({
+      ...base,
+      homework: [
+        { date: '2026-06-12', subject: 'Physics', chapter: 'Laws', type: 'notes', resolved_at: null },
+        { date: '2026-06-04', subject: 'Maths', chapter: 'Statistic', type: 'homework', resolved_at: '2026-06-04T17:00:00Z' },
+      ],
+    })
+    expect(r.homeworkFlagged).toHaveLength(2)
+    expect(r.homeworkFlagged[0]).toMatchObject({ date: '4 Jun', subject: 'Maths', chapter: 'Statistic', type: 'homework', resolved: true })
+    expect(r.homeworkFlagged[1]).toMatchObject({ date: '12 Jun', subject: 'Physics', resolved: false })
+  })
+
+  it('excludes homework from other months', () => {
+    const r = buildMonthlyReport({
+      ...base,
+      homework: [{ date: '2026-05-30', subject: 'Maths', chapter: 'X', type: 'homework', resolved_at: null }],
+    })
+    expect(r.homeworkFlagged).toEqual([])
+  })
+
+  it('returns [] when homework is undefined', () => {
+    expect(buildMonthlyReport(base).homeworkFlagged).toEqual([])
+  })
+})
+
 // ── getMonthlyReportCohort ──────────────────────────────────────────────────
 
 describe('getMonthlyReportCohort', () => {

@@ -53,6 +53,7 @@ export function buildMonthlyReport({
   attendance,
   lectureAbsences,
   examAbsences,
+  homework,
   batchChapterTimelines,
   syllabusPrograms,
 }) {
@@ -115,6 +116,18 @@ export function buildMonthlyReport({
     .filter(r => dateInMonth(r.date, month))
     .map(r => ({ date: shortDate(r.date), subject: r.subject || '' }))
 
+  // ── homework / notes flagged this month (all flagged, resolved or not) ──
+  const homeworkFlagged = (homework || [])
+    .filter(r => dateInMonth(r.date, month))
+    .sort((a, b) => a.date.localeCompare(b.date))   // sort raw ISO before formatting
+    .map(r => ({
+      date: shortDate(r.date),
+      subject: r.subject || '',
+      chapter: r.chapter || '',
+      type: r.type || '',
+      resolved: !!r.resolved_at,
+    }))
+
   // ── next month focus ───────────────────────────────────────────────────
   let nextMonthFocus = null
   if (batch) {
@@ -161,6 +174,7 @@ export function buildMonthlyReport({
       lateDates,
       missedLectureDetails: missedLectureRows,
     },
+    homeworkFlagged,
     nextMonthFocus,
   }
 }
