@@ -22,6 +22,7 @@ import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
+import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -51,6 +52,17 @@ export default function App() {
 
   // Load data: dev = from disk, prod admin = from Supabase, prod teacher/student = no-op
   useEffect(() => { initStore() }, [])
+
+  // Shareable quiz link (?quiz=<id>): focused, self-contained student quiz page.
+  // Independent of the store + auth — handles its own one-time mobile identity.
+  const quizLinkId = new URLSearchParams(window.location.search).get('quiz')
+  if (quizLinkId) {
+    return (
+      <ModeContext.Provider value="student">
+        <QuizLinkPage quizId={quizLinkId} />
+      </ModeContext.Provider>
+    )
+  }
 
   // Block render until data is loaded AND (for IS_READ_ONLY) auth state is known
   if (!hydrated || (IS_READ_ONLY && !sessionChecked)) {

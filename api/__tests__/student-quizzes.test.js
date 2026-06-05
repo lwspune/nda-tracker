@@ -69,6 +69,11 @@ describe('POST /api/student-quizzes', () => {
     expect((await call({ mobile: '9999999999' })).status).toHaveBeenCalledWith(404)
   })
 
+  it('returns the student name alongside the quizzes', async () => {
+    const res = await call({ mobile: '9876543210' })
+    expect(res.json.mock.calls[0][0].name).toBe('Arjun Sharma')
+  })
+
   it('returns open quizzes targeting the student batch, with the answer key stripped', async () => {
     const res = await call({ mobile: '9876543210' })
     expect(res.status).toHaveBeenCalledWith(200)

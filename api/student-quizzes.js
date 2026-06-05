@@ -130,5 +130,5 @@ export default async function handler(req, res) {
     // closed && !attempt → omitted
   }
 
-  res.status(200).json({ quizzes })
+  res.status(200).json({ name: student.canonical_name, quizzes })
 }

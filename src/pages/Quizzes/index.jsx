@@ -23,6 +23,7 @@ export default function QuizzesPage() {
   // editing: null = list · 'new' = create · quizId = edit
   const [editing, setEditing] = useState(null)
   const [resultsId, setResultsId] = useState(null)
+  const [copiedId, setCopiedId] = useState(null)
 
   if (editing) {
     const quiz = editing === 'new' ? null : quizzes.find(q => q.id === editing)
@@ -40,6 +41,14 @@ export default function QuizzesPage() {
     if (window.confirm(`Delete quiz "${q.title}"? This also removes all student attempts for it. This cannot be undone.`)) {
       deleteQuiz(q.id)
     }
+  }
+
+  function copyLink(q) {
+    const url = `${window.location.origin}/?quiz=${q.id}`
+    navigator.clipboard?.writeText(url).then(
+      () => { setCopiedId(q.id); setTimeout(() => setCopiedId(c => (c === q.id ? null : c)), 1800) },
+      () => window.prompt('Copy this quiz link:', url),
+    )
   }
 
   return (
@@ -79,6 +88,11 @@ export default function QuizzesPage() {
                 <div className="flex items-center gap-2 mt-auto pt-2 border-t border-border">
                   <button className="text-[12px] font-semibold text-accent hover:underline" onClick={() => setEditing(q.id)}>Edit</button>
                   <button className="text-[12px] font-semibold text-ink-2 hover:underline" onClick={() => setResultsId(q.id)}>Results</button>
+                  {status !== 'draft' && (
+                    <button className="text-[12px] font-semibold text-ink-2 hover:underline" onClick={() => copyLink(q)}>
+                      {copiedId === q.id ? '✓ Copied' : '🔗 Copy link'}
+                    </button>
+                  )}
                   <button className="text-[12px] text-red-500 hover:text-red-700 ml-auto" onClick={() => handleDelete(q)}>Delete</button>
                 </div>
               </Card>
