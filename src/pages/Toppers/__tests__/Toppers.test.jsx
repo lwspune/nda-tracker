@@ -20,6 +20,14 @@ import ToppersPage from '../index'
 const PROFILES = {
   Alice: { lwsId: 'L1', name: 'Alice', branch: 'LWS Pune', batches: ['BATCH_A'], nameVariants: [], regDate: '2023-01-01', accountStatus: 'Active' },
   Bob:   { lwsId: 'L2', name: 'Bob',   branch: 'APJ',      batches: ['BATCH_B'], nameVariants: [], regDate: '2023-01-01', accountStatus: 'Active' },
+  Carol: { lwsId: 'L3', name: 'Carol', branch: 'LWS Pune', batches: ['BATCH_A'], nameVariants: [], regDate: '2023-01-01', accountStatus: 'Active' },
+}
+const GAT_EXAM = {
+  id: 'g1', name: 'GAT Mock', date: '2024-01-02', subject: 'GAT', batch: 'BATCH_A',
+  marking: { correct: 4, wrong: 0 },
+  questions: [{ q: 1, chapter: 'GK', subtopic: 'X' }],
+  students: [{ name: 'Carol', totalMarks: 4, correct: 1, incorrect: 0, notAttempted: 0, responses: { 1: 1 } }],
+  createdAt: '2024-01-02T00:00:00.000Z',
 }
 const COMBINED_EXAM = {
   id: 'e1', name: 'Combined Mock', date: '2024-01-01', subject: 'Maths', batch: 'BATCH_A, BATCH_B',
@@ -52,5 +60,27 @@ describe('ToppersPage — batch filter = current members', () => {
     await user.selectOptions(batchSelect, 'BATCH_A')
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.queryByText('Bob')).not.toBeInTheDocument()  // Bob is BATCH_B — gone
+  })
+})
+
+describe('ToppersPage — defaults to Maths', () => {
+  it('opens on Maths, so GAT-only students are not shown until the subject is changed', () => {
+    mockStore.exams = [COMBINED_EXAM, GAT_EXAM]
+    render(<ToppersPage />)
+    // subject dropdown defaults to Maths
+    expect(screen.getByRole('option', { name: 'Maths' }).selected).toBe(true)
+    // Maths attendees show; the GAT-only student (Carol) does not
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.queryByText('Carol')).not.toBeInTheDocument()
+  })
+
+  it('switching to GAT surfaces the GAT student', async () => {
+    mockStore.exams = [COMBINED_EXAM, GAT_EXAM]
+    const user = userEvent.setup()
+    render(<ToppersPage />)
+    const subjectSelect = screen.getByRole('option', { name: 'GAT' }).closest('select')
+    await user.selectOptions(subjectSelect, 'GAT')
+    expect(screen.getByText('Carol')).toBeInTheDocument()
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
   })
 })

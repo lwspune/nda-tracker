@@ -20,7 +20,7 @@ export default function ToppersPage() {
 
   const [threshold, setThreshold]     = useState(50)
   const [batchFilter, setBatchFilter] = useState('all')
-  const [subjectFilter, setSubjectFilter] = useState('all')
+  const [subjectFilter, setSubjectFilter] = useState('Maths')  // Maths is the main NDA paper; projection is per-subject
   const [sortBy, setSortBy]           = useState('projected')
 
   const mode = useMode()
@@ -34,17 +34,23 @@ export default function ToppersPage() {
     ? exams
     : getExamsForBatch(exams, studentProfiles, batchFilter)
 
-  // Subject filter — derived from exams actually present
+  // Subject filter — derived from exams actually present.
+  // Default is 'Maths'; if the selected scope has no Maths exams, snap to 'all'
+  // so the dropdown value matches the rendered set (mirrors StudentView's
+  // effectiveFilter — avoids a select showing 'All' while state stays 'Maths').
   const allSubjects = [...new Set(batchFiltered.map(e => e.subject || 'Maths'))].sort()
-  const filteredExams = subjectFilter === 'all'
+  const effectiveSubject = subjectFilter === 'all' || allSubjects.includes(subjectFilter)
+    ? subjectFilter
+    : 'all'
+  const filteredExams = effectiveSubject === 'all'
     ? batchFiltered
-    : batchFiltered.filter(e => (e.subject || 'Maths') === subjectFilter)
+    : batchFiltered.filter(e => (e.subject || 'Maths') === effectiveSubject)
 
   // Resolve freq for the active subject.
   // When 'all', use the most common subject so projected scores are meaningful.
-  const activeSubject = subjectFilter === 'all'
+  const activeSubject = effectiveSubject === 'all'
     ? getPrimarySubject(filteredExams)
-    : subjectFilter
+    : effectiveSubject
   const ndaFreq    = getFreqForSubject(ndaFreqBySubject, activeSubject)
   const hasFreqData = ndaFreq.length > 0
   const subjectMaxScore = ndaMarksBySubject?.[activeSubject] ?? 300
@@ -161,7 +167,7 @@ export default function ToppersPage() {
         {/* Subject filter */}
         {allSubjects.length > 1 && (
           <select
-            value={subjectFilter}
+            value={effectiveSubject}
             onChange={e => setSubjectFilter(e.target.value)}
             className="form-input w-auto text-[13px] cursor-pointer"
           >
