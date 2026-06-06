@@ -117,6 +117,47 @@ export const createAttendanceSlice = (set, get) => ({
     return true
   },
 
+  // Loads one day's attendance for the Dashboard roll-up.
+  // `date === null` → resolves to the latest recorded date first.
+  // Returns { date, rows: [{ lws_id, status }] } (paginated; rows can exceed 1000).
+  // No session (dev/teacher-less) → { date: null, rows: [] }.
+  async fetchDailyAttendance(date = null) {
+    const session = await getSession()
+    if (!session) return { date: null, rows: [] }
+
+    let targetDate = date
+    if (!targetDate) {
+      const { data, error } = await supabase
+        .from('student_attendance')
+        .select('date')
+        .order('date', { ascending: false })
+        .limit(1)
+      if (error) {
+        console.error('[attendance] latest-date lookup failed:', error)
+        return { date: null, rows: [] }
+      }
+      targetDate = data?.[0]?.date ?? null
+    }
+    if (!targetDate) return { date: null, rows: [] }
+
+    const PAGE = 1000
+    let from = 0
+    const rows = []
+    while (true) {
+      const { data, error } = await supabase
+        .from('student_attendance')
+        .select('lws_id, status')
+        .eq('date', targetDate)
+        .range(from, from + PAGE - 1)
+      if (error) { console.error('[attendance] fetchDailyAttendance failed:', error); break }
+      if (!data?.length) break
+      rows.push(...data)
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    return { date: targetDate, rows }
+  },
+
   // Returns lws_id[] for students marked late on the given date.
   async getLateStudentsForDate(date) {
     if (!date) return []

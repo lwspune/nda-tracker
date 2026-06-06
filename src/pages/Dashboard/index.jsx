@@ -11,6 +11,7 @@ import KpiStrip from './KpiStrip'
 import PerformanceTrend from './PerformanceTrend'
 import PriorityChapters from './PriorityChapters'
 import BatchComparison from './BatchComparison'
+import AttendanceRollup from './AttendanceRollup'
 
 export default function DashboardPage() {
   const exams              = useStore(s => s.exams)
@@ -18,6 +19,9 @@ export default function DashboardPage() {
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const setActiveStudent   = useStore(s => s.setActiveStudent)
+  const branches             = useStore(s => s.branches)
+  const syllabusBatchBranches = useStore(s => s.syllabusBatchBranches)
+  const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -179,6 +183,14 @@ export default function DashboardPage() {
         projectedCount={projected.count}
         atRiskNow={atRisk.length}
         atRiskPrior={atRiskPrior}
+      />
+
+      {/* Branch-wise attendance roll-up (class-wide for the selected day) */}
+      <AttendanceRollup
+        studentProfiles={studentProfiles}
+        branches={branches}
+        syllabusBatchBranches={syllabusBatchBranches}
+        fetchDailyAttendance={fetchDailyAttendance}
       />
 
       {/* Performance over time */}

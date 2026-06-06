@@ -16,6 +16,9 @@ const mockStore = {
   resetNdaFreq: vi.fn(),
   studentProfiles: {},
   setActiveStudent: vi.fn(),
+  branches: [],
+  syllabusBatchBranches: {},
+  fetchDailyAttendance: vi.fn(async () => ({ date: null, rows: [] })),
 }
 
 vi.mock('../../../store/useStore', () => ({

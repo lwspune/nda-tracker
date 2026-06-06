@@ -34,6 +34,9 @@ function makeQueryBuilder({ data = [], error = null, upsertError = null } = {}) 
   builder.eq     = vi.fn(() => builder)
   builder.in     = vi.fn(() => builder)
   builder.delete = vi.fn(() => builder)
+  builder.order  = vi.fn(() => builder)
+  builder.limit  = vi.fn(() => builder)
+  builder.range  = vi.fn(() => builder)
   builder.upsert = vi.fn(() => Promise.resolve({ error: upsertError }))
   builder.then   = (onFulfilled, onRejected) =>
     Promise.resolve({ data, error }).then(onFulfilled, onRejected)
@@ -287,5 +290,63 @@ describe('getLateStudentsForDate', () => {
     const result = await slice.getLateStudentsForDate('2026-05-21')
     expect(result).toEqual([])
     expect(supabase.from).not.toHaveBeenCalled()
+  })
+})
+
+// ── fetchDailyAttendance tests ───────────────────────────────
+
+describe('fetchDailyAttendance', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function sessionOn() {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'admin' } } } })
+  }
+
+  it('resolves to the latest recorded date when called with null, then returns its rows', async () => {
+    sessionOn()
+    const dateBuilder = makeQueryBuilder({ data: [{ date: '2026-06-05' }] })
+    const rowsBuilder = makeQueryBuilder({ data: [
+      { lws_id: 'LWS-001', status: 'P' },
+      { lws_id: 'LWS-002', status: 'A' },
+    ] })
+    supabase.from.mockReturnValueOnce(dateBuilder).mockReturnValueOnce(rowsBuilder)
+
+    const { slice } = makeStore()
+    const result = await slice.fetchDailyAttendance(null)
+
+    expect(dateBuilder.order).toHaveBeenCalledWith('date', { ascending: false })
+    expect(dateBuilder.limit).toHaveBeenCalledWith(1)
+    expect(rowsBuilder.eq).toHaveBeenCalledWith('date', '2026-06-05')
+    expect(result.date).toBe('2026-06-05')
+    expect(result.rows).toHaveLength(2)
+  })
+
+  it('uses the supplied date directly (no latest-date lookup)', async () => {
+    sessionOn()
+    const rowsBuilder = makeQueryBuilder({ data: [{ lws_id: 'LWS-001', status: 'P' }] })
+    supabase.from.mockReturnValueOnce(rowsBuilder)
+
+    const { slice } = makeStore()
+    const result = await slice.fetchDailyAttendance('2026-05-21')
+
+    expect(supabase.from).toHaveBeenCalledTimes(1)  // no date lookup
+    expect(rowsBuilder.eq).toHaveBeenCalledWith('date', '2026-05-21')
+    expect(result.date).toBe('2026-05-21')
+  })
+
+  it('returns { date: null, rows: [] } when no session', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
+    const { slice } = makeStore()
+    const result = await slice.fetchDailyAttendance(null)
+    expect(result).toEqual({ date: null, rows: [] })
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('returns { date: null, rows: [] } when there is no recorded attendance', async () => {
+    sessionOn()
+    supabase.from.mockReturnValueOnce(makeQueryBuilder({ data: [] }))  // empty latest-date lookup
+    const { slice } = makeStore()
+    const result = await slice.fetchDailyAttendance(null)
+    expect(result).toEqual({ date: null, rows: [] })
   })
 })
