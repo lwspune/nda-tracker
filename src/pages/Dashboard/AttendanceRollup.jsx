@@ -28,8 +28,37 @@ function cellNames(data, col) {
   return [...g.present, ...g.absent]
 }
 
+// Sort batches by class/standard, lower → higher (9th < 10th < 11th < 12th).
+// Programs with no class number (2Y / 6M / CDS) rank last, alphabetical among them.
+function batchStdRank(name) {
+  const m = String(name).match(/(\d+)\s*th/i)
+  return m ? Number(m[1]) : 999
+}
+
+function emptyData() {
+  return { male: { present: [], absent: [] }, female: { present: [], absent: [] } }
+}
+
 function BranchTable({ branch, batches, expanded, onToggle }) {
-  const batchNames = Object.keys(batches).sort()
+  const batchNames = Object.keys(batches).sort(
+    (a, b) => batchStdRank(a) - batchStdRank(b) || a.localeCompare(b),
+  )
+
+  // Branch total = sum across batches (so total = Σ batch counts; a multi-batch
+  // student counts once per batch, same as the per-batch cells).
+  const totalData = emptyData()
+  for (const b of batchNames) {
+    for (const g of ['male', 'female']) {
+      totalData[g].present.push(...batches[b][g].present)
+      totalData[g].absent.push(...batches[b][g].absent)
+    }
+  }
+
+  const rows = [
+    ...batchNames.map(b => ({ label: b, idBatch: b, data: batches[b], isTotal: false })),
+    { label: 'Total', idBatch: '__total__', data: totalData, isTotal: true },
+  ]
+
   return (
     <div className="min-w-[320px] flex-1">
       <h3 className="text-[13px] font-bold text-ink mb-2">{branch}</h3>
@@ -51,22 +80,18 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
             </tr>
           </thead>
           <tbody>
-            {batchNames.map(batch => {
-              const data = batches[batch]
-              const openCol = expanded && expanded.branch === branch && expanded.batch === batch ? expanded : null
-              const openNames = openCol ? cellNames(data, openCol) : []
-              return (
-                <FragmentRows
-                  key={batch}
-                  branch={branch}
-                  batch={batch}
-                  data={data}
-                  openCol={openCol}
-                  openNames={openNames}
-                  onToggle={onToggle}
-                />
-              )
-            })}
+            {rows.map(r => (
+              <BatchRows
+                key={r.idBatch}
+                branch={branch}
+                label={r.label}
+                idBatch={r.idBatch}
+                data={r.data}
+                isTotal={r.isTotal}
+                expanded={expanded}
+                onToggle={onToggle}
+              />
+            ))}
           </tbody>
         </table>
       </div>
@@ -74,25 +99,28 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
   )
 }
 
-function FragmentRows({ branch, batch, data, openCol, openNames, onToggle }) {
+function BatchRows({ branch, label, idBatch, data, isTotal, expanded, onToggle }) {
+  const openCol = expanded && expanded.branch === branch && expanded.batch === idBatch ? expanded : null
+  const openNames = openCol ? cellNames(data, openCol) : []
+  const rowCls = isTotal ? 'border-t-2 border-border' : 'border-b border-border/50'
   return (
     <>
-      <tr className="border-b border-border/50">
-        <td className="py-1.5 pr-3 font-medium text-ink">{batch}</td>
+      <tr className={rowCls}>
+        <td className={`py-1.5 pr-3 text-ink ${isTotal ? 'font-bold' : 'font-medium'}`}>{label}</td>
         {COLS.map(col => {
           const count = cellNames(data, col).length
           const isOpen = !!openCol && openCol.key === col.key && openCol.gender === col.gender
-          const id = `cell-${branch}-${batch}-${col.key}-${col.gender}`
+          const id = `cell-${branch}-${idBatch}-${col.key}-${col.gender}`
           return (
             <td key={`${col.key}-${col.gender}`} data-testid={id} className="text-center px-1">
               <button
                 type="button"
-                onClick={() => onToggle({ branch, batch, key: col.key, gender: col.gender })}
+                onClick={() => onToggle({ branch, batch: idBatch, key: col.key, gender: col.gender })}
                 aria-expanded={isOpen}
-                aria-label={`${batch} ${col.key} ${col.gender === 'male' ? 'male' : 'female'}: ${count} student${count === 1 ? '' : 's'}`}
-                className="inline-flex items-center gap-0.5 font-mono tabular-nums px-1 py-0.5 rounded
+                aria-label={`${label} ${col.key} ${col.gender === 'male' ? 'male' : 'female'}: ${count} student${count === 1 ? '' : 's'}`}
+                className={`inline-flex items-center gap-0.5 font-mono tabular-nums px-1 py-0.5 rounded
                            hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40
-                           disabled:opacity-40 disabled:hover:bg-transparent"
+                           disabled:opacity-40 disabled:hover:bg-transparent ${isTotal ? 'font-bold' : ''}`}
                 disabled={count === 0}
               >
                 <span>{count}</span>
@@ -106,7 +134,7 @@ function FragmentRows({ branch, batch, data, openCol, openNames, onToggle }) {
         <tr>
           <td colSpan={7} className="pb-2 pt-0">
             <div
-              data-testid={`names-${branch}-${batch}-${openCol.key}-${openCol.gender}`}
+              data-testid={`names-${branch}-${idBatch}-${openCol.key}-${openCol.gender}`}
               className="text-[11px] font-mono text-ink-2 bg-surface-2 rounded px-2 py-1 leading-relaxed"
             >
               {openNames.length ? openNames.join(' · ') : '—'}

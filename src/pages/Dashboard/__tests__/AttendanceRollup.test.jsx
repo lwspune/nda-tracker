@@ -8,8 +8,9 @@ const PROFILES = {
   Bob:   { name: 'Bob',   lwsId: 'L2', branch: 'LWS Pune', batches: ['LWS_A'], gender: 'Male',   accountStatus: 'Active', nameVariants: [] },
   Carol: { name: 'Carol', lwsId: 'L3', branch: 'LWS Pune', batches: ['LWS_A'], gender: 'Female', accountStatus: 'Active', nameVariants: [] },
   Dave:  { name: 'Dave',  lwsId: 'L4', branch: 'APJ',      batches: ['APJ_1'], gender: 'Male',   accountStatus: 'Active', nameVariants: [] },
+  Gina:  { name: 'Gina',  lwsId: 'L7', branch: 'LWS Pune', batches: ['LWS_B'], gender: 'Female', accountStatus: 'Active', nameVariants: [] },
 }
-const BRANCH_MAP = { LWS_A: 'LWS Pune', APJ_1: 'APJ' }
+const BRANCH_MAP = { LWS_A: 'LWS Pune', LWS_B: 'LWS Pune', APJ_1: 'APJ' }
 const BRANCHES = ['APJ', 'LWS Pune']
 
 // Bob absent; Alice + Carol present; Dave present (no record).
@@ -108,5 +109,57 @@ describe('AttendanceRollup', () => {
     const fetchFn = vi.fn(async () => ({ date: null, rows: [] }))
     renderWidget({ fetchDailyAttendance: fetchFn })
     expect(await screen.findByText(/no attendance recorded/i)).toBeInTheDocument()
+  })
+
+  it('renders a Total row that sums all batches in the branch', async () => {
+    renderWidget()
+    // LWS Pune: present females = Alice + Carol (LWS_A) + Gina (LWS_B) = 3
+    const totalF = await screen.findByTestId('cell-LWS Pune-__total__-present-female')
+    expect(totalF).toHaveTextContent('3')
+    // absent males across the branch = Bob = 1
+    expect(screen.getByTestId('cell-LWS Pune-__total__-absent-male')).toHaveTextContent('1')
+  })
+
+  it('total row drills down to every name in the branch for that cell', async () => {
+    const user = userEvent.setup()
+    renderWidget()
+    const cell = await screen.findByTestId('cell-LWS Pune-__total__-present-female')
+    await user.click(within(cell).getByRole('button'))
+    const list = await screen.findByTestId('names-LWS Pune-__total__-present-female')
+    expect(list).toHaveTextContent('Alice')
+    expect(list).toHaveTextContent('Carol')
+    expect(list).toHaveTextContent('Gina')
+  })
+})
+
+describe('AttendanceRollup — batch ordering', () => {
+  const STD_PROFILES = {
+    S12: { name: 'S12', lwsId: 'a12', branch: 'APJ', batches: ['APJ_NDA_12th_(26-27)'],   gender: 'Male',   accountStatus: 'Active', nameVariants: [] },
+    S9:  { name: 'S9',  lwsId: 'a9',  branch: 'APJ', batches: ['APJ_NDA_9th_(26-27)'],    gender: 'Male',   accountStatus: 'Active', nameVariants: [] },
+    S11: { name: 'S11', lwsId: 'a11', branch: 'APJ', batches: ['APJ_NDA_11th_(26-27)_A'], gender: 'Female', accountStatus: 'Active', nameVariants: [] },
+    S10: { name: 'S10', lwsId: 'a10', branch: 'APJ', batches: ['APJ_NDA_10th_(26-27)'],   gender: 'Male',   accountStatus: 'Active', nameVariants: [] },
+  }
+  const STD_MAP = {
+    'APJ_NDA_12th_(26-27)': 'APJ', 'APJ_NDA_9th_(26-27)': 'APJ',
+    'APJ_NDA_11th_(26-27)_A': 'APJ', 'APJ_NDA_10th_(26-27)': 'APJ',
+  }
+
+  it('sorts batches lower std → higher std', async () => {
+    render(
+      <AttendanceRollup
+        studentProfiles={STD_PROFILES}
+        branches={['APJ']}
+        syllabusBatchBranches={STD_MAP}
+        fetchDailyAttendance={vi.fn(async () => ({ date: '2026-06-05', rows: [] }))}
+      />,
+    )
+    await screen.findByRole('heading', { name: 'APJ' })
+    const labels = screen.getAllByText(/APJ_NDA_\d+th/).map(el => el.textContent)
+    expect(labels).toEqual([
+      'APJ_NDA_9th_(26-27)',
+      'APJ_NDA_10th_(26-27)',
+      'APJ_NDA_11th_(26-27)_A',
+      'APJ_NDA_12th_(26-27)',
+    ])
   })
 })
