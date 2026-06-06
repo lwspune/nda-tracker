@@ -229,6 +229,95 @@ describe('LectureLogTab — send button', () => {
   })
 })
 
+describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
+  async function ready(date = THURSDAY) {
+    render(<LectureLogTab initialDate={date} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+  }
+
+  it('shows an "Add impromptu lecture" button when a batch is selected', async () => {
+    await ready()
+    expect(screen.getByRole('button', { name: /add impromptu lecture/i })).toBeInTheDocument()
+  })
+
+  it('adds an impromptu lecture card with the entered subject', async () => {
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /add impromptu lecture/i }))
+    fireEvent.change(screen.getByLabelText(/impromptu.*subject/i), { target: { value: 'Extra Maths Doubt' } })
+    fireEvent.click(screen.getByRole('button', { name: /^add lecture$/i }))
+    expect(await screen.findByText('Extra Maths Doubt')).toBeInTheDocument()
+  })
+
+  it('marking an impromptu lecture saves with an adhoc_ slot_id + the entered times', async () => {
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /add impromptu lecture/i }))
+    fireEvent.change(screen.getByLabelText(/impromptu.*subject/i), { target: { value: 'Extra Maths Doubt' } })
+    fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '3:00 PM' } })
+    fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '4:00 PM' } })
+    fireEvent.click(screen.getByRole('button', { name: /^add lecture$/i }))
+    await screen.findByText('Extra Maths Doubt')
+
+    const markBtns = screen.getAllByRole('button', { name: /mark absentees/i })
+    fireEvent.click(markBtns[markBtns.length - 1]) // the ad-hoc card (rendered last)
+    fireEvent.click(await screen.findByLabelText(/Arjun Sharma/))
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(
+      THURSDAY, expect.stringMatching(/^adhoc_/), 'Extra Maths Doubt', ['LWS-001'],
+      { startTime: '3:00 PM', endTime: '4:00 PM' },
+    ))
+  })
+
+  it('reconstructs an impromptu card from a persisted adhoc_ row (subject + time)', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt Session', start_time: '3:00 PM', end_time: '4:00 PM' },
+    ])
+    await ready()
+    expect(await screen.findByText('Doubt Session')).toBeInTheDocument()
+    expect(screen.getByText('3:00 PM – 4:00 PM')).toBeInTheDocument()
+    expect(await screen.findByText(/1 absent/i)).toBeInTheDocument()
+  })
+
+  it('allows adding an impromptu lecture on a day with no timetabled lectures (Sunday)', async () => {
+    await ready('2026-05-24') // Sunday
+    expect(screen.getByText(/no lectures scheduled/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /add impromptu lecture/i }))
+    fireEvent.change(screen.getByLabelText(/impromptu.*subject/i), { target: { value: 'Sunday Special' } })
+    fireEvent.click(screen.getByRole('button', { name: /^add lecture$/i }))
+    expect(await screen.findByText('Sunday Special')).toBeInTheDocument()
+  })
+
+  it('includes impromptu-lecture absences in the onSend payload', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt', start_time: '3:00 PM', end_time: '4:00 PM' },
+    ])
+    const onSend = vi.fn()
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={onSend} />)
+    await screen.findByText('Doubt')
+    fireEvent.click(screen.getByRole('button', { name: /send lecture-miss notifications/i }))
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'LWS-001': expect.arrayContaining([
+          expect.objectContaining({ subject: 'Doubt', startTime: '3:00 PM', endTime: '4:00 PM' }),
+        ]),
+      }),
+      THURSDAY,
+      'LWS_NDA_2Y_(25-27)_A',
+    )
+  })
+
+  it('removing an impromptu card clears its absentees', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt', start_time: null, end_time: null },
+    ])
+    await ready()
+    await screen.findByText('Doubt')
+    fireEvent.click(screen.getByRole('button', { name: /remove .*doubt/i }))
+    await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(THURSDAY, 'adhoc_abc', 'Doubt', []))
+    await waitFor(() => expect(screen.queryByText('Doubt')).not.toBeInTheDocument())
+  })
+})
+
 describe('LectureLogTab — resend states (read lectureMissSendHistory)', () => {
   const HISTORY_KEY = `${THURSDAY}|LWS_NDA_2Y_(25-27)_A`
 

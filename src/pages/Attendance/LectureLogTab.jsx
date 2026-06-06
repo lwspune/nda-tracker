@@ -8,6 +8,13 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+// Impromptu (ad-hoc) lectures have no timetable slot, so we mint a synthetic
+// slot_id. The `adhoc_` prefix is what distinguishes them from timetable slots
+// (`slot_*`) on reconstruction. Module-level counter keeps ids unique within a
+// session; once marked, the id is persisted on the lecture_absences rows.
+let _adhocSeq = 0
+const mintAdhocId = () => `adhoc_${Date.now().toString(36)}_${(++_adhocSeq).toString(36)}`
+
 // Lecture log: per-period cards for one (date, batch). Faculty clicks a card,
 // picks the students who missed that lecture, saves. Cards re-render with the
 // new count. Send button hands per-student subject lists to the parent for the
@@ -29,9 +36,14 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const [date, setDate]           = useState(initialDate ?? todayIso())
   const [batchName, setBatchName] = useState(initialBatch ?? '')
   const [absencesBySlot, setAbsencesBySlot] = useState({}) // { slotId: [lwsId] }
-  // Open-modal context. null = closed. Otherwise { slotId, subject } so the
-  // save handler can both key by slot_id and persist the subject for display.
+  // Open-modal context. null = closed. Otherwise { slotId, subject, adhoc?,
+  // startTime?, endTime? } so the save handler can key by slot_id, persist the
+  // subject for display, and (for ad-hoc) persist the entered time.
   const [modalSlot, setModalSlot] = useState(null)
+  // Impromptu lectures created/reconstructed for this (date, batch).
+  // Shape: { slotId, subject, startTime, endTime }.
+  const [adhocLectures, setAdhocLectures] = useState([])
+  const [adhocForm, setAdhocForm] = useState(null) // null = hidden; else { subject, start, end }
 
   // Available batches: union of all timetable batch names
   const availableBatches = useMemo(() => {
@@ -51,12 +63,17 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     [timetable, date, mappings]
   )
 
-  // slot_id → lecture for quick lookups (subject + time)
+  // slot_id → lecture for quick lookups (subject + time). Combines timetabled
+  // periods AND impromptu lectures so absencesByLwsId (the send payload) picks
+  // up ad-hoc absences too — without this merge they'd be silently dropped.
   const lecturesBySlotId = useMemo(() => {
     const map = {}
     for (const lec of lectures) map[lec.slotId] = lec
+    for (const a of adhocLectures) {
+      map[a.slotId] = { slotId: a.slotId, subject: a.subject, startTime: a.startTime, endTime: a.endTime }
+    }
     return map
-  }, [lectures])
+  }, [lectures, adhocLectures])
 
   // Students in the selected batch (deduped, sorted by name)
   const studentsInBatch = useMemo(() => {
@@ -83,29 +100,67 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     if (!date || !batchName) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAbsencesBySlot({})
+      setAdhocLectures([])
       return
     }
     let cancelled = false
     getAbsencesForDate(date).then(rows => {
       if (cancelled) return
       const grouped = {}
+      const adhocMeta = {} // slotId → { slotId, subject, startTime, endTime } reconstructed from rows
       for (const r of rows) {
         if (!batchIdSet.has(r.lws_id)) continue
         if (!r.slot_id) continue // legacy/orphan rows without slot_id are skipped
         if (!grouped[r.slot_id]) grouped[r.slot_id] = []
         grouped[r.slot_id].push(r.lws_id)
+        if (r.slot_id.startsWith('adhoc_') && !adhocMeta[r.slot_id]) {
+          adhocMeta[r.slot_id] = {
+            slotId: r.slot_id, subject: r.subject,
+            startTime: r.start_time ?? null, endTime: r.end_time ?? null,
+          }
+        }
       }
       setAbsencesBySlot(grouped)
+      // Reset ad-hoc cards to those reconstructed from persisted rows. Cards
+      // created in-session but never marked (no rows) intentionally don't
+      // survive a date/batch switch.
+      setAdhocLectures(Object.values(adhocMeta))
     })
     return () => { cancelled = true }
   }, [date, batchName, getAbsencesForDate, batchIdSet])
 
   async function handleSavePeriod(lwsIds) {
     if (!modalSlot?.slotId) return
-    const ok = await setForPeriod(date, modalSlot.slotId, modalSlot.subject, lwsIds)
+    // Timetabled cards call the 4-arg form (time re-derived from the timetable
+    // at send-time); ad-hoc cards pass the entered time so it persists.
+    const ok = modalSlot.adhoc
+      ? await setForPeriod(date, modalSlot.slotId, modalSlot.subject, lwsIds,
+          { startTime: modalSlot.startTime ?? null, endTime: modalSlot.endTime ?? null })
+      : await setForPeriod(date, modalSlot.slotId, modalSlot.subject, lwsIds)
     if (ok) {
       setAbsencesBySlot(prev => ({ ...prev, [modalSlot.slotId]: lwsIds }))
     }
+  }
+
+  function addAdhocLecture() {
+    const subject = (adhocForm?.subject || '').trim()
+    if (!subject) return
+    setAdhocLectures(prev => [...prev, {
+      slotId: mintAdhocId(), subject,
+      startTime: (adhocForm.start || '').trim() || null,
+      endTime:   (adhocForm.end || '').trim() || null,
+    }])
+    setAdhocForm(null)
+  }
+
+  async function removeAdhocLecture(lec) {
+    await setForPeriod(date, lec.slotId, lec.subject, []) // clears any persisted rows
+    setAdhocLectures(prev => prev.filter(a => a.slotId !== lec.slotId))
+    setAbsencesBySlot(prev => {
+      const next = { ...prev }
+      delete next[lec.slotId]
+      return next
+    })
   }
 
   // Per-student missed-subject list with time info, derived by looking up the
@@ -210,46 +265,133 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       {/* Period cards */}
       {!batchName ? (
         <div className="text-[13px] text-ink-3 italic py-10 text-center">Select a batch to view today's lectures.</div>
-      ) : !timetable ? (
-        <div className="text-[13px] text-ink-3 italic py-10 text-center">
-          No timetable for this batch — set one up first.
-        </div>
-      ) : lectures.length === 0 ? (
-        <div className="text-[13px] text-ink-3 italic py-10 text-center">
-          No lectures scheduled for this day.
-        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {lectures.map(lec => {
-            const count = (absencesBySlot[lec.slotId] || []).length
-            return (
-              <div
-                key={lec.slotId}
-                className="card px-4 py-3"
+        <>
+          {/* Add impromptu lecture — available even when nothing is timetabled (e.g. Sunday) */}
+          <div className="mb-4">
+            {adhocForm === null ? (
+              <button
+                type="button"
+                onClick={() => setAdhocForm({ subject: '', start: '', end: '' })}
+                className="btn text-[12px] min-h-[40px] px-3"
+                aria-label="Add impromptu lecture"
               >
-                <div className="text-[13px] font-semibold text-ink mb-1">{lec.subject}</div>
-                <div className="text-[11px] font-mono text-ink-3 mb-2">
-                  {lec.startTime} – {lec.endTime}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`text-[12px] font-mono ${count > 0 ? 'text-red-400' : 'text-ink-3'}`}
-                  >
-                    {count} absent
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setModalSlot({ slotId: lec.slotId, subject: lec.subject })}
-                    className="btn text-[12px] min-h-[36px] px-3"
-                    aria-label={`Mark absentees for ${lec.subject} ${lec.startTime}`}
-                  >
-                    Mark absentees
-                  </button>
-                </div>
+                + Add impromptu lecture
+              </button>
+            ) : (
+              <div className="card px-4 py-3 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">Subject</span>
+                  <input
+                    type="text"
+                    value={adhocForm.subject}
+                    onChange={e => setAdhocForm(f => ({ ...f, subject: e.target.value }))}
+                    aria-label="Impromptu lecture subject"
+                    placeholder="e.g. Extra Maths Doubt"
+                    className="form-input text-[13px] min-h-[40px] px-3"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">Start (optional)</span>
+                  <input
+                    type="text" value={adhocForm.start}
+                    onChange={e => setAdhocForm(f => ({ ...f, start: e.target.value }))}
+                    aria-label="Impromptu start time" placeholder="3:00 PM"
+                    className="form-input text-[13px] min-h-[40px] px-3 w-28"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">End (optional)</span>
+                  <input
+                    type="text" value={adhocForm.end}
+                    onChange={e => setAdhocForm(f => ({ ...f, end: e.target.value }))}
+                    aria-label="Impromptu end time" placeholder="4:00 PM"
+                    className="form-input text-[13px] min-h-[40px] px-3 w-28"
+                  />
+                </label>
+                <button
+                  type="button" onClick={addAdhocLecture}
+                  disabled={!adhocForm.subject.trim()}
+                  className="btn btn-primary text-[12px] min-h-[40px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Add lecture"
+                >
+                  Add lecture
+                </button>
+                <button
+                  type="button" onClick={() => setAdhocForm(null)}
+                  className="btn text-[12px] min-h-[40px] px-3"
+                  aria-label="Cancel impromptu lecture"
+                >
+                  Cancel
+                </button>
               </div>
-            )
-          })}
-        </div>
+            )}
+          </div>
+
+          {/* Hint when no timetabled lectures (impromptu still available above) */}
+          {!timetable ? (
+            <div className="text-[13px] text-ink-3 italic mb-3">No timetable for this batch — add an impromptu lecture above.</div>
+          ) : lectures.length === 0 ? (
+            <div className="text-[13px] text-ink-3 italic mb-3">No lectures scheduled for this day — add an impromptu lecture above.</div>
+          ) : null}
+
+          {(lectures.length > 0 || adhocLectures.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {lectures.map(lec => {
+                const count = (absencesBySlot[lec.slotId] || []).length
+                return (
+                  <div key={lec.slotId} className="card px-4 py-3">
+                    <div className="text-[13px] font-semibold text-ink mb-1">{lec.subject}</div>
+                    <div className="text-[11px] font-mono text-ink-3 mb-2">{lec.startTime} – {lec.endTime}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[12px] font-mono ${count > 0 ? 'text-red-400' : 'text-ink-3'}`}>{count} absent</span>
+                      <button
+                        type="button"
+                        onClick={() => setModalSlot({ slotId: lec.slotId, subject: lec.subject })}
+                        className="btn text-[12px] min-h-[36px] px-3"
+                        aria-label={`Mark absentees for ${lec.subject} ${lec.startTime}`}
+                      >
+                        Mark absentees
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {adhocLectures.map(lec => {
+                const count = (absencesBySlot[lec.slotId] || []).length
+                return (
+                  <div key={lec.slotId} className="card px-4 py-3 border-dashed">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="text-[13px] font-semibold text-ink">{lec.subject}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeAdhocLecture(lec)}
+                        className="text-ink-3 hover:text-red-400 text-[16px] leading-none px-1"
+                        aria-label={`Remove impromptu lecture ${lec.subject}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="text-[11px] font-mono text-ink-3 mb-2">
+                      {lec.startTime && lec.endTime ? `${lec.startTime} – ${lec.endTime}` : 'Impromptu'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[12px] font-mono ${count > 0 ? 'text-red-400' : 'text-ink-3'}`}>{count} absent</span>
+                      <button
+                        type="button"
+                        onClick={() => setModalSlot({ slotId: lec.slotId, subject: lec.subject, adhoc: true, startTime: lec.startTime, endTime: lec.endTime })}
+                        className="btn text-[12px] min-h-[36px] px-3"
+                        aria-label={`Mark absentees for ${lec.subject}`}
+                      >
+                        Mark absentees
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       <MarkAbsenteesModal

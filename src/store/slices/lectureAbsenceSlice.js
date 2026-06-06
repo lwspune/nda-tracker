@@ -13,7 +13,12 @@ export const createLectureAbsenceSlice = (_set, _get) => ({
   // `subject` is persisted alongside slot_id so the message body can read it
   // without a timetable join later; slot_id is what disambiguates two
   // same-subject periods on the same day.
-  async setLectureAbsenteesForPeriod(date, slotId, subject, lwsIds) {
+  // `startTime`/`endTime` (optional, via the opts object) persist a period's
+  // time on the row — used for IMPROMPTU (ad-hoc) lectures that have no
+  // timetable slot to re-derive the time from. Timetabled lectures pass
+  // nothing here (their time is re-derived from the timetable at send-time),
+  // so both default to null.
+  async setLectureAbsenteesForPeriod(date, slotId, subject, lwsIds, { startTime = null, endTime = null } = {}) {
     if (!date || !slotId || !subject || !Array.isArray(lwsIds)) return false
     const session = await getSession()
     if (!session) return false
@@ -33,7 +38,9 @@ export const createLectureAbsenceSlice = (_set, _get) => ({
     const uniqueIds = [...new Set(lwsIds)]
     const createdBy = session.user?.email ?? null
     const rows = uniqueIds.map(lws_id => ({
-      lws_id, date, slot_id: slotId, subject, created_by: createdBy,
+      lws_id, date, slot_id: slotId, subject,
+      start_time: startTime ?? null, end_time: endTime ?? null,
+      created_by: createdBy,
     }))
     const { error: insError } = await supabase
       .from('lecture_absences')
@@ -53,7 +60,7 @@ export const createLectureAbsenceSlice = (_set, _get) => ({
     if (!session) return []
     const { data, error } = await supabase
       .from('lecture_absences')
-      .select('lws_id, date, slot_id, subject, created_at')
+      .select('lws_id, date, slot_id, subject, start_time, end_time, created_at')
       .eq('date', date)
     if (error) {
       console.error('[lectureAbsence] getForDate failed:', error)

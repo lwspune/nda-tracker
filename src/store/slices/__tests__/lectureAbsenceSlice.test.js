@@ -67,10 +67,25 @@ describe('setLectureAbsenteesForPeriod', () => {
     expect(builder.insert).toHaveBeenCalledOnce()
     const rows = builder.insert.mock.calls[0][0]
     expect(rows).toEqual([
-      { lws_id: 'LWS-001', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
-      { lws_id: 'LWS-002', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
-      { lws_id: 'LWS-003', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', created_by: 'admin@lws' },
+      { lws_id: 'LWS-001', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', start_time: null, end_time: null, created_by: 'admin@lws' },
+      { lws_id: 'LWS-002', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', start_time: null, end_time: null, created_by: 'admin@lws' },
+      { lws_id: 'LWS-003', date: '2026-05-21', slot_id: 'slot_abc', subject: 'Maths', start_time: null, end_time: null, created_by: 'admin@lws' },
     ])
+  })
+
+  it('persists optional start/end time on the rows (impromptu lectures)', async () => {
+    const { builder } = mockSupabase()
+    const { slice } = makeStore()
+    const ok = await slice.setLectureAbsenteesForPeriod(
+      '2026-05-21', 'adhoc_xyz', 'Extra Maths Doubt', ['LWS-001'],
+      { startTime: '3:00 PM', endTime: '4:00 PM' },
+    )
+    expect(ok).toBe(true)
+    const rows = builder.insert.mock.calls[0][0]
+    expect(rows[0]).toEqual({
+      lws_id: 'LWS-001', date: '2026-05-21', slot_id: 'adhoc_xyz',
+      subject: 'Extra Maths Doubt', start_time: '3:00 PM', end_time: '4:00 PM', created_by: 'admin@lws',
+    })
   })
 
   it('only deletes when the new list is empty (clear-the-period flow)', async () => {

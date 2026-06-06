@@ -197,12 +197,14 @@ Indexes: `(lws_id, generated_at DESC)`, `(student_name, generated_at DESC)`.
 | `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
 | `date` | text NOT NULL | — | |
 | `subject` | text NOT NULL | — | Display-only (avoids a timetable join in the message body) |
-| `slot_id` | text NOT NULL | — | `timetables[].timeSlots[].id` — the period identity |
+| `slot_id` | text NOT NULL | — | The period identity: `timetables[].timeSlots[].id` for scheduled lectures, or a minted `adhoc_*` id for impromptu ones (2026-06-06) |
+| `start_time` | text | nullable | Impromptu lectures only — persists the entered time (timetabled rows re-derive from the timetable, leave NULL) (2026-06-06) |
+| `end_time` | text | nullable | Impromptu lectures only (2026-06-06) |
 | `created_at` | timestamptz NOT NULL | `now()` | |
 | `created_by` | text | nullable | Auth session email |
 | **UNIQUE** | `(lws_id, date, slot_id)` | | Was `(…, subject)` until 2026-05-21 — same-subject double periods collapsed |
 
-Indexes: `(date)`, `(lws_id, date)`, `(slot_id)`. RLS ✓ authenticated (`faculty_rw`). Replace-set per period via `setLectureAbsenteesForPeriod` (delete-by-`(date,slot_id)` then insert).
+Indexes: `(date)`, `(lws_id, date)`, `(slot_id)`. RLS ✓ authenticated (`faculty_rw`). Replace-set per period via `setLectureAbsenteesForPeriod(date, slotId, subject, lwsIds, { startTime?, endTime? })` (delete-by-`(date,slot_id)` then insert). **Impromptu lectures** (not in the timetable) use a minted `adhoc_*` `slot_id` + the optional time columns; they reconstruct from these rows since there's no timetable to re-derive from.
 
 ### `homework_pending` — one row per (student, day, subject, chapter, type) flagged
 
