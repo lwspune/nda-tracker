@@ -52,8 +52,15 @@ describe('AttendanceRollup', () => {
 
   it('renders one table per branch that has members', async () => {
     renderWidget()
-    expect(await screen.findByRole('heading', { name: 'LWS Pune' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'APJ' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /LWS Pune/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /APJ/ })).toBeInTheDocument()
+  })
+
+  it('shows the active headcount in each branch heading', async () => {
+    renderWidget()
+    // LWS Pune: Alice + Bob + Carol (LWS_A) + Gina (LWS_B) = 4; APJ: Dave = 1
+    expect(await screen.findByRole('heading', { name: /LWS Pune \(4\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /APJ \(1\)/ })).toBeInTheDocument()
   })
 
   it('shows present/absent/total counts split by gender', async () => {
@@ -153,7 +160,7 @@ describe('AttendanceRollup — batch ordering', () => {
         fetchDailyAttendance={vi.fn(async () => ({ date: '2026-06-05', rows: [] }))}
       />,
     )
-    await screen.findByRole('heading', { name: 'APJ' })
+    await screen.findByRole('heading', { name: /APJ/ })
     const labels = screen.getAllByText(/APJ_NDA_\d+th/).map(el => el.textContent)
     expect(labels).toEqual([
       'APJ_NDA_9th_(26-27)',

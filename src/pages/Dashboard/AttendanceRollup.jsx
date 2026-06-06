@@ -59,9 +59,16 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
     { label: 'Total', idBatch: '__total__', data: totalData, isTotal: true },
   ]
 
+  // Active headcount for the branch (present + absent, both genders) — shown in the heading.
+  const branchTotal = ['male', 'female'].reduce(
+    (sum, g) => sum + totalData[g].present.length + totalData[g].absent.length, 0,
+  )
+
   return (
     <div className="min-w-[320px] flex-1">
-      <h3 className="text-[13px] font-bold text-ink mb-2">{branch}</h3>
+      <h3 className="text-[13px] font-bold text-ink mb-2">
+        {branch} <span className="text-ink-3 font-semibold">({branchTotal})</span>
+      </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-[12px] border-collapse">
           <thead>
