@@ -205,11 +205,12 @@ Path A keeps the dev workflow simple (one JSON file on disk). Path B keeps prod 
 
 ## 8. Open roadmap
 
-Three significant pieces of design work are documented but not implemented. A new contributor should read these before proposing related changes.
+Four significant pieces of design work are documented but not implemented. A new contributor should read these before proposing related changes.
 
 - **Demo mode** — public read-only view of an anonymised topper student, gated by `?demo=true`. Four-phase plan agreed April 2026. See memory file `project_demo_mode.md`.
 - **Branch/batch unification** — link the timetable, syllabus, and exam-schedule batch namespaces (currently independent strings) so the student portal can personalise its views to the logged-in student's branch and batches. Three-phase plan. See `project_branch_batch_plan.md`.
 - **AI insights cadence** — the trigger event for generating new student plans is not decided (manual / post-test / calendar). The Supabase tables (`class_reports`, `student_plans`) and the slice are ready; the trigger and the student-portal surface are not. See `project_ai_insights_cadence.md`.
+- **Multi-tenancy** — serving a second institute (inbound request 2026-06-06). **Not decided, not started.** The app is single-tenant with "authenticated-sees-all" RLS, so data cannot be co-mingled. Three paths (separate deployment per institute / true multi-tenant shared DB+codebase / paid copy); a shared-DB rebuild is ~5–8 weeks with break-even ≈ 3–4 institutes. Start with separate deployments. See `project_multi_tenancy.md`.
 
 ---
 
