@@ -3,7 +3,7 @@
 Live schema of the Supabase project `exjnzrrlzcrsoxfoojcq` (production).
 Column-level reference. For *how* the app uses this data (load/save paths, dual-path mutations, mode-conditional reads), see `CLAUDE.md` → "Data persistence".
 
-**Last verified:** 2026-05-20 via `mcp__supabase__list_tables`.
+**Last verified:** event/quiz/feedback tables (§6–8) on 2026-06-06 via `information_schema` + `pg_constraint`/`pg_policy`. Core 10 tables (§1–5) row counts as of 2026-05-20 — not re-counted since.
 
 ---
 
@@ -16,8 +16,11 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Activity logs | `student_attendance`, `student_logins` | 2402 + 193 |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
+| Event logs | `lecture_absences`, `homework_pending`, `exam_absences` | 125 + 2 + 876 |
+| Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
+| Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 
-10 tables, ~5057 rows. All RLS-enabled except `student_logins` — see warning below.
+16 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin).
 
 ---
 
@@ -182,23 +185,144 @@ Indexes: `(lws_id, generated_at DESC)`, `(student_name, generated_at DESC)`.
 
 ---
 
+## 6. Event logs (sparse, one row per incident)
+
+> Behavioural detail (write paths, replace-set vs reconcile semantics, send flows) lives in `CLAUDE.md` + `FLOWS.md`. These are the column-level shapes.
+
+### `lecture_absences` — one row per (student, day, slot missed)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `date` | text NOT NULL | — | |
+| `subject` | text NOT NULL | — | Display-only (avoids a timetable join in the message body) |
+| `slot_id` | text NOT NULL | — | `timetables[].timeSlots[].id` — the period identity |
+| `created_at` | timestamptz NOT NULL | `now()` | |
+| `created_by` | text | nullable | Auth session email |
+| **UNIQUE** | `(lws_id, date, slot_id)` | | Was `(…, subject)` until 2026-05-21 — same-subject double periods collapsed |
+
+Indexes: `(date)`, `(lws_id, date)`, `(slot_id)`. RLS ✓ authenticated (`faculty_rw`). Replace-set per period via `setLectureAbsenteesForPeriod` (delete-by-`(date,slot_id)` then insert).
+
+### `homework_pending` — one row per (student, day, subject, chapter, type) flagged
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `date` | text NOT NULL | — | |
+| `subject` | text NOT NULL | — | Free text |
+| `chapter` | text NOT NULL | — | Free text |
+| `type` | text NOT NULL | — | CHECK ∈ `('homework','notes','both')` |
+| `created_at` | timestamptz | `now()` | |
+| `created_by` | text | nullable | |
+| `resolved_at` | timestamptz | nullable | Stamped on closure — row is NEVER deleted, only stamped |
+| `resolved_by` | text | nullable | |
+| `notified_at` | timestamptz | nullable | Server audit; UI pending logic uses `notifiedItemKeys` not this |
+| **UNIQUE** | `(lws_id, date, subject, chapter, type)` | | |
+
+Indexes: `(date)`, `(lws_id, date)`, `(lws_id, resolved_at)`. RLS ✓ authenticated (`faculty_rw`). Written by `homeworkSlice` via a **reconcile** (select→delete-unticked→insert-new), preserving `resolved_at` across card re-edits.
+
+### `exam_absences` — one row per (exam, student who didn't attend)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `exam_id` | text NOT NULL | — | FK → `exams(id)` ON DELETE CASCADE |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `marked_at` | timestamptz NOT NULL | `now()` | `timestamptz` — query with ISO `gte`, not a date string |
+| `marked_by` | text | nullable | |
+| `notified_at` | timestamptz | nullable | Stamped client-side after a successful send |
+| **UNIQUE** | `(exam_id, lws_id)` | | |
+
+Indexes: `(exam_id)`, `(lws_id)`, `(lws_id, marked_at DESC)`. RLS ✓ authenticated (`exam_absences_authenticated_all`). Written ONLY by `examAbsenceSlice.syncExamAbsences(examId)` (diff reconciliation — never direct INSERT elsewhere).
+
+---
+
+## 7. Daily Quiz (deliberately separate from `exams`)
+
+### `quizzes` — quiz definition + question bank
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `title` | text NOT NULL | — | |
+| `subject` / `batch` / `branch` | text | nullable | Targeting |
+| `marking` | jsonb NOT NULL | `{"wrong":0,"correct":1}` | |
+| `questions` | jsonb NOT NULL | `'[]'` | Includes answer key — stripped before reaching students |
+| `opens_at` / `closes_at` | timestamptz | nullable | Open window; submit blocked after `closes_at` |
+| `status` | text NOT NULL | `'draft'` | CHECK ∈ `('draft','published')` |
+| `created_by` | text | nullable | |
+| `created_at` / `updated_at` | timestamptz | `now()` | |
+
+Index: `(status)`. RLS ✓ authenticated (`quizzes_authenticated_all`) — teachers can write by design (UI exposure is the only gate; see CLAUDE.md guardrail).
+
+### `quiz_attempts` — one submission per student per quiz
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `quiz_id` | uuid NOT NULL | — | FK → `quizzes(id)` ON DELETE CASCADE |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `student_name` | text NOT NULL | — | |
+| `answers` | jsonb NOT NULL | `'{}'` | |
+| `score` | numeric NOT NULL | `0` | Server-graded |
+| `correct` / `incorrect` / `not_attempted` | int4 NOT NULL | `0` | |
+| `started_at` | timestamptz | nullable | |
+| `submitted_at` | timestamptz | `now()` | |
+| `created_at` | timestamptz | `now()` | |
+| **UNIQUE** | `(quiz_id, lws_id)` | | Enforces one-attempt-per-student |
+
+Indexes: `(lws_id)`, `(quiz_id)`. RLS ✓ authenticated. Graded server-side by `api/quiz-submit.js` (close-window + one-attempt checks are the integrity boundary).
+
+---
+
+## 8. Teacher feedback
+
+### `teacher_feedback` — one row per (form submission × teacher)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `cycle` | text NOT NULL | — | Per-form-export label (e.g. `'03 LWS Pune'`); drives trend/filter |
+| `branch` | text | nullable | |
+| `submitted_at` | timestamptz | nullable | IST (`parseFormTimestamp` appends `+05:30`) |
+| `teacher_name` | text NOT NULL | — | Mapped at import from Form section titles (not in the sheet) |
+| `clarity`, `engagement`, `support`, `feedback`, `pace`, `respect`, `organization`, `availability` | int4 | nullable | 8 dims; each CHECK `(NULL OR 1..5)` |
+| `comment` | text | nullable | |
+| `created_at` | timestamptz | `now()` | |
+| `created_by` | text | nullable | |
+
+Indexes: `(cycle)`, `(teacher_name)`. **RLS ✓ superadmin only** (`superadmin_all`): `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'` — the project's only role-restricted policy; a normal admin cannot read it. Written by `teacherFeedbackSlice.importTeacherFeedback`; wide Google-Form export reshaped long by `src/lib/teacherFeedback.js`.
+
+---
+
 ## FK graph
 
 ```
         exams (45)
          │
          ├──→ exam_results (1636, ON DELETE CASCADE)
-         └──→ class_reports (0, ON DELETE SET NULL)
+         ├──→ class_reports (0, ON DELETE SET NULL)
+         └──→ exam_absences (876, ON DELETE CASCADE)
 
       students (281)
          │
          ├──→ student_batches (493)
          ├──→ student_attendance (2402)
          ├──→ student_logins (193)
-         └──→ student_plans (1, ON DELETE SET NULL)
+         ├──→ student_plans (1, ON DELETE SET NULL)
+         ├──→ lecture_absences (125, ON DELETE CASCADE)
+         ├──→ homework_pending (2, ON DELETE CASCADE)
+         ├──→ exam_absences (876, ON DELETE CASCADE)
+         └──→ quiz_attempts (0, ON DELETE CASCADE)
 
-  faculty_state (1)   ← no FKs (JSONB blob)
-  students_meta (1)   ← no FKs (single-row config)
+        quizzes (0)
+         └──→ quiz_attempts (0, ON DELETE CASCADE)
+
+  faculty_state (1)    ← no FKs (JSONB blob)
+  students_meta (1)    ← no FKs (single-row config)
+  teacher_feedback (499) ← no FKs (teacher_name is text, not a join)
 ```
 
 ---
@@ -211,6 +335,9 @@ Indexes: `(lws_id, generated_at DESC)`, `(student_name, generated_at DESC)`.
 | `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
+| `lecture_absences`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) |
+| `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
+| **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The only role-restricted policy. |
 | **`student_logins`** | **✗ DISABLED** | **Exposed to `anon` + `authenticated`** |
 
 ### ⚠️ `student_logins` RLS gap
