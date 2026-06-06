@@ -17,22 +17,33 @@ export function buildExamRow(exam) {
   }
 }
 
-export function buildResultRows(exam) {
-  return (exam.students || []).map(s => ({
-    exam_id:       exam.id,
-    student_name:  s.name,
-    roll_no:       s.rollNo        ?? '',
-    total_marks:   s.totalMarks    ?? 0,
-    correct:       s.correct       ?? 0,
-    incorrect:     s.incorrect     ?? 0,
-    not_attempted: s.notAttempted  ?? 0,
-    responses:     s.responses     ?? {},
-  }))
+// `studentProfiles` (the canonical+variant-keyed map) lets us snapshot each
+// student's CURRENT batch/branch onto the result row at upload time — see
+// `batch_at_exam`/`branch_at_exam` in DATABASE_SCHEMA. The snapshot is frozen
+// (a later move doesn't rewrite it); null when the student has no matched profile.
+export function buildResultRows(exam, studentProfiles = {}) {
+  return (exam.students || []).map(s => {
+    const p = studentProfiles[s.name]  // map is keyed by canonical name AND every variant
+    return {
+      exam_id:        exam.id,
+      student_name:   s.name,
+      roll_no:        s.rollNo        ?? '',
+      total_marks:    s.totalMarks    ?? 0,
+      correct:        s.correct       ?? 0,
+      incorrect:      s.incorrect     ?? 0,
+      not_attempted:  s.notAttempted  ?? 0,
+      responses:      s.responses     ?? {},
+      batch_at_exam:  p ? ((p.batches || []).join(', ') || null) : null,
+      branch_at_exam: p ? (p.branch || null) : null,
+    }
+  })
 }
 
 // Upsert exam row + replace all result rows.
 // Used by both addExam (no prior rows) and replaceExam (clears stale rows).
-export async function upsertExam(supabase, exam) {
+// `studentProfiles` is threaded through so each result row snapshots the
+// student's current batch/branch at upload time (re-upload re-snapshots).
+export async function upsertExam(supabase, exam, studentProfiles = {}) {
   const { error: examErr } = await supabase
     .from('exams')
     .upsert(buildExamRow(exam), { onConflict: 'id' })
@@ -44,7 +55,7 @@ export async function upsertExam(supabase, exam) {
     .eq('exam_id', exam.id)
   if (delErr) throw new Error(`exam_results delete failed: ${delErr.message}`)
 
-  const resultRows = buildResultRows(exam)
+  const resultRows = buildResultRows(exam, studentProfiles)
   if (resultRows.length > 0) {
     const { error: insErr } = await supabase.from('exam_results').insert(resultRows)
     if (insErr) throw new Error(`exam_results insert failed: ${insErr.message}`)

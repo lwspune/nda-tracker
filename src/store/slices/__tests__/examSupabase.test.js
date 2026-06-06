@@ -100,19 +100,38 @@ describe('buildExamRow', () => {
 // ── buildResultRows ───────────────────────────────────────────────────────────
 
 describe('buildResultRows', () => {
-  it('maps each student to a result row', () => {
+  it('maps each student to a result row (null cohort snapshot without profiles)', () => {
     const rows = buildResultRows(MOCK_EXAM)
     expect(rows).toHaveLength(2)
     expect(rows[0]).toEqual({
-      exam_id:       'exam_1',
-      student_name:  'Arjun Sharma',
-      roll_no:       'R001',
-      total_marks:   80,
-      correct:       20,
-      incorrect:     5,
-      not_attempted: 5,
-      responses:     { '1': 1 },
+      exam_id:        'exam_1',
+      student_name:   'Arjun Sharma',
+      roll_no:        'R001',
+      total_marks:    80,
+      correct:        20,
+      incorrect:      5,
+      not_attempted:  5,
+      responses:      { '1': 1 },
+      batch_at_exam:  null,
+      branch_at_exam: null,
     })
+  })
+
+  it('snapshots current batch/branch from studentProfiles (canonical + variant; null when unmatched)', () => {
+    const profiles = {
+      'Arjun Sharma': { name: 'Arjun Sharma', branch: 'LWS Pune', batches: ['LWS_NDA_2Y_(25-27)_A', 'LWS_NDA_2Y_(25-27)_B'], nameVariants: ['Arjun S'] },
+      'Arjun S':      { name: 'Arjun Sharma', branch: 'LWS Pune', batches: ['LWS_NDA_2Y_(25-27)_A', 'LWS_NDA_2Y_(25-27)_B'], nameVariants: ['Arjun S'] },
+      // Ravi Kumar has no profile → null snapshot
+    }
+    const rows = buildResultRows(MOCK_EXAM, profiles)
+    expect(rows[0].batch_at_exam).toBe('LWS_NDA_2Y_(25-27)_A, LWS_NDA_2Y_(25-27)_B')
+    expect(rows[0].branch_at_exam).toBe('LWS Pune')
+    expect(rows[1].batch_at_exam).toBeNull()   // Ravi: no profile
+    expect(rows[1].branch_at_exam).toBeNull()
+
+    // resolves a variant spelling to the same profile
+    const variantExam = { ...MOCK_EXAM, students: [{ name: 'Arjun S', responses: {} }] }
+    expect(buildResultRows(variantExam, profiles)[0].branch_at_exam).toBe('LWS Pune')
   })
 
   it('defaults roll_no to empty string when absent', () => {

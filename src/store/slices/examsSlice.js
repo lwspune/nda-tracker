@@ -14,7 +14,7 @@ export const createExamsSlice = (set, get) => ({
     get()._save()
     get().syncExamAbsences?.(normalised.id)
     getSession().then(session => {
-      if (session) upsertExam(supabase, normalised).catch(e => console.error('[exams] addExam Supabase write failed:', e))
+      if (session) upsertExam(supabase, normalised, get().studentProfiles).catch(e => console.error('[exams] addExam Supabase write failed:', e))
     })
   },
 
@@ -23,7 +23,7 @@ export const createExamsSlice = (set, get) => ({
     get()._save()
     get().syncExamAbsences?.(id)
     getSession().then(session => {
-      if (session) upsertExam(supabase, exam).catch(e => console.error('[exams] replaceExam Supabase write failed:', e))
+      if (session) upsertExam(supabase, exam, get().studentProfiles).catch(e => console.error('[exams] replaceExam Supabase write failed:', e))
     })
   },
 
