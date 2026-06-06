@@ -4,7 +4,7 @@ import { EmptyState, StatCard } from '../../components/ui'
 import {
   getToppers, getValidStudentNames,
   getStudentExams, filterValidExams,
-  computeProjectedScore, getBatchOptions, getExamsForBatch
+  computeProjectedScore, getBatchOptions, getExamsForBatch, getBatchMemberNames
 } from '../../lib/analytics'
 import { getFreqForSubject } from '../../lib/ndaFreq'
 import { useMode } from '../../context/ModeContext'
@@ -49,12 +49,21 @@ export default function ToppersPage() {
   const hasFreqData = ndaFreq.length > 0
   const subjectMaxScore = ndaMarksBySubject?.[activeSubject] ?? 300
 
-  // Valid students: those whose matched profile has a regDate.
-  // null when no profiles imported — no filtering applied.
+  // Valid students: those whose matched profile has a regDate, AND — when a batch
+  // is selected — who are CURRENT members of that batch (not just co-attendees of
+  // its exams). This makes the batch filter student-centric / move-robust: a
+  // student who moved into the batch shows up with their full history; a
+  // cross-cohort co-attendee of a combined exam is excluded.
+  // null when no profiles imported AND no batch filter — no filtering applied.
   const validNames = useMemo(() => {
-    if (!Object.keys(studentProfiles).length) return null
-    return getValidStudentNames(filteredExams, studentProfiles)
-  }, [filteredExams, studentProfiles])
+    const hasProfiles = Object.keys(studentProfiles).length > 0
+    let base = hasProfiles ? getValidStudentNames(filteredExams, studentProfiles) : null
+    if (batchFilter !== 'all') {
+      const members = getBatchMemberNames(studentProfiles, batchFilter)
+      base = base === null ? members : new Set([...base].filter(n => members.has(n)))
+    }
+    return base
+  }, [filteredExams, studentProfiles, batchFilter])
 
   // Build case-insensitive name → profile map for regDate lookups in enrichment
   const profileMap = useMemo(() => {

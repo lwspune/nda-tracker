@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { getExamBatches, getExamAbsentees } from '../filters'
+import {
+  getExamBatches, getExamAbsentees,
+  getBatchMemberNames, getBranchMemberNames, getExamsForBranch,
+} from '../filters'
 
 describe('getExamBatches', () => {
   it('returns single-element array for a single batch', () => {
@@ -192,5 +195,67 @@ describe('getExamAbsentees', () => {
     const exam = { batch: 'APJ_NDA_2Y_(26-28)', students: [] } // no date
     const result = getExamAbsentees(exam, datedProfiles)
     expect(result.map(r => r.name).sort()).toEqual(['Alice', 'Bob'])
+  })
+})
+
+// ── current-cohort membership helpers (move-robust batch/branch filtering) ──
+
+describe('getBatchMemberNames / getBranchMemberNames', () => {
+  const profiles = {
+    // canonical entries
+    'Namit':  { name: 'Namit', branch: 'LWS Pune', batches: ['LWS_2Y_A'], nameVariants: ['Namit S'] },
+    'Mansi':  { name: 'Mansi', branch: 'LWS Pune', batches: ['LWS_2Y_A'], nameVariants: [] },
+    'Bhumi':  { name: 'Bhumi', branch: 'APJ',      batches: ['APJ_12th'], nameVariants: [] }, // moved LWS→APJ
+    // variant-keyed map entry pointing at the same Namit profile — must be skipped
+    'Namit S':{ name: 'Namit', branch: 'LWS Pune', batches: ['LWS_2Y_A'], nameVariants: ['Namit S'] },
+  }
+
+  it('returns current batch members incl. canonical + variants, excluding non-members', () => {
+    expect(getBatchMemberNames(profiles, 'LWS_2Y_A')).toEqual(new Set(['Namit', 'Namit S', 'Mansi']))
+    expect(getBatchMemberNames(profiles, 'APJ_12th')).toEqual(new Set(['Bhumi']))
+  })
+
+  it('returns current branch members the same way', () => {
+    expect(getBranchMemberNames(profiles, 'LWS Pune')).toEqual(new Set(['Namit', 'Namit S', 'Mansi']))
+    expect(getBranchMemberNames(profiles, 'APJ')).toEqual(new Set(['Bhumi']))
+  })
+
+  it('skips variant-keyed entries (no double counting) and handles empty profiles', () => {
+    // Namit appears once as a canonical name + once via his variant — the variant-keyed
+    // map entry ("Namit S") is skipped, so the set is exactly {Namit, Namit S, Mansi}.
+    expect(getBatchMemberNames(profiles, 'LWS_2Y_A').size).toBe(3)
+    expect(getBatchMemberNames({}, 'LWS_2Y_A')).toEqual(new Set())
+    expect(getBranchMemberNames(null, 'APJ')).toEqual(new Set())
+  })
+
+  it('multi-batch student is a member of each of their batches', () => {
+    const dual = { 'Zoya': { name: 'Zoya', branch: 'APJ', batches: ['APJ_12th', 'APJ_11th'], nameVariants: [] } }
+    expect(getBatchMemberNames(dual, 'APJ_12th')).toEqual(new Set(['Zoya']))
+    expect(getBatchMemberNames(dual, 'APJ_11th')).toEqual(new Set(['Zoya']))
+  })
+})
+
+describe('getExamsForBranch', () => {
+  const profiles = {
+    'Namit': { name: 'Namit', branch: 'LWS Pune', batches: ['LWS_2Y_A'], nameVariants: [] },
+    'Bhumi': { name: 'Bhumi', branch: 'APJ',      batches: ['APJ_12th'], nameVariants: [] }, // moved to APJ
+  }
+
+  it('includes a combined exam under the branch of ANY current-branch attendee (roster-based)', () => {
+    const exams = [
+      // tagged LWS, but a now-APJ student (Bhumi) sat it → must surface under APJ
+      { id: 'e1', branch: 'LWS Pune', students: [{ name: 'Namit' }, { name: 'Bhumi' }] },
+      { id: 'e2', branch: 'LWS Pune', students: [{ name: 'Namit' }] },
+    ]
+    expect(getExamsForBranch(exams, profiles, 'APJ').map(e => e.id)).toEqual(['e1'])
+    expect(getExamsForBranch(exams, profiles, 'LWS Pune').map(e => e.id)).toEqual(['e1', 'e2'])
+  })
+
+  it('falls back to exam.branch only when no attendee has a profile', () => {
+    const exams = [{ id: 'x', branch: 'APJ', students: [{ name: 'Unknown' }] }]
+    expect(getExamsForBranch(exams, profiles, 'APJ').map(e => e.id)).toEqual(['x'])
+    // an attendee WITH a profile of a different branch suppresses the exam.branch fallback
+    const exams2 = [{ id: 'y', branch: 'APJ', students: [{ name: 'Namit' }] }]
+    expect(getExamsForBranch(exams2, profiles, 'APJ')).toEqual([])
   })
 })

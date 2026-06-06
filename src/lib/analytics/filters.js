@@ -142,6 +142,52 @@ export function getExamsForBatch(exams, studentProfiles, batchName) {
   })
 }
 
+// Exams where ≥1 attendee's CURRENT branch matches (roster-based, mirrors
+// getExamsForBatch). Falls back to exam.branch only when no attendee has a profile.
+// Used to scope the exam set to a branch's current cohort while still including the
+// combined / pre-move exams those members actually sat (an exam-tag filter on
+// exam.branch would drop a moved student's earlier-branch history).
+export function getExamsForBranch(exams, studentProfiles, branchName) {
+  const lookup = buildProfileLookup(studentProfiles)
+  return exams.filter(e => {
+    for (const s of e.students) {
+      const profile = lookup[s.name]
+      if (profile && profile.branch === branchName) return true
+    }
+    const hasAnyProfile = e.students.some(s => lookup[s.name])
+    return !hasAnyProfile && e.branch === branchName
+  })
+}
+
+// Exam-record names (canonical + every nameVariant) of students whose CURRENT
+// profile batch includes batchName. Used to scope student-ranking analytics to a
+// batch's *current* members — robust to batch/branch moves (a moved student's full
+// exam history follows them; one who moved out drops off immediately). Skips
+// variant-keyed map entries via `p.name === key`, same guard as getExamAbsentees.
+export function getBatchMemberNames(studentProfiles, batchName) {
+  const names = new Set()
+  for (const [key, p] of Object.entries(studentProfiles || {})) {
+    if (!p || p.name !== key) continue
+    if (!(p.batches || []).includes(batchName)) continue
+    names.add(p.name)
+    for (const v of (p.nameVariants || [])) if (v) names.add(v)
+  }
+  return names
+}
+
+// Same, by current branch. Branch is kept in sync with batch (a batch belongs to
+// exactly one branch), so this scopes to all current members of a branch.
+export function getBranchMemberNames(studentProfiles, branchName) {
+  const names = new Set()
+  for (const [key, p] of Object.entries(studentProfiles || {})) {
+    if (!p || p.name !== key) continue
+    if (p.branch !== branchName) continue
+    names.add(p.name)
+    for (const v of (p.nameVariants || [])) if (v) names.add(v)
+  }
+  return names
+}
+
 // All exams a student appeared in, with their record
 export function getStudentExams(name, exams) {
   return exams

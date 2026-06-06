@@ -3,7 +3,7 @@ import useStore from '../../store/useStore'
 import { EmptyState, PageHeader, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
 import {
   computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames,
-  getBatchOptions, getExamsForBatch, computeTrend,
+  getBatchOptions, getExamsForBatch, getExamsForBranch, getBatchMemberNames, getBranchMemberNames, computeTrend,
   getPerformanceSeries, getClassProjectedAvg, getPriorityChapters, getBatchComparison,
 } from '../../lib/analytics'
 import { getFreqForSubject, NDA_TOTAL_MARKS_BY_SUBJECT } from '../../lib/ndaFreq'
@@ -33,9 +33,12 @@ export default function DashboardPage() {
 
   const allBranches = [...new Set(subjectFiltered.map(e => e.branch).filter(Boolean))].sort()
 
+  // Branch + batch scope the exam set by current cohort ROSTER (not exam.branch
+  // tag), so a moved student's earlier-branch exams are still included — see
+  // validNames below where students are restricted to current members.
   const branchFiltered = branchFilter === 'all'
     ? subjectFiltered
-    : subjectFiltered.filter(e => e.branch === branchFilter)
+    : getExamsForBranch(subjectFiltered, studentProfiles, branchFilter)
 
   const allBatches = getBatchOptions(branchFiltered, studentProfiles)
 
@@ -47,10 +50,19 @@ export default function DashboardPage() {
     ? batchFiltered
     : batchFiltered.filter(e => e.id === filterVal)
 
+  // Valid students = regDate-valid AND (when a branch/batch is selected) CURRENT
+  // members of it. Student-centric / move-robust: a moved-in student brings their
+  // full history; a cross-cohort co-attendee of a combined exam is excluded.
   const validNames = useMemo(() => {
-    if (!Object.keys(studentProfiles).length) return null
-    return getValidStudentNames(filtered, studentProfiles)
-  }, [filtered, studentProfiles])
+    const hasProfiles = Object.keys(studentProfiles).length > 0
+    let base = hasProfiles ? getValidStudentNames(filtered, studentProfiles) : null
+    const restrict = (set) => {
+      base = base === null ? set : new Set([...base].filter(n => set.has(n)))
+    }
+    if (branchFilter !== 'all') restrict(getBranchMemberNames(studentProfiles, branchFilter))
+    if (batchFilter !== 'all')  restrict(getBatchMemberNames(studentProfiles, batchFilter))
+    return base
+  }, [filtered, studentProfiles, branchFilter, batchFilter])
 
   // Subject whose weightage table drives projection + priority chapters.
   const prioritySubject = subjectFilter === 'all' ? 'Maths' : subjectFilter
