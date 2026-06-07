@@ -252,22 +252,27 @@ function QuestionForm({ q, index, canRemove, onChange, onRemove }) {
           const key = `option${letter}`
           const isAnswer = String(q.answer || '').toUpperCase() === letter
           return (
-            <label key={letter} className={`flex items-center gap-2 rounded-lg border px-2 py-1.5
+            <label key={letter} className={`flex flex-col gap-1 rounded-lg border px-2 py-1.5
               ${isAnswer ? 'border-accent bg-accent-soft' : 'border-border'}`}>
-              <input
-                type="radio"
-                name={`answer-${index}`}
-                checked={isAnswer}
-                onChange={() => onChange({ answer: letter })}
-                aria-label={`Mark option ${letter} correct`}
-              />
-              <span className="text-[12px] font-bold text-ink-3 w-4">{letter}</span>
-              <input
-                className="input flex-1 text-[13px] py-1"
-                placeholder={`Option ${letter}`}
-                value={q[key] || ''}
-                onChange={e => onChange({ [key]: e.target.value })}
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`answer-${index}`}
+                  checked={isAnswer}
+                  onChange={() => onChange({ answer: letter })}
+                  aria-label={`Mark option ${letter} correct`}
+                />
+                <span className="text-[12px] font-bold text-ink-3 w-4">{letter}</span>
+                <input
+                  className="input flex-1 text-[13px] py-1"
+                  placeholder={`Option ${letter}`}
+                  value={q[key] || ''}
+                  onChange={e => onChange({ [key]: e.target.value })}
+                />
+              </div>
+              {String(q[key] || '').includes('\\(') && (
+                <div className="text-[12px] text-ink-2 pl-8"><Math>{q[key]}</Math></div>
+              )}
             </label>
           )
         })}
