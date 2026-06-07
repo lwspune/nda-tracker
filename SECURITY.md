@@ -40,9 +40,11 @@ Four distinct auth paths, each with different trust assumptions.
 | Admin | Supabase Auth — email + password, JWT, no `user_metadata.role` | The session holder is a designated admin. Single shared account today. |
 | Superadmin | Supabase Auth — email + password, JWT, `user_metadata.role = 'superadmin'` | Admin powers **plus** access to teacher feedback (HR-sensitive). Single account (`vilas11shinde@gmail.com`). Routes through the admin portal; the extra surface is gated by the `isSuperadmin` flag + the `teacher_feedback` RLS role check. |
 | Teacher | Supabase Auth — email + password, JWT, `user_metadata.role = 'teacher'` | The session holder is a designated teacher with read-only intent. Individual accounts. |
-| Student | `POST /api/student-login` with mobile number, returns a session token stored in `localStorage` | The caller knows a mobile number that exists in `students.mobile`. No Supabase Auth session. |
+| Student | `POST /api/student-login` with mobile number, returns a session token stored in `localStorage` | The caller knows a mobile number that exists in `students.mobile` **or any `students.parent_mobiles[]`**. No Supabase Auth session. |
 
 The student "auth" is mobile-number-only — there is no password and no OTP. Anyone who knows or guesses a student's mobile number can read their data via the student portal. This is an accepted trade-off for the coaching context (mobile numbers are not secret, and students should not need to remember a password).
+
+A login number may be the student's **own** mobile or any entry in their `parent_mobiles[]` — a parent reaching their child's dashboard is intended (same accountability stance as the WhatsApp alerts). The blast radius of a known number is therefore unchanged: it still resolves only to the student(s) that number belongs to. When one number is linked to **two or more** students (siblings sharing a parent number), the endpoint returns a candidate list and the client shows a picker; see the `lwsId` validation rule in "Student portal — RLS bypass".
 
 ---
 
@@ -73,6 +75,7 @@ This makes `api/student-login.js` a security-critical file:
 - It must filter results by the mobile-number lookup. A bug that returns un-filtered data is a full PII leak.
 - It must never log the service role key or include it in any response.
 - It must not accept SQL-influencing parameters from the request body (no template substitution into queries).
+- **The request body's optional `lwsId` (used by the sibling picker and session restore) is an authorization input, not just a selector.** It is honoured **only when it is in the candidate set computed from the looked-up mobile** — i.e. the number is that student's own or parent number. Trusting a client-supplied `lwsId` on its own would let any caller pull any student's data by guessing an id. Do not relax this check, and do not collapse a multi-candidate (sibling) match to "first hit wins".
 
 The student portal also has a parallel attendance fetch — to bypass RLS, attendance data is passed as a prop from the serverless response into `StudentView` instead of fetched client-side.
 
