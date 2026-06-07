@@ -386,17 +386,6 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         />
       )}
 
-      {/* Chapter accordion */}
-      <Card>
-        <CardTitle>
-          Chapter Performance (Recency-Weighted)
-          <span className="ml-2 text-[9px] normal-case tracking-normal text-ink-3 font-normal">
-            — click a chapter to expand subtopics
-          </span>
-        </CardTitle>
-        <ChapterAccordion chapterSummary={chapterSummary} name={name} exams={filteredExams} />
-      </Card>
-
       {/* Exam history */}
       <ExamHistoryTable scores={scores} />
 
@@ -406,6 +395,17 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         exams={normalizedExams}
         examAbsencesProp={examAbsencesProp}
       />
+
+      {/* Chapter accordion — grouped with the audits below as the "diagnosis" cluster */}
+      <Card>
+        <CardTitle>
+          Chapter Performance (Recency-Weighted)
+          <span className="ml-2 text-[9px] normal-case tracking-normal text-ink-3 font-normal">
+            — click a chapter to expand subtopics
+          </span>
+        </CardTitle>
+        <ChapterAccordion chapterSummary={chapterSummary} name={name} exams={filteredExams} />
+      </Card>
 
       {/* Wrong Answer Audit — all modes */}
       {wrongAudit.length > 0 && (
