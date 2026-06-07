@@ -192,3 +192,75 @@ describe('LoginPage — Student tab', () => {
     expect(screen.getByPlaceholderText('98765 43210')).toBeInTheDocument()
   })
 })
+
+describe('LoginPage — Student tab sibling picker', () => {
+  const PICKER_RESPONSE = {
+    multiple: true,
+    candidates: [
+      { lwsId: 'LWS001', name: 'Arjun Sharma', branch: 'APJ', batches: ['APJ_NDA_12th_(26-27)'] },
+      { lwsId: 'LWS002', name: 'Priya Sharma', branch: 'APJ', batches: ['APJ_NDA_11th_(26-27)_A'] },
+    ],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    global.fetch.mockRejectedValue(new Error('no network in tests'))
+  })
+
+  it('shows a student picker when the number matches multiple students', async () => {
+    global.fetch.mockResolvedValueOnce(mockFetchSuccess(PICKER_RESPONSE))
+
+    const onStudentLogin = vi.fn()
+    renderLoginPage({ onStudentLogin })
+    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
+
+    fireEvent.change(screen.getByPlaceholderText('98765 43210'), { target: { value: '9111111111' } })
+    fireEvent.click(screen.getByRole('button', { name: /View My Results/i }))
+
+    await waitFor(() => expect(screen.getByText('Arjun Sharma')).toBeInTheDocument())
+    expect(screen.getByText('Priya Sharma')).toBeInTheDocument()
+    // Did NOT log in yet — waiting for the user to choose
+    expect(onStudentLogin).not.toHaveBeenCalled()
+  })
+
+  it('re-calls the endpoint with the chosen lwsId and logs in', async () => {
+    global.fetch
+      .mockResolvedValueOnce(mockFetchSuccess(PICKER_RESPONSE))
+      .mockResolvedValueOnce(mockFetchSuccess({ ...MOCK_STUDENT_DATA, lwsId: 'LWS002', name: 'Priya Sharma' }))
+
+    const onStudentLogin = vi.fn()
+    renderLoginPage({ onStudentLogin })
+    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
+
+    fireEvent.change(screen.getByPlaceholderText('98765 43210'), { target: { value: '9111111111' } })
+    fireEvent.click(screen.getByRole('button', { name: /View My Results/i }))
+
+    await waitFor(() => expect(screen.getByText('Priya Sharma')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Priya Sharma'))
+
+    await waitFor(() => expect(onStudentLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ lwsId: 'LWS002' })
+    ))
+    // Second fetch carried the chosen lwsId
+    expect(global.fetch).toHaveBeenLastCalledWith('/api/student-login',
+      expect.objectContaining({ body: expect.stringContaining('LWS002') })
+    )
+  })
+
+  it('lets the user go back to the number entry from the picker', async () => {
+    global.fetch.mockResolvedValueOnce(mockFetchSuccess(PICKER_RESPONSE))
+
+    renderLoginPage()
+    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument())
+
+    fireEvent.change(screen.getByPlaceholderText('98765 43210'), { target: { value: '9111111111' } })
+    fireEvent.click(screen.getByRole('button', { name: /View My Results/i }))
+
+    await waitFor(() => expect(screen.getByText('Arjun Sharma')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /different number/i }))
+
+    expect(screen.getByPlaceholderText('98765 43210')).toBeInTheDocument()
+    expect(screen.queryByText('Arjun Sharma')).not.toBeInTheDocument()
+  })
+})

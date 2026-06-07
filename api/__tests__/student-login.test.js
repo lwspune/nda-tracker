@@ -415,3 +415,108 @@ describe('POST /api/student-login', () => {
     expect(result.examAbsences[0].exam_date).toBeNull()
   })
 })
+
+// ── Parent-number login + sibling picker ──────────────────────────────────────
+//
+// A student can log in with their own registered number OR a parent number from
+// parent_mobiles[]. When a number resolves to exactly one student, login is
+// direct. When it resolves to 2+ students (siblings sharing a parent number),
+// the endpoint returns a picker payload; the client re-calls with the chosen
+// lwsId to get that student's full data.
+
+const SIBLING_A = {
+  ...MOCK_STUDENT,
+  canonical_name: 'Arjun Sharma',
+  lws_id:         'LWS001',
+  mobile:         '9876543210',
+  parent_mobiles: ['9111111111'],
+}
+const SIBLING_B = {
+  ...MOCK_STUDENT,
+  canonical_name: 'Priya Sharma',
+  lws_id:         'LWS002',
+  mobile:         '9000000002',
+  parent_mobiles: ['9111111111'],
+}
+
+describe('POST /api/student-login — parent number + sibling picker', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    process.env.VITE_SUPABASE_URL = 'https://test.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
+  })
+
+  it('logs in via a parent mobile number (single match)', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, parent_mobiles: ['9111111111'] }],
+    }))
+    const res = await call({ mobile: '9111111111' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    const result = res.json.mock.calls[0][0]
+    expect(result.lwsId).toBe('LWS001')
+    expect(result.viaParent).toBe(true)
+  })
+
+  it('normalises a parent number that carries a country-code prefix', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, parent_mobiles: ['9111111111'] }],
+    }))
+    const res = await call({ mobile: '919111111111' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.json.mock.calls[0][0].lwsId).toBe('LWS001')
+  })
+
+  it('sets viaParent=false when logging in with the own number', async () => {
+    const res = await call({ mobile: '9876543210' })
+    expect(res.json.mock.calls[0][0].viaParent).toBe(false)
+  })
+
+  it('returns a picker payload (no exam data) when a number matches multiple students', async () => {
+    const client = makeMockClient({ students: [SIBLING_A, SIBLING_B] })
+    vi.mocked(createClient).mockReturnValue(client)
+    const res = await call({ mobile: '9111111111' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    const result = res.json.mock.calls[0][0]
+    expect(result.multiple).toBe(true)
+    expect(result.candidates).toHaveLength(2)
+    expect(result.candidates.map(c => c.lwsId).sort()).toEqual(['LWS001', 'LWS002'])
+    expect(result.candidates[0]).toMatchObject({
+      name:   expect.any(String),
+      branch: expect.any(String),
+    })
+    // Picker step must not leak full data or record a login yet
+    expect(result.exams).toBeUndefined()
+    expect(client.loginInsert).not.toHaveBeenCalled()
+  })
+
+  it('resolves to the chosen student when lwsId is supplied with an ambiguous number', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ students: [SIBLING_A, SIBLING_B] }))
+    const res = await call({ mobile: '9111111111', lwsId: 'LWS002' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    const result = res.json.mock.calls[0][0]
+    expect(result.lwsId).toBe('LWS002')
+    expect(result.multiple).toBeUndefined()
+  })
+
+  it('returns 404 when the supplied lwsId is not linked to the number', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ students: [SIBLING_A, SIBLING_B] }))
+    const res = await call({ mobile: '9111111111', lwsId: 'LWS999' })
+    expect(res.status).toHaveBeenCalledWith(404)
+  })
+
+  it('records the login under the chosen student when resolved via picker', async () => {
+    const client = makeMockClient({ students: [SIBLING_A, SIBLING_B] })
+    vi.mocked(createClient).mockReturnValue(client)
+    await call({ mobile: '9111111111', lwsId: 'LWS002' })
+    expect(client.loginInsert).toHaveBeenCalledWith({ lws_id: 'LWS002' })
+  })
+
+  it('returns 404 when neither own nor parent numbers match', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, parent_mobiles: ['9111111111'] }],
+    }))
+    const res = await call({ mobile: '9222222222' })
+    expect(res.status).toHaveBeenCalledWith(404)
+  })
+})

@@ -56,6 +56,9 @@ export default function LoginPage({ onStudentLogin }) {
   const [mobile, setMobile]                 = useState('')
   const [studentLoading, setStudentLoading] = useState(false)
   const [studentError,   setStudentError]   = useState(null)
+  // Sibling picker: when a number is linked to 2+ students, the endpoint returns
+  // a candidate list and we let the user choose which student to open.
+  const [candidates, setCandidates]         = useState(null)
 
   // ── Pre-fill mobile from ?mobile= URL param ────────────────
   useEffect(() => {
@@ -74,12 +77,16 @@ export default function LoginPage({ onStudentLogin }) {
           const res = await fetch('/api/student-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mobile: session.mobile }),
+            // Pass the stored lwsId so a shared (sibling) number restores the
+            // exact student that was chosen, without re-showing the picker.
+            body: JSON.stringify({ mobile: session.mobile, lwsId: session.lwsId }),
           })
           if (res.ok) {
             const data = await res.json()
-            onStudentLogin(data)
-            return
+            if (!data.multiple) {
+              onStudentLogin(data)
+              return
+            }
           }
         } catch { /* fall through to login UI */ }
       }
@@ -105,7 +112,8 @@ export default function LoginPage({ onStudentLogin }) {
   }
 
   // ── Student login ───────────────────────────────────────────
-  async function handleStudentLogin() {
+  // `chosenLwsId` is set only on the second call from the sibling picker.
+  async function handleStudentLogin(chosenLwsId) {
     const digits = mobile.replace(/\D/g, '')
     if (digits.length < 10) {
       setStudentError('Please enter a valid 10-digit mobile number.')
@@ -117,11 +125,17 @@ export default function LoginPage({ onStudentLogin }) {
       const res = await fetch('/api/student-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: digits }),
+        body: JSON.stringify({ mobile: digits, ...(chosenLwsId ? { lwsId: chosenLwsId } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) {
         setStudentError(data.error || 'Mobile number not found. Please check your number or contact LWS Pune.')
+        setStudentLoading(false)
+        return
+      }
+      // Shared (sibling) number → show the picker instead of logging in.
+      if (data.multiple) {
+        setCandidates(data.candidates)
         setStudentLoading(false)
         return
       }
@@ -173,10 +187,47 @@ export default function LoginPage({ onStudentLogin }) {
         <div className="bg-surface border border-border rounded-2xl p-4 md:p-6 shadow-sm">
 
           {tab === 'student' ? (
+            candidates ? (
+              <> {/* ── Sibling picker ── */}
+                <div className="text-[15px] font-bold text-ink mb-1">Choose a student</div>
+                <div className="text-[13px] text-ink-3 mb-5">
+                  This number is registered for more than one student. Select whose
+                  results you want to view.
+                </div>
+
+                <div className="flex flex-col gap-2 mb-4">
+                  {candidates.map(c => (
+                    <button
+                      key={c.lwsId}
+                      onClick={() => handleStudentLogin(c.lwsId)}
+                      disabled={studentLoading}
+                      className="w-full text-left px-3 py-3 rounded-xl border border-border bg-surface-2
+                                 hover:border-accent hover:bg-surface-3 transition-colors min-h-[44px]
+                                 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <div className="text-[14px] font-bold text-ink">{c.name}</div>
+                      <div className="text-[11px] font-mono text-ink-3 mt-0.5">
+                        {[c.branch, ...(c.batches || [])].filter(Boolean).join(' · ') || c.lwsId}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {studentError && <ErrorBox message={studentError} />}
+
+                <button
+                  onClick={() => { setCandidates(null); setStudentError(null) }}
+                  className="w-full py-2.5 rounded-xl font-semibold text-[13px] text-ink-3
+                             hover:text-ink transition-colors min-h-[44px]"
+                >
+                  ← Use a different number
+                </button>
+              </>
+            ) : (
             <> {/* ── Student ── */}
               <div className="text-[15px] font-bold text-ink mb-1">Welcome back</div>
               <div className="text-[13px] text-ink-3 mb-5">
-                Enter your registered mobile number to view your results.
+                Enter your or your parent's registered mobile number to view your results.
               </div>
 
               <div className="mb-4">
@@ -204,7 +255,7 @@ export default function LoginPage({ onStudentLogin }) {
               {studentError && <ErrorBox message={studentError} />}
 
               <button
-                onClick={handleStudentLogin}
+                onClick={() => handleStudentLogin()}
                 disabled={studentLoading || mobile.length < 10}
                 className={`w-full py-3 rounded-xl font-bold text-[14px] transition-all
                   ${studentLoading || mobile.length < 10
@@ -215,6 +266,7 @@ export default function LoginPage({ onStudentLogin }) {
                 {studentLoading ? 'Checking…' : 'View My Results →'}
               </button>
             </>
+            )
           ) : (
             <> {/* ── Admin / Teacher ── */}
               <div className="text-[15px] font-bold text-ink mb-1">Staff sign-in</div>

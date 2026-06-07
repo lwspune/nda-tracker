@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const { mobile } = req.body || {}
+  const { mobile, lwsId } = req.body || {}
   if (!mobile) {
     res.status(400).json({ error: 'mobile is required' })
     return
@@ -62,11 +62,50 @@ export default async function handler(req, res) {
     return
   }
 
-  const student = students.find(s => normMobile(s.mobile) === normalized)
-  if (!student) {
+  // A number may be a student's own mobile OR a parent number (parent_mobiles[]).
+  // Build the full candidate set so a parent can reach their child's dashboard,
+  // and siblings sharing a parent number can be disambiguated via a picker.
+  const candidates = students.filter(s =>
+    normMobile(s.mobile) === normalized ||
+    (s.parent_mobiles || []).some(pm => normMobile(pm) === normalized)
+  )
+
+  if (candidates.length === 0) {
     res.status(404).json({ error: 'Mobile number not found. Please check your number or contact LWS Pune.' })
     return
   }
+
+  let student
+  if (lwsId) {
+    // Disambiguation step (sibling picker) OR session restore. The lwsId is only
+    // honoured when it is actually among the candidates for this number — never
+    // trust a client-supplied lwsId on its own, or any number could pull any
+    // student's data.
+    student = candidates.find(c => c.lws_id === lwsId)
+    if (!student) {
+      res.status(404).json({ error: 'That student is not linked to this mobile number.' })
+      return
+    }
+  } else if (candidates.length === 1) {
+    student = candidates[0]
+  } else {
+    // Multiple students share this number (siblings) — return a lightweight
+    // picker payload (no exam data, no login recorded). The client re-calls with
+    // the chosen lwsId.
+    res.status(200).json({
+      multiple: true,
+      candidates: candidates.map(c => ({
+        lwsId:   c.lws_id,
+        name:    c.canonical_name,
+        branch:  c.branch || '',
+        batches: (c.student_batches || []).map(b => b.batch_name),
+      })),
+    })
+    return
+  }
+
+  // viaParent = the number matched a parent entry, not the student's own mobile.
+  const viaParent = normMobile(student.mobile) !== normalized
 
   const canonicalName = student.canonical_name
   const allNames = [
@@ -216,6 +255,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     name:             canonicalName,
     lwsId:            student.lws_id,
+    viaParent,
     profile,
     exams,
     attendance:       attendanceRows || [],
