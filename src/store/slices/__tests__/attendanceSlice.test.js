@@ -36,6 +36,7 @@ function makeQueryBuilder({ data = [], error = null, upsertError = null } = {}) 
   builder.delete = vi.fn(() => builder)
   builder.order  = vi.fn(() => builder)
   builder.limit  = vi.fn(() => builder)
+  builder.gte    = vi.fn(() => builder)
   builder.range  = vi.fn(() => builder)
   builder.upsert = vi.fn(() => Promise.resolve({ error: upsertError }))
   builder.then   = (onFulfilled, onRejected) =>
@@ -348,5 +349,41 @@ describe('fetchDailyAttendance', () => {
     const { slice } = makeStore()
     const result = await slice.fetchDailyAttendance(null)
     expect(result).toEqual({ date: null, rows: [] })
+  })
+})
+
+describe('fetchAttendanceLeadersData', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('returns empty rows when there is no session', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
+    const { slice } = makeStore()
+    const result = await slice.fetchAttendanceLeadersData('2026-05-10')
+    expect(result).toEqual({ attendanceRows: [], lectureRows: [], homeworkRows: [] })
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('reads the three tables windowed by sinceIso and returns their rows', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'admin' } } } })
+    const attendance = makeQueryBuilder({ data: [{ lws_id: 'L1', status: 'A' }] })
+    const lecture    = makeQueryBuilder({ data: [{ lws_id: 'L2' }] })
+    const homework   = makeQueryBuilder({ data: [{ lws_id: 'L3' }] })
+    supabase.from.mockImplementation(table =>
+      table === 'student_attendance' ? attendance
+      : table === 'lecture_absences' ? lecture
+      : homework)
+
+    const { slice } = makeStore()
+    const result = await slice.fetchAttendanceLeadersData('2026-05-10')
+
+    // attendance scoped to A/L statuses + the window; all three windowed by date
+    expect(attendance.in).toHaveBeenCalledWith('status', ['A', 'L'])
+    expect(attendance.gte).toHaveBeenCalledWith('date', '2026-05-10')
+    expect(lecture.gte).toHaveBeenCalledWith('date', '2026-05-10')
+    expect(homework.gte).toHaveBeenCalledWith('date', '2026-05-10')
+
+    expect(result.attendanceRows).toEqual([{ lws_id: 'L1', status: 'A' }])
+    expect(result.lectureRows).toEqual([{ lws_id: 'L2' }])
+    expect(result.homeworkRows).toEqual([{ lws_id: 'L3' }])
   })
 })

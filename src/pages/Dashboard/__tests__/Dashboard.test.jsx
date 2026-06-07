@@ -19,6 +19,7 @@ const mockStore = {
   branches: [],
   syllabusBatchBranches: {},
   fetchDailyAttendance: vi.fn(async () => ({ date: null, rows: [] })),
+  fetchAttendanceLeadersData: vi.fn(async () => ({ attendanceRows: [], lectureRows: [], homeworkRows: [] })),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -146,14 +147,20 @@ describe('Dashboard — subject dropdown presence', () => {
 })
 
 describe('Dashboard — command-center widgets', () => {
-  it('renders the new KPI strip (no meaningless raw "Avg Score")', () => {
+  it('no longer renders the KPI strip (removed in favour of attendance widgets)', () => {
     setExams([makeExam()])
     renderDashboard()
-    expect(screen.getByText('Latest Exam Avg')).toBeInTheDocument()
-    expect(screen.getByText('Avg Projected NDA')).toBeInTheDocument()
-    expect(screen.getByText('At-Risk')).toBeInTheDocument()
-    // The old raw-totalMarks KPI is gone
+    expect(screen.queryByText('Latest Exam Avg')).not.toBeInTheDocument()
+    expect(screen.queryByText('Avg Projected NDA')).not.toBeInTheDocument()
     expect(screen.queryByText('Avg Score')).not.toBeInTheDocument()
+  })
+
+  it('renders the attendance leaders widget', () => {
+    setExams([makeExam()])
+    renderDashboard()
+    expect(screen.getByText('Attendance Leaders')).toBeInTheDocument()
+    expect(screen.getByText(/Most Absent/)).toBeInTheDocument()
+    expect(screen.getByText(/Most Lectures Missed/)).toBeInTheDocument()
   })
 
   it('renders the performance-over-time and priority-chapters widgets', () => {

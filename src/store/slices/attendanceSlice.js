@@ -158,6 +158,40 @@ export const createAttendanceSlice = (set, get) => ({
     return { date: targetDate, rows }
   },
 
+  // Bulk reads for the Dashboard "attendance leaders" widget, windowed to
+  // `sinceIso` (YYYY-MM-DD). Returns raw rows; ranking happens in the pure
+  // buildAttendanceLeaders aggregator. Paginated (attendance can exceed 1000).
+  // No session → empty rows.
+  async fetchAttendanceLeadersData(sinceIso) {
+    const session = await getSession()
+    if (!session) return { attendanceRows: [], lectureRows: [], homeworkRows: [] }
+
+    const readAll = async (build) => {
+      const PAGE = 1000
+      let from = 0
+      const out = []
+      while (true) {
+        const { data, error } = await build().range(from, from + PAGE - 1)
+        if (error) { console.error('[attendance] leaders read failed:', error); break }
+        if (!data?.length) break
+        out.push(...data)
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      return out
+    }
+
+    const attendanceRows = await readAll(() => supabase
+      .from('student_attendance').select('lws_id, status')
+      .in('status', ['A', 'L']).gte('date', sinceIso))
+    const lectureRows = await readAll(() => supabase
+      .from('lecture_absences').select('lws_id').gte('date', sinceIso))
+    const homeworkRows = await readAll(() => supabase
+      .from('homework_pending').select('lws_id').gte('date', sinceIso))
+
+    return { attendanceRows, lectureRows, homeworkRows }
+  },
+
   // Returns lws_id[] for students marked late on the given date.
   async getLateStudentsForDate(date) {
     if (!date) return []

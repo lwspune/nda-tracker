@@ -2,16 +2,16 @@ import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { EmptyState, PageHeader, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
 import {
-  computeChapterStats, getAtRisk, getHardestQuestions, getAllStudents, getValidStudentNames,
+  computeChapterStats, getAtRisk, getHardestQuestions, getValidStudentNames,
   getBatchOptions, getExamsForBatch, getExamsForBranch, getBatchMemberNames, getBranchMemberNames, computeTrend,
-  getPerformanceSeries, getClassProjectedAvg, getPriorityChapters, getBatchComparison,
+  getPerformanceSeries, getPriorityChapters, getBatchComparison,
 } from '../../lib/analytics'
 import { getFreqForSubject, NDA_TOTAL_MARKS_BY_SUBJECT } from '../../lib/ndaFreq'
-import KpiStrip from './KpiStrip'
 import PerformanceTrend from './PerformanceTrend'
 import PriorityChapters from './PriorityChapters'
 import BatchComparison from './BatchComparison'
 import AttendanceRollup from './AttendanceRollup'
+import AttendanceLeaders from './AttendanceLeaders'
 
 export default function DashboardPage() {
   const exams              = useStore(s => s.exams)
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const branches             = useStore(s => s.branches)
   const syllabusBatchBranches = useStore(s => s.syllabusBatchBranches)
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
+  const fetchAttendanceLeadersData = useStore(s => s.fetchAttendanceLeadersData)
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -82,29 +83,18 @@ export default function DashboardPage() {
     )
   }
 
-  const students     = getAllStudents(filtered, validNames)
   const chapterStats = computeChapterStats(filtered, validNames)
   const atRisk       = getAtRisk(filtered, validNames)
   const hardest      = getHardestQuestions(filtered, 8, validNames)
-  const totalInExams = validNames !== null ? getAllStudents(filtered).length : null
 
-  // Performance over time + KPI deltas (class avg %-of-max per exam, chronological)
+  // Performance over time (class avg %-of-max per exam, chronological)
   const series       = getPerformanceSeries(filtered, validNames)
   const classTrend   = computeTrend(series.map(p => p.avgPct))
-  const latestPct    = series.length ? series[series.length - 1].avgPct : null
-  const prevPct      = series.length >= 2 ? series[series.length - 2].avgPct : null
 
-  // At-risk change vs the class state before the most recent exam
-  const sortedByDate = [...filtered].sort((a, b) => a.date.localeCompare(b.date))
-  const atRiskPrior  = sortedByDate.length >= 2
-    ? getAtRisk(sortedByDate.slice(0, -1), validNames).length
-    : null
-
-  // Class projected NDA score (subject-scoped to prioritySubject)
+  // Subject-scoped exam set for priority chapters + per-batch comparison
   const prioritySubjectExams = subjectFilter === 'all'
     ? filtered.filter(e => (e.subject || 'Maths') === prioritySubject)
     : filtered
-  const projected = getClassProjectedAvg(prioritySubjectExams, freq, totalMarks, { validNames, studentProfiles })
 
   // Weak × high-yield priorities + per-batch comparison
   const priorityRows = getPriorityChapters(prioritySubjectExams, freq, totalMarks, { validNames })
@@ -172,25 +162,19 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI strip */}
-      <KpiStrip
-        registered={validNames !== null}
-        studentsCount={students.length}
-        totalInExams={totalInExams}
-        latestPct={latestPct}
-        prevPct={prevPct}
-        projectedAvg={projected.avg}
-        projectedCount={projected.count}
-        atRiskNow={atRisk.length}
-        atRiskPrior={atRiskPrior}
-      />
-
       {/* Branch-wise attendance roll-up (class-wide for the selected day) */}
       <AttendanceRollup
         studentProfiles={studentProfiles}
         branches={branches}
         syllabusBatchBranches={syllabusBatchBranches}
         fetchDailyAttendance={fetchDailyAttendance}
+      />
+
+      {/* Attendance leaders — top-5 absent / late / lecture-miss / homework-miss (class-wide) */}
+      <AttendanceLeaders
+        studentProfiles={studentProfiles}
+        fetchAttendanceLeadersData={fetchAttendanceLeadersData}
+        setActiveStudent={setActiveStudent}
       />
 
       {/* Performance over time */}
