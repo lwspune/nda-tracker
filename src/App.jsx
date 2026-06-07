@@ -233,7 +233,7 @@ function TeacherPortal({ onLogout }) {
 
 // ── Student Portal ─────────────────────────────────────────────
 // Wraps StudentView with student-specific data loaded from their JSON file
-function StudentPortal({ data, onLogout }) {
+export function StudentPortal({ data, onLogout }) {
   const loadStudentData = useStore(s => s.loadStudentData)
 
   // Deep-link from the WhatsApp result message: `?exam=<id>` focuses that exam's
