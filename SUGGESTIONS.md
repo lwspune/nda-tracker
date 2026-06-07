@@ -120,3 +120,44 @@ The KPI strip was removed on 2026-06-07 (`KpiStrip.jsx` deleted, commit `4cae24f
   1. **Surface it** — add a small "Avg Projected NDA" stat somewhere it's genuinely useful (e.g. the `BatchComparison` card already shows per-batch projected; a class-wide figure could sit there or on Toppers). Keep the function + tests.
   2. **Remove it** — delete `getClassProjectedAvg` from `dashboard.js`, drop its `getClassProjectedAvg` describe block from `dashboard.test.js`, and confirm nothing else imports it (`grep getClassProjectedAvg src/`). Net test count drops by that block.
 - It reuses `getToppers(…, 0, …)` for regDate scoping, so removal is self-contained — no shared helper to worry about.
+
+---
+
+### Persist each student's chosen option on results upload (so key fixes become re-gradeable)
+
+Today `parseExcelFull` collapses each answer to a `1/-1/0` verdict and **discards the chosen option** (`Q N Options`). When an answer key is later found wrong (this session: 12 keys across 2 mocks), the marks can't be re-graded from the DB — the students who picked the now-correct option are unrecoverable. See `memory/reference_exam_grading_data_model.md`.
+
+**Why:** answer-key errors are not rare (this session's audit found ~32 defects across 270 questions — ~12%, incl. ~12 outright wrong keys). Each correction currently fixes only the *displayed* answer + solution, never the scores/rankings. Storing the raw choice once makes every future key fix a one-query re-grade.
+
+**How to apply:**
+- In `parseExcelFull` ([src/lib/excel.js](src/lib/excel.js) ~L104), persist the chosen letter alongside (or instead of) the verdict — e.g. `responses[qn] = { opt: <A-D|null>, v: 1|-1|0 }`, or a parallel `choices` map.
+- Add a pure `gradeResults(exam, choices)` that derives `correct/incorrect/not_attempted/total_marks/responses` from choices × `questions[].answer` × `marking`. Use it at upload AND expose a "re-grade from stored choices" admin action.
+- Migration is forward-only (old rows have no stored choice); document that pre-change exams remain Evalbee-graded and un-re-gradeable.
+- Note the trade-off: this moves grading authority from Evalbee to the app key — only worth it if `questions[].answer` is trusted (it now has an audit path).
+
+---
+
+### Sweep older exams for key/solution defects
+
+The correctness audit only covered the latest GAT + Maths mocks. The same failure mode (hand-entered keys + AI-generated solutions, never cross-verified) likely affects other recent exams. The method that worked: independent re-derivation via fanned-out subagents, NOT a key-vs-solution consistency check (which is blind to shared errors). See `memory/feedback_rederive_over_consistency_check.md`.
+
+**Why:** a ~12% defect rate on the two newest mocks implies a meaningful tail of wrong keys students are revising against — the opposite of the product's "grounded, verified" positioning. Bad solutions are worse than none for active recall.
+
+**How to apply:**
+- Prioritise high-traffic exams (recent mocks, large cohorts). Pull `questions` per exam, fan out ~30-question chunks to subagents that *solve* each independently and return MIS-KEYED / DEFECTIVE / SOLUTION-WRONG / DUPLICATE / AMBIGUOUS rows.
+- Apply only high-confidence MIS-KEYED fixes via the JSONB recipe in `reference_exam_grading_data_model.md`; route DEFECTIVE / AMBIGUOUS / SOLUTION-WRONG to faculty.
+- Snapshot pre-change keys (revert map) and verify `jsonb_array_length` after each write.
+
+---
+
+### Resolve the non-key defects in the two audited mocks (faculty judgment)
+
+Beyond the 12 keys already corrected, the audit left open: **7 defective questions** (correct answer not among options — GAT 5/116, Maths 12/45/48/52/75), **4 misleading solutions** with a correct key (GAT 20, Maths 5/16/71), **5 duplicate pairs** (GAT 65≈72, 66=69, 67=71, 143=144; Maths Q30 has two identical options), and **4 ambiguous** (GAT 7/8, Maths 38/84). These need option-set edits or faculty calls, not a key flip.
+
+**Why:** defective questions are un-answerable as written (students lose marks on impossible items); duplicate GAT 143/144 was keyed two different ways; misleading solutions teach the wrong method even when the key is right.
+
+**How to apply:**
+- For DEFECTIVE: fix the option set (or drop the question) in the tags source + re-upload, or edit `questions[]` JSONB directly.
+- For SOLUTION-WRONG: rewrite the `solution` text to match the (correct) key.
+- For DUPLICATEs: delete one of each pair; for Maths Q30, fix the duplicated option.
+- All of these are content decisions — surface the list to faculty rather than auto-applying.
