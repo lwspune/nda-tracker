@@ -125,7 +125,7 @@ function DifficultyGroup({ label, items, examId }) {
 
 // ── Expanded panel for one exam row ──────────────────────────
 
-function ExamIssuesPanel({ exam, student }) {
+export function ExamIssuesPanel({ exam, student }) {
   const issues = getIssues(exam, student)
   if (!issues.length) return null
   const groups = groupByDifficulty(issues)

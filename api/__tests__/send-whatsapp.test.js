@@ -222,4 +222,37 @@ describe('POST /api/send-whatsapp', () => {
     // Should still find the exam and return 200
     expect(res.status).toHaveBeenCalledWith(200)
   })
+
+  // ── Tracker deep-link (so parents land on the specific result) ─────────────
+
+  // The tracker URL is the 7th template variable (index 6).
+  function trackerUrlsFromFetch() {
+    return global.fetch.mock.calls.map(c => JSON.parse(c[1].body).variables[6])
+  }
+
+  it('embeds the exam id in every tracker link (deep-link to the result)', async () => {
+    await call({ examName: 'NDA Test 1' })
+    const urls = trackerUrlsFromFetch()
+    expect(urls.length).toBeGreaterThan(0)
+    urls.forEach(u => expect(u).toContain('exam=exam1'))
+  })
+
+  it('pre-fills the student mobile + exam id on the PARENT message link', async () => {
+    // Previously the parent link was the bare tracker base (no pre-fill) — a
+    // parent had to guess which number to type. Now it carries the student's
+    // own mobile (one-tap, right child, no sibling picker) + the exam id.
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [{ canonical_name: 'Arjun Sharma', mobile: '9876543210', parent_mobiles: ['9000000001'], name_variants: [] }],
+        resultRows: [{ student_name: 'Arjun Sharma', correct: 20, incorrect: 5, not_attempted: 5 }],
+      }),
+    })
+    await call({ examName: 'NDA Test 1' })
+    const urls = trackerUrlsFromFetch()
+    expect(urls).toHaveLength(2) // student + 1 parent
+    urls.forEach(u => {
+      expect(u).toContain('mobile=9876543210')
+      expect(u).toContain('exam=exam1')
+    })
+  })
 })

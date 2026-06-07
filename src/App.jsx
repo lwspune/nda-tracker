@@ -21,6 +21,7 @@ import MonthlyReportsPage from './pages/MonthlyReports'
 import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
+import FocusedExamResult from './pages/Students/FocusedExamResult'
 import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
 import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
@@ -235,9 +236,24 @@ function TeacherPortal({ onLogout }) {
 function StudentPortal({ data, onLogout }) {
   const loadStudentData = useStore(s => s.loadStudentData)
 
+  // Deep-link from the WhatsApp result message: `?exam=<id>` focuses that exam's
+  // result at the top so parents don't have to hunt for it on the dashboard.
+  const [focusedExamId] = useState(() =>
+    new URLSearchParams(window.location.search).get('exam') || null
+  )
+
   useEffect(() => {
     loadStudentData(data)
   }, [data])
+
+  // Strip `?exam=` after first read so a restored/bookmarked session doesn't stay
+  // pinned to one exam on later visits.
+  useEffect(() => {
+    if (!focusedExamId) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('exam')
+    window.history.replaceState({}, '', url)
+  }, [focusedExamId])
 
   return (
     <ModeContext.Provider value="student">
@@ -250,7 +266,7 @@ function StudentPortal({ data, onLogout }) {
               🎯 NDA Tracker
             </div>
             <div className="text-[9px] font-mono text-indigo-300/30 tracking-[1.5px] uppercase">
-              LWS PUNE · {data.profile?.batches?.[0] || 'Student View'}
+              LWS PUNE · {data.name}{data.profile?.batches?.[0] ? ` · ${data.profile.batches[0]}` : ''}
             </div>
           </div>
           <button
@@ -263,6 +279,15 @@ function StudentPortal({ data, onLogout }) {
         </div>
 
         <div className="pt-[72px] pb-8 px-4 md:px-8 max-w-4xl mx-auto">
+          {/* Parent view banner — names the child so a parent is sure whose data this is */}
+          {data.viaParent && (
+            <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-indigo-50
+                            border border-indigo-200 text-[13px] text-indigo-900">
+              <span className="text-[15px] flex-shrink-0">👨‍👩‍👦</span>
+              <span>Parent view — showing <strong>{data.name}</strong>'s results.</span>
+            </div>
+          )}
+          <FocusedExamResult examId={focusedExamId} exams={data.exams || []} />
           <StudentQuizzes mobile={data.profile?.mobile} />
           <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} />
         </div>

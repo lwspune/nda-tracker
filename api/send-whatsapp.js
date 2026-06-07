@@ -34,6 +34,15 @@ function fmtDate(d) {
   return `${day} ${MONTHS[m - 1]} ${y}`
 }
 
+// Build the student-portal link carried in the result message. Pre-fills the
+// mobile (one-tap login) and the exam id (lands on this exam's result).
+function buildTrackerUrl(mobileRaw, examId) {
+  const params = []
+  if (mobileRaw) params.push(`mobile=${mobileRaw}`)
+  if (examId)    params.push(`exam=${examId}`)
+  return params.length ? `${TRACKER_BASE}?${params.join('&')}` : TRACKER_BASE
+}
+
 async function sendWabridge(appKey, authKey, deviceId, templateId, destination, variables) {
   const payload = {
     'app-key':            appKey,
@@ -177,7 +186,11 @@ export default async function handler(req, res) {
 
     const mobileRaw  = mobileMap[name.toLowerCase()] || ''
     const mobileNorm = normMobile(mobileRaw)
-    const trackerUrl = mobileRaw ? `${TRACKER_BASE}?mobile=${mobileRaw}` : TRACKER_BASE
+    // Deep-link: pre-fill the student's own mobile (one-tap login to the right
+    // child, no sibling picker) + the exam id so the portal lands on this exam's
+    // result. Used for BOTH the student and the parent message (parents otherwise
+    // got a bare link with no pre-fill and landed on the dashboard root).
+    const trackerUrl = buildTrackerUrl(mobileRaw, exam.id)
     const makeParams = url => [name, exam.name, examDate, `${pct}%`, String(correct), String(total), url]
 
     // Student
@@ -199,7 +212,7 @@ export default async function handler(req, res) {
         skipped++
         continue
       }
-      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, makeParams(TRACKER_BASE))
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, makeParams(trackerUrl))
       if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
       else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
     }

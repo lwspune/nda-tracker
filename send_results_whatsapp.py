@@ -179,6 +179,7 @@ def main():
     exam        = pick_exam(data, args.exam)
     exam_name   = exam.get('name', 'Exam')
     exam_date   = fmt_date(exam.get('date', ''))
+    exam_id     = str(exam.get('id') or '')
 
     print(f"Exam: {exam_name}  ({exam.get('date', '')})")
     print(f"Mode: {'DRY RUN — no messages will be sent' if args.dry_run else 'LIVE SEND'}")
@@ -223,7 +224,11 @@ def main():
 
         student_mobile_raw  = mobile_map.get(name.lower(), '')
         student_mobile_norm = normalise_mobile(student_mobile_raw) if student_mobile_raw else None
-        tracker_student     = f"{TRACKER_BASE}?mobile={student_mobile_raw}" if student_mobile_raw else TRACKER_BASE
+        # Deep-link: pre-fill the student's own mobile (one-tap login → right
+        # child, no sibling picker) + the exam id (portal lands on this result).
+        # Same link for student AND parent — parents previously got a bare URL.
+        _parts          = ([f"mobile={student_mobile_raw}"] if student_mobile_raw else []) + ([f"exam={exam_id}"] if exam_id else [])
+        tracker_student = f"{TRACKER_BASE}?{'&'.join(_parts)}" if _parts else TRACKER_BASE
 
         def make_params(tracker_url):
             return [name, exam_name, exam_date, f"{pct}%", str(correct), str(total), tracker_url]
@@ -262,7 +267,7 @@ def main():
                 skipped += 1
                 continue
             ok, detail = send_whatsapp(app_key, auth_key, device_id, template_id,
-                                       parent_norm, make_params(TRACKER_BASE), args.dry_run)
+                                       parent_norm, make_params(tracker_student), args.dry_run)
             if ok:
                 print(f"  SENT → {name} (parent → {parent_norm})")
                 sent += 1
