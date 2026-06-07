@@ -1,11 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 
 // Stub the heavy per-question panel — its own rendering (QuestionCard + store +
 // KaTeX) is tested via ExamHistoryTable; here we only verify FocusedExamResult's
-// own logic (matching + summary + that it hands the matched exam to the panel).
+// own logic (matching + summary + that it hands the matched exam/includeAll to
+// the panel).
 vi.mock('../ExamHistoryTable', () => ({
-  ExamIssuesPanel: ({ exam }) => <div data-testid="issues-panel">issues:{exam.id}</div>,
+  ExamIssuesPanel: ({ exam, includeAll }) => (
+    <div data-testid="issues-panel" data-all={String(Boolean(includeAll))}>issues:{exam.id}</div>
+  ),
 }))
 
 import FocusedExamResult from '../FocusedExamResult'
@@ -57,5 +60,19 @@ describe('FocusedExamResult', () => {
     render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
     const panel = screen.getByTestId('issues-panel')
     expect(panel).toHaveTextContent('issues:exam1')
+  })
+
+  it('defaults to wrong+skipped only (includeAll=false)', () => {
+    render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
+    expect(screen.getByTestId('issues-panel')).toHaveAttribute('data-all', 'false')
+    expect(screen.getByRole('button', { name: /show all questions/i })).toBeInTheDocument()
+  })
+
+  it('toggles to all questions (includeAll=true) when "Show all questions" is clicked', () => {
+    render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
+    fireEvent.click(screen.getByRole('button', { name: /show all questions/i }))
+    expect(screen.getByTestId('issues-panel')).toHaveAttribute('data-all', 'true')
+    // Button label flips back
+    expect(screen.getByRole('button', { name: /show only wrong & skipped/i })).toBeInTheDocument()
   })
 })

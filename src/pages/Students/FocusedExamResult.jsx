@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Card, Badge } from '../../components/ui'
 import { ExamIssuesPanel } from './ExamHistoryTable'
 
@@ -17,6 +18,8 @@ import { ExamIssuesPanel } from './ExamHistoryTable'
  *                              (each has `students: [theStudent]`)
  */
 export default function FocusedExamResult({ examId, exams }) {
+  const [showAll, setShowAll] = useState(false)
+
   if (!examId) return null
   const exam = (exams || []).find(e => e.id === examId)
   if (!exam) return null
@@ -46,19 +49,25 @@ export default function FocusedExamResult({ examId, exams }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 text-[12px] font-mono mb-1">
-        <span className="text-success">✅ {student.correct} correct</span>
-        <span className="text-danger">❌ {student.incorrect} wrong</span>
-        <span className="text-ink-3">⬜ {student.notAttempted} skipped</span>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+        <div className="flex items-center gap-3 text-[12px] font-mono">
+          <span className="text-success">✅ {student.correct} correct</span>
+          <span className="text-danger">❌ {student.incorrect} wrong</span>
+          <span className="text-ink-3">⬜ {student.notAttempted} skipped</span>
+        </div>
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-border
+                     bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
+                     hover:border-accent/30 transition-all min-h-[32px]"
+        >
+          {showAll ? 'Show only wrong & skipped' : 'Show all questions'}
+        </button>
       </div>
 
-      {/* Per-question wrong/skipped breakdown for this exam */}
+      {/* Per-question breakdown — wrong/skipped by default, all questions when toggled */}
       <div className="-mx-4 -mb-4 mt-2">
-        <ExamIssuesPanel exam={exam} student={student} />
-      </div>
-
-      <div className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-border">
-        ↓ Scroll down for full performance history, attendance, and chapter analysis.
+        <ExamIssuesPanel exam={exam} student={student} includeAll={showAll} />
       </div>
     </Card>
   )

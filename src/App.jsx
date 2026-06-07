@@ -241,6 +241,11 @@ function StudentPortal({ data, onLogout }) {
   const [focusedExamId] = useState(() =>
     new URLSearchParams(window.location.search).get('exam') || null
   )
+  // On a deep-link arrival we show ONLY the focused result + a reveal button, so
+  // the parent isn't overwhelmed by the full dashboard. Revealed on click.
+  const [showFull, setShowFull] = useState(false)
+  const focusedExam = focusedExamId ? (data.exams || []).find(e => e.id === focusedExamId) : null
+  const focusedMode = Boolean(focusedExam) && !showFull
 
   useEffect(() => {
     loadStudentData(data)
@@ -288,8 +293,21 @@ function StudentPortal({ data, onLogout }) {
             </div>
           )}
           <FocusedExamResult examId={focusedExamId} exams={data.exams || []} />
-          <StudentQuizzes mobile={data.profile?.mobile} />
-          <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} />
+          {focusedMode ? (
+            <button
+              onClick={() => setShowFull(true)}
+              className="w-full py-3 rounded-xl font-bold text-[14px] border border-border
+                         bg-surface text-ink-2 hover:bg-accent-soft hover:text-accent
+                         hover:border-accent/30 transition-all"
+            >
+              View full performance ↓
+            </button>
+          ) : (
+            <>
+              <StudentQuizzes mobile={data.profile?.mobile} />
+              <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} />
+            </>
+          )}
         </div>
       </div>
     </ModeContext.Provider>

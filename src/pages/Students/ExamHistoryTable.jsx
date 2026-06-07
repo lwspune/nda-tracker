@@ -17,14 +17,16 @@ export function fmtMarks(total) {
   return r > 0 ? `+${r}` : String(r === 0 ? 0 : r)  // String(-0) is "0"; force 0 too
 }
 
-/** All wrong (-1) and skipped (0) questions for one exam + student pair. */
-function getIssues(exam, student) {
+/**
+ * Questions for one exam + student pair.
+ * Default: only the "issues" (wrong = -1, skipped = 0).
+ * `includeAll`: every question (incl. correct = 1) for full-paper review.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function getIssues(exam, student, includeAll = false) {
   return (exam.questions || [])
-    .filter(q => {
-      const r = student.responses?.[q.q]
-      return r === -1 || r === 0
-    })
-    .map(q => ({ q, result: student.responses[q.q] }))
+    .map(q => ({ q, result: student.responses?.[q.q] }))
+    .filter(({ result }) => includeAll ? true : (result === -1 || result === 0))
 }
 
 /** Bucket issues into difficulty groups. */
@@ -47,11 +49,22 @@ const DIFFICULTY_META = {
   Untagged: { label: 'Untagged', cls: 'bg-surface-2 text-ink-3 border-border' },
 }
 
+// ── Per-result status styling (wrong / skipped / correct) ─────
+
+const STATUS = {
+  correct: { label: '✅ Correct', badge: 'bg-green-50 text-green-700 border-green-200', panel: 'bg-green-50/40 border-green-100' },
+  wrong:   { label: '❌ Wrong',   badge: 'bg-red-50 text-danger border-red-200',        panel: 'bg-red-50/40 border-red-100' },
+  skipped: { label: '⬜ Skipped', badge: 'bg-surface-2 text-ink-3 border-border',        panel: 'bg-surface-2/60 border-border' },
+}
+function statusOf(result) {
+  return result === 1 ? STATUS.correct : result === -1 ? STATUS.wrong : STATUS.skipped
+}
+
 // ── Question row inside the expanded panel ────────────────────
 
 function IssueRow({ item, examId }) {
   const [open, setOpen] = useState(false)
-  const isWrong = item.result === -1
+  const st = statusOf(item.result)
   const hasContent = item.q.question || item.q.optionA
 
   return (
@@ -64,11 +77,8 @@ function IssueRow({ item, examId }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border
-            ${isWrong
-              ? 'bg-red-50 text-danger border-red-200'
-              : 'bg-surface-2 text-ink-3 border-border'}`}>
-            {isWrong ? '❌ Wrong' : '⬜ Skipped'}
+          <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${st.badge}`}>
+            {st.label}
           </span>
           <button
             onClick={() => setOpen(o => !o)}
@@ -76,9 +86,7 @@ function IssueRow({ item, examId }) {
             className={`flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-semibold
                         border transition-all disabled:opacity-40 disabled:cursor-not-allowed
               ${open
-                ? (isWrong
-                    ? 'bg-red-50 text-danger border-red-200'
-                    : 'bg-surface-2 text-ink-3 border-border')
+                ? st.badge
                 : 'bg-surface-2 text-ink-2 border-border hover:bg-accent-soft hover:text-accent hover:border-accent/30'
               }`}
           >
@@ -87,7 +95,7 @@ function IssueRow({ item, examId }) {
         </div>
       </div>
       {open && (
-        <div className={`px-4 py-3 border-t ${isWrong ? 'bg-red-50/40 border-red-100' : 'bg-surface-2/60 border-border'}`}>
+        <div className={`px-4 py-3 border-t ${st.panel}`}>
           <QuestionCard
             q={item.q}
             examId={examId}
@@ -125,8 +133,8 @@ function DifficultyGroup({ label, items, examId }) {
 
 // ── Expanded panel for one exam row ──────────────────────────
 
-export function ExamIssuesPanel({ exam, student }) {
-  const issues = getIssues(exam, student)
+export function ExamIssuesPanel({ exam, student, includeAll = false }) {
+  const issues = getIssues(exam, student, includeAll)
   if (!issues.length) return null
   const groups = groupByDifficulty(issues)
 
