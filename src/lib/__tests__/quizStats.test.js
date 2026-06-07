@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { quizCohort, quizSummary, quizQuestionStats, quizNotAttempted } from '../quizStats'
+import { quizCohort, quizSummary, quizQuestionStats, quizNotAttempted, attemptsWithProfile } from '../quizStats'
 
 const QUIZ = {
   batch: 'BATCH_A',
@@ -74,6 +74,44 @@ describe('quizQuestionStats', () => {
     const stats = quizQuestionStats(QUIZ, [])
     expect(stats[0].pct).toBe(0)
     expect(stats[0].correctCount).toBe(0)
+  })
+
+  it('tallies a per-option pick distribution + skipped count', () => {
+    const attempts = [
+      { answers: { 1: 'A', 2: 'C' } }, // q1 A, q2 C
+      { answers: { 1: 'A' } },          // q1 A, q2 skipped
+      { answers: { 1: 'D', 2: 'B' } }, // q1 D, q2 B
+    ]
+    const stats = quizQuestionStats(QUIZ, attempts)
+    expect(stats[0].dist).toEqual({ A: 2, B: 0, C: 0, D: 1 })
+    expect(stats[0].skipped).toBe(0)
+    expect(stats[1].dist).toEqual({ A: 0, B: 1, C: 1, D: 0 })
+    expect(stats[1].skipped).toBe(1)
+  })
+})
+
+describe('attemptsWithProfile', () => {
+  it('attaches current branch + batches by lwsId', () => {
+    const profiles = {
+      'Arjun Sharma': { name: 'Arjun Sharma', lwsId: 'L1', branch: 'APJ', batches: ['APJ_NDA_12th_(26-27)'] },
+    }
+    const out = attemptsWithProfile([{ lwsId: 'L1', studentName: 'Arjun Sharma' }], profiles)
+    expect(out[0]).toMatchObject({ lwsId: 'L1', branch: 'APJ', batches: ['APJ_NDA_12th_(26-27)'] })
+  })
+
+  it('returns empty branch/batches when no profile matches', () => {
+    const out = attemptsWithProfile([{ lwsId: 'L9', studentName: 'Ghost' }], {})
+    expect(out[0]).toMatchObject({ branch: '', batches: [] })
+  })
+
+  it('ignores variant-keyed entries when indexing (canonical wins)', () => {
+    const profiles = {
+      'Arjun Sharma': { name: 'Arjun Sharma', lwsId: 'L1', branch: 'APJ', batches: ['B1'] },
+      'Arjun':        { name: 'Arjun Sharma', lwsId: 'L1', branch: 'WRONG', batches: ['BAD'] },
+    }
+    const out = attemptsWithProfile([{ lwsId: 'L1' }], profiles)
+    expect(out[0].branch).toBe('APJ')
+    expect(out[0].batches).toEqual(['B1'])
   })
 })
 

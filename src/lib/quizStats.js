@@ -38,11 +38,14 @@ export function quizQuestionStats(quiz, attempts) {
   return (quiz?.questions || []).map(q => {
     const key = String(q.q)
     const right = String(q.answer || '').toUpperCase()
-    let correctCount = 0, attemptedCount = 0
+    let correctCount = 0, attemptedCount = 0, skipped = 0
+    const dist = { A: 0, B: 0, C: 0, D: 0 }   // how many chose each option
     for (const a of attempts || []) {
       const chosen = String(a.answers?.[key] ?? '').toUpperCase()
-      if (chosen) attemptedCount++
-      if (chosen && chosen === right) correctCount++
+      if (!chosen) { skipped++; continue }
+      attemptedCount++
+      if (chosen in dist) dist[chosen]++
+      if (chosen === right) correctCount++
     }
     return {
       q: q.q,
@@ -50,9 +53,27 @@ export function quizQuestionStats(quiz, attempts) {
       question: q.question || '',
       correctCount,
       attemptedCount,
+      skipped,
+      dist,
       n,
       pct: n > 0 ? correctCount / n : 0,
     }
+  })
+}
+
+// Attach each attempting student's current branch + batches (looked up by lwsId
+// against the canonical profile entries) for the Attempted-list columns. Pure.
+// Missing profile → branch '' / batches []. Variant-keyed entries (p.name !== key)
+// are skipped when indexing so a name variant can't shadow the canonical profile.
+export function attemptsWithProfile(attempts, studentProfiles) {
+  const byId = {}
+  for (const [key, p] of Object.entries(studentProfiles || {})) {
+    if (!p || p.name !== key || !p.lwsId) continue
+    byId[p.lwsId] = p
+  }
+  return (attempts || []).map(a => {
+    const p = byId[a.lwsId]
+    return { ...a, branch: p?.branch || '', batches: p?.batches || [] }
   })
 }
 
