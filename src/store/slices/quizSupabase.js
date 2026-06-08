@@ -1,7 +1,7 @@
 // Supabase mutation helpers for quiz data.
 // Mirrors examSupabase.js — exported so they can be unit-tested independently
 // of the slice. Quizzes live in their own `quizzes` table (NOT faculty_state).
-import { DEFAULT_MARKING } from '../../lib/quiz'
+import { DEFAULT_MARKING } from '../../lib/quiz.js'
 
 export function buildQuizRow(quiz) {
   return {
