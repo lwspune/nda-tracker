@@ -24,6 +24,7 @@ export default function QuizzesPage() {
   const [editing, setEditing] = useState(null)
   const [resultsId, setResultsId] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
+  const [filters, setFilters] = useState({ exam: '', subject: '', chapter: '', theme: '', status: '' })
 
   if (editing) {
     const quiz = editing === 'new' ? null : quizzes.find(q => q.id === editing)
@@ -36,6 +37,20 @@ export default function QuizzesPage() {
   }
 
   const sorted = [...quizzes].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+
+  // Filter by exam / subject / chapter / theme (stored fields) + status (derived).
+  const valueOf = (q, key) => (key === 'status' ? quizStatus(q) : (q[key] || ''))
+  const FILTER_DEFS = [
+    { key: 'exam', all: 'All exams' },
+    { key: 'subject', all: 'All subjects' },
+    { key: 'chapter', all: 'All chapters' },
+    { key: 'theme', all: 'All themes' },
+    { key: 'status', all: 'Any status' },
+  ]
+  const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+  const optionsFor = key => [...new Set(sorted.map(q => valueOf(q, key)).filter(Boolean))].sort()
+  const filtered = sorted.filter(q => FILTER_DEFS.every(f => !filters[f.key] || valueOf(q, f.key) === filters[f.key]))
+  const anyFilter = Object.values(filters).some(Boolean)
 
   function handleDelete(q) {
     if (window.confirm(`Delete quiz "${q.title}"? This also removes all student attempts for it. This cannot be undone.`)) {
@@ -61,15 +76,46 @@ export default function QuizzesPage() {
         }
       />
 
+      {sorted.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {FILTER_DEFS.map(f => {
+            const opts = optionsFor(f.key)
+            if (opts.length === 0) return null
+            return (
+              <select
+                key={f.key}
+                className="input text-[12px] py-1"
+                value={filters[f.key]}
+                onChange={e => setFilters(s => ({ ...s, [f.key]: e.target.value }))}
+              >
+                <option value="">{f.all}</option>
+                {opts.map(o => <option key={o} value={o}>{cap(o)}</option>)}
+              </select>
+            )
+          })}
+          {anyFilter && (
+            <button
+              className="text-[12px] text-ink-3 hover:text-ink underline"
+              onClick={() => setFilters({ exam: '', subject: '', chapter: '', theme: '', status: '' })}
+            >
+              Clear
+            </button>
+          )}
+          <span className="text-[11px] text-ink-3 ml-auto font-mono">{filtered.length} of {sorted.length}</span>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <EmptyState
           icon="❓"
           title="No quizzes yet"
           sub="Create your first daily quiz. Add questions, set a close time, and publish — students see it in their portal."
         />
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="🔍" title="No quizzes match" sub="Try clearing or changing the filters above." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {sorted.map(q => {
+          {filtered.map(q => {
             const status = quizStatus(q)
             const badge = STATUS_BADGE[status]
             const batches = q.batch ? q.batch.split(',').map(b => b.trim()).filter(Boolean) : []
@@ -80,7 +126,10 @@ export default function QuizzesPage() {
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                 </div>
                 <div className="text-[11px] text-ink-3 font-mono">
-                  {q.subject || '—'} · {q.questions?.length || 0} Q · closes {fmtClose(q.closesAt)}
+                  {[q.exam, q.subject, q.chapter, q.theme && cap(q.theme)].filter(Boolean).join(' · ') || '—'}
+                </div>
+                <div className="text-[11px] text-ink-3 font-mono">
+                  {q.questions?.length || 0} Q · closes {fmtClose(q.closesAt)}
                 </div>
                 <div className="text-[11px] text-ink-3 truncate">
                   {batches.length ? batches.join(', ') : 'All batches'}

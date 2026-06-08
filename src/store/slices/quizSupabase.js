@@ -10,6 +10,11 @@ export function buildQuizRow(quiz) {
     subject:    quiz.subject   || null,
     batch:      quiz.batch     || null,
     branch:     quiz.branch    || null,
+    // Classification for filtering — sent by PYQ Vault's quiz import (exam /
+    // chapter / theme), or set in the editor for hand-authored quizzes.
+    exam:       quiz.exam      || null,
+    chapter:    quiz.chapter   || null,
+    theme:      quiz.theme     || null,
     marking:    quiz.marking   ?? DEFAULT_MARKING,
     questions:  quiz.questions ?? [],
     opens_at:   quiz.opensAt   ?? null,

@@ -9,6 +9,9 @@ describe('buildQuizRow', () => {
       subject: 'Maths',
       batch: 'LWS_NDA_2Y_(26-28)_A',
       branch: 'LWS Pune',
+      exam: 'NDA',
+      chapter: 'Probability',
+      theme: 'formula',
       questions: [{ q: 1, answer: 'A' }],
       status: 'published',
       opensAt: '2026-06-05T03:00:00.000Z',
@@ -25,6 +28,9 @@ describe('buildQuizRow', () => {
     expect(row.created_by).toBe('teacher@lws.com')
     expect(row.created_at).toBe('2026-06-05T02:00:00.000Z')
     expect(row.marking).toEqual({ correct: 1, wrong: 0 })
+    expect(row.exam).toBe('NDA')
+    expect(row.chapter).toBe('Probability')
+    expect(row.theme).toBe('formula')
     expect(row.updated_at).toBeTypeOf('string')
   })
 
@@ -33,6 +39,9 @@ describe('buildQuizRow', () => {
     expect(row.subject).toBeNull()
     expect(row.batch).toBeNull()
     expect(row.branch).toBeNull()
+    expect(row.exam).toBeNull()
+    expect(row.chapter).toBeNull()
+    expect(row.theme).toBeNull()
     expect(row.opens_at).toBeNull()
     expect(row.closes_at).toBeNull()
     expect(row.status).toBe('draft')
