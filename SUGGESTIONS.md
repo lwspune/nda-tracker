@@ -6,17 +6,13 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ## 2026-05-21
 
-### Soft-archive pre-Vercel-migration decisions out of CLAUDE.md
+### ~~Soft-archive pre-Vercel-migration decisions out of CLAUDE.md~~ — **DONE 2026-06-09** (already satisfied; verified)
 
-Move pre-Phase-0 decisions (anything from 2026-04 — multi-subject support, store modularisation, the early teacher AES-GCM portal) from `CLAUDE.md`'s "Decisions log" and "What not to change" sections into `memory/project_completed_archive.md` (or a new `DECISIONS_ARCHIVE.md` at the root if you'd rather keep them outside auto-memory).
+Closed after a full re-read of both surfaces — the work this suggestion asked for had already happened in two steps that postdate it:
+- **Decisions log:** extracted wholesale into `DECISIONS.md` (CLAUDE.md "## Decisions log" is now a one-line pointer, ~line 513). It's read on-demand, not auto-loaded, so it no longer adds to per-session context — the original "both load on every read" premise is moot.
+- **"What not to change":** the genuinely pre-Vercel bullets were already moved on 2026-05-21 into `memory/project_completed_archive.md` → "Archived decisions (pre-Vercel)" table (db.json, `teacher_password.txt`, the old subject-keyed `lecture_absences` UNIQUE, batch-name spacing).
 
-**Why:** the decisions log is ~155 rows and what-not-to-change is ~85 bullets. Both load on every `CLAUDE.md` read. Anything pre-Vercel is historical context, not active guidance — moving it cheaply trims the file by 20–30 rows without losing the "why" trail (it just lives one click away).
-
-**How to apply:**
-- Skim the decisions log; mark rows whose date is before 2026-05-06 (Phase 0 cutover).
-- Move them as a block to `project_completed_archive.md` under a new "Archived decisions (pre-Vercel)" heading.
-- Same pass for "What not to change" bullets whose underlying file/feature has been replaced or deprecated.
-- Verify by re-reading CLAUDE.md end-to-end — every remaining row should describe behaviour that is still load-bearing.
+2026-06-09 verification: read all ~170 current "What not to change" bullets + all 115 DECISIONS.md rows. Every remaining guardrail is post-Vercel and load-bearing — the few that name deleted files (`ManageTeachersModal.jsx`, `KpiStrip.jsx`, `html-to-image`) are live "do not re-introduce" rules, not dead weight. No further safe *content* trim exists under the "pre-Vercel / file-or-feature replaced" criterion; removing any guardrail would strip a real regression guard. **Instead, the whole "What not to change" section (171 bullets) was extracted to a new [`GUARDRAILS.md`](./GUARDRAILS.md) on 2026-06-09** (same lossless pattern as the DECISIONS.md split — content preserved, CLAUDE.md left a one-line pointer). CLAUDE.md dropped 693 → 521 lines; all cross-doc pointers (README/ARCHITECTURE/OPERATIONS/SECURITY/FLOWS/DECISIONS) repointed to GUARDRAILS.md. New guardrails now go in GUARDRAILS.md, not CLAUDE.md. If size becomes a problem again, the next lever is *consolidating verbose bullets within GUARDRAILS.md* — a separate (riskier) editing task.
 
 ---
 
@@ -161,3 +157,18 @@ Beyond the 12 keys already corrected, the audit left open: **7 defective questio
 - For SOLUTION-WRONG: rewrite the `solution` text to match the (correct) key.
 - For DUPLICATEs: delete one of each pair; for Maths Q30, fix the duplicated option.
 - All of these are content decisions — surface the list to faculty rather than auto-applying.
+
+---
+
+## 2026-06-09
+
+### Manually verify the offline-exam golden path in the browser
+
+The offline-exam feature (totals-only, template upload — commit `b4f49fd`) shipped with full test + lint coverage (1429 Vitest passing) but the **golden-path browser check was not done** (the global Definition of Done requires it). The DB column + code are deployed, so it goes live on the next Vercel build.
+
+**Why:** the integration seam (template parse → modal → `addExam` with `maxMarks` → Supabase round-trip → exam appears in trends/Toppers/history with correct %) is only unit-covered. A 5-minute manual pass on `nda-tracker.vercel.app` confirms the end-to-end flow before faculty relies on it for real marks.
+
+**How to apply:**
+- On the Exams page, click **"+ Offline marks"** → Download template → fill 2-3 names + marks → upload → set max marks + batch → Save.
+- Confirm: the exam shows an "Offline" badge with the right %-of-max on the card; it appears in the Dashboard performance trend and the student's Exam History; per-question surfaces show the "Offline" notice (not zeros); Insights/PDF buttons are absent.
+- Optionally tick the absentee opt-in once and confirm it flags/notifies as expected (leave off otherwise).

@@ -2,7 +2,7 @@
 
 Triage steps for known production failure modes. For each scenario: how to recognise it, where to look first, and the SQL or commands that have helped before.
 
-For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For decisions and the "what not to change" list see [`CLAUDE.md`](./CLAUDE.md).
+For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For the *why* trail see [`DECISIONS.md`](./DECISIONS.md) and for the "what not to change" list see [`GUARDRAILS.md`](./GUARDRAILS.md).
 
 ---
 
@@ -254,6 +254,6 @@ After any production incident:
 
 1. Add a new scenario (or extend an existing one) with the symptoms you observed.
 2. Document the SQL or commands that diagnosed it.
-3. If the underlying cause is something that shouldn't have happened, add an entry to the CLAUDE.md "What not to change" list as well.
+3. If the underlying cause is something that shouldn't have happened, add an entry to the [`GUARDRAILS.md`](./GUARDRAILS.md) "what not to change" list as well.
 
 A runbook only stays useful if it grows with the incidents you've actually seen.

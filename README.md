@@ -14,7 +14,8 @@ Production: `nda-tracker.vercel.app`.
 | [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md) | Column-level Supabase schema reference. |
 | [`OPERATIONS.md`](./OPERATIONS.md) | Triage runbook for known production failure modes. |
 | [`SECURITY.md`](./SECURITY.md) | Auth model, RLS policies, PII handling, secret management. |
-| [`CLAUDE.md`](./CLAUDE.md) | Operational reference: commands, conventions, decisions log, "what not to change". |
+| [`CLAUDE.md`](./CLAUDE.md) | Operational reference: commands, conventions, file/visibility maps. |
+| [`GUARDRAILS.md`](./GUARDRAILS.md) | The "what not to change" list — behavioural invariants the codebase depends on. |
 
 ---
 

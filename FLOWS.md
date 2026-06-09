@@ -1,6 +1,6 @@
 # Feature flows — NDA Maths Tracker
 
-> Extracted from [`CLAUDE.md`](./CLAUDE.md) on 2026-06-05 to keep that file lean. These are the end-to-end walkthroughs for the parent-/student-facing feature flows. The **invariants** for all of them remain in CLAUDE.md's "What not to change" section (and the *why* trail in [`DECISIONS.md`](./DECISIONS.md)) — read those before changing any flow here. Column-level schema is in [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md).
+> Extracted from [`CLAUDE.md`](./CLAUDE.md) on 2026-06-05 to keep that file lean. These are the end-to-end walkthroughs for the parent-/student-facing feature flows. The **invariants** for all of them live in [`GUARDRAILS.md`](./GUARDRAILS.md) (and the *why* trail in [`DECISIONS.md`](./DECISIONS.md)) — read those before changing any flow here. Column-level schema is in [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md).
 
 ### WhatsApp Results flow
 `💬 WhatsApp Results` button (admin, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).

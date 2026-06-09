@@ -2,7 +2,7 @@
 
 The application handles personally identifiable information about minors (full names, dates of birth, mobile numbers, parent mobile numbers, exam scores, attendance records) and integrates with paid third-party messaging APIs. This document captures the security model, the data being protected, and known gaps.
 
-For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For runtime decisions and the "what not to change" list see [`CLAUDE.md`](./CLAUDE.md).
+For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For the *why* trail see [`DECISIONS.md`](./DECISIONS.md) and for the "what not to change" list see [`GUARDRAILS.md`](./GUARDRAILS.md).
 
 ---
 
@@ -94,7 +94,7 @@ Secrets are managed at three levels.
 **Rules:**
 
 - The service role key is **never** present in any code path that runs in the browser. It is used only by Node scripts (`migrate_*.js`, `sync_*.js`, `create_teacher_account.js`) and by Vercel serverless functions where it lives in `process.env`.
-- `apiKey` (Anthropic API key, if ever used in-app) is held in memory only — never persisted to disk, JSON, or localStorage. See "What not to change" in CLAUDE.md.
+- `apiKey` (Anthropic API key, if ever used in-app) is held in memory only — never persisted to disk, JSON, or localStorage. See [`GUARDRAILS.md`](./GUARDRAILS.md).
 - No secrets in `git log`. If a secret was committed and pushed, rotate it immediately rather than rewriting history.
 - `.env.local` is gitignored. Verify before any `git add -A`.
 

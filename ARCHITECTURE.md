@@ -224,7 +224,7 @@ In order, for a new contributor:
 4. [`api/student-login.js`](api/student-login.js) — the most complete example of a serverless function (auth, multi-table query, response shaping).
 5. [`src/lib/analytics/index.js`](src/lib/analytics/index.js) — entry point to all derived metrics. The functions are pure; the page components compose them.
 6. [`src/pages/Students/StudentView.jsx`](src/pages/Students/StudentView.jsx) — the largest page component. Shared across all three portals. Demonstrates `useMode()`-based visibility and the subject-filter pattern.
-7. [`CLAUDE.md`](./CLAUDE.md) — the project conventions, decisions log, and the "what not to change" list.
+7. [`CLAUDE.md`](./CLAUDE.md) — the project conventions; [`DECISIONS.md`](./DECISIONS.md) — the decisions log; [`GUARDRAILS.md`](./GUARDRAILS.md) — the "what not to change" list.
 
 ---
 
@@ -233,8 +233,8 @@ In order, for a new contributor:
 Project-level conventions and decisions are catalogued in [`CLAUDE.md`](./CLAUDE.md). The most consequential ones for a new contributor:
 
 - **Test-first.** Tests are written before implementation, fail for the right reason, then are made to pass. Failing tests are usually stale tests, not broken components — see `feedback_test_fixes.md` in the memory directory.
-- **Decisions log.** Non-obvious architectural choices are recorded in the "Decisions log" section of CLAUDE.md with the *why*. Add entries when making similar choices.
-- **What not to change.** A list of behavioural invariants that have caused incidents in the past lives in CLAUDE.md. Read it before touching `persist.js`, `studentSlice.js`, or any pagination-sensitive code.
+- **Decisions log.** Non-obvious architectural choices are recorded in [`DECISIONS.md`](./DECISIONS.md) with the *why*. Add entries when making similar choices.
+- **What not to change.** A list of behavioural invariants that have caused incidents in the past lives in [`GUARDRAILS.md`](./GUARDRAILS.md). Read it before touching `persist.js`, `studentSlice.js`, or any pagination-sensitive code.
 - **Refactors require concrete problem evidence.** File size, repetition, and aesthetics alone do not justify restructuring. See `feedback_no_speculative_refactors.md`.
 - **Migration safety.** Destructive cleanup SQL is never automated. Seed → verify row counts → run cleanup SQL manually. See `feedback_migration_safety.md`.
 

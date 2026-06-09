@@ -1,6 +1,6 @@
 # NDA Maths Tracker — Decisions log
 
-> **See also:** [`CLAUDE.md`](./CLAUDE.md) — operational reference (commands, conventions, "what not to change"). This file is the long-form *why* trail for non-obvious architectural choices so they aren't re-litigated. Each row captures one decision; new entries go at the end.
+> **See also:** [`CLAUDE.md`](./CLAUDE.md) — operational reference (commands, conventions); [`GUARDRAILS.md`](./GUARDRAILS.md) — the "what not to change" invariants. This file is the long-form *why* trail for non-obvious architectural choices so they aren't re-litigated. Each row captures one decision; new entries go at the end.
 
 | Decision | Why |
 |---|---|
