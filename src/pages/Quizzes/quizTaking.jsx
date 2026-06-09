@@ -35,7 +35,12 @@ function useCountUp(target, ms = 900) {
       if (t < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    // Guarantee the final value even if the rAF chain is throttled/dropped (e.g.
+    // mobile backgrounding the tab right after mount) — otherwise the number can
+    // stick at its initial 0 while the CSS ring (a DOM transition, rAF-independent)
+    // finishes, showing "0" next to a full ring + a high-score verdict.
+    const settle = setTimeout(() => setVal(target), ms + 120)
+    return () => { cancelAnimationFrame(raf); clearTimeout(settle) }
   }, [target, ms])
   return val
 }
