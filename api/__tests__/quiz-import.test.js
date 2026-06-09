@@ -23,15 +23,20 @@ function makeQuiz(over = {}) {
   }
 }
 
-// quizzes table mock — captures the upserted row.
-function makeMockClient({ upsertError = null } = {}) {
+// quizzes table mock — captures the upserted row + supports the delete chain
+// (.delete({count}).eq('id', …).eq('status', 'draft') → { error, count }).
+function makeMockClient({ upsertError = null, deleteError = null, deleteCount = 1 } = {}) {
   const upsert = vi.fn().mockResolvedValue({ error: upsertError })
+  const eqStatus = vi.fn().mockResolvedValue({ error: deleteError, count: deleteCount })
+  const eqId = vi.fn(() => ({ eq: eqStatus }))
+  const del = vi.fn(() => ({ eq: eqId }))
   const client = {
     from: vi.fn(table => {
-      if (table === 'quizzes') return { upsert }
+      if (table === 'quizzes') return { upsert, delete: del }
       return { upsert: vi.fn().mockResolvedValue({ error: null }) }
     }),
     upsert,
+    delete: del,
   }
   return client
 }
@@ -113,5 +118,20 @@ describe('POST /api/quiz-import', () => {
     vi.mocked(createClient).mockReturnValue(makeMockClient({ upsertError: { message: 'boom' } }))
     const res = await call(makeQuiz())
     expect(res.status).toHaveBeenCalledWith(500)
+  })
+
+  it('deletes a draft quiz on action:delete and reports the count', async () => {
+    const client = makeMockClient({ deleteCount: 1 })
+    vi.mocked(createClient).mockReturnValue(client)
+    const res = await call({ action: 'delete', id: 'nda-prob-classical-1' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(client.delete).toHaveBeenCalledWith({ count: 'exact' })
+    const out = res.json.mock.calls[0][0]
+    expect(out).toMatchObject({ ok: true, action: 'delete', id: 'nda-prob-classical-1', deleted: 1 })
+  })
+
+  it('returns 400 on a delete with no id', async () => {
+    const res = await call({ action: 'delete' })
+    expect(res.status).toHaveBeenCalledWith(400)
   })
 })

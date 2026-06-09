@@ -39,6 +39,36 @@ export default async function handler(req, res) {
   }
 
   const quiz = req.body || {}
+
+  // Cross-app DELETE: PYQ Vault deleted this quiz; remove the orphaned DRAFT here.
+  // NEVER delete a published quiz (it may have student attempts) — the status
+  // filter makes that a no-op (deleted: 0).
+  if (quiz.action === 'delete') {
+    const delId = String(quiz.id || '').trim()
+    if (!delId) {
+      res.status(400).json({ error: 'id is required for delete' })
+      return
+    }
+    const sbUrl = env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+    const svcKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    if (!sbUrl || !svcKey) {
+      res.status(500).json({ error: 'Supabase not configured on server' })
+      return
+    }
+    const db = createClient(sbUrl, svcKey)
+    const { error: delErr, count } = await db
+      .from('quizzes')
+      .delete({ count: 'exact' })
+      .eq('id', delId)
+      .eq('status', 'draft')
+    if (delErr) {
+      res.status(500).json({ error: 'Could not delete the quiz', detail: delErr.message })
+      return
+    }
+    res.status(200).json({ ok: true, action: 'delete', id: delId, deleted: count || 0 })
+    return
+  }
+
   if (!quiz.title || !String(quiz.title).trim()) {
     res.status(400).json({ error: 'title is required' })
     return
