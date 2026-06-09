@@ -32,7 +32,7 @@ describe('QuizLinkPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/10-digit mobile/i), { target: { value: '9876543210' } })
     fireEvent.click(screen.getByText('Start'))
     await waitFor(() => expect(screen.getByText('Daily 1')).toBeInTheDocument())
-    expect(screen.getByText(/Submit quiz/i)).toBeInTheDocument()
+    expect(screen.getByText('Skip')).toBeInTheDocument() // one-at-a-time taker is showing
     expect(localStorage.getItem('nda_quiz_mobile')).toBe('9876543210')
   })
 
@@ -40,7 +40,7 @@ describe('QuizLinkPage', () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ mobile: '9876543210', expiry: Date.now() + 1e7 }))
     mockFetch({ name: 'Arjun', quizzes: [OPEN_QUIZ] })
     render(<QuizLinkPage quizId="q-a" />)
-    await waitFor(() => expect(screen.getByText(/Submit quiz/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Skip')).toBeInTheDocument())
   })
 
   it('shows "not available" when the quiz is not in the student list', async () => {
