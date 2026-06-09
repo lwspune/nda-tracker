@@ -158,7 +158,7 @@ export function QuizTaker({ quiz, mobile, onCancel, onSubmitted }) {
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
             <div className="flex gap-2 text-[15px] font-semibold leading-relaxed text-ink">
               <span className="text-[12px] font-bold text-ink-3">{idx + 1}.</span>
-              <Math>{q.question}</Math>
+              <div className="min-w-0 flex-1 overflow-x-auto"><Math>{q.question}</Math></div>
             </div>
             <div className="mt-4 space-y-2">
               {opts.map((letter) => {
@@ -175,7 +175,7 @@ export function QuizTaker({ quiz, mobile, onCancel, onSubmitted }) {
                       ${on ? 'border-accent bg-accent text-white' : 'border-border text-ink-3'}`}>
                       {on ? '✓' : letter}
                     </span>
-                    <span className="min-w-0 flex-1"><Math>{String(q[`option${letter}`])}</Math></span>
+                    <span className="min-w-0 flex-1 overflow-x-auto"><Math>{String(q[`option${letter}`])}</Math></span>
                   </button>
                 )
               })}
@@ -267,7 +267,7 @@ export function QuizReview({ title, review, onBack }) {
             <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
               <div className="mb-2 flex gap-2 text-[13px] font-semibold text-ink">
                 <span className="text-[12px] font-bold text-ink-3">{idx + 1}.</span>
-                <span className="min-w-0 flex-1"><Math>{q.question}</Math></span>
+                <span className="min-w-0 flex-1 overflow-x-auto"><Math>{q.question}</Math></span>
                 {!mine && <span className="text-[10px] font-bold text-amber-600">SKIPPED</span>}
               </div>
               <div className="space-y-1.5">
@@ -280,7 +280,7 @@ export function QuizReview({ title, review, onBack }) {
                   return (
                     <div key={letter} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] ${cls}`}>
                       <span className="w-4 flex-shrink-0 text-[11px] font-bold">{letter}</span>
-                      <span className="min-w-0 flex-1"><Math>{String(q[`option${letter}`])}</Math></span>
+                      <span className="min-w-0 flex-1 overflow-x-auto"><Math>{String(q[`option${letter}`])}</Math></span>
                       {isRight && <span className="ml-auto flex-shrink-0 text-[10px] font-bold text-green-700">CORRECT</span>}
                       {isMine && !isRight && <span className="ml-auto flex-shrink-0 text-[10px] font-bold text-red-700">YOURS</span>}
                     </div>
