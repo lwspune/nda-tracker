@@ -48,7 +48,29 @@ export default function QuizzesPage() {
     { key: 'status', all: 'Any status' },
   ]
   const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
-  const optionsFor = key => [...new Set(sorted.map(q => valueOf(q, key)).filter(Boolean))].sort()
+  // Cascade: each dropdown's options reflect the OTHER active filters, so e.g.
+  // Subject=Maths lists only Maths chapters (not Biology's Human Physiology).
+  const optsGiven = (state, key) =>
+    [...new Set(
+      sorted
+        .filter(q => FILTER_DEFS.every(f => f.key === key || !state[f.key] || valueOf(q, f.key) === state[f.key]))
+        .map(q => valueOf(q, key))
+        .filter(Boolean)
+    )].sort()
+  const optionsFor = key => optsGiven(filters, key)
+  // Setting a value can make another active filter an impossible combo — clear it.
+  const setFilter = (key, value) =>
+    setFilters(cur => {
+      const next = { ...cur, [key]: value }
+      if (value) {
+        for (const f of FILTER_DEFS) {
+          if (f.key !== key && next[f.key] && !optsGiven(next, f.key).includes(next[f.key])) {
+            next[f.key] = ''
+          }
+        }
+      }
+      return next
+    })
   const filtered = sorted.filter(q => FILTER_DEFS.every(f => !filters[f.key] || valueOf(q, f.key) === filters[f.key]))
   const anyFilter = Object.values(filters).some(Boolean)
 
@@ -86,7 +108,7 @@ export default function QuizzesPage() {
                 key={f.key}
                 className="input text-[12px] py-1"
                 value={filters[f.key]}
-                onChange={e => setFilters(s => ({ ...s, [f.key]: e.target.value }))}
+                onChange={e => setFilter(f.key, e.target.value)}
               >
                 <option value="">{f.all}</option>
                 {opts.map(o => <option key={o} value={o}>{cap(o)}</option>)}

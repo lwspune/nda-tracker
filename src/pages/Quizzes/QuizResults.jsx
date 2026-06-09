@@ -76,7 +76,7 @@ export default function QuizResults({ quiz, onBack }) {
                   />
                   {open && q && (
                     <div className="mt-1 mb-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5">
-                      <div className="text-[13px] font-semibold text-ink mb-2"><Tex>{q.question}</Tex></div>
+                      <div className="text-[13px] font-semibold text-ink mb-2 overflow-x-auto"><Tex>{q.question}</Tex></div>
                       <div className="space-y-1.5">
                         {LETTERS.map(letter => {
                           const text = q[`option${letter}`]
@@ -90,7 +90,7 @@ export default function QuizResults({ quiz, onBack }) {
                               className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] ${isRight ? 'border-green-300 bg-green-50 text-green-900' : 'border-border bg-surface text-ink-2'}`}
                             >
                               <span className="w-5 text-[11px] font-bold flex-shrink-0">{letter}</span>
-                              <span className="flex-1 min-w-0"><Tex>{String(text)}</Tex></span>
+                              <span className="flex-1 min-w-0 overflow-x-auto"><Tex>{String(text)}</Tex></span>
                               {isRight && <span className="text-[10px] font-bold text-green-700 flex-shrink-0">CORRECT</span>}
                               <span className="font-mono text-[11px] text-ink-3 w-16 text-right flex-shrink-0">{pickPct}% ({picks})</span>
                             </div>
