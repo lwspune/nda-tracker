@@ -4,7 +4,7 @@ import QuestionCard from '../../components/ui/QuestionCard'
 import {
   getExamTopStudents, getExamBottomStudents,
   getExamWrongQuestions, getExamSkippedQuestions,
-  getExamToppers,
+  getExamToppers, examMaxMarks,
 } from '../../lib/analytics'
 
 // ── Shared sub-components ─────────────────────────────────────
@@ -222,7 +222,7 @@ function ToppersTab({ exam }) {
   const { toppers, names, count, cutoffScore } = useMemo(
     () => getExamToppers(exam, 0.25), [exam]
   )
-  const maxMarks    = exam.questions.length * exam.marking.correct
+  const maxMarks    = examMaxMarks(exam)
   const cutoffPct   = maxMarks > 0 ? Math.round(cutoffScore / maxMarks * 100) : 0
   const wrong       = useMemo(() => getExamWrongQuestions(exam, names, 5),   [exam, names])
   const skipped     = useMemo(() => getExamSkippedQuestions(exam, names, 5), [exam, names])

@@ -14,11 +14,12 @@ import { getBatchOptions, getExamsForBatch } from './filters'
 import { computeChapterStats } from './chapterStats'
 import { getAtRisk } from './classMetrics'
 import { getToppers } from './projection'
+import { examMaxMarks } from '../analyticsHelpers'
 
 // Average %-of-max for a single exam, optionally scoped to a set of student names.
 // Returns { avgPct (0..1), n (students scored), maxMarks }.
 export function examAvgPct(exam, nameFilter = null) {
-  const maxMarks = (exam.questions?.length || 0) * (exam.marking?.correct || 0)
+  const maxMarks = examMaxMarks(exam)
   if (maxMarks <= 0) return { avgPct: 0, n: 0, maxMarks: 0 }
 
   const students = (exam.students || []).filter(s => !nameFilter || nameFilter.has(s.name))

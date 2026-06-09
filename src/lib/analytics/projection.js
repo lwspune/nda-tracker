@@ -2,6 +2,7 @@
 import { filterValidExams, getAllStudents, getStudentExams } from './filters'
 import { computeStudentChapterStats } from './chapterStats'
 import { computeAttemptQuality, computeConsistency } from './performance'
+import { examMaxMarks } from '../analyticsHelpers'
 
 // Projected NDA score using chapter accuracy and frequency table.
 // totalMarks: the subject's NDA paper ceiling (e.g. 300 for Maths, 200 for English).
@@ -101,7 +102,7 @@ export function getToppers(exams, ndaFreq, threshold = 0.7, totalMarks = 300, op
       const scopedExams  = exams.filter(e => validExamIds.has(e.id))
 
       const pcts = studentExams.map(({ exam, student }) => {
-        const max = exam.questions.length * exam.marking.correct
+        const max = examMaxMarks(exam)
         return max > 0 ? student.totalMarks / max : 0
       })
       const avgPct = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0

@@ -8,20 +8,25 @@ async function getSession() {
 }
 
 export const createExamsSlice = (set, get) => ({
-  addExam(exam) {
+  // opts.syncAbsences (default true): flag rostered no-shows as absent + enable
+  // the absence WhatsApp flow. Offline exams pass false by default so a totals
+  // upload doesn't unexpectedly message parents (faculty opts in via a checkbox).
+  addExam(exam, opts = {}) {
+    const { syncAbsences = true } = opts
     const normalised = { ...exam, batch: exam.batch || null, branch: exam.branch || null }
     set(s => ({ exams: [...s.exams, normalised] }))
     get()._save()
-    get().syncExamAbsences?.(normalised.id)
+    if (syncAbsences) get().syncExamAbsences?.(normalised.id)
     getSession().then(session => {
       if (session) upsertExam(supabase, normalised, get().studentProfiles).catch(e => console.error('[exams] addExam Supabase write failed:', e))
     })
   },
 
-  replaceExam(id, exam) {
+  replaceExam(id, exam, opts = {}) {
+    const { syncAbsences = true } = opts
     set(s => ({ exams: s.exams.map(e => e.id === id ? exam : e) }))
     get()._save()
-    get().syncExamAbsences?.(id)
+    if (syncAbsences) get().syncExamAbsences?.(id)
     getSession().then(session => {
       if (session) upsertExam(supabase, exam, get().studentProfiles).catch(e => console.error('[exams] replaceExam Supabase write failed:', e))
     })

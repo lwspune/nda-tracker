@@ -12,6 +12,7 @@ import {
   computeStudentChapterStats,
   computeAttemptQuality, computeConsistency,
   computeProjectedScore, computeWrongAudit, computeSkippedAudit,
+  examMaxMarks,
 } from '../../lib/analytics'
 import { getFreqForSubject } from '../../lib/ndaFreq'
 import ChapterAccordion from './ChapterAccordion'
@@ -212,21 +213,27 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const wrongAudit    = computeWrongAudit(name, filteredExams, qSubject)
   const skippedAudit  = computeSkippedAudit(name, filteredExams, qSubject)
 
-  const scores = examData.map(({ exam, student }) => ({
+  const scores = examData.map(({ exam, student }) => {
+    const max = examMaxMarks(exam)
+    return {
     name: exam.name, date: exam.date,
     score: student.totalMarks,
-    max: exam.questions.length * exam.marking.correct,
-    pct: exam.questions.length * exam.marking.correct > 0
-      ? student.totalMarks / (exam.questions.length * exam.marking.correct)
-      : 0,
+    max,
+    pct: max > 0 ? student.totalMarks / max : 0,
     correct: student.correct, wrong: student.incorrect, na: student.notAttempted,
     exam,    // full exam object — needed for per-exam question breakdown
     student, // full student object — needed for responses
-  }))
+    }
+  })
 
   const latest = scores[scores.length - 1]
   const prev   = scores.length >= 2 ? scores[scores.length - 2] : null
   const delta  = prev ? latest.score - prev.score : null
+
+  // Offline exams carry no per-question data → chapter analytics are empty.
+  // Flag when EVERY in-scope exam is offline so the blank section reads as
+  // "not available" rather than "no weaknesses found".
+  const allOffline = examData.length > 0 && examData.every(({ exam }) => !exam.questions?.length)
 
   // Chapter summary for accordion
   const chapterSummary = Object.entries(chapterStats).map(([ch, subs]) => {
@@ -404,7 +411,13 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
             — click a chapter to expand subtopics
           </span>
         </CardTitle>
-        <ChapterAccordion chapterSummary={chapterSummary} name={name} exams={filteredExams} />
+        {allOffline ? (
+          <p className="text-[12.5px] text-ink-3 px-1 py-2">
+            Chapter-level analysis isn't available — this student's exams in scope are offline (total marks only, no per-question data).
+          </p>
+        ) : (
+          <ChapterAccordion chapterSummary={chapterSummary} name={name} exams={filteredExams} />
+        )}
       </Card>
 
       {/* Wrong Answer Audit — all modes */}

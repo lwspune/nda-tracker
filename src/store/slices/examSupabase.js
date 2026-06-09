@@ -12,6 +12,9 @@ export function buildExamRow(exam) {
     branch:     exam.branch     || null,
     marking:    exam.marking    ?? { correct: 4, wrong: -1 },
     questions:  exam.questions  ?? [],
+    // Explicit paper ceiling for offline exams (no questions[]); null for MCQ
+    // exams whose max derives from questions.length × marking.correct.
+    max_marks:  exam.maxMarks   ?? null,
     created_at: exam.createdAt  ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }

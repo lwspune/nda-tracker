@@ -2,10 +2,11 @@ import { useState } from 'react'
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
-import { getBatchOptions, getExamsForBatch } from '../lib/analytics'
+import { getBatchOptions, getExamsForBatch, examMaxMarks } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
+import OfflineExamModal     from '../components/upload/OfflineExamModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
 import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
 import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
@@ -35,6 +36,7 @@ export default function ExamsPage() {
   const PAGE_SIZE = 10
   const [reuploadTagsExam, setReuploadTagsExam]       = useState(null)
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
+  const [offlineModalOpen, setOfflineModalOpen]       = useState(false)
   const [expandedExamId, setExpandedExamId]           = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
   const [reportsGenerating, setReportsGenerating]     = useState(null)
@@ -251,9 +253,14 @@ export default function ExamsPage() {
               </select>
             )}
             {mode === 'admin' && (
-              <button onClick={openUploadModal} className="btn btn-primary">
-                + Add Exam
-              </button>
+              <>
+                <button onClick={() => setOfflineModalOpen(true)} className="btn btn-secondary">
+                  + Offline marks
+                </button>
+                <button onClick={openUploadModal} className="btn btn-primary">
+                  + Add Exam
+                </button>
+              </>
             )}
           </div>
         )}
@@ -264,7 +271,7 @@ export default function ExamsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {visibleExams.map(exam => {
-            const maxMarks = exam.questions.length * exam.marking.correct
+            const maxMarks = examMaxMarks(exam)
             const scores   = exam.students.map(st => st.totalMarks)
             const avgScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
             const minScore = scores.length ? Math.min(...scores) : 0
@@ -280,15 +287,26 @@ export default function ExamsPage() {
                 {/* ── Main exam row ── */}
                 <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 xl:gap-4 px-4 py-3">
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-[14px] text-ink truncate">{exam.name}</div>
+                    <div className="font-bold text-[14px] text-ink truncate flex items-center gap-2">
+                      {exam.name}
+                      {!exam.questions.length && (
+                        <span className="text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-ink-3 border border-border rounded-full px-2 py-0.5">Offline</span>
+                      )}
+                    </div>
                     <div className="flex items-center flex-wrap gap-3 mt-1 text-[11px] font-mono text-ink-3">
                       <span>{exam.date}</span>
                       <span>·</span>
                       <span>{exam.students.length} students</span>
                       <span>·</span>
-                      <span>{exam.questions.length} questions</span>
-                      <span>·</span>
-                      <span>+{exam.marking.correct}/{exam.marking.wrong}</span>
+                      {exam.questions.length > 0 ? (
+                        <>
+                          <span>{exam.questions.length} questions</span>
+                          <span>·</span>
+                          <span>+{exam.marking.correct}/{exam.marking.wrong}</span>
+                        </>
+                      ) : (
+                        <span>max {maxMarks} · total marks only</span>
+                      )}
                       {exam.batch && <><span>·</span><span className="text-accent">{exam.batch}</span></>}
                     </div>
                   </div>
@@ -476,6 +494,9 @@ export default function ExamsPage() {
           exam={reuploadResultsExam}
           onClose={() => setReuploadResultsExam(null)}
         />
+      )}
+      {offlineModalOpen && (
+        <OfflineExamModal onClose={() => setOfflineModalOpen(false)} />
       )}
 
       {whatsappPreviewExam && (

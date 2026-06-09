@@ -122,6 +122,72 @@ export async function parseExcelFull(file) {
 }
 
 // ============================================================
+// PARSE OFFLINE RESULTS (XLSX)
+// A minimal "Name, Marks" template for exams conducted offline (hand-graded
+// papers) where only a TOTAL mark per student is available — no per-question
+// data. Returns the same student shape as parseExcelFull but with
+// correct/incorrect/notAttempted = 0 and responses = {}.
+//
+// Required columns: Name, and one of Marks / Total Marks / Score.
+// Optional: Roll No. Rows with a blank name OR blank marks are skipped
+// (an explicit 0 is a valid mark). Exam name/date/maxMarks are entered in the
+// UI, not read from the file.
+// Returns { students }.
+// ============================================================
+export async function parseOfflineResults(file) {
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1 })
+
+  // Find header row (contains 'Name') within the first few rows.
+  let hi = -1
+  for (let i = 0; i < Math.min(raw.length, 5); i++) {
+    if (raw[i]?.some(c => String(c || '').trim().toLowerCase() === 'name')) { hi = i; break }
+  }
+  if (hi === -1) throw new Error("Cannot find a 'Name' column in the file.")
+
+  const headers = raw[hi].map(h => String(h || '').trim())
+  const has = names => headers.findIndex(h => names.includes(h.toLowerCase()))
+  const ni = has(['name'])
+  const ri = has(['roll no', 'roll no.', 'rollno'])
+  const mi = has(['marks', 'total marks', 'score', 'marks obtained'])
+
+  if (ni === -1) throw new Error("Cannot find a 'Name' column in the file.")
+  if (mi === -1) throw new Error("Cannot find a 'Marks' column (accepted: Marks, Total Marks, Score).")
+
+  const students = []
+  for (let r = hi + 1; r < raw.length; r++) {
+    const row = raw[r]; if (!row) continue
+    const name = String(row[ni] ?? '').trim()
+    const rawMark = row[mi]
+    if (!name) continue
+    if (rawMark === null || rawMark === undefined || String(rawMark).trim() === '') continue
+    const totalMarks = parseFloat(rawMark)
+    if (isNaN(totalMarks)) continue
+    students.push({
+      name,
+      rollNo:       ri >= 0 ? String(row[ri] ?? '').trim() : '',
+      totalMarks,
+      correct:      0,
+      incorrect:    0,
+      notAttempted: 0,
+      responses:    {},
+    })
+  }
+
+  return { students }
+}
+
+// Header + one example row for the downloadable offline-marks template.
+export function buildOfflineTemplateRows() {
+  return [
+    ['Name', 'Marks'],
+    ['Student Full Name', 0],
+  ]
+}
+
+// ============================================================
 // PARSE TAGS FILE (XLSX)
 // Reads the enriched tags file with columns:
 // Q | Chapter | Subtopic | Question | OptionA | OptionB |

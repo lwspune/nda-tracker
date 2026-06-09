@@ -67,6 +67,19 @@ describe('examAvgPct', () => {
     expect(r.n).toBe(0)
     expect(r.avgPct).toBe(0)
   })
+
+  it('scores an OFFLINE exam (no questions) via explicit maxMarks', () => {
+    // questions=[] but maxMarks=100 → comparable %-of-max, so the exam is NOT
+    // silently dropped from trends/Toppers (the whole point of the offline path).
+    const e = exam({ questions: [], maxMarks: 100, students: [
+      { name: 'Alice', totalMarks: 90, responses: {} },
+      { name: 'Bob',   totalMarks: 60, responses: {} },
+    ] })
+    const r = examAvgPct(e)
+    expect(r.maxMarks).toBe(100)
+    expect(r.n).toBe(2)
+    expect(r.avgPct).toBeCloseTo(0.75, 5)
+  })
 })
 
 // ── getPerformanceSeries ──────────────────────────────────────────────────────

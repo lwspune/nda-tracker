@@ -1,13 +1,14 @@
 // ── Exam-level insight functions ──────────────────────────────
 // All functions operate directly on a single exam object.
 // `names` param (optional Set<string>) scopes counts to a subset of students.
+import { examMaxMarks } from '../analyticsHelpers'
 
 /**
  * Top N students by score in a single exam.
  * @returns {Array<{name, score, pct}>}
  */
 export function getExamTopStudents(exam, n = 5) {
-  const maxMarks = exam.questions.length * exam.marking.correct
+  const maxMarks = examMaxMarks(exam)
   return [...exam.students]
     .sort((a, b) => b.totalMarks - a.totalMarks)
     .slice(0, n)
@@ -23,7 +24,7 @@ export function getExamTopStudents(exam, n = 5) {
  * @returns {Array<{name, score, pct}>}
  */
 export function getExamBottomStudents(exam, n = 5) {
-  const maxMarks = exam.questions.length * exam.marking.correct
+  const maxMarks = examMaxMarks(exam)
   return [...exam.students]
     .sort((a, b) => a.totalMarks - b.totalMarks)
     .slice(0, n)

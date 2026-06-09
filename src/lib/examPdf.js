@@ -1,7 +1,7 @@
 import {
   getExamTopStudents, getExamBottomStudents,
   getExamWrongQuestions, getExamSkippedQuestions,
-  getExamToppers,
+  getExamToppers, examMaxMarks,
 } from './analytics'
 
 // ── LaTeX → plain ASCII (jsPDF Helvetica is WinAnsi-encoded;
@@ -175,7 +175,7 @@ function sectionLabel(doc, y, label) {
 function drawStatBoxes(doc, y, exam) {
   const W       = doc.internal.pageSize.getWidth()
   const scores  = exam.students.map(s => s.totalMarks)
-  const maxM    = exam.questions.length * exam.marking.correct
+  const maxM    = examMaxMarks(exam)
   const avg     = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
   const min     = scores.length ? Math.min(...scores) : 0
   const max     = scores.length ? Math.max(...scores) : 0
@@ -456,7 +456,7 @@ export async function downloadExamPdf(exam) {
   ])
   const doc     = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W       = doc.internal.pageSize.getWidth()
-  const maxM    = exam.questions.length * exam.marking.correct
+  const maxM    = examMaxMarks(exam)
 
   // ── Page 1 ────────────────────────────────────────────────
   let y = drawHeader(doc, exam)

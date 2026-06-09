@@ -75,6 +75,12 @@ describe('addExam', () => {
     slice.addExam(makeExam({ id: 'exam_99' }))
     expect(syncExamAbsences).toHaveBeenCalledWith('exam_99')
   })
+
+  it('skips syncExamAbsences when opts.syncAbsences is false (offline exam default)', () => {
+    const { slice, syncExamAbsences } = makeStore()
+    slice.addExam(makeExam({ id: 'exam_off' }), { syncAbsences: false })
+    expect(syncExamAbsences).not.toHaveBeenCalled()
+  })
 })
 
 // ── replaceExam ───────────────────────────────────────────────────────────────

@@ -130,11 +130,14 @@ Written fire-and-forget by `api/student-login.js`. Read by `StudentView` (admin/
 | `batch` | text | nullable | Free text — see `getBatchOptions` for resolution |
 | `branch` | text | nullable | |
 | `marking` | jsonb | `{"correct":4,"wrong":-1}` | `{correct: number, wrong: number}` |
-| `questions` | jsonb | `'[]'` | `[{q, chapter, subtopic?, subject?, ...}]` |
+| `questions` | jsonb | `'[]'` | `[{q, chapter, subtopic?, subject?, ...}]` — **empty `[]` for offline exams** |
+| `max_marks` | numeric | nullable | Explicit paper ceiling for **offline / manually-recorded** exams (no per-question data). NULL for MCQ exams (max derived as `questions.length × marking.correct`). Readers go through `examMaxMarks(exam)` which prefers `max_marks` when positive. Added 2026-06-09. |
 | `created_at` | timestamptz | `now()` | |
 | `updated_at` | timestamptz | `now()` | |
 
 **FKs in:** `exam_results` (CASCADE), `class_reports` (SET NULL).
+
+**Offline exams** (questions `[]` + `max_marks` set): total-marks-only records of hand-graded papers. `exam_results` rows carry `total_marks` with `correct/incorrect/not_attempted = 0` and `responses = {}`. They feed %-of-max trends / Toppers via `max_marks`, but per-question analytics (chapter stats, audits, hardest-Q) are intentionally empty — surfaced as an "Offline" notice in the UI, not as zeros.
 
 ### `exam_results` — one row per student per exam
 

@@ -1,5 +1,5 @@
 // ── Per-student performance metrics & audits ─────────────────
-import { stdDev } from '../analyticsHelpers'
+import { stdDev, examMaxMarks } from '../analyticsHelpers'
 import { getStudentExams } from './filters'
 import { computeStudentChapterStats } from './chapterStats'
 
@@ -20,7 +20,7 @@ export function computeConsistency(name, exams) {
   const studentExams = getStudentExams(name, exams)
   if (studentExams.length < 2) return null
   const pcts = studentExams.map(({ exam, student }) => {
-    const max = exam.questions.length * exam.marking.correct
+    const max = examMaxMarks(exam)
     return max > 0 ? student.totalMarks / max : 0
   })
   const sd = stdDev(pcts)

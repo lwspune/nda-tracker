@@ -3,6 +3,8 @@
 // applicable), returns a sections object the PDF lib renders. Compute-on-demand
 // — no persistence; re-running with the same inputs returns the same output.
 
+import { examMaxMarks } from './analyticsHelpers'
+
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -34,10 +36,6 @@ function shortDate(dateStr) {
   return `${Number(d)} ${MONTH_NAMES[Number(m) - 1]}`
 }
 
-function maxMarks(exam) {
-  return (exam.questions?.length || 0) * (exam.marking?.correct || 0)
-}
-
 // Resolves the student's row inside exam.students[] using canonical name +
 // all known nameVariants (case-sensitive, matches the existing lookup pattern).
 function findEntry(exam, profile) {
@@ -67,7 +65,7 @@ export function buildMonthlyReport({
     if (regDate && exam.date < regDate) continue
     const entry = findEntry(exam, profile)
     if (entry) {
-      const max = maxMarks(exam)
+      const max = examMaxMarks(exam)
       tableRows.push({
         examId: exam.id,
         examName: exam.name,

@@ -75,6 +75,12 @@ describe('buildExamRow', () => {
     expect(row.created_at).toBe('2025-06-01T10:00:00.000Z')
   })
 
+  it('maps maxMarks → max_marks (null for MCQ exams, set for offline)', () => {
+    expect(buildExamRow(MOCK_EXAM).max_marks).toBeNull()
+    const offline = buildExamRow({ ...MOCK_EXAM, questions: [], maxMarks: 100 })
+    expect(offline.max_marks).toBe(100)
+  })
+
   it('coerces empty batch and undefined branch to null', () => {
     const row = buildExamRow({ ...MOCK_EXAM, batch: '', branch: undefined })
     expect(row.batch).toBeNull()
