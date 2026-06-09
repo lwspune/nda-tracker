@@ -7,6 +7,12 @@ import {
   blankQuestion, quizQuestionComplete, validateQuizForPublish,
 } from '../../lib/quiz'
 
+// Classification vocab — kept in sync with PYQ Vault's quiz import so a hand-
+// authored quiz filters alongside imported ones (instead of "Uncategorized").
+const EXAMS = ['NDA', 'MHT-CET']
+const THEMES = ['mixed', 'formula', 'property', 'computation', 'fact', 'trap']
+const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+
 const PUBLISH_REASONS = {
   title_required:        'Add a title before publishing.',
   no_complete_questions: 'Add at least one complete question (text + 4 options + correct answer).',
@@ -38,6 +44,9 @@ function initDraft(quiz) {
     id: (globalThis.crypto?.randomUUID?.() ?? `quiz_${Date.now()}`),
     title: '',
     subject: 'Maths',
+    exam: 'NDA',
+    chapter: '',
+    theme: 'mixed',
     batch: '',
     branch: null,
     marking: { ...DEFAULT_MARKING },
@@ -144,6 +153,43 @@ export default function QuizEditor({ quiz, onDone }) {
                 value={toLocalInput(draft.closesAt)}
                 onChange={e => patch({ closesAt: fromLocalInput(e.target.value) })}
               />
+            </div>
+          </div>
+
+          {/* Classification — drives the Daily Quiz filters (exam/chapter/theme). */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-ink-2 block mb-1">Exam</label>
+              <select
+                className="input w-full text-[13px]"
+                value={draft.exam || ''}
+                onChange={e => patch({ exam: e.target.value || null })}
+                aria-label="Exam"
+              >
+                <option value="">— Exam —</option>
+                {EXAMS.map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-ink-2 block mb-1">Chapter</label>
+              <input
+                className="input w-full text-[13px]"
+                placeholder="e.g. Probability"
+                value={draft.chapter || ''}
+                onChange={e => patch({ chapter: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-ink-2 block mb-1">Theme</label>
+              <select
+                className="input w-full text-[13px]"
+                value={draft.theme || ''}
+                onChange={e => patch({ theme: e.target.value || null })}
+                aria-label="Theme"
+              >
+                <option value="">— Theme —</option>
+                {THEMES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+              </select>
             </div>
           </div>
 
