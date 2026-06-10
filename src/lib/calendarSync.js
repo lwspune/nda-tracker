@@ -44,9 +44,13 @@ export function blockSignature({ startTime, endTime, label, batchName, branch, t
 // mapping resolves to a teacher WITH an email (an attendee is required to land
 // the event on the teacher's calendar). Skips breaks, __span rows, unassigned
 // mappings, missing mappings, and email-less teachers.
-export function buildTeacherBlocks(timetables, mappings, teachers) {
+// Pass refYmd (the sync date) to fold the current window into each block's
+// signature, so a weekly re-sync rolls the dates (signature changes → patch);
+// omit it (date-agnostic signature) only for tests / non-windowed callers.
+export function buildTeacherBlocks(timetables, mappings, teachers, refYmd = null) {
   const mapById = new Map((mappings ?? []).map(m => [m.id, m]))
   const teacherById = new Map((teachers ?? []).map(t => [t.id, t]))
+  const win = refYmd ? computeWindow(refYmd) : null
   const blocks = []
 
   for (const tt of timetables ?? []) {
@@ -77,6 +81,7 @@ export function buildTeacherBlocks(timetables, mappings, teachers) {
           branch: tt.branch,
         }
         block.signature = blockSignature(block)
+        if (win) block.signature += `|${nextDateForWeekday(day, win.anchorFrom)}|${win.untilUtc}`
         blocks.push(block)
       }
     }
@@ -117,12 +122,34 @@ export function nextDateForWeekday(dayName, refYmd) {
   return `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}`
 }
 
+// Internal date helpers (UTC arithmetic — no local-tz drift).
+function ymdToUTC(ymd) { const [Y, M, D] = ymd.split('-').map(Number); return new Date(Date.UTC(Y, M - 1, D)) }
+function utcToYmd(dt) { return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}` }
+function addDays(ymd, n) { const d = ymdToUTC(ymd); d.setUTCDate(d.getUTCDate() + n); return utcToYmd(d) }
+
+// The "remaining-current-week + next-week" window for a sync run anchored at
+// refYmd (IST date 'YYYY-MM-DD'):
+// - anchorFrom: each block's first occurrence is the next weekday on/after this
+//   date — = today for Mon–Sat (so already-passed days this week roll to next
+//   week), = tomorrow's Monday when synced on a Sunday (which has no teaching).
+// - untilUtc: RRULE UNTIL = NEXT week's Saturday, 23:59:59 IST (→ UTC `Z`), so a
+//   passed weekday gets 1 occurrence (next week only) and an upcoming one gets 2.
+export function computeWindow(refYmd) {
+  const dow = ymdToUTC(refYmd).getUTCDay() // 0=Sun .. 6=Sat
+  const monday = dow === 0 ? addDays(refYmd, 1) : addDays(refYmd, -(dow - 1))
+  const anchorFrom = dow === 0 ? monday : refYmd
+  const untilDate = addDays(monday, 12) // next week's Saturday
+  const untilUtc = untilDate.replace(/-/g, '') + 'T182959Z' // 23:59:59 IST = 18:29:59Z
+  return { anchorFrom, untilUtc, untilDate }
+}
+
 // Build the Google Calendar event resource for a block. `refYmd` anchors the
 // first occurrence; the RRULE then repeats it weekly. Times are emitted as
 // local wall-clock + an explicit Asia/Kolkata zone (India has no DST), so no
 // offset math is needed.
 export function toGCalEvent(block, refYmd) {
-  const date = nextDateForWeekday(block.day, refYmd)
+  const { anchorFrom, untilUtc } = computeWindow(refYmd)
+  const date = nextDateForWeekday(block.day, anchorFrom)
   const s = parseClock(block.startTime)
   const e = parseClock(block.endTime)
   const fmt = t => `${date}T${pad(t.h)}:${pad(t.m)}:00`
@@ -132,7 +159,7 @@ export function toGCalEvent(block, refYmd) {
     location: block.branch || undefined,
     start: { dateTime: fmt(s), timeZone: 'Asia/Kolkata' },
     end: { dateTime: fmt(e), timeZone: 'Asia/Kolkata' },
-    recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${DAY_TO_RRULE[block.day]}`],
+    recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${DAY_TO_RRULE[block.day]};UNTIL=${untilUtc}`],
     attendees: [{ email: block.teacherEmail }],
     transparency: 'opaque', // shows the teacher as busy
     extendedProperties: { private: { blockKey: block.blockKey, signature: block.signature } },

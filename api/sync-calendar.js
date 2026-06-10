@@ -72,7 +72,8 @@ export default async function handler(req, res) {
   if (stateErr) { res.status(500).json({ ok: false, error: 'Failed to load faculty_state: ' + stateErr.message }); return }
   const d = stateRow.data || {}
 
-  let desired = buildTeacherBlocks(d.timetables || [], d.timetableMappings || [], d.timetableTeachers || [])
+  const refYmd = istToday()
+  let desired = buildTeacherBlocks(d.timetables || [], d.timetableMappings || [], d.timetableTeachers || [], refYmd)
   let ledgerQ = svc.from('teacher_calendar_blocks').select('block_key, teacher_id, event_id, signature')
   if (teacherId) { desired = desired.filter(b => b.teacherId === teacherId); ledgerQ = ledgerQ.eq('teacher_id', teacherId) }
   const { data: ledger, error: ledErr } = await ledgerQ
@@ -97,11 +98,10 @@ export default async function handler(req, res) {
   try { token = await getAccessToken(google) }
   catch (e) { res.status(502).json({ ok: false, error: 'Google auth failed: ' + e.message }); return }
 
-  const refYmd = istToday()
   const errors = []
   let created = 0, updated = 0, deleted = 0
 
-  await mapLimit(toCreate, 6, async (b) => {
+  await mapLimit(toCreate, 4, async (b) => {
     const r = await insertEvent(token, calendarId, toGCalEvent(b, refYmd))
     if (!r.ok) { errors.push(`create ${b.blockKey}: ${r.error}`); return }
     const { error } = await svc.from('teacher_calendar_blocks').upsert({
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
     created++
   })
 
-  await mapLimit(toUpdate, 6, async (b) => {
+  await mapLimit(toUpdate, 4, async (b) => {
     const r = await patchEvent(token, calendarId, b.eventId, toGCalEvent(b, refYmd))
     if (!r.ok) { errors.push(`update ${b.blockKey}: ${r.error}`); return }
     const { error } = await svc.from('teacher_calendar_blocks').upsert({
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
     updated++
   })
 
-  await mapLimit(toDelete, 6, async (x) => {
+  await mapLimit(toDelete, 4, async (x) => {
     const r = await deleteEvent(token, calendarId, x.eventId)
     if (!r.ok) { errors.push(`delete ${x.blockKey}: ${r.error}`); return }
     const { error } = await svc.from('teacher_calendar_blocks').delete().eq('block_key', x.blockKey)

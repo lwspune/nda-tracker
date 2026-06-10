@@ -302,6 +302,23 @@ Indexes: `(cycle)`, `(teacher_name)`. **RLS ✓ superadmin only** (`superadmin_a
 
 ---
 
+## 9. Calendar sync
+
+### `teacher_calendar_blocks` — Google Calendar sync ledger (one row per synced teaching-block)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `block_key` | text PK | — | Stable identity `teacherId\|timetableId\|slotId\|day` — keying by teacher makes a teacher-swap on a cell release the old block + add the new |
+| `teacher_id` | text | nullable | `timetableTeachers[].id` (not a DB FK — timetable lives in the `faculty_state` JSONB) |
+| `event_id` | text NOT NULL | — | The Google Calendar event id (for patch/delete) |
+| `calendar_id` | text NOT NULL | — | The faculty calendar the event lives on (`FACULTY_CALENDAR_ID`) |
+| `signature` | text NOT NULL | — | Content fingerprint (`startTime\|endTime\|label\|batchName\|branch\|teacherEmail`); a change → patch the event |
+| `synced_at` | timestamptz NOT NULL | `now()` | |
+
+Index: `(teacher_id)`. **RLS ✓ with NO public policy** → anon/authenticated denied; only the **service-role** client reaches it. Written exclusively by `api/sync-calendar.js` (the reconcile endpoint). **Derived sync ledger** — safe to truncate to force a full re-create, BUT truncating orphans the existing Google events (the next sync can't find them to delete), so pair any truncate with a manual calendar clear. See CLAUDE.md → "Teacher calendar sync" + [[reference_google_calendar_sync]].
+
+---
+
 ## FK graph
 
 ```
@@ -328,6 +345,7 @@ Indexes: `(cycle)`, `(teacher_name)`. **RLS ✓ superadmin only** (`superadmin_a
   faculty_state (1)    ← no FKs (JSONB blob)
   students_meta (1)    ← no FKs (single-row config)
   teacher_feedback (499) ← no FKs (teacher_name is text, not a join)
+  teacher_calendar_blocks ← no FKs (teacher_id is text; lives in faculty_state JSONB)
 ```
 
 ---
@@ -343,6 +361,7 @@ Indexes: `(cycle)`, `(teacher_name)`. **RLS ✓ superadmin only** (`superadmin_a
 | `lecture_absences`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The only role-restricted policy. |
+| **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |
 | **`student_logins`** | **✗ DISABLED** | **Exposed to `anon` + `authenticated`** |
 
 ### ⚠️ `student_logins` RLS gap

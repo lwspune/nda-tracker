@@ -5,6 +5,7 @@ import {
   blockSignature,
   toGCalEvent,
   nextDateForWeekday,
+  computeWindow,
 } from '../calendarSync'
 
 const TEACHERS = [
@@ -150,8 +151,9 @@ describe('toGCalEvent', () => {
     signature: 'sig123',
   }
   it('builds a weekly recurring event with the teacher as attendee, busy + tagged', () => {
+    // 2026-06-10 is a Wednesday → window-end = next week's Saturday 2026-06-20.
     const ev = toGCalEvent(block, '2026-06-10')
-    expect(ev.recurrence).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO'])
+    expect(ev.recurrence).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20260620T182959Z'])
     expect(ev.attendees).toEqual([{ email: 'navneet@example.com' }])
     expect(ev.transparency).toBe('opaque')
     expect(ev.start).toEqual({ dateTime: '2026-06-15T09:30:00', timeZone: 'Asia/Kolkata' })
@@ -165,5 +167,50 @@ describe('toGCalEvent', () => {
     const ev = toGCalEvent({ ...block, day: 'Tuesday', startTime: '1:45 PM', endTime: '2:50PM' }, '2026-06-10')
     expect(ev.start.dateTime).toBe('2026-06-16T13:45:00')
     expect(ev.end.dateTime).toBe('2026-06-16T14:50:00')
+  })
+
+  // Synced Tuesday 2026-06-16: Monday (already taught this week) rolls to next
+  // week only; Wednesday (still upcoming) keeps this week + next.
+  it('skips an already-passed weekday this week when synced mid-week', () => {
+    const evMon = toGCalEvent({ ...block, day: 'Monday' }, '2026-06-16')
+    expect(evMon.start.dateTime).toBe('2026-06-22T09:30:00')   // next week, not the passed 06-15
+    expect(evMon.recurrence[0]).toContain('UNTIL=20260627T182959Z')
+  })
+  it('keeps an upcoming weekday this week when synced mid-week', () => {
+    const evWed = toGCalEvent({ ...block, day: 'Wednesday' }, '2026-06-16')
+    expect(evWed.start.dateTime).toBe('2026-06-17T09:30:00')   // tomorrow (remaining this week)
+  })
+})
+
+describe('computeWindow', () => {
+  it('mid-week (Tue 2026-06-16): anchors at today, ends next Saturday 2026-06-27', () => {
+    expect(computeWindow('2026-06-16')).toEqual({ anchorFrom: '2026-06-16', untilUtc: '20260627T182959Z', untilDate: '2026-06-27' })
+  })
+  it('Sunday (2026-06-14): anchors at the upcoming Monday, spans the next two weeks', () => {
+    // Sunday has no teaching → start Monday 06-15; window-end = 06-27 (Sat after next)
+    expect(computeWindow('2026-06-14')).toEqual({ anchorFrom: '2026-06-15', untilUtc: '20260627T182959Z', untilDate: '2026-06-27' })
+  })
+  it('Saturday (2026-06-13): only Saturday remains this week, plus all of next week', () => {
+    expect(computeWindow('2026-06-13')).toEqual({ anchorFrom: '2026-06-13', untilUtc: '20260620T182959Z', untilDate: '2026-06-20' })
+  })
+})
+
+describe('buildTeacherBlocks — windowed signature', () => {
+  const MAP = [{ id: 'm', label: 'Maths', subject: 'Maths', teacherId: 't' }]
+  const TCH = [{ id: 't', name: 'A', email: 'a@x.com' }]
+  const TT = { id: 'tt', branch: 'APJ', batchName: 'B', timeSlots: [{ id: 's', startTime: '9:00 AM', endTime: '10:00 AM' }], grid: { s: { Monday: { type: 'class', mappingId: 'm' } } } }
+
+  it('omitting refYmd → date-agnostic signature (back-compat)', () => {
+    const sig = buildTeacherBlocks([TT], MAP, TCH)[0].signature
+    expect(sig).not.toContain('UNTIL')
+    expect(sig).toBe(blockSignature(buildTeacherBlocks([TT], MAP, TCH)[0]))
+  })
+  it('passing refYmd folds the window in, so a later week rolls the signature', () => {
+    const wk1 = buildTeacherBlocks([TT], MAP, TCH, '2026-06-16')[0].signature
+    const wk2 = buildTeacherBlocks([TT], MAP, TCH, '2026-06-23')[0].signature // next week
+    expect(wk1).toContain('20260627T182959Z')
+    expect(wk1).not.toBe(wk2)               // window moved → patch on re-sync
+    const wk1again = buildTeacherBlocks([TT], MAP, TCH, '2026-06-16')[0].signature
+    expect(wk1again).toBe(wk1)              // same week, same data → no-op
   })
 })

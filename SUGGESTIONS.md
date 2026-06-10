@@ -172,3 +172,42 @@ The offline-exam feature (totals-only, template upload — commit `b4f49fd`) shi
 - On the Exams page, click **"+ Offline marks"** → Download template → fill 2-3 names + marks → upload → set max marks + batch → Save.
 - Confirm: the exam shows an "Offline" badge with the right %-of-max on the card; it appears in the Dashboard performance trend and the student's Exam History; per-question surfaces show the "Offline" notice (not zeros); Insights/PDF buttons are absent.
 - Optionally tick the absentee opt-in once and confirm it flags/notifies as expected (leave off otherwise).
+
+---
+
+## 2026-06-10
+
+### Finish the teacher-calendar-sync production rollout
+
+The Google Calendar sync feature shipped (commit `48f37c3`) and was verified locally — Google write path proven live + a single-teacher in-app trial confirmed by the user. Two production steps remain unfinished. See `memory/reference_google_calendar_sync.md`.
+
+**Update 2026-06-10:** the **full all-teacher sync is now DONE** — all **165 teaching-blocks** across all teachers are on the "LWS Faculty Timetable" calendar (the user had already synced 163 via the app; a headless `run_full_sync` reconcile closed the last 2 for Vishal Sir; ledger == calendar, 0 pending). `SUPABASE_SERVICE_ROLE_KEY` is now in local `.env.local`. **Still open:** the 4 Google env vars + `SUPABASE_SERVICE_ROLE_KEY` in **Vercel** (deployed Sync button still 500s without them), and the notification-mode decision (currently silent + teacher-default reminders).
+
+**Why:** every push to `main` already deployed the code, so the **deployed** "📅 Sync calendars" button will 500 until the env vars exist — a half-live feature. And the full benefit (all teachers' calendars blocked) only lands after the full-teacher run.
+
+**How to apply:**
+- Add to Vercel → Settings → Environment Variables: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `FACULTY_CALENDAR_ID` (values are in local `.env.local`; `SUPABASE_SERVICE_ROLE_KEY` is already set).
+- In the app (local dev works now), open Sync calendars → Scope = **All teachers** → dry-run → Apply (~300–360 events, silent, ~bounded concurrency 6; idempotent if it times out — re-run or chunk by teacher).
+- Decide the notification mode (currently default: no invite emails via `sendUpdates:'none'`, but teachers' default per-occurrence reminders fire). To go fully silent add `reminders:{useDefault:false,overrides:[]}` to `toGCalEvent`; to actively notify on change switch `sendUpdates` to `'all'`.
+
+### Add `teacher_calendar_blocks` to DATABASE_SCHEMA.md
+
+The new sync-ledger table was created in Supabase and documented in CLAUDE.md's table list + Timetable section, but the **column-level** schema reference (`DATABASE_SCHEMA.md`) wasn't updated this session.
+
+**Why:** DATABASE_SCHEMA.md is the canonical per-column reference (all other 16 tables are there); leaving the 17th out makes it the one table a future maintainer can't look up in the expected place.
+
+**How to apply:** add a section for `teacher_calendar_blocks (block_key text PK, teacher_id text, event_id text NOT NULL, calendar_id text NOT NULL, signature text NOT NULL, synced_at timestamptz default now())` — note RLS enabled with **no public policy** (service-role-only; written exclusively by `api/sync-calendar.js`), index on `teacher_id`, and that it's a derived sync ledger (safe to truncate — a re-sync rebuilds it, though that orphans the existing Google events, so pair a truncate with a manual calendar clear).
+
+### ~~Calendar sync: bound the recurrence (no more "recurs forever")~~ — **DONE 2026-06-10**
+
+Replaced infinite weekly recurrence with a **bounded 2-week window** (`computeWindow` → `UNTIL=<next week's Saturday>`, first occurrence anchored to the next weekday on/after the sync day = remaining current week + next week) + folded the window into the block signature so weekly re-syncs roll it forward, + rate-limit backoff for the ~165-event weekly patch. Shipped this session; all 165 live events migrated to bounded. See `reference_google_calendar_sync.md`.
+
+### Calendar sync: automate the weekly window roll + holiday EXDATEs
+
+Two follow-ups remain after the bounded-window change.
+
+**Why:** the window now **must be re-synced periodically** to roll forward (it's no longer fire-and-forget). Today that's a manual click each Sunday — easy to forget, leaving stale/empty calendars. Separately, blocks still recur through holidays/exam days within the window (phantom classes on off days).
+
+**How to apply (when it matters):**
+- **Auto-roll:** a Sunday-evening cron that calls the sync endpoint (or a small scheduled job) so the window advances without a manual click. The endpoint is already idempotent + admin-gated; a cron would need a service-role or stored-admin-token path since there's no interactive JWT.
+- **Holidays / exam days:** add `EXDATE`s to the recurrence (needs a holiday/exam-day source) so blocks skip non-teaching days.
