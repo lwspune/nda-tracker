@@ -171,12 +171,12 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
                                 <span>{group.examName}</span>
                               </div>
                               <div className="space-y-2.5">
-                                {group.items.map(({ qObj, studentResult }) => (
+                                {group.items.map(({ qObj, studentResult, studentAnswer }) => (
                                   <QuestionCard
                                     key={`Q${qObj.q}`}
                                     q={qObj}
                                     examId={group.examId}
-                                    studentAnswer={null}
+                                    studentAnswer={studentAnswer}
                                     studentResult={studentResult}
                                   />
                                 ))}

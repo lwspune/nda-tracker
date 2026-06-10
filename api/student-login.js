@@ -112,7 +112,6 @@ export default async function handler(req, res) {
     canonicalName,
     ...(student.name_variants || []),
   ]
-  const allNamesLower = new Set(allNames.map(n => n.toLowerCase()))
 
   // ── 2. Load this student's exam results from normalised table ────────────
 
@@ -167,6 +166,7 @@ export default async function handler(req, res) {
           incorrect:     r.incorrect,
           notAttempted:  r.not_attempted,
           responses:     r.responses     || {},
+          choices:       r.choices       || {},   // chosen letters → highlight the pick in the parent/student report
         }] : [],
       }
     })

@@ -42,4 +42,17 @@ describe('getIssues — wrong/skipped vs all questions', () => {
     expect(all.map(i => i.q.q)).toEqual([1, 2, 3, 4])
     expect(all.find(i => i.q.q === 1).result).toBe(1)
   })
+
+  it('attaches the chosen option from student.choices (null for skipped / absent)', () => {
+    const st = { responses: { 1: 1, 2: -1, 3: 0 }, choices: { 1: 'A', 2: 'C', 3: null } }
+    const all = getIssues(exam, st, true)
+    expect(all.find(i => i.q.q === 1).studentAnswer).toBe('A')   // correct pick
+    expect(all.find(i => i.q.q === 2).studentAnswer).toBe('C')   // wrong pick
+    expect(all.find(i => i.q.q === 3).studentAnswer).toBeNull()  // skipped
+    expect(all.find(i => i.q.q === 4).studentAnswer).toBeNull()  // no choice entry
+  })
+
+  it('studentAnswer is null when the exam predates choice capture (no choices map)', () => {
+    expect(getIssues(exam, student).every(i => i.studentAnswer === null)).toBe(true)
+  })
 })

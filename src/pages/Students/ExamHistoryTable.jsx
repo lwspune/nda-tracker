@@ -25,7 +25,7 @@ export function fmtMarks(total) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function getIssues(exam, student, includeAll = false) {
   return (exam.questions || [])
-    .map(q => ({ q, result: student.responses?.[q.q] }))
+    .map(q => ({ q, result: student.responses?.[q.q], studentAnswer: student.choices?.[q.q] ?? null }))
     .filter(({ result }) => includeAll ? true : (result === -1 || result === 0))
 }
 
@@ -99,7 +99,7 @@ function IssueRow({ item, examId }) {
           <QuestionCard
             q={item.q}
             examId={examId}
-            studentAnswer={null}
+            studentAnswer={item.studentAnswer}
             studentResult={item.result}
           />
         </div>
