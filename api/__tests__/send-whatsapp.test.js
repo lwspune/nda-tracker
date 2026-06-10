@@ -255,4 +255,31 @@ describe('POST /api/send-whatsapp', () => {
       expect(u).toContain('exam=exam1')
     })
   })
+
+  // ── Message name = canonical roster spelling (not the exam-sheet variant) ──
+  const namesFromFetch = () => global.fetch.mock.calls.map(c => JSON.parse(c[1].body).variables[0])
+
+  it('shows the canonical roster spelling even when the exam sheet used a variant', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [{ canonical_name: 'Vedant Bechawade', mobile: '9876543210', parent_mobiles: ['9000000001'], name_variants: ['Vedant Bechavade'] }],
+        resultRows: [{ student_name: 'Vedant Bechavade', correct: 10, incorrect: 5, not_attempted: 5 }],
+      }),
+    })
+    await call({ examName: 'NDA Test 1' })
+    const names = namesFromFetch()
+    expect(names.length).toBeGreaterThan(0)         // student + parent
+    names.forEach(n => expect(n).toBe('Vedant Bechawade'))  // canonical, not the sheet's 'Bechavade'
+  })
+
+  it('falls back to the exam-sheet name when no profile matches', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [],
+        resultRows: [{ student_name: 'No Profile Student', correct: 1, incorrect: 0, not_attempted: 0 }],
+      }),
+    })
+    await call({ examName: 'NDA Test 1', redirectTo: '9999999999' })
+    expect(namesFromFetch()).toContain('No Profile Student')
+  })
 })

@@ -145,11 +145,13 @@ export default async function handler(req, res) {
 
   const mobileMap = {}
   const parentMap = {}
+  const canonicalMap = {}   // any name-key (canonical or variant, lc) → canonical roster spelling
   for (const s of (studentRows || [])) {
     const name = (s.canonical_name || '').trim()
     const keys = [name.toLowerCase(), ...(s.name_variants || []).map(v => v.trim().toLowerCase())]
     for (const key of keys) {
       if (!key) continue
+      canonicalMap[key] = name
       if (s.mobile)                mobileMap[key] = s.mobile
       if (s.parent_mobiles?.length) parentMap[key] = s.parent_mobiles
     }
@@ -175,8 +177,11 @@ export default async function handler(req, res) {
   const examDate = fmtDate(exam.date || '')
 
   for (const row of results) {
-    const name = (row.name || '').trim()
+    const name = (row.name || '').trim()   // exam-sheet spelling — used for mobile/parent lookup
     if (!name) continue
+    // Message shows the canonical roster spelling (falls back to the exam-sheet
+    // name when the student has no matched profile).
+    const displayName = canonicalMap[name.toLowerCase()] || name
 
     const correct = row.correct      || 0
     const wrong   = row.incorrect    || 0
@@ -191,7 +196,7 @@ export default async function handler(req, res) {
     // result. Used for BOTH the student and the parent message (parents otherwise
     // got a bare link with no pre-fill and landed on the dashboard root).
     const trackerUrl = buildTrackerUrl(mobileRaw, exam.id)
-    const makeParams = url => [name, exam.name, examDate, `${pct}%`, String(correct), String(total), url]
+    const makeParams = url => [displayName, exam.name, examDate, `${pct}%`, String(correct), String(total), url]
 
     // Student
     const destStudent = redirectNorm || mobileNorm

@@ -188,6 +188,7 @@ def main():
     # Build name-keyed lookups from students_db
     mobile_map = {}
     parent_map = {}
+    canonical_map = {}   # name-key (canonical or variant, lc) -> canonical roster spelling
     for s in (students_db if isinstance(students_db, list) else students_db.get('students', [])):
         name    = (s.get('canonical_name') or s.get('name') or '').strip()
         mobile  = str(s.get('mobile') or '').strip()
@@ -195,6 +196,7 @@ def main():
         keys    = [name.lower()] + [v.strip().lower() for v in s.get('name_variants', [])]
         for key in keys:
             if key:
+                canonical_map[key] = name
                 if mobile:
                     mobile_map[key] = mobile
                 if parents:
@@ -212,9 +214,11 @@ def main():
     sent = skipped = 0
 
     for row in results:
-        name = (row.get('name') or '').strip()
+        name = (row.get('name') or '').strip()   # exam-sheet spelling (mobile/parent lookup)
         if not name:
             continue
+        # Message shows the canonical roster spelling (fallback: exam-sheet name).
+        display_name = canonical_map.get(name.lower(), name)
 
         correct = row.get('correct', 0) or 0
         wrong   = row.get('incorrect', row.get('wrong', 0)) or 0
@@ -230,8 +234,8 @@ def main():
         _parts          = ([f"mobile={student_mobile_raw}"] if student_mobile_raw else []) + ([f"exam={exam_id}"] if exam_id else [])
         tracker_student = f"{TRACKER_BASE}?{'&'.join(_parts)}" if _parts else TRACKER_BASE
 
-        def make_params(tracker_url):
-            return [name, exam_name, exam_date, f"{pct}%", str(correct), str(total), tracker_url]
+        def make_params(tracker_url, _dn=display_name):
+            return [_dn, exam_name, exam_date, f"{pct}%", str(correct), str(total), tracker_url]
 
         if args.to:
             dest = normalise_mobile(args.to)
