@@ -79,3 +79,71 @@ export function getTodaysLectures(timetable, date, mappings) {
   }
   return results
 }
+
+// Pivots scheduled class hours by subject (rows) across batches/timetables
+// (columns) — the subject-side analogue of the Teacher Schedule's hours roll-up.
+// Walks every class cell (type:'class' with a resolvable mapping) and adds the
+// slot's duration in hours for each day it runs, grouped by the mapping's
+// `subject`. Granular labels collapse into their shared subject (Maths PYQs +
+// Maths → "Maths"); a mapping without a subject buckets under "Unspecified".
+// Breaks, __span rows and unresolved mappings are excluded (same rules as
+// getTodaysLectures). Pass { branch } to restrict the columns to one branch.
+//
+// Returns:
+//   {
+//     batches: [{ id, branch, batchName }],      // columns, in input order
+//     subjects: [string],                         // rows, total hours desc then name asc
+//     cell: { [subject]: { [batchId]: hours } },  // sparse (only nonzero)
+//     batchTotals: { [batchId]: hours },
+//     subjectTotals: { [subject]: hours },
+//     grandTotal: hours,
+//   }
+export function getSubjectHoursByBatch(timetables, mappings, { branch } = {}) {
+  const empty = { batches: [], subjects: [], cell: {}, batchTotals: {}, subjectTotals: {}, grandTotal: 0 }
+  if (!Array.isArray(timetables)) return empty
+
+  const mappingById = new Map((mappings ?? []).map(m => [m.id, m]))
+  const cols = timetables.filter(tt => tt && (!branch || tt.branch === branch))
+
+  const cell = {}
+  const batchTotals = {}
+  const subjectTotals = {}
+  let grandTotal = 0
+
+  for (const tt of cols) {
+    batchTotals[tt.id] = 0
+    const grid = tt.grid ?? {}
+    for (const slot of tt.timeSlots ?? []) {
+      const row = grid[slot.id]
+      if (!row || row.__span) continue
+      const mins = parseTimeToMinutes(slot.endTime) - parseTimeToMinutes(slot.startTime)
+      if (mins <= 0) continue
+      const hours = mins / 60
+      for (const [day, c] of Object.entries(row)) {
+        if (day === '__span') continue
+        if (!c || c.type !== 'class') continue
+        const mapping = mappingById.get(c.mappingId)
+        if (!mapping) continue
+        const subject = mapping.subject || 'Unspecified'
+        if (!cell[subject]) cell[subject] = {}
+        cell[subject][tt.id] = (cell[subject][tt.id] ?? 0) + hours
+        subjectTotals[subject] = (subjectTotals[subject] ?? 0) + hours
+        batchTotals[tt.id] += hours
+        grandTotal += hours
+      }
+    }
+  }
+
+  const subjects = Object.keys(subjectTotals).sort(
+    (a, b) => (subjectTotals[b] - subjectTotals[a]) || a.localeCompare(b)
+  )
+
+  return {
+    batches: cols.map(tt => ({ id: tt.id, branch: tt.branch, batchName: tt.batchName })),
+    subjects,
+    cell,
+    batchTotals,
+    subjectTotals,
+    grandTotal,
+  }
+}

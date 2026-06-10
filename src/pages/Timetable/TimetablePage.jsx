@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
+import { getSubjectHoursByBatch } from '../../lib/timetable'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -427,6 +428,7 @@ export default function TimetablePage() {
         sub={
           view === 'grid'    ? (selectedBranch ? (activeTT ? getTimetableTitle(activeTT) : `${selectedBranch} — Select a batch`) : 'No timetables yet')
           : view === 'teacher' ? 'Teacher Schedule'
+          : view === 'subjects' ? 'Subject Hours — weekly load by batch'
           : 'Exam Schedule'
         }
         actions={isAdmin && (
@@ -444,9 +446,10 @@ export default function TimetablePage() {
       {/* View toggle */}
       <div className="flex gap-2 mb-5">
         {[
-          { key: 'grid',    label: 'Student View' },
-          { key: 'teacher', label: 'Teacher Schedule' },
-          { key: 'exam',    label: 'Exam Schedule' },
+          { key: 'grid',     label: 'Student View' },
+          { key: 'teacher',  label: 'Teacher Schedule' },
+          { key: 'subjects', label: 'Subject Hours' },
+          { key: 'exam',     label: 'Exam Schedule' },
         ].map(({ key, label }) => (
           <button
             key={key}
@@ -772,6 +775,116 @@ export default function TimetablePage() {
           )}
         </div>
       )}
+
+      {/* ── Subject Hours view ───────────────────────────── */}
+      {view === 'subjects' && (() => {
+        const data = getSubjectHoursByBatch(timetables, mappings, { branch: selectedBranch })
+        const fmt = h => (h ? Number(h.toFixed(2)).toString() : '')
+        return (
+          <div className="space-y-4">
+            {timetables.length === 0 ? (
+              <EmptyState
+                icon="📊"
+                title="No timetables yet"
+                sub="Create a timetable to compare subject hours across batches."
+              />
+            ) : (
+              <>
+                {/* Branch tabs (shared selection with Student View) */}
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mr-1">Branch</span>
+                  {branches.map(b => (
+                    <button
+                      key={b}
+                      onClick={() => setSelectedBranch(b)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
+                        b === selectedBranch
+                          ? 'bg-accent text-white border-accent'
+                          : 'bg-surface border-border text-ink-2 hover:border-accent/50'
+                      }`}
+                    >{b}</button>
+                  ))}
+                </div>
+
+                {data.batches.length === 0 || data.subjects.length === 0 ? (
+                  <div className="card text-center py-10">
+                    <div className="text-2xl mb-2 opacity-30">📊</div>
+                    <div className="text-[14px] font-bold mb-1">No scheduled hours</div>
+                    <div className="text-[12px] text-ink-3">
+                      No subject classes are assigned in {selectedBranch}'s timetables yet.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-ink-3">
+                      Weekly scheduled hours per subject. Breaks and free slots excluded; granular labels
+                      (e.g. Maths PYQs) roll up to their subject.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-[12px] min-w-[520px]">
+                        <thead>
+                          <tr>
+                            <th className="border border-border bg-surface-2 px-3 py-2.5 text-left font-bold text-ink-2 text-[11px] uppercase tracking-wide sticky left-0 z-10">
+                              Subject
+                            </th>
+                            {data.batches.map(b => (
+                              <th key={b.id} className="border border-border bg-surface-2 px-3 py-2.5 text-center font-bold text-ink-2 text-[11px] tracking-wide whitespace-nowrap">
+                                {b.batchName}
+                              </th>
+                            ))}
+                            <th className="border border-border bg-surface-2 px-3 py-2.5 text-center font-bold text-accent text-[11px] uppercase tracking-wide">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.subjects.map(subject => (
+                            <tr key={subject}>
+                              <td className="border border-border px-3 py-2 font-semibold text-ink sticky left-0 bg-surface z-10">
+                                {subject}
+                              </td>
+                              {data.batches.map(b => {
+                                const h = data.cell[subject]?.[b.id] ?? 0
+                                return (
+                                  <td
+                                    key={b.id}
+                                    className={`border border-border px-3 py-2 text-center tabular-nums ${
+                                      h ? 'text-ink font-medium' : 'text-ink-3/40'
+                                    }`}
+                                  >
+                                    {h ? fmt(h) : '·'}
+                                  </td>
+                                )
+                              })}
+                              <td className="border border-border px-3 py-2 text-center font-bold text-accent tabular-nums">
+                                {fmt(data.subjectTotals[subject])}
+                              </td>
+                            </tr>
+                          ))}
+                          {/* Total row */}
+                          <tr>
+                            <td className="border border-border px-3 py-2.5 font-bold text-ink-2 text-[11px] uppercase tracking-wide sticky left-0 bg-surface-2 z-10">
+                              Total / Week
+                            </td>
+                            {data.batches.map(b => (
+                              <td key={b.id} className="border border-border bg-surface-2 px-3 py-2.5 text-center font-bold text-ink tabular-nums">
+                                {fmt(data.batchTotals[b.id])}
+                              </td>
+                            ))}
+                            <td className="border border-border bg-surface-2 px-3 py-2.5 text-center font-bold text-accent tabular-nums">
+                              {fmt(data.grandTotal)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Exam Schedule view ───────────────────────────── */}
       {view === 'exam' && <ExamScheduleView />}
