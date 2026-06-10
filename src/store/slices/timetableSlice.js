@@ -137,6 +137,30 @@ export const createTimetableSlice = (set, get) => ({
     get()._save()
   },
 
+  // Reorder a batch tab by swapping it with its adjacent same-branch sibling.
+  // dir = 'left' | 'right'. No-op at the ends, for unknown id, or bad dir.
+  // Cross-branch order is preserved (only the two same-branch entries swap).
+  moveTimetableWithinBranch(id, dir) {
+    if (dir !== 'left' && dir !== 'right') return
+    let moved = false
+    set(s => {
+      const arr = s.timetables
+      const idx = arr.findIndex(tt => tt.id === id)
+      if (idx === -1) return s
+      const branch = arr[idx].branch
+      const step = dir === 'left' ? -1 : 1
+      // Walk to the nearest neighbour in the SAME branch in that direction.
+      let swap = idx + step
+      while (swap >= 0 && swap < arr.length && arr[swap].branch !== branch) swap += step
+      if (swap < 0 || swap >= arr.length) return s
+      const next = [...arr]
+      ;[next[idx], next[swap]] = [next[swap], next[idx]]
+      moved = true
+      return { timetables: next }
+    })
+    if (moved) get()._save()
+  },
+
   // ── Slot CRUD ─────────────────────────────────────────────────
   addTimetableSlot(timetableId, startTime, endTime) {
     const slotId = uid('slot')

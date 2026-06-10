@@ -263,6 +263,66 @@ describe('deleteTimetable', () => {
   })
 })
 
+describe('moveTimetableWithinBranch', () => {
+  // Build APJ:[A,B,C] interleaved with an LWS timetable to prove branch isolation.
+  function seed() {
+    const store = makeStore()
+    const a = store.slice.addTimetable('APJ', 'A')
+    const lws = store.slice.addTimetable('LWS Pune', 'L')
+    const b = store.slice.addTimetable('APJ', 'B')
+    const c = store.slice.addTimetable('APJ', 'C')
+    return { ...store, a, lws, b, c }
+  }
+  const batchOrder = (get, branch) =>
+    get().timetables.filter(t => t.branch === branch).map(t => t.batchName)
+
+  it('moves a batch right (swaps with next same-branch sibling)', () => {
+    const { get, slice, a } = seed()
+    slice.moveTimetableWithinBranch(a, 'right')
+    expect(batchOrder(get, 'APJ')).toEqual(['B', 'A', 'C'])
+  })
+
+  it('moves a batch left (swaps with previous same-branch sibling)', () => {
+    const { get, slice, c } = seed()
+    slice.moveTimetableWithinBranch(c, 'left')
+    expect(batchOrder(get, 'APJ')).toEqual(['A', 'C', 'B'])
+  })
+
+  it('is a no-op moving the first batch left', () => {
+    const { get, slice, a, saves } = seed()
+    const before = saves.length
+    slice.moveTimetableWithinBranch(a, 'left')
+    expect(batchOrder(get, 'APJ')).toEqual(['A', 'B', 'C'])
+    expect(saves.length).toBe(before) // no save on no-op
+  })
+
+  it('is a no-op moving the last batch right', () => {
+    const { get, slice, c } = seed()
+    slice.moveTimetableWithinBranch(c, 'right')
+    expect(batchOrder(get, 'APJ')).toEqual(['A', 'B', 'C'])
+  })
+
+  it('does not disturb other branches', () => {
+    const { get, slice, a } = seed()
+    slice.moveTimetableWithinBranch(a, 'right')
+    expect(batchOrder(get, 'LWS Pune')).toEqual(['L'])
+    expect(get().timetables).toHaveLength(4) // nothing lost
+  })
+
+  it('saves on a real move', () => {
+    const { slice, a, saves } = seed()
+    const before = saves.length
+    slice.moveTimetableWithinBranch(a, 'right')
+    expect(saves.length).toBe(before + 1)
+  })
+
+  it('is a no-op for an unknown id', () => {
+    const { get, slice } = seed()
+    slice.moveTimetableWithinBranch('nope', 'right')
+    expect(batchOrder(get, 'APJ')).toEqual(['A', 'B', 'C'])
+  })
+})
+
 // ── Slot CRUD ─────────────────────────────────────────────────────────────────
 describe('addTimetableSlot', () => {
   it('adds a time slot to a timetable', () => {

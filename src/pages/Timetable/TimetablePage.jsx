@@ -246,6 +246,7 @@ export default function TimetablePage() {
   const teachers      = useStore(s => s.timetableTeachers)
   const mappings      = useStore(s => s.timetableMappings)
   const updateTimetable = useStore(s => s.updateTimetable)
+  const moveTimetableWithinBranch = useStore(s => s.moveTimetableWithinBranch)
 
   const branches = [...new Set(timetables.map(t => t.branch))].sort()
 
@@ -495,7 +496,7 @@ export default function TimetablePage() {
               {/* Batch tabs */}
               {branchTTs.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-5 border-b border-border pb-0">
-                  {branchTTs.map(tt => (
+                  {branchTTs.map((tt, i) => (
                     <div key={tt.id} className="flex items-center">
                       <button
                         onClick={() => setSelectedTTId(tt.id)}
@@ -506,11 +507,28 @@ export default function TimetablePage() {
                         }`}
                       >{tt.batchName}</button>
                       {isAdmin && tt.id === selectedTTId && (
-                        <button
-                          className="ml-0.5 mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
-                          onClick={() => setAddTTModal(tt)}
-                          title="Edit timetable"
-                        >⚙</button>
+                        <>
+                          <button
+                            className="ml-0.5 mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:cursor-default"
+                            onClick={() => moveTimetableWithinBranch(tt.id, 'left')}
+                            disabled={i === 0}
+                            aria-label={`Move ${tt.batchName} left`}
+                            title="Move left"
+                          >◀</button>
+                          <button
+                            className="mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:cursor-default"
+                            onClick={() => moveTimetableWithinBranch(tt.id, 'right')}
+                            disabled={i === branchTTs.length - 1}
+                            aria-label={`Move ${tt.batchName} right`}
+                            title="Move right"
+                          >▶</button>
+                          <button
+                            className="mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
+                            onClick={() => setAddTTModal(tt)}
+                            aria-label={`Edit ${tt.batchName} timetable`}
+                            title="Edit timetable"
+                          >⚙</button>
+                        </>
                       )}
                     </div>
                   ))}
