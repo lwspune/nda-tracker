@@ -150,7 +150,8 @@ Written fire-and-forget by `api/student-login.js`. Read by `StudentView` (admin/
 | `correct` | int4 | `0` | |
 | `incorrect` | int4 | `0` | |
 | `not_attempted` | int4 | `0` | |
-| `responses` | jsonb | `'{}'` | `{ qNum: 1 \| -1 \| 0 }` (correct/wrong/skipped) |
+| `responses` | jsonb | `'{}'` | `{ qNum: 1 \| -1 \| 0 }` (correct/wrong/skipped) — Evalbee's verdict |
+| `choices` | jsonb | nullable | `{ qNum: 'A'–'Z' \| null }` — the student's chosen letter (null = blank). Additive (2026-06-10); NULL for rows uploaded before capture. Enables re-grading a corrected key (re-grade action not yet built). |
 | **PK** | `(exam_id, student_name)` | | |
 
 Reads must paginate with `fetchAllRows()` — 1636+ rows exceeds Supabase's 1000-row default.

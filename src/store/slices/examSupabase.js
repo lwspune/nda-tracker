@@ -36,6 +36,9 @@ export function buildResultRows(exam, studentProfiles = {}) {
       incorrect:      s.incorrect     ?? 0,
       not_attempted:  s.notAttempted  ?? 0,
       responses:      s.responses     ?? {},
+      // Captured chosen letters ({qn: 'A'|null}) — additive, for re-grading a
+      // corrected key later; {} for older uploads that predate capture.
+      choices:        s.choices       ?? {},
       batch_at_exam:  p ? ((p.batches || []).join(', ') || null) : null,
       branch_at_exam: p ? (p.branch || null) : null,
     }

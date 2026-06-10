@@ -88,6 +88,7 @@ export async function loadExamsFromSupabase() {
       incorrect:    r.incorrect     ?? 0,
       notAttempted: r.not_attempted ?? 0,
       responses:    r.responses     ?? {},
+      choices:      r.choices       ?? {},
     })
   }
 

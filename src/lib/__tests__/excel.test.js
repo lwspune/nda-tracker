@@ -97,3 +97,31 @@ describe('parseExcelFull — Q N Key extraction', () => {
     expect(out.answerKeys).toEqual({ 1: 'A' })
   })
 })
+
+describe('parseExcelFull — choice capture (for re-gradeability)', () => {
+  it("captures each student's chosen option letter per question", async () => {
+    const file = buildResultsFile({ totalQs: 3, opts: { 1: 'A', 2: 'B', 3: 'C' } })
+    const out = await parseExcelFull(file)
+    expect(out.students[0].choices).toEqual({ 1: 'A', 2: 'B', 3: 'C' })
+  })
+
+  it('stores null for a blank (unattempted) option, and the verdict stays 0', async () => {
+    const file = buildResultsFile({ totalQs: 3, opts: { 1: 'A', 2: '', 3: 'C' }, marks: { 1: 2.5, 2: 0, 3: 2.5 } })
+    const out = await parseExcelFull(file)
+    expect(out.students[0].choices).toEqual({ 1: 'A', 2: null, 3: 'C' })
+    expect(out.students[0].responses[2]).toBe(0)
+  })
+
+  it('uppercases lowercase choice letters', async () => {
+    const file = buildResultsFile({ totalQs: 2, opts: { 1: 'a', 2: 'd' } })
+    const out = await parseExcelFull(file)
+    expect(out.students[0].choices).toEqual({ 1: 'A', 2: 'D' })
+  })
+
+  it('leaves responses (the 1/-1/0 verdict) unchanged — choice capture is purely additive', async () => {
+    const file = buildResultsFile({ totalQs: 2, opts: { 1: 'A', 2: 'B' }, marks: { 1: 2.5, 2: -0.83 } })
+    const out = await parseExcelFull(file)
+    expect(out.students[0].responses).toEqual({ 1: 1, 2: -1 })   // by Evalbee mark sign
+    expect(out.students[0].choices).toEqual({ 1: 'A', 2: 'B' })
+  })
+})

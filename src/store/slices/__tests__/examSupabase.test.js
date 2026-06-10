@@ -118,9 +118,20 @@ describe('buildResultRows', () => {
       incorrect:      5,
       not_attempted:  5,
       responses:      { '1': 1 },
+      choices:        {},
       batch_at_exam:  null,
       branch_at_exam: null,
     })
+  })
+
+  it('persists the captured choices map (and defaults to {} when absent)', () => {
+    const exam = { ...MOCK_EXAM, students: [
+      { name: 'A', responses: { '1': 1, '2': -1 }, choices: { '1': 'C', '2': 'A', '3': null } },
+      { name: 'B', responses: {} },   // no choices captured (older upload)
+    ] }
+    const rows = buildResultRows(exam)
+    expect(rows[0].choices).toEqual({ '1': 'C', '2': 'A', '3': null })
+    expect(rows[1].choices).toEqual({})
   })
 
   it('snapshots current batch/branch from studentProfiles (canonical + variant; null when unmatched)', () => {

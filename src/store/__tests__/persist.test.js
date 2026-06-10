@@ -197,6 +197,7 @@ describe('loadExamsFromSupabase', () => {
       incorrect:    5,
       notAttempted: 5,
       responses:    { '1': 1 },
+      choices:      {},   // additive; defaults to {} when the row has no choices column
     })
   })
 

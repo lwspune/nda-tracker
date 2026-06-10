@@ -98,10 +98,16 @@ export async function parseExcelFull(file) {
     const row = raw[r]; if (!row || !row[ni]) continue
     const tm = row[ti]; if (tm === null || tm === undefined || tm === '') continue
     const responses = {}
+    const choices = {}
     Object.entries(qm).forEach(([qn, ci2]) => {
       const mk = parseFloat(row[ci2])
       const op = row[qo[qn]]
       responses[qn] = (!op || op === '' || op === null) ? 0 : (mk > 0 ? 1 : -1)
+      // Capture the student's chosen letter (additive — enables re-grading
+      // against a corrected key later). null = blank/unrecognised. The 1/-1/0
+      // verdict above is unchanged; grading stays Evalbee-authoritative.
+      const letter = String(op ?? '').trim().toUpperCase()
+      choices[qn] = /^[A-Z]$/.test(letter) ? letter : null
     })
     students.push({
       name:         String(row[ni]).trim(),
@@ -111,6 +117,7 @@ export async function parseExcelFull(file) {
       incorrect:    parseInt(row[ii])  || 0,
       notAttempted: parseInt(row[nai]) || 0,
       responses,
+      choices,
     })
   }
 
