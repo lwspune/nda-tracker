@@ -11,6 +11,7 @@ import ManageMappingsModal from './ManageMappingsModal'
 import AddTimetableModal from './AddTimetableModal'
 import AddSlotModal from './AddSlotModal'
 import SendScheduleModal from './SendScheduleModal'
+import SyncCalendarModal from './SyncCalendarModal'
 import ExamScheduleView from './ExamScheduleView'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -263,6 +264,7 @@ export default function TimetablePage() {
   const [slotModal, setSlotModal]                   = useState(null)
   // sendSchedule: null | { teacherId: string|null }
   const [sendSchedule, setSendSchedule]             = useState(null)
+  const [syncCalOpen, setSyncCalOpen]               = useState(false)
   const [footnotesDraft, setFootnotesDraft]         = useState(null)
 
   useEffect(() => {
@@ -657,12 +659,21 @@ export default function TimetablePage() {
                 Select Teacher
               </label>
               {isAdmin && teachers.length > 0 && (
-                <button
-                  className="ml-auto btn text-[11px] px-3 py-1 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
-                  onClick={() => setSendSchedule({ teacherId: null })}
-                >
-                  ✉ Send all schedules
-                </button>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    className="btn text-[11px] px-3 py-1 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
+                    onClick={() => setSyncCalOpen(true)}
+                    title="Push teaching periods to each teacher's Google calendar"
+                  >
+                    📅 Sync calendars
+                  </button>
+                  <button
+                    className="btn text-[11px] px-3 py-1 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
+                    onClick={() => setSendSchedule({ teacherId: null })}
+                  >
+                    ✉ Send all schedules
+                  </button>
+                </div>
               )}
             </div>
             {teachers.length === 0 ? (
@@ -937,6 +948,7 @@ export default function TimetablePage() {
           onClose={() => setSendSchedule(null)}
         />
       )}
+      {syncCalOpen && <SyncCalendarModal teachers={teachers} onClose={() => setSyncCalOpen(false)} />}
     </div>
   )
 }
