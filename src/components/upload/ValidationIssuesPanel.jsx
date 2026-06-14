@@ -9,12 +9,12 @@ export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept
   const allSuggestable = tagIssues.length > 0 && tagIssues.every(i => i.suggestion)
 
   return (
-    <div className="mb-4 border border-red-200 rounded-xl overflow-hidden">
+    <div className="mb-4 border border-amber-300 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-red-50 border-b border-red-200">
+      <div className="flex items-center justify-between px-4 py-3 bg-amber-50 border-b border-amber-200">
         <div className="flex items-center gap-2">
-          <span className="text-danger font-bold text-[13px]">
-            ❌ {tagIssues.length} chapter name issue{tagIssues.length > 1 ? 's' : ''} — fix to continue
+          <span className="text-amber-700 font-bold text-[13px]">
+            ⚠️ {tagIssues.length} chapter name{tagIssues.length > 1 ? 's' : ''} not in the {tagsSubject} list — you can proceed; fix if this is an NDA test
           </span>
         </div>
         {allSuggestable && tagIssues.length > 1 && (
@@ -29,16 +29,16 @@ export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept
       </div>
 
       {/* Issue rows */}
-      <div className="divide-y divide-red-100">
+      <div className="divide-y divide-amber-100">
         {tagIssues.map(issue => (
           <div key={issue.q} className="px-4 py-3 bg-white flex items-center gap-3 flex-wrap">
             <span className="font-mono font-bold text-[11px] text-ink-3 flex-shrink-0 w-8">
               Q{issue.q}
             </span>
 
-            {/* Wrong name */}
-            <span className="text-[12px] font-semibold text-danger bg-red-50
-                             px-2 py-0.5 rounded border border-red-200">
+            {/* Unrecognised name */}
+            <span className="text-[12px] font-semibold text-amber-800 bg-amber-50
+                             px-2 py-0.5 rounded border border-amber-200">
               {issue.chapter || '(empty)'}
             </span>
 
@@ -60,7 +60,7 @@ export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept
               </>
             ) : (
               <span className="text-[11px] text-ink-3 italic ml-1">
-                No suggestion found — fix in Excel and re-upload
+                Not in the {tagsSubject} list — will upload as-is
               </span>
             )}
           </div>
@@ -69,8 +69,8 @@ export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept
 
       {/* Footer hint — only shown when the subject has a known chapter list */}
       {getValidChapters(tagsSubject).length > 0 && (
-        <div className="px-4 py-2.5 bg-red-50 border-t border-red-100">
-          <span className="text-[10.5px] text-danger/70">
+        <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100">
+          <span className="text-[10.5px] text-amber-700/80">
             Valid chapters for <strong>{tagsSubject}</strong>: {getValidChapters(tagsSubject).join(' · ')}
           </span>
         </div>

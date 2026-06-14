@@ -93,11 +93,14 @@ export default function Step1Upload({ onNext, onCancel }) {
     setTagIssues(prev => prev.filter(i => !i.suggestion))
   }
 
-  const hasBlockingIssues = tagIssues.length > 0
+  // Chapter-name mismatches are WARNINGS, not blockers: correct for NDA tests (typo
+  // catch) but wrong for non-NDA papers (e.g. Class-10) whose chapters aren't in the
+  // NDA list. Surface them, let the user proceed; accept-suggestion still one-click-fixes
+  // genuine typos.
+  const hasChapterWarnings = tagIssues.length > 0
 
   async function handleNext() {
     if (!xlsxFile) { setError('Please upload the Results Excel file.'); return }
-    if (hasBlockingIssues) { setError('Fix all chapter name issues before proceeding.'); return }
     setError(null)
     setLoading(true)
 
@@ -134,16 +137,12 @@ export default function Step1Upload({ onNext, onCancel }) {
         tags = tags.map(t => answerKeys[t.q] ? { ...t, answer: answerKeys[t.q] } : t)
       }
 
-      // Re-validate with the resolved subject (handles edge case where tags were
-      // initially validated against a different subject before Excel was parsed).
+      // Re-validate with the resolved subject so the warning panel reflects the final
+      // subject — but chapter mismatches are warnings, not blockers, so don't return.
       if (tags) {
         const { issues } = validateTags(tags, finalSubject)
         setTagIssues(issues)
         setTagsSubject(finalSubject)
-        if (issues.length > 0) {
-          setLoading(false)
-          return // block — user must fix remaining issues
-        }
       }
 
       let tagsSource = null
@@ -225,7 +224,7 @@ export default function Step1Upload({ onNext, onCancel }) {
         </div>
       </div>
 
-      {/* Validation issues — hard block */}
+      {/* Chapter-name warnings — non-blocking */}
       {tagIssues.length > 0 && (
         <ValidationIssuesPanel
           tagIssues={tagIssues}
@@ -236,7 +235,7 @@ export default function Step1Upload({ onNext, onCancel }) {
       )}
 
       {/* Tags valid confirmation */}
-      {tagsFile && parsedTags && !hasBlockingIssues && (
+      {tagsFile && parsedTags && !hasChapterWarnings && (
         <div className="mb-4 flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-[12.5px] text-green-900">
           <span>✅</span>
           <span>All {parsedTags.length} chapter names validated — ready to proceed</span>
@@ -253,8 +252,8 @@ export default function Step1Upload({ onNext, onCancel }) {
         <button onClick={onCancel} className="btn btn-secondary">Cancel</button>
         <button
           onClick={handleNext}
-          disabled={loading || !xlsxFile || hasBlockingIssues}
-          className={`btn btn-primary ${hasBlockingIssues ? 'opacity-40 cursor-not-allowed' : ''}`}
+          disabled={loading || !xlsxFile}
+          className="btn btn-primary"
         >
           {loading ? <><Spinner size="sm" /> Reading files…</> : 'Extract Details →'}
         </button>

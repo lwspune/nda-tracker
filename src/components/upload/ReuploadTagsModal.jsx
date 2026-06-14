@@ -25,7 +25,8 @@ export default function ReuploadTagsModal({ exam, onClose }) {
   const subject        = exam.subject || 'Maths'
   const validChapters  = getValidChapters(subject)
   const hasChapterList = validChapters.length > 0
-  const hasBlockingIssues = tagIssues.length > 0
+  // Chapter-name mismatches are warnings, not blockers (see Step1Upload) — proceed allowed.
+  const hasChapterWarnings = tagIssues.length > 0
 
   // ── Step 1: file handling ─────────────────────────────────────
 
@@ -168,7 +169,7 @@ export default function ReuploadTagsModal({ exam, onClose }) {
               )}
 
               {/* Valid confirmation */}
-              {tagsFile && parsedTags && !hasBlockingIssues && (
+              {tagsFile && parsedTags && !hasChapterWarnings && (
                 <div className="mb-4 flex items-center gap-2 px-4 py-2.5 bg-green-50
                                 border border-green-200 rounded-xl text-[12.5px] text-green-900">
                   <span>✅</span>
@@ -184,7 +185,7 @@ export default function ReuploadTagsModal({ exam, onClose }) {
                 <button onClick={onClose} className="btn btn-secondary">Cancel</button>
                 <button
                   onClick={handleProceedToReview}
-                  disabled={loading || !tagsFile || hasBlockingIssues || !parsedTags}
+                  disabled={loading || !tagsFile || !parsedTags}
                   className="btn btn-primary"
                 >
                   {loading ? <><Spinner size="sm" /> Reading…</> : 'Review Tags →'}

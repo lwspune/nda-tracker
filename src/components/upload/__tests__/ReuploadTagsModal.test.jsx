@@ -143,16 +143,19 @@ describe('ReuploadTagsModal — step 1 upload', () => {
     })
   })
 
-  it('blocks proceed when there are unresolved validation issues', async () => {
+  it('still allows proceed when chapter names are unrecognised (warning, not blocker)', async () => {
     mockValidateTags.mockReturnValue({
-      issues: [{ q: 1, chapter: 'Algbera', suggestion: 'Algebra', type: 'typo' }],
+      issues: [{ q: 1, chapter: 'Algbera', suggestion: 'Algebra', type: 'unrecognised' }],
     })
     const user = userEvent.setup()
     const { container } = renderModal()
     await user.upload(getFileInput(container), makeFakeFile())
+    // The warning panel shows...
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /review tags/i })).toBeDisabled()
+      expect(screen.getByText(/chapter name/i)).toBeInTheDocument()
     })
+    // ...but proceed is NOT blocked — chapter mismatches are warnings now.
+    expect(screen.getByRole('button', { name: /review tags/i })).not.toBeDisabled()
   })
 
   it('shows a success message when all tags are valid', async () => {
