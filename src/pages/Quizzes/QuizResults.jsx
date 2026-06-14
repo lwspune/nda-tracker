@@ -76,6 +76,12 @@ export default function QuizResults({ quiz, onBack }) {
                   />
                   {open && q && (
                     <div className="mt-1 mb-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5">
+                      {q.context && (
+                        <div className="mb-2 rounded-md border border-border bg-surface px-2.5 py-2 text-[12px] leading-relaxed text-ink-2">
+                          <div className="text-[8.5px] font-bold uppercase tracking-wide text-ink-3 mb-1">Passage</div>
+                          <Tex>{q.context}</Tex>
+                        </div>
+                      )}
                       <div className="text-[13px] font-semibold text-ink mb-2 overflow-x-auto"><Tex>{q.question}</Tex></div>
                       <div className="space-y-1.5">
                         {LETTERS.map(letter => {

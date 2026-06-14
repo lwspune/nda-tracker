@@ -161,6 +161,13 @@ export function QuizTaker({ quiz, mobile, onCancel, onSubmitted }) {
       {phase === 'taking' ? (
         <AnimatedSwap dep={idx}>
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+            {q.context && (
+              <div className="mb-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5
+                              text-[13px] leading-relaxed text-ink-2">
+                <div className="text-[9px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">Passage</div>
+                <Math>{q.context}</Math>
+              </div>
+            )}
             <div className="flex gap-2 text-[15px] font-semibold leading-relaxed text-ink">
               <span className="text-[12px] font-bold text-ink-3">{idx + 1}.</span>
               <div className="min-w-0 flex-1 overflow-x-auto"><Math>{q.question}</Math></div>
@@ -270,6 +277,12 @@ export function QuizReview({ title, review, onBack }) {
           if (!showAll && correct) return null
           return (
             <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
+              {q.context && (
+                <div className="mb-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
+                  <div className="text-[8.5px] font-bold uppercase tracking-wide text-ink-3 mb-1">Passage</div>
+                  <Math>{q.context}</Math>
+                </div>
+              )}
               <div className="mb-2 flex gap-2 text-[13px] font-semibold text-ink">
                 <span className="text-[12px] font-bold text-ink-3">{idx + 1}.</span>
                 <span className="min-w-0 flex-1 overflow-x-auto"><Math>{q.question}</Math></span>

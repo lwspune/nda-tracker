@@ -21,6 +21,13 @@ export const SUBJECTS = [
 // pct = percentage of paper; NDA Maths marks = pct × 3
 
 export const NDA_FREQ_BY_SUBJECT = {
+  // Chapter NAMES are the canonical NDA Maths taxonomy from PYQ Vault (the
+  // content master) — kept in sync so an auto-generated tagged sheet validates
+  // cleanly. `getValidChapters` reads this list for validation; the freq CHART
+  // reads each user's persisted `ndaFreqBySubject`, so these pct values only
+  // seed new installs. Where PYQ Vault splits a chapter the parent pct was
+  // split too (Differentiation→+Application of Derivatives, Integration→
+  // Indefinite+Definite, Probability→+Binomial Distribution), keeping the total.
   Maths: [
     { chapter: 'Logarithms',                  pct: 2.5 },
     { chapter: 'Linear Inequalities',         pct: 1.7 },
@@ -38,9 +45,11 @@ export const NDA_FREQ_BY_SUBJECT = {
     { chapter: 'Height & Distance',           pct: 2.5 },
     { chapter: 'Inverse Trigonometry',        pct: 2.5 },
     { chapter: 'Properties of Triangle',      pct: 2.5 },
-    { chapter: 'Differentiation',             pct: 8.3 },
-    { chapter: 'Integration',                 pct: 8.3 },
-    { chapter: 'Area Under Curve',            pct: 2.5 },
+    { chapter: 'Differentiation',             pct: 5.8 },
+    { chapter: 'Application of Derivatives',  pct: 2.5 },
+    { chapter: 'Indefinite Integration',      pct: 5.0 },
+    { chapter: 'Definite Integration',        pct: 3.3 },
+    { chapter: 'Applications of Integration', pct: 2.5 },
     { chapter: 'Limits & Continuity',         pct: 3.3 },
     { chapter: 'Differential Equations',      pct: 2.5 },
     { chapter: 'Lines',                       pct: 3.3 },
@@ -49,7 +58,8 @@ export const NDA_FREQ_BY_SUBJECT = {
     { chapter: 'Vectors',                     pct: 4.2 },
     { chapter: '3D Geometry',                 pct: 4.2 },
     { chapter: 'Statistics',                  pct: 5.8 },
-    { chapter: 'Probability',                 pct: 5.0 },
+    { chapter: 'Probability',                 pct: 3.3 },
+    { chapter: 'Binomial Distribution',       pct: 1.7 },
   ],
   English:   [],
   Physics:   [],

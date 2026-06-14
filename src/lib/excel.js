@@ -197,11 +197,13 @@ export function buildOfflineTemplateRows() {
 // ============================================================
 // PARSE TAGS FILE (XLSX)
 // Reads the enriched tags file with columns:
-// Q | Chapter | Subtopic | Question | OptionA | OptionB |
-// OptionC | OptionD | Answer | Solution
+// Q | Subject | Chapter | Subtopic | Question | OptionA | OptionB |
+// OptionC | OptionD | Answer | Solution | Difficulty | Context
 //
-// All columns except Q, Chapter, Subtopic are optional —
-// the file is backwards compatible with the old 3-column format.
+// All columns except Q, Chapter are optional — the file is backwards
+// compatible with the old 3-column format. `Context` (alias `Passage`) carries
+// the shared passage for comprehension/RC sets so a question is reviewable
+// without its passage being lost.
 // ============================================================
 export async function parseTagsFile(file) {
   const buf = await file.arrayBuffer()
@@ -235,6 +237,7 @@ export async function parseTagsFile(file) {
   const ani  = headers.findIndex(c => c === 'answer')
   const soli = headers.findIndex(c => c === 'solution')
   const difi = headers.findIndex(c => c.includes('difficulty'))
+  const cxi  = headers.findIndex(c => c === 'context' || c === 'passage')
 
   if (qi < 0)  throw new Error('Could not find "Q" column')
   if (chi < 0) throw new Error('Could not find "Chapter" column')
@@ -260,6 +263,7 @@ export async function parseTagsFile(file) {
       answer:     cell(row, ani)?.toUpperCase() || null,
       solution:   cell(row, soli),
       difficulty: cell(row, difi),   // 'Easy' | 'Moderate' | 'Hard' | null
+      context:    cell(row, cxi),    // shared passage / context, null when absent
     })
   }
 

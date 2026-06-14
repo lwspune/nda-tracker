@@ -21,7 +21,7 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult }
   const updateQuestion = useStore(s => s.updateQuestion)
 
   const mode       = useMode()
-  const hasContent = q.question || q.optionA
+  const hasContent = q.question || q.optionA || q.context
   const canEdit    = mode === 'admin' && !!examId
 
   const OPTIONS    = ['A', 'B', 'C', 'D']
@@ -130,6 +130,16 @@ function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
                     studentResult, studentAnswer, showSolution, setShowSolution }) {
   return (
     <>
+      {q.context && (
+        <div className="mb-3 p-3 bg-surface-2 border border-border rounded-lg
+                        text-[12.5px] leading-relaxed text-ink-2">
+          <div className="text-[9px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
+            Passage
+          </div>
+          <Math>{q.context}</Math>
+        </div>
+      )}
+
       {q.question && (
         <div className="text-[13.5px] leading-relaxed text-ink mb-4 font-medium">
           <Math>{q.question}</Math>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { detectSubjectFromName, parseExcelFull } from '../excel'
+import { detectSubjectFromName, parseExcelFull, parseTagsFile } from '../excel'
 
 // Build a synthetic results xlsx as a File, mirroring the Evalbee export shape.
 // `keys` is { qNum: 'A'|'B'|... } for the Q N Key column. Pass null to omit Key columns.
@@ -123,5 +123,52 @@ describe('parseExcelFull — choice capture (for re-gradeability)', () => {
     const out = await parseExcelFull(file)
     expect(out.students[0].responses).toEqual({ 1: 1, 2: -1 })   // by Evalbee mark sign
     expect(out.students[0].choices).toEqual({ 1: 'A', 2: 'B' })
+  })
+})
+
+// Build a synthetic tags xlsx as a File. `headers` is the header row, `rows`
+// the data rows (each an array aligned to headers).
+function buildTagsFile(headers, rows) {
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Tags')
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  return new File([buf], 'tags.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+}
+
+describe('parseTagsFile — Context / Passage column', () => {
+  const ENRICHED = ['Q', 'Subject', 'Chapter', 'Subtopic', 'Question', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'Answer', 'Solution', 'Difficulty', 'Context']
+
+  it('parses the Context column into tag.context', async () => {
+    const file = buildTagsFile(ENRICHED, [
+      [1, 'English', 'Reading Comprehension', 'Inference', 'What does line 4 imply?', 'a', 'b', 'c', 'd', 'B', 'because', 'Moderate', 'Read the passage carefully.'],
+    ])
+    const tags = await parseTagsFile(file)
+    expect(tags[0].context).toBe('Read the passage carefully.')
+  })
+
+  it('accepts "Passage" as an alias for the context column', async () => {
+    const headers = ['Q', 'Chapter', 'Passage']
+    const file = buildTagsFile(headers, [[1, 'Reading Comprehension', 'A long passage.']])
+    const tags = await parseTagsFile(file)
+    expect(tags[0].context).toBe('A long passage.')
+  })
+
+  it('returns null context when the column is absent (backward compatible)', async () => {
+    const file = buildTagsFile(['Q', 'Chapter', 'Subtopic'], [[1, 'Probability', 'Classical']])
+    const tags = await parseTagsFile(file)
+    expect(tags[0].context).toBeNull()
+  })
+
+  it('parses the full enriched row (options/answer/difficulty/subject) alongside context', async () => {
+    const file = buildTagsFile(ENRICHED, [
+      [1, 'Maths', 'Statistics', 'Mean', 'find the mean', 'A-t', 'B-t', 'C-t', 'D-t', 'b', 'soln', 'Hard', ''],
+    ])
+    const [tag] = await parseTagsFile(file)
+    expect(tag).toMatchObject({
+      q: 1, subject: 'Maths', chapter: 'Statistics', subtopic: 'Mean',
+      optionA: 'A-t', optionD: 'D-t', answer: 'B', difficulty: 'Hard',
+    })
+    expect(tag.context).toBeNull() // blank cell → null (cell() coalesces empty to null)
   })
 })
