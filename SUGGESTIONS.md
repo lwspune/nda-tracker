@@ -192,13 +192,9 @@ The Google Calendar sync feature shipped (commit `48f37c3`) and was verified loc
 - In the app (local dev works now), open Sync calendars → Scope = **All teachers** → dry-run → Apply (~300–360 events, silent, ~bounded concurrency 6; idempotent if it times out — re-run or chunk by teacher).
 - Decide the notification mode (currently default: no invite emails via `sendUpdates:'none'`, but teachers' default per-occurrence reminders fire). To go fully silent add `reminders:{useDefault:false,overrides:[]}` to `toGCalEvent`; to actively notify on change switch `sendUpdates` to `'all'`.
 
-### Add `teacher_calendar_blocks` to DATABASE_SCHEMA.md
+### ~~Add `teacher_calendar_blocks` to DATABASE_SCHEMA.md~~ — **DONE 2026-06-10**
 
-The new sync-ledger table was created in Supabase and documented in CLAUDE.md's table list + Timetable section, but the **column-level** schema reference (`DATABASE_SCHEMA.md`) wasn't updated this session.
-
-**Why:** DATABASE_SCHEMA.md is the canonical per-column reference (all other 16 tables are there); leaving the 17th out makes it the one table a future maintainer can't look up in the expected place.
-
-**How to apply:** add a section for `teacher_calendar_blocks (block_key text PK, teacher_id text, event_id text NOT NULL, calendar_id text NOT NULL, signature text NOT NULL, synced_at timestamptz default now())` — note RLS enabled with **no public policy** (service-role-only; written exclusively by `api/sync-calendar.js`), index on `teacher_id`, and that it's a derived sync ledger (safe to truncate — a re-sync rebuilds it, though that orphans the existing Google events, so pair a truncate with a manual calendar clear).
+Added as `DATABASE_SCHEMA.md` §9 "Calendar sync" (full column table) + FK-graph "no FKs" note + RLS row (service-role-only). Verified present.
 
 ### ~~Calendar sync: bound the recurrence (no more "recurs forever")~~ — **DONE 2026-06-10**
 
@@ -221,6 +217,61 @@ Two follow-ups remain after the bounded-window change.
 
 **Why:** the window now **must be re-synced periodically** to roll forward (it's no longer fire-and-forget). Today that's a manual click each Sunday — easy to forget, leaving stale/empty calendars. Separately, blocks still recur through holidays/exam days within the window (phantom classes on off days).
 
+### "Reconcile names against roster" as an admin action
+
+Done manually this session (canonical names matched against "Student Search List 10 JUN 2026.xls" by reg-no; 3 spelling fixes applied). It's worth productising because **`canonical_name` is sticky** — re-imports match by EIS and never overwrite the name, so HR spelling corrections silently never propagate. See `memory/reference_roster_reconciliation.md`.
+
+**Why:** every future HR spelling correction stays invisible until someone manually reconciles. A button (dry-run preview → apply, with anomaly flagging) makes it routine instead of a one-off script.
+
+**How to apply:**
+- Admin action: upload the roster XLS → match DB students by **reg-no = `eis_reg_no`** → list `canonical ≠ roster_name` mismatches, **categorised**: clean spelling variant (auto-applicable) · middle-name add/drop (confirm) · different-name anomaly (flag, never auto-rename — e.g. LWS-493 `Pranali`/`Droupadi`).
+- On apply: set canonical to the roster spelling, **keep the old canonical in `name_variants`** (so `exam_results` keyed on the old spelling still resolve).
+- Note the export is often a **filtered** search list (159 of 281 on 2026-06-10) — only reconciles who's in the file.
+- **Open data decisions from this session** (do via this tool or manually): LWS-105 `Sanmod Santosh Jambagi`→`Sanmod Jambagi` and LWS-093 `Bhumi Mahesh Ranjane`→`Bhumi Ranjane` (middle-name drops, held); LWS-493 `Pranali Sarpale` vs roster `Droupadi Sarpale` (anomaly — investigate, do not rename).
+
+### Audit other exams for `answer` vs `solution` key mismatches
+
+The English Test 1 cleanup caught **3 silent wrong keys** where the `answer` field disagreed with the option named in the question's own `solution` text. The same defect likely sits in other recent exams (hand-entered keys + AI-generated solutions).
+
+**Why:** a wrong `questions[].answer` shows students/parents the wrong "correct" option in the per-question view (and now mis-flags the chosen-option highlighting), even though marks are unaffected. Cheap to find.
+
+**How to apply:** run the divergence check per exam — `where (q->>'answer') <> substring(q->>'solution' from 'Matches option ([A-D])')` over `jsonb_array_elements(questions)`. It's a *first filter* only (blind to errors where key AND solution agree but are both wrong); for a real correctness audit, re-derive — see `memory/feedback_rederive_over_consistency_check.md`. Fix high-confidence MIS-KEYED via the JSONB recipe in `reference_exam_grading_data_model.md`.
+
 **How to apply (when it matters):**
 - **Auto-roll:** a Sunday-evening cron that calls the sync endpoint (or a small scheduled job) so the window advances without a manual click. The endpoint is already idempotent + admin-gated; a cron would need a service-role or stored-admin-token path since there's no interactive JWT.
 - **Holidays / exam days:** add `EXDATE`s to the recurrence (needs a holiday/exam-day source) so blocks skip non-teaching days.
+
+---
+
+## 2026-06-15
+
+### A populated Class-10 / SSC chapter list (or a dedicated school subject) for tag validation
+
+Chapter-name validation was just downgraded to a non-blocking warning (DECISIONS.md 2026-06-15), so non-NDA **school Class-10** tests (e.g. the APJ Maths paper) now upload fine — but their chapters (Polynomials, Arithmetic Progressions, Real Numbers, …) still show as amber *"not in the Maths list"* warnings because `getValidChapters('Maths')` is the NDA list. A populated Class-10 list would make those validate cleanly (and re-enable typo-catching for school tests).
+
+**Why:** purely cosmetic now (the warning is walk-past-able). Low priority — only worth it if school tests become frequent and the amber warnings get noisy.
+
+**How to apply (`src/lib/ndaFreq.js`):** add a subject key (e.g. `'Maths (School)'` / `'SSC Maths'`) whose chapter list is the CBSE/SSC Class-10 set (Real Numbers, Polynomials, Pair of Linear Equations, Quadratic Equations, Arithmetic Progressions, Triangles, Coordinate Geometry, Introduction to Trigonometry, Some Applications of Trigonometry, Circles, Areas Related to Circles, Surface Areas and Volumes, Statistics, Probability), and have school papers tagged with that `Subject` (the PYQ-Vault tags generator can emit it). An empty `[]` list also works (skips validation) but loses typo-catching.
+
+---
+
+## 2026-06-16
+
+### Manually verify the WhatsApp result-monitoring golden path in the browser
+
+The monitoring-copy feature (commit `81761ce`) shipped with full unit/lint coverage (1512 Vitest passing) but the **end-to-end browser check was not done** (the global Definition of Done requires it). The Settings → Monitoring tab + the `monitorMobiles[]` body param + the `api/send-whatsapp.js` random-pick path are all deployed and go live on the next Vercel build; the seam (Settings edit → persist round-trip → real send → MONITOR message actually arrives on `9021869427`) is only unit-covered.
+
+**Why:** monitoring is *itself* the verification mechanism for the result blast — if it silently doesn't fire (e.g. a Wabridge quirk on the extra send, or `monitorMobiles` not reaching the endpoint in prod), the faculty loses the observability they asked for without knowing. A 2-minute live pass confirms it.
+
+**How to apply:**
+- On `nda-tracker.vercel.app`: Settings → Monitoring → confirm `9021869427` is listed (add a test number you control if preferred).
+- Send a real result blast for a small/old exam (or use a redirect-to test FIRST to confirm the monitor copy is correctly **suppressed** on test sends), then a real send and confirm exactly one `👁 MONITOR → … (sample: <name>)` line appears in the results modal and the message lands on the monitor phone.
+- Confirm removing all numbers (empty list) cleanly disables it (no monitor line, `monitor: 0`).
+
+### Decide whether to strip the deep-link mobile from monitoring copies
+
+The monitoring copy reuses the sampled student's exact message, including the tracker deep-link with that student's mobile pre-filled (`?mobile=<student>&exam=<id>`) — i.e. a one-tap login into that student's portal lands on the monitor phone. Acceptable today (the monitor number is the faculty owner's own phone), flagged during the build but left as-is.
+
+**Why:** low risk now, but if the monitoring list ever grows beyond the owner's own device (e.g. a staff member, a shared phone), the copy hands out a working student-portal login. Cheap to neutralise.
+
+**How to apply:** in `api/send-whatsapp.js` (and `send_results_whatsapp.py`), when building the monitor copy's params, swap the per-student `trackerUrl` for one without the `mobile=` param (exam-only or bare base) — a 1-line change in `makeParamsForRow`'s monitor call site, or pass a flag. Only worth doing if the list becomes multi-recipient.
