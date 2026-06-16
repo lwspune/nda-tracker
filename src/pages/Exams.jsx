@@ -22,6 +22,7 @@ export default function ExamsPage() {
   const bulkUpdateStudentContacts  = useStore(s => s.bulkUpdateStudentContacts)
   const whatsappSendHistory        = useStore(s => s.whatsappSendHistory)
   const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
+  const monitorMobiles             = useStore(s => s.monitorMobiles)
   const examAbsenceSendHistory     = useStore(s => s.examAbsenceSendHistory)
   const setExamAbsenceSendHistory  = useStore(s => s.setExamAbsenceSendHistory)
   const markExamAbsencesNotified   = useStore(s => s.markExamAbsencesNotified)
@@ -129,6 +130,7 @@ export default function ExamsPage() {
       const body = { examName: exam.name }
       if (redirectTo)   body.redirectTo = redirectTo
       if (studentNames) body.students   = studentNames
+      if (monitorMobiles?.length) body.monitorMobiles = monitorMobiles
       const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const headers = { 'Content-Type': 'application/json' }
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`

@@ -16,6 +16,18 @@ import { cascadeBatchRenameToSupabase } from './batchSupabase'
 export const createConfigSlice = (set, get) => ({
   branches: [],
 
+  // ── Monitoring numbers ──────────────────────────────────────
+  // Replace the whole list. Each entry is normalised to its last 10 digits;
+  // non-10-digit entries are dropped and duplicates collapsed. An empty list
+  // disables monitoring. Seeded default lives in DEFAULTS (defaults.js).
+  setMonitorMobiles(list) {
+    const clean = (Array.isArray(list) ? list : [])
+      .map(n => String(n ?? '').replace(/\D/g, '').slice(-10))
+      .filter(n => n.length === 10)
+    set({ monitorMobiles: [...new Set(clean)] })
+    get()._save()
+  },
+
   // ── Branch CRUD ─────────────────────────────────────────────
   addBranch(name) {
     const trimmed = (name ?? '').trim()

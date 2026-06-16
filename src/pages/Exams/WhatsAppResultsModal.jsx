@@ -1,8 +1,9 @@
 import { useRef, useEffect } from 'react'
 
 function lineStyle(line) {
-  if (line.startsWith('  SENT'))  return { icon: '✅', color: 'text-success', bg: 'bg-green-50' }
-  if (line.startsWith('  SKIP'))  return { icon: '⏭',  color: 'text-warning', bg: 'bg-amber-50' }
+  if (line.startsWith('  SENT'))    return { icon: '✅', color: 'text-success', bg: 'bg-green-50' }
+  if (line.startsWith('  MONITOR')) return { icon: '👁', color: 'text-ink-2',  bg: 'bg-surface-2' }
+  if (line.startsWith('  SKIP'))    return { icon: '⏭',  color: 'text-warning', bg: 'bg-amber-50' }
   if (line.startsWith('  FAIL'))  return { icon: '❌', color: 'text-danger',  bg: 'bg-red-50'   }
   if (line.startsWith('ERR:'))    return { icon: '❌', color: 'text-danger',  bg: 'bg-red-50'   }
   return { icon: '', color: 'text-ink-3', bg: '' }

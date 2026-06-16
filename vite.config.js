@@ -176,12 +176,13 @@ function localDataPlugin() {
         req.on('data', chunk => { body += chunk })
         req.on('end', () => {
           try {
-            const { examName, redirectTo, students } = JSON.parse(body || '{}')
+            const { examName, redirectTo, students, monitorMobiles } = JSON.parse(body || '{}')
 
             const args = ['-X', 'utf8', 'send_results_whatsapp.py']
             if (examName)  args.push('--exam', examName)
             if (redirectTo) args.push('--redirect-to', redirectTo)
             if (students?.length) args.push('--students', students.join(','))
+            if (monitorMobiles?.length) args.push('--monitor', monitorMobiles.join(','))
 
             const child = spawn('python', args)
 

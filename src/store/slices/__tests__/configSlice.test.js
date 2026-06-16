@@ -79,6 +79,44 @@ describe('addBranch', () => {
   })
 })
 
+describe('setMonitorMobiles', () => {
+  it('replaces the list with normalised 10-digit numbers', () => {
+    const { get, slice } = makeStore({ monitorMobiles: [] })
+    slice.setMonitorMobiles(['9021869427', '+91 98765 43210'])
+    expect(get().monitorMobiles).toEqual(['9021869427', '9876543210'])
+  })
+
+  it('keeps only the last 10 digits (strips 91/0 prefixes)', () => {
+    const { get, slice } = makeStore({ monitorMobiles: [] })
+    slice.setMonitorMobiles(['919021869427', '09021869427'])
+    expect(get().monitorMobiles).toEqual(['9021869427'])
+  })
+
+  it('drops entries that are not 10 digits', () => {
+    const { get, slice } = makeStore({ monitorMobiles: [] })
+    slice.setMonitorMobiles(['12345', '', '9021869427'])
+    expect(get().monitorMobiles).toEqual(['9021869427'])
+  })
+
+  it('collapses duplicates', () => {
+    const { get, slice } = makeStore({ monitorMobiles: [] })
+    slice.setMonitorMobiles(['9021869427', '9021869427'])
+    expect(get().monitorMobiles).toEqual(['9021869427'])
+  })
+
+  it('an empty list disables monitoring', () => {
+    const { get, slice } = makeStore({ monitorMobiles: ['9021869427'] })
+    slice.setMonitorMobiles([])
+    expect(get().monitorMobiles).toEqual([])
+  })
+
+  it('saves on change', () => {
+    const { saves, slice } = makeStore({ monitorMobiles: [] })
+    slice.setMonitorMobiles(['9021869427'])
+    expect(saves).toHaveLength(1)
+  })
+})
+
 describe('renameBranch', () => {
   it('renames the branch in branches[]', () => {
     const { get, slice } = makeStore({ branches: ['LWS Pune'] })

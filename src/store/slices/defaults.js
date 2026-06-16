@@ -31,6 +31,10 @@ export const DEFAULTS = {
   examAbsenceSendHistory: {},
   homeworkSendHistory: {},
   branches: [],
+  // Monitoring numbers — a copy of one random student's result message is sent
+  // here on every real WhatsApp result blast (process observability). Seeded
+  // with the predefined number; editable in Settings. Empty array = no monitoring.
+  monitorMobiles: ['9021869427'],
 }
 
 // Merge saved data with defaults (handles missing keys from old versions)

@@ -14,6 +14,7 @@ Credentials in .env.local:
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import urllib.request
@@ -150,11 +151,15 @@ def main():
     parser.add_argument('--to',          help='Send test to this mobile number (uses first student data)')
     parser.add_argument('--redirect-to', help='Send all messages to this number instead of actual student/parent numbers')
     parser.add_argument('--students',    help='Comma-separated student names to process (default: all)')
+    parser.add_argument('--monitor',     help='Comma-separated monitoring numbers — one random student result is copied to each (skipped on --redirect-to)')
     args = parser.parse_args()
 
     redirect_to = normalise_mobile(args.redirect_to) if args.redirect_to else None
     if args.redirect_to and not redirect_to:
         sys.exit(f"ERROR: Cannot normalise --redirect-to '{args.redirect_to}'")
+
+    # Monitoring numbers — malformed entries are dropped (logged below).
+    monitor_raw = [n.strip() for n in args.monitor.split(',')] if args.monitor else []
 
     app_key     = os.environ.get('WABRIDGE_APP_KEY',     '')
     auth_key    = os.environ.get('WABRIDGE_AUTH_KEY',    '')
@@ -211,7 +216,23 @@ def main():
         results = [r for r in results if (r.get('name') or '').strip().lower() in student_filter]
         print(f"Filtering to {len(results)} student(s): {args.students}")
 
-    sent = skipped = 0
+    def params_for_row(row):
+        """Build the 7 template variables for one result row (same shape the
+        student/parent messages use). Single source so the monitoring copy can't
+        diverge from the real message."""
+        nm = (row.get('name') or '').strip()
+        dn = canonical_map.get(nm.lower(), nm)
+        c  = row.get('correct', 0) or 0
+        w  = row.get('incorrect', row.get('wrong', 0)) or 0
+        a  = row.get('notAttempted', row.get('skipped', 0)) or 0
+        t  = c + w + a
+        p  = round(c / t * 100) if t else 0
+        mob = mobile_map.get(nm.lower(), '')
+        parts = ([f"mobile={mob}"] if mob else []) + ([f"exam={exam_id}"] if exam_id else [])
+        url = f"{TRACKER_BASE}?{'&'.join(parts)}" if parts else TRACKER_BASE
+        return [dn, exam_name, exam_date, f"{p}%", str(c), str(t), url]
+
+    sent = skipped = monitor = 0
 
     for row in results:
         name = (row.get('name') or '').strip()   # exam-sheet spelling (mobile/parent lookup)
@@ -277,6 +298,29 @@ def main():
                 sent += 1
             else:
                 print(f"  FAIL → {name} (parent → {parent_norm}): {detail}")
+                skipped += 1
+
+    # ── Monitoring copy ──────────────────────────────────────────────────────
+    # One random student's exact result message to each monitor number, so the
+    # send process can be observed from a fixed phone. Skipped on test sends
+    # (--redirect-to / --to) — monitoring is for real blasts only.
+    if monitor_raw and not redirect_to and not args.to and results:
+        sample        = random.choice(results)
+        sample_name   = (sample.get('name') or '').strip()
+        sample_params = params_for_row(sample)
+        for mon in monitor_raw:
+            dest = normalise_mobile(mon)
+            if not dest:
+                print(f"  SKIP monitor {mon} — unrecognised format")
+                skipped += 1
+                continue
+            ok, detail = send_whatsapp(app_key, auth_key, device_id, template_id,
+                                       dest, sample_params, args.dry_run)
+            if ok:
+                print(f"  MONITOR → {dest} (sample: {sample_name})")
+                monitor += 1
+            else:
+                print(f"  FAIL → monitor {dest}: {detail}")
                 skipped += 1
 
     print(f"\nDone. Sent: {sent}  Skipped: {skipped}")

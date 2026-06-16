@@ -282,4 +282,54 @@ describe('POST /api/send-whatsapp', () => {
     await call({ examName: 'NDA Test 1', redirectTo: '9999999999' })
     expect(namesFromFetch()).toContain('No Profile Student')
   })
+
+  // ── Monitoring copy (one random student's message → monitor number) ─────────
+
+  const destsFromFetch = () => global.fetch.mock.calls.map(c => JSON.parse(c[1].body).destination_number)
+
+  it('sends one monitoring copy to each configured monitor number', async () => {
+    const res = await call({ examName: 'NDA Test 1', monitorMobiles: ['9021869427'] })
+    const body = res.json.mock.calls[0][0]
+    expect(body.monitor).toBe(1)
+    expect(destsFromFetch()).toContain('919021869427')
+  })
+
+  it('sends a monitoring copy to every monitor number when several are set', async () => {
+    const res = await call({ examName: 'NDA Test 1', monitorMobiles: ['9021869427', '9876500000'] })
+    const body = res.json.mock.calls[0][0]
+    expect(body.monitor).toBe(2)
+    const dests = destsFromFetch()
+    expect(dests).toContain('919021869427')
+    expect(dests).toContain('919876500000')
+  })
+
+  it('the monitoring message is a real student\'s result (7 template variables)', async () => {
+    await call({ examName: 'NDA Test 1', monitorMobiles: ['9021869427'] })
+    const monitorCall = global.fetch.mock.calls.find(c => JSON.parse(c[1].body).destination_number === '919021869427')
+    const vars = JSON.parse(monitorCall[1].body).variables
+    expect(vars).toHaveLength(7)
+    expect(['Arjun Sharma', 'Ravi Kumar']).toContain(vars[0])
+  })
+
+  it('does NOT send a monitoring copy on a test send (redirectTo set)', async () => {
+    const res = await call({ examName: 'NDA Test 1', redirectTo: '9999999999', monitorMobiles: ['9021869427'] })
+    const body = res.json.mock.calls[0][0]
+    expect(body.monitor).toBe(0)
+    expect(destsFromFetch()).not.toContain('919021869427')
+  })
+
+  it('sends no monitoring copy when monitorMobiles is empty or absent', async () => {
+    const res = await call({ examName: 'NDA Test 1' })
+    const body = res.json.mock.calls[0][0]
+    expect(body.monitor).toBe(0)
+    expect(destsFromFetch()).not.toContain('919021869427')
+  })
+
+  it('skips a malformed monitor number but still sends to valid ones', async () => {
+    const res = await call({ examName: 'NDA Test 1', monitorMobiles: ['123', '9021869427'] })
+    const body = res.json.mock.calls[0][0]
+    expect(body.monitor).toBe(1)
+    expect(destsFromFetch()).toContain('919021869427')
+    expect(body.lines.some(l => l.includes('SKIP monitor 123'))).toBe(true)
+  })
 })

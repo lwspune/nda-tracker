@@ -103,7 +103,7 @@ export default async function handler(req, res) {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   })
 
-  const { examName, redirectTo, students } = req.body
+  const { examName, redirectTo, students, monitorMobiles } = req.body
 
   // ── Load exam from normalised exams table ──────────────────────────────────
 
@@ -172,36 +172,39 @@ export default async function handler(req, res) {
   }
 
   const lines = []
-  let sent = 0, skipped = 0
+  let sent = 0, skipped = 0, monitor = 0
   const redirectNorm = redirectTo ? normMobile(redirectTo) : null
   const examDate = fmtDate(exam.date || '')
+
+  // Builds the 7 template variables for one result row. The deep-link pre-fills
+  // the student's own mobile (one-tap login to the right child, no sibling
+  // picker) + the exam id so the portal lands on this exam's result. The message
+  // shows the canonical roster spelling (falls back to the exam-sheet name when
+  // the student has no matched profile). Single source so the student, parent,
+  // and monitoring copies can never diverge.
+  function makeParamsForRow(row) {
+    const nm  = (row.name || '').trim()
+    const dn  = canonicalMap[nm.toLowerCase()] || nm
+    const c   = row.correct      || 0
+    const w   = row.incorrect    || 0
+    const a   = row.notAttempted || 0
+    const t   = c + w + a
+    const p   = t ? Math.round(c / t * 100) : 0
+    const url = buildTrackerUrl(mobileMap[nm.toLowerCase()] || '', exam.id)
+    return [dn, exam.name, examDate, `${p}%`, String(c), String(t), url]
+  }
 
   for (const row of results) {
     const name = (row.name || '').trim()   // exam-sheet spelling — used for mobile/parent lookup
     if (!name) continue
-    // Message shows the canonical roster spelling (falls back to the exam-sheet
-    // name when the student has no matched profile).
-    const displayName = canonicalMap[name.toLowerCase()] || name
 
-    const correct = row.correct      || 0
-    const wrong   = row.incorrect    || 0
-    const na      = row.notAttempted || 0
-    const total   = correct + wrong + na
-    const pct     = total ? Math.round(correct / total * 100) : 0
-
-    const mobileRaw  = mobileMap[name.toLowerCase()] || ''
-    const mobileNorm = normMobile(mobileRaw)
-    // Deep-link: pre-fill the student's own mobile (one-tap login to the right
-    // child, no sibling picker) + the exam id so the portal lands on this exam's
-    // result. Used for BOTH the student and the parent message (parents otherwise
-    // got a bare link with no pre-fill and landed on the dashboard root).
-    const trackerUrl = buildTrackerUrl(mobileRaw, exam.id)
-    const makeParams = url => [displayName, exam.name, examDate, `${pct}%`, String(correct), String(total), url]
+    const mobileNorm = normMobile(mobileMap[name.toLowerCase()] || '')
+    const params = makeParamsForRow(row)
 
     // Student
     const destStudent = redirectNorm || mobileNorm
     if (destStudent) {
-      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, makeParams(trackerUrl))
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, params)
       if (ok) { lines.push(`  SENT → ${name} (student → ${destStudent})`); sent++ }
       else    { lines.push(`  FAIL → ${name} (student → ${destStudent}): ${detail}`); skipped++ }
     } else {
@@ -217,12 +220,33 @@ export default async function handler(req, res) {
         skipped++
         continue
       }
-      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, makeParams(trackerUrl))
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, params)
       if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
       else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
     }
   }
 
+  // ── Monitoring copy ────────────────────────────────────────────────────────
+  // Send one random student's exact result message to each monitor number, so
+  // the process can be observed from a fixed phone. Skipped on test sends
+  // (redirectTo) — monitoring is for real blasts only — and when no numbers set.
+  if (!redirectNorm && Array.isArray(monitorMobiles) && monitorMobiles.length && results.length) {
+    const sample      = results[Math.floor(Math.random() * results.length)]
+    const sampleName  = (sample.name || '').trim()
+    const sampleParams = makeParamsForRow(sample)
+    for (const monRaw of monitorMobiles) {
+      const dest = normMobile(monRaw)
+      if (!dest) {
+        lines.push(`  SKIP monitor ${monRaw} — unrecognised format`)
+        skipped++
+        continue
+      }
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, dest, sampleParams)
+      if (ok) { lines.push(`  MONITOR → ${dest} (sample: ${sampleName})`); monitor++ }
+      else    { lines.push(`  FAIL → monitor ${dest}: ${detail}`); skipped++ }
+    }
+  }
+
   lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
-  res.status(200).json({ ok: true, sent, skipped, lines })
+  res.status(200).json({ ok: true, sent, skipped, monitor, lines })
 }

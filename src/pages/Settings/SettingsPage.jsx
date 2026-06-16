@@ -4,12 +4,14 @@ import BranchesTab from './BranchesTab'
 import BatchesTab from './BatchesTab'
 import TeachersTab from './TeachersTab'
 import NdaWeightageTab from './NdaWeightageTab'
+import MonitoringTab from './MonitoringTab'
 
 const TABS = [
   { id: 'branches',  label: 'Branches' },
   { id: 'batches',   label: 'Batches' },
   { id: 'teachers',  label: 'Teachers' },
   { id: 'weightage', label: 'NDA Weightage' },
+  { id: 'monitoring', label: 'Monitoring' },
 ]
 
 export default function SettingsPage() {
@@ -37,6 +39,7 @@ export default function SettingsPage() {
       {tab === 'batches'   && <BatchesTab />}
       {tab === 'teachers'  && <TeachersTab />}
       {tab === 'weightage' && <NdaWeightageTab />}
+      {tab === 'monitoring' && <MonitoringTab />}
     </div>
   )
 }
