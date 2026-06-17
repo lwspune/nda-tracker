@@ -275,3 +275,34 @@ The monitoring copy reuses the sampled student's exact message, including the tr
 **Why:** low risk now, but if the monitoring list ever grows beyond the owner's own device (e.g. a staff member, a shared phone), the copy hands out a working student-portal login. Cheap to neutralise.
 
 **How to apply:** in `api/send-whatsapp.js` (and `send_results_whatsapp.py`), when building the monitor copy's params, swap the per-student `trackerUrl` for one without the `mobile=` param (exam-only or bare base) — a 1-line change in `makeParamsForRow`'s monitor call site, or pass a flag. Only worth doing if the list becomes multi-recipient.
+
+### Decide the Maths chapter-consolidation candidates (deferred from the subtopic cleanup)
+
+The 2026-06-16 Maths cleanup applied the 23 safe subtopic merges + the one clear chapter duplicate (`Height & Distance` → `Heights and Distances`, weightage row renamed too). The user **deferred** the taxonomy-changing consolidations: `Arithmetic Progressions` (5 Qs) → `Sequence & Series`; `Area Under Curve` (1) → `Integration`; `Areas Related to Circles` (2) → `Circles`; and the CBSE-class-10 fragments (`Real Numbers`, `Polynomials`, `Pair of Linear Equations`, `Triangles`, `Coordinate Geometry`, `Introduction to Trigonometry`) that may belong under broader NDA chapters.
+
+**Why:** these aren't typos — they're real taxonomy decisions that change chapter-level analytics, NDA-weightage rows, and (for the CBSE fragments) overlap with the open 2026-06-15 "Class-10 / SSC subject for tag validation" suggestion. Worth a deliberate call rather than an over-eager merge. Several fragments are likely **school-paper chapters** that should route to a separate school subject (see the 2026-06-15 entry), not fold into NDA Maths.
+
+**How to apply:**
+- Decide per group: fold into the parent NDA chapter, OR route to a dedicated school subject (ties into the 2026-06-15 Class-10 list suggestion), OR leave as-is.
+- For any fold: add `CHAPTER_RENAMES` entries to **both** `merge_subtopics.py` and `migrate_subtopics_supabase.js` (the chapter-rename plumbing now exists), add TDD coverage to `tests/test_subtopic_merge.py`, run `merge:subtopics` + `:sync`, then **rename the matching `ndaFreqBySubject` weightage key** (chapter renames do NOT cascade to weightage — `syncFreqChapters` would orphan the pct).
+- Verify with a Supabase `COUNT` before/after (exact-string match — pull literal chapter strings first; see `memory/feedback_query_database_before_reasoning.md`).
+
+---
+
+## 2026-06-17
+
+### Teacher per-student drill-in: expand `StudentQuizHistory` rows into `QuizReview`
+
+The wrong-answer remediation links (2026-06-17) render in `QuestionCard` and reach both the student exam review (`FocusedExamResult`) and the teacher exam-insights cohort view (`ExamInsightsPanel`). But the teacher's **per-student** view (`StudentView` → `StudentQuizHistory`) only lists quiz attempts as summary rows (title · X/total · score) — it can't expand into the per-question review, so a teacher can't see an individual student's misses + the Learn/Practice links there.
+
+**Why:** in a coaching setting the teacher often drives remediation ("go drill this"). The data is all present (`quiz_attempts.answers` per student + the quiz's questions/key), and it reuses the existing `QuizReview` — small, self-contained, arguably more useful than the student-only path.
+
+**How to apply:** make `StudentQuizHistory` rows expandable → render `QuizReview` (read-only) for the clicked attempt, passing `subject` so the buttons resolve. Confirm `getQuizAttemptsForStudent` returns `answers` (add to the select if not). The exam side has the same gap (per-student exam review) and could get the same treatment.
+
+### Error-type signal: don't push remediation on a likely careless slip
+
+The remediation links show on EVERY wrong/skipped question. But not every miss is a knowledge gap — a careless slip on a topic the student otherwise aces doesn't need drilling, and pushing remediation there reads as punitive. Cheap proxy: if the student got the OTHER questions in the same subtopic right, the miss is likely a slip.
+
+**Why:** the feature's design thesis is "remediate the concept gap, not the slip." Without this signal it over-triggers. nda-tracker already computes per-student per-subtopic accuracy (`computeStudentChapterStats`), so the signal is available locally.
+
+**How to apply:** in `QuestionCard`/`FocusedExamResult`, soften or de-emphasise the buttons when the student's same-subtopic accuracy (this exam, or recency-weighted) is high. Keep it a gentle de-emphasis, not a hard hide — a student may still want to revise.
