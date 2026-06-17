@@ -103,6 +103,7 @@ export default function WrongAnswerAudit({ wrongAudit, name, exams }) {
                             examId={group.examId}
                             studentAnswer={studentAnswer}
                             studentResult={studentResult}
+                            showRemediation={studentResult === -1 || studentResult === 0}
                           />
                         ))}
                       </div>

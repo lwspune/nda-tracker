@@ -30,3 +30,16 @@ describe('QuestionCard — student choice highlighting', () => {
     expect(screen.queryByText('Marked:')).not.toBeInTheDocument()
   })
 })
+
+describe('QuestionCard — remediation links', () => {
+  it('renders Learn this / Practice when showRemediation is set', () => {
+    render(<QuestionCard q={Q} examId="e1" studentAnswer="B" studentResult={-1} showRemediation />)
+    expect(screen.getByText(/Learn this/)).toBeInTheDocument()
+    expect(screen.getByText(/Practice/)).toBeInTheDocument()
+  })
+
+  it('hides them by default (showRemediation off)', () => {
+    render(<QuestionCard q={Q} examId="e1" studentAnswer="B" studentResult={-1} />)
+    expect(screen.queryByText(/Learn this/)).not.toBeInTheDocument()
+  })
+})

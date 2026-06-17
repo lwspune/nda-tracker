@@ -101,6 +101,7 @@ function IssueRow({ item, examId }) {
             examId={examId}
             studentAnswer={item.studentAnswer}
             studentResult={item.result}
+            showRemediation={item.result === -1 || item.result === 0}
           />
         </div>
       )}
