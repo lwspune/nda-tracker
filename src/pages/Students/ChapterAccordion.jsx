@@ -178,6 +178,7 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
                                     examId={group.examId}
                                     studentAnswer={studentAnswer}
                                     studentResult={studentResult}
+                                    showRemediation={studentResult === -1 || studentResult === 0}
                                   />
                                 ))}
                               </div>
@@ -207,6 +208,7 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
                                     examId={group.examId}
                                     studentAnswer={null}
                                     studentResult={studentResult}
+                                    showRemediation={studentResult === -1 || studentResult === 0}
                                   />
                                 ))}
                               </div>

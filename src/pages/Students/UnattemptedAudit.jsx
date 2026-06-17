@@ -103,6 +103,7 @@ export default function UnattemptedAudit({ skippedAudit, name, exams }) {
                             examId={group.examId}
                             studentAnswer={null}
                             studentResult={studentResult}
+                            showRemediation={studentResult === -1 || studentResult === 0}
                           />
                         ))}
                       </div>
