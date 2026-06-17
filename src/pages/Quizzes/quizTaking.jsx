@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert } from '../../components/ui'
 import { Math } from '../../components/ui/Math'
 import { LETTERS } from '../../lib/quiz'
+import { remediationLinks, practiceMistakesUrl } from '../../lib/remediation'
 
 // Shared quiz-taking UI used by both the in-portal section (StudentQuizzes) and
 // the standalone shareable link page (QuizLinkPage). One-question-at-a-time with
@@ -236,11 +237,18 @@ export function QuizTaker({ quiz, mobile, onCancel, onSubmitted }) {
   )
 }
 
-export function QuizReview({ title, review, onBack }) {
+export function QuizReview({ title, review, subject, onBack }) {
   const questions = review.review || []
   const myAnswers = review.myAnswers || {}
   const v = verdictFor(review.score, review.total)
   const wrong = (review.total || 0) - (review.correct || 0) - (review.notAttempted || 0)
+  // Wrong + skipped questions → one bundled "Practice my mistakes" link (Maths only).
+  const missed = questions.filter((q) => {
+    const right = String(q.answer || '').toUpperCase()
+    const mine = String(myAnswers[q.q] || '').toUpperCase()
+    return !mine || mine !== right
+  })
+  const mistakesUrl = practiceMistakesUrl(missed, subject)
   // Student review = a learning tool → show every answer by default (the public
   // lead-magnet defaults to misses-only instead).
   const [showAll, setShowAll] = useState(true)
@@ -261,6 +269,14 @@ export function QuizReview({ title, review, onBack }) {
         </div>
         <div className="mt-2 text-[12px] text-ink-3">{title}</div>
       </div>
+
+      {/* Fix-your-mistakes headline action — practise the topics you missed */}
+      {mistakesUrl && (
+        <a href={mistakesUrl} target="_blank" rel="noopener noreferrer"
+          className="btn btn-primary mt-4 flex w-full items-center justify-center gap-1.5 py-3 text-[14px]">
+          Practice my mistakes →
+        </a>
+      )}
 
       {/* Review */}
       <div className="mt-4 flex items-center justify-between">
@@ -310,6 +326,26 @@ export function QuizReview({ title, review, onBack }) {
                   <span className="font-bold text-ink-3">Solution: </span><Math>{q.solution}</Math>
                 </div>
               )}
+              {!correct && (() => {
+                const { learnUrl, practiceUrl } = remediationLinks(q, subject)
+                if (!learnUrl && !practiceUrl) return null
+                return (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {learnUrl && (
+                      <a href={learnUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent transition-colors hover:border-accent">
+                        Learn this →
+                      </a>
+                    )}
+                    {practiceUrl && (
+                      <a href={practiceUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-accent/40">
+                        Practice →
+                      </a>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )
         })}

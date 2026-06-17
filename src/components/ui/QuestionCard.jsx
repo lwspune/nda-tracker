@@ -3,6 +3,7 @@ import { Math } from './Math'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import QuestionCardEditor from './QuestionCardEditor'
+import { examRemediationLinks } from '../../lib/remediation'
 
 // q        — question object { q, chapter, subtopic, question, optionA..D, answer, solution, difficulty }
 // examId   — parent exam id (needed for updateQuestion)
@@ -15,7 +16,7 @@ const DIFFICULTY_STYLE = {
   hard:   'bg-red-50 text-red-700 border-red-200',
 }
 
-export default function QuestionCard({ q, examId, studentAnswer, studentResult }) {
+export default function QuestionCard({ q, examId, studentAnswer, studentResult, showRemediation = false }) {
   const [showSolution, setShowSolution] = useState(false)
   const [editing, setEditing]           = useState(false)
   const updateQuestion = useStore(s => s.updateQuestion)
@@ -110,6 +111,7 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult }
             studentAnswer={studentAnswer}
             showSolution={showSolution}
             setShowSolution={setShowSolution}
+            showRemediation={showRemediation}
           />
         ) : (
           <div className="flex items-center gap-3 py-1">
@@ -127,7 +129,9 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult }
 
 // ── View Mode ─────────────────────────────────────────────────
 function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
-                    studentResult, studentAnswer, showSolution, setShowSolution }) {
+                    studentResult, studentAnswer, showSolution, setShowSolution,
+                    showRemediation }) {
+  const remediation = showRemediation ? examRemediationLinks(q) : null
   return (
     <>
       {q.context && (
@@ -190,6 +194,26 @@ function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
                             text-[12.5px] leading-relaxed text-ink">
               <Math>{q.solution}</Math>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Fix-your-mistakes links — learn the concept, then drill more like it */}
+      {remediation && (remediation.learnUrl || remediation.practiceUrl) && (
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+          {remediation.learnUrl && (
+            <a href={remediation.learnUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center rounded-lg border border-accent/40 bg-accent-soft
+                         px-2.5 py-1 text-[11px] font-semibold text-accent transition-colors hover:border-accent">
+              Learn this →
+            </a>
+          )}
+          {remediation.practiceUrl && (
+            <a href={remediation.practiceUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center rounded-lg border border-border px-2.5 py-1
+                         text-[11px] font-semibold text-ink-2 transition-colors hover:border-accent/40">
+              Practice →
+            </a>
           )}
         </div>
       )}

@@ -238,6 +238,10 @@ export async function parseTagsFile(file) {
   const soli = headers.findIndex(c => c === 'solution')
   const difi = headers.findIndex(c => c.includes('difficulty'))
   const cxi  = headers.findIndex(c => c === 'context' || c === 'passage')
+  // Notes slugs (exact-match so they don't collide with the `includes('subtopic')`
+  // finder above) — enable slug-precise /go remediation links. Optional.
+  const ssi  = headers.findIndex(c => c === 'subtopicslug' || c === 'subtopic slug' || c === 'subtopic_slug')
+  const csi  = headers.findIndex(c => c === 'conceptslug' || c === 'concept slug' || c === 'concept_slug')
 
   if (qi < 0)  throw new Error('Could not find "Q" column')
   if (chi < 0) throw new Error('Could not find "Chapter" column')
@@ -264,6 +268,8 @@ export async function parseTagsFile(file) {
       solution:   cell(row, soli),
       difficulty: cell(row, difi),   // 'Easy' | 'Moderate' | 'Hard' | null
       context:    cell(row, cxi),    // shared passage / context, null when absent
+      subtopicSlug: cell(row, ssi),  // notes subtopic slug, null when untagged
+      conceptSlug:  cell(row, csi),  // notes concept slug, null when untagged
     })
   }
 

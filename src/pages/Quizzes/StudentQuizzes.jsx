@@ -47,12 +47,12 @@ export default function StudentQuizzes({ mobile }) {
         quiz={view.quiz}
         mobile={mobile}
         onCancel={() => setView({ mode: 'list' })}
-        onSubmitted={(review) => { load(); setView({ mode: 'review', review, title: view.quiz.title }) }}
+        onSubmitted={(review) => { load(); setView({ mode: 'review', review, title: view.quiz.title, subject: view.quiz.subject }) }}
       />
     )
   }
   if (view.mode === 'review') {
-    return <QuizReview title={view.title} review={view.review} onBack={() => setView({ mode: 'list' })} />
+    return <QuizReview title={view.title} review={view.review} subject={view.subject} onBack={() => setView({ mode: 'list' })} />
   }
 
   const open = quizzes.filter(q => q.state === 'open')
@@ -83,7 +83,7 @@ export default function StudentQuizzes({ mobile }) {
             <Badge variant="gray">Done</Badge>
             <button
               className="btn btn-secondary text-[12px] px-4"
-              onClick={() => setView({ mode: 'review', title: q.title, review: { review: q.questions, myAnswers: q.myAnswers, ...q.result, total: q.questions.length } })}
+              onClick={() => setView({ mode: 'review', title: q.title, subject: q.subject, review: { review: q.questions, myAnswers: q.myAnswers, ...q.result, total: q.questions.length } })}
             >Review</button>
           </Card>
         ))}

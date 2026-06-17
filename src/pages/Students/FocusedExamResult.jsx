@@ -185,6 +185,7 @@ function FragmentRow({ q, examId, result, studentAnswer, open, hasContent, onTog
               examId={examId}
               studentAnswer={studentAnswer}
               studentResult={result}
+              showRemediation={result === -1 || result === 0}
             />
           </td>
         </tr>
