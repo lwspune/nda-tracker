@@ -41,7 +41,7 @@ export default function QuizLinkPage({ quizId }) {
       if (!found) { setStatus('unavailable'); return }
       rememberMobile(m)
       if (found.state === 'done') {
-        setReview({ ...found.result, review: found.questions, myAnswers: found.myAnswers, total: found.questions.length, title: found.title })
+        setReview({ ...found.result, review: found.questions, myAnswers: found.myAnswers, total: found.questions.length, title: found.title, subject: found.subject })
         setStatus('review')
       } else {
         setQuiz(found)
@@ -115,14 +115,14 @@ export default function QuizLinkPage({ quizId }) {
             <QuizTaker
               quiz={quiz}
               mobile={mobile}
-              onSubmitted={(data) => { setReview({ ...data, title: quiz.title }); setStatus('review') }}
+              onSubmitted={(data) => { setReview({ ...data, title: quiz.title, subject: quiz.subject }); setStatus('review') }}
             />
           </>
         )}
 
         {status === 'review' && review && (
           <>
-            <QuizReview title={review.title} review={review} />
+            <QuizReview title={review.title} review={review} subject={review.subject} />
             <div className="text-center mt-4">
               <a href={window.location.origin + window.location.pathname} className="text-[13px] text-accent hover:underline">Open my full dashboard →</a>
             </div>

@@ -105,6 +105,7 @@ function QuestionRow({ rank, item, type, examId }) {
             examId={examId}
             studentAnswer={null}
             studentResult={null}
+            showRemediation={true}
           />
         </div>
       )}

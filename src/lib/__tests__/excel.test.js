@@ -172,3 +172,32 @@ describe('parseTagsFile — Context / Passage column', () => {
     expect(tag.context).toBeNull() // blank cell → null (cell() coalesces empty to null)
   })
 })
+
+describe('parseTagsFile — notes slug columns (remediation)', () => {
+  const WITH_SLUGS = ['Q', 'Subject', 'Chapter', 'Subtopic', 'Answer', 'Context', 'SubtopicSlug', 'ConceptSlug']
+
+  it('parses SubtopicSlug + ConceptSlug into the tag', async () => {
+    const file = buildTagsFile(WITH_SLUGS, [
+      [1, 'Maths', 'Vectors', 'Dot Product', 'B', '', 'vectors-dot-product', 'dot-product'],
+    ])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.subtopicSlug).toBe('vectors-dot-product')
+    expect(tag.conceptSlug).toBe('dot-product')
+  })
+
+  it('does not confuse SubtopicSlug with the Subtopic column', async () => {
+    const file = buildTagsFile(WITH_SLUGS, [
+      [1, 'Maths', 'Vectors', 'Dot Product', 'B', '', 'vectors-dot-product', 'dot-product'],
+    ])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.subtopic).toBe('Dot Product')        // the name, not the slug
+    expect(tag.subtopicSlug).toBe('vectors-dot-product')
+  })
+
+  it('returns null slugs when the columns are absent (untagged / backward compatible)', async () => {
+    const file = buildTagsFile(['Q', 'Chapter', 'Subtopic'], [[1, 'Spotting Errors', 'Conditional Sentences']])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.subtopicSlug).toBeNull()
+    expect(tag.conceptSlug).toBeNull()
+  })
+})
