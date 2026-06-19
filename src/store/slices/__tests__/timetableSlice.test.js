@@ -56,6 +56,15 @@ describe('updateTimetableTeacher', () => {
     slice.updateTimetableTeacher(id, { name: 'New Name' })
     expect(get().timetableTeachers[0].name).toBe('New Name')
   })
+
+  it('sets a mobile number (trimmed), independently of name/email', () => {
+    const { get, slice } = makeStore()
+    const id = slice.addTimetableTeacher('Vilas Sir', 'v@example.com')
+    slice.updateTimetableTeacher(id, { mobile: '  9021869427 ' })
+    expect(get().timetableTeachers[0]).toMatchObject({
+      name: 'Vilas Sir', email: 'v@example.com', mobile: '9021869427',
+    })
+  })
 })
 
 describe('deleteTimetableTeacher', () => {

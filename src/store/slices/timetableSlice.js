@@ -10,16 +10,16 @@ export const createTimetableSlice = (set, get) => ({
   examSchedules: [],
 
   // ── Teacher CRUD ──────────────────────────────────────────────
-  addTimetableTeacher(name, email = '') {
+  addTimetableTeacher(name, email = '', mobile = '') {
     const trimmed = name.trim()
     if (!trimmed) return null
     const id = uid('tchr')
-    set(s => ({ timetableTeachers: [...s.timetableTeachers, { id, name: trimmed, email: email.trim() }] }))
+    set(s => ({ timetableTeachers: [...s.timetableTeachers, { id, name: trimmed, email: email.trim(), mobile: mobile.trim() }] }))
     get()._save()
     return id
   },
 
-  // patch: { name?, email? }
+  // patch: { name?, email?, mobile? }
   updateTimetableTeacher(id, patch) {
     const update = {}
     if (patch.name !== undefined) {
@@ -28,6 +28,7 @@ export const createTimetableSlice = (set, get) => ({
       update.name = trimmed
     }
     if (patch.email !== undefined) update.email = patch.email.trim()
+    if (patch.mobile !== undefined) update.mobile = patch.mobile.trim()
     if (!Object.keys(update).length) return
     set(s => ({
       timetableTeachers: s.timetableTeachers.map(t =>

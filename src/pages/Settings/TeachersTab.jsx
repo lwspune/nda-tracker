@@ -39,9 +39,10 @@ export default function TeachersTab() {
   const [addStatus,      setAddStatus]      = useState(null) // { kind, message }
 
   // Edit-row state (existing)
-  const [editingId,    setEditingId]    = useState(null)
-  const [editingName,  setEditingName]  = useState('')
-  const [editingEmail, setEditingEmail] = useState('')
+  const [editingId,     setEditingId]     = useState(null)
+  const [editingName,   setEditingName]   = useState('')
+  const [editingEmail,  setEditingEmail]  = useState('')
+  const [editingMobile, setEditingMobile] = useState('')
 
   // Login-management state
   const [authEmails,   setAuthEmails]   = useState(new Set()) // lowercase emails with login accounts
@@ -107,10 +108,11 @@ export default function TeachersTab() {
     setEditingId(t.id)
     setEditingName(t.name)
     setEditingEmail(t.email ?? '')
+    setEditingMobile(t.mobile ?? '')
   }
 
   function handleSaveEdit(id) {
-    updateTimetableTeacher(id, { name: editingName, email: editingEmail })
+    updateTimetableTeacher(id, { name: editingName, email: editingEmail, mobile: editingMobile })
     setEditingId(null)
   }
 
@@ -268,6 +270,18 @@ export default function TeachersTab() {
                             if (e.key === 'Escape') setEditingId(null)
                           }}
                         />
+                        <input
+                          className="input w-full text-[13px] py-1"
+                          placeholder="WhatsApp mobile (for mentorship nudges)"
+                          type="tel"
+                          inputMode="numeric"
+                          value={editingMobile}
+                          onChange={e => setEditingMobile(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter')  handleSaveEdit(t.id)
+                            if (e.key === 'Escape') setEditingId(null)
+                          }}
+                        />
                         <div className="flex gap-2">
                           <button className="text-[11px] px-2 py-1 rounded bg-accent text-white" onClick={() => handleSaveEdit(t.id)}>✓ Save</button>
                           <button className="text-[11px] px-2 py-1 rounded border border-border text-ink-3" onClick={() => setEditingId(null)}>✕ Cancel</button>
@@ -288,6 +302,9 @@ export default function TeachersTab() {
                         {t.email
                           ? <div className="text-[11px] text-ink-3 truncate">{t.email}</div>
                           : <div className="text-[11px] text-amber-500 italic">No email — won't receive schedule emails</div>}
+                        {t.mobile
+                          ? <div className="text-[11px] text-ink-3 truncate">📱 {t.mobile}</div>
+                          : <div className="text-[11px] text-amber-500 italic">No mobile — won't receive mentorship nudges</div>}
                         <div className="text-[11px] text-ink-3 mt-0.5">
                           {usage.mappingCount} mapping{usage.mappingCount !== 1 ? 's' : ''} · {usage.examCount} exam schedule{usage.examCount !== 1 ? 's' : ''}
                         </div>
