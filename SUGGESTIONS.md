@@ -326,7 +326,9 @@ The wrong-answer "Learn this / Practice" feature (commits `d278e65` + `5a303f1`,
 
 ## 2026-06-19
 
-### Finish the mentorship-nudge production rollout (env + mobiles + live var-order check)
+### ~~Finish the mentorship-nudge production rollout (env + mobiles + live var-order check)~~ — **DONE 2026-06-19**
+
+Rollout completed by the user: Vercel env (`WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID` + `CRON_SECRET`) set, teacher mobiles entered, and the live test-send confirmed the `[date, students]` variable order. The daily cron is now live (07:30 IST, Mon–Fri).
 
 The daily mentor nudge shipped (commit `728ddf1`, pushed to main) with full unit/lint coverage (1568 Vitest) and a verified live dry-run against real data, but three user-side steps remain before the cron can fire for real. The cron is already in `vercel.json` but is **fail-closed** — without `CRON_SECRET` set in Vercel it rejects the daily call, so nothing sends until the rollout is finished.
 
@@ -337,7 +339,9 @@ The daily mentor nudge shipped (commit `728ddf1`, pushed to main) with full unit
 - Settings → Teachers: enter each mentor's WhatsApp `mobile` (at least your own first).
 - Settings → Mentorship: **Preview today's picks** (sanity), then **Send test to** your own number and confirm the message renders `Date: …` / `Students: …` correctly — if the date/students are swapped, flip the `variables` order in `api/send-mentor-nudges.js` (the `[dateLabel, namesList]` line) and the `reference_whatsapp_templates` row.
 
-### Decide mentor-nudge name style: canonical vs familiar short names
+### ~~Decide mentor-nudge name style: canonical vs familiar short names~~ — **CLOSED 2026-06-19 (not needed — canonical names kept)**
+
+Decided: keep full canonical names in the message. No change to `api/send-mentor-nudges.js`.
 
 The nudge message lists mentees by **full `canonical_name`** (e.g. "Pooja Harishchandra Gaikwad", "Himanshu Suvarna Kutal") rather than the short familiar names mentors used on their own sheets ("Pooja Gaikwad", "Himanshu Kutal"). Canonical is unambiguous and always present; short names read more naturally to the teacher.
 
