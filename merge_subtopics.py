@@ -77,6 +77,52 @@ SUBTOPIC_RENAMES = {
     # Maths / Trigonometric Identities — reciprocal/quotient identity pairs
     'Cosecant and Cotangent Identities':                         'Reciprocal and Quotient Identities',
     'Secant and Tangent Identities':                             'Reciprocal and Quotient Identities',
+
+    # ── Maths subject-wide cleanup (2026-06-16) ───────────────────────────
+    # Circles
+    'Radius of circle':                        'Radius of Circle',
+    'Tangent to a Circle':                     'Tangents to a Circle',
+    # Complex Numbers
+    'Argument of Complex Number':              'Argument of a Complex Number',
+    # Differentiation
+    'Derivative of Absolute Value Functions':  'Derivatives of Absolute Value Functions',
+    'Increasing/Decreasing Functions':         'Increasing and Decreasing Functions',
+    'Inverse Trigonometric Derivatives':       'Inverse Trigonometric Differentiation',
+    # Lines
+    'Diagonal of parallelogram':               'Diagonal of Parallelogram',
+    'Area of square — parallel side lines':    'Area of Square from Parallel Sides',
+    'Area of square from parallel sides':      'Area of Square from Parallel Sides',
+    'Collinearity condition':                  'Collinearity Condition',
+    'Collinearity of points':                  'Collinearity of Points',
+    'Distance between parallel lines':         'Distance Between Parallel Lines',
+    'Perpendicular line through point':        'Perpendicular Line Through a Point',
+    # Matrices & Determinants
+    'Adjoint of 2×2 matrix':                   'Adjoint of a Matrix',
+    'Determinant with cube roots of unity':    'Determinant with Cube Roots of Unity',
+    'Inverse of Matrix':                       'Inverse of a Matrix',
+    'Sum of two determinants':                 'Sum of Determinants',
+    'Trigonometric determinant':               'Trigonometric Determinants',
+    # Probability
+    'Conditional probability':                 'Conditional Probability',
+    # Quadratic Equations
+    'Common Root of Two Equations':            'Common Roots of Two Quadratics',
+    'Common roots of two quadratics':          'Common Roots of Two Quadratics',
+    'Complex Roots of Quadratic':              'Complex Roots of Quadratic Equations',
+    'Complex roots of quadratic equations':    'Complex Roots of Quadratic Equations',
+    'Ratio of roots':                          'Ratio of Roots',
+    # Sequence & Series
+    'Sum of infinite GP':                      'Sum of Infinite GP',
+    # Trigonometric Identities
+    'Double Angle Formula':                    'Double Angle Formulas',
+}
+
+
+# ── Chapter rename map ─────────────────────────────────────────────────────
+# Same invariant: no canonical appears as a key.
+
+CHAPTER_RENAMES = {
+    # Maths — two spellings of the same chapter (2026-06-16)
+    'Height & Distance':                       'Heights and Distances',
 }
 
 
@@ -90,6 +136,18 @@ def apply_renames(exams: list, rename_map: dict) -> int:
             st = q.get('subtopic') or ''
             if st and st in rename_map:
                 q['subtopic'] = rename_map[st]
+                changed += 1
+    return changed
+
+
+def apply_chapter_renames(exams: list, rename_map: dict) -> int:
+    """Rename chapters in-place. Returns count of questions changed."""
+    changed = 0
+    for exam in exams:
+        for q in exam.get('questions', []):
+            ch = q.get('chapter') or ''
+            if ch and ch in rename_map:
+                q['chapter'] = rename_map[ch]
                 changed += 1
     return changed
 
@@ -109,19 +167,23 @@ def main():
         import copy
         exams_copy = copy.deepcopy(exams)
         changed = apply_renames(exams_copy, SUBTOPIC_RENAMES)
-        print(f'[dry-run] Would rename {changed} question subtopic(s). No file written.')
+        ch_changed = apply_chapter_renames(exams_copy, CHAPTER_RENAMES)
+        print(f'[dry-run] Would rename {changed} question subtopic(s) '
+              f'and {ch_changed} question chapter(s). No file written.')
         return
 
     changed = apply_renames(exams, SUBTOPIC_RENAMES)
+    ch_changed = apply_chapter_renames(exams, CHAPTER_RENAMES)
 
-    if changed == 0:
-        print('No subtopics matched the rename map — file unchanged.')
+    if changed == 0 and ch_changed == 0:
+        print('No subtopics or chapters matched the rename maps — file unchanged.')
         return
 
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(f'Renamed {changed} question subtopic(s). Written to {DATA_FILE}.')
+    print(f'Renamed {changed} question subtopic(s) and {ch_changed} question chapter(s). '
+          f'Written to {DATA_FILE}.')
     print('Next: node migrate_subtopics_supabase.js  (needs SUPABASE_SERVICE_ROLE_KEY)')
 
 

@@ -8,7 +8,12 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
-from merge_subtopics import SUBTOPIC_RENAMES, apply_renames
+from merge_subtopics import (
+    SUBTOPIC_RENAMES,
+    CHAPTER_RENAMES,
+    apply_renames,
+    apply_chapter_renames,
+)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -206,6 +211,94 @@ def test_trig_identity_variants(old):
     assert q["subtopic"] == "Reciprocal and Quotient Identities"
 
 
+# ── Maths subject-wide cleanup (2026-06-16) ────────────────────────────────
+
+@pytest.mark.parametrize("old,new", [
+    # Circles
+    ("Radius of circle",                       "Radius of Circle"),
+    ("Tangent to a Circle",                    "Tangents to a Circle"),
+    # Complex Numbers
+    ("Argument of Complex Number",             "Argument of a Complex Number"),
+    # Differentiation
+    ("Derivative of Absolute Value Functions", "Derivatives of Absolute Value Functions"),
+    ("Increasing/Decreasing Functions",        "Increasing and Decreasing Functions"),
+    ("Inverse Trigonometric Derivatives",      "Inverse Trigonometric Differentiation"),
+    # Lines
+    ("Diagonal of parallelogram",              "Diagonal of Parallelogram"),
+    ("Area of square — parallel side lines",   "Area of Square from Parallel Sides"),
+    ("Area of square from parallel sides",     "Area of Square from Parallel Sides"),
+    ("Collinearity condition",                 "Collinearity Condition"),
+    ("Collinearity of points",                 "Collinearity of Points"),
+    ("Distance between parallel lines",        "Distance Between Parallel Lines"),
+    ("Perpendicular line through point",       "Perpendicular Line Through a Point"),
+    # Matrices & Determinants
+    ("Adjoint of 2×2 matrix",                  "Adjoint of a Matrix"),
+    ("Determinant with cube roots of unity",   "Determinant with Cube Roots of Unity"),
+    ("Inverse of Matrix",                      "Inverse of a Matrix"),
+    ("Sum of two determinants",                "Sum of Determinants"),
+    ("Trigonometric determinant",              "Trigonometric Determinants"),
+    # Probability
+    ("Conditional probability",                "Conditional Probability"),
+    # Quadratic Equations
+    ("Common Root of Two Equations",           "Common Roots of Two Quadratics"),
+    ("Common roots of two quadratics",         "Common Roots of Two Quadratics"),
+    ("Complex Roots of Quadratic",             "Complex Roots of Quadratic Equations"),
+    ("Complex roots of quadratic equations",   "Complex Roots of Quadratic Equations"),
+    ("Ratio of roots",                         "Ratio of Roots"),
+    # Sequence & Series
+    ("Sum of infinite GP",                     "Sum of Infinite GP"),
+    # Trigonometric Identities
+    ("Double Angle Formula",                   "Double Angle Formulas"),
+])
+def test_maths_cleanup_subtopic_variants(old, new):
+    q = make_q(old)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == new
+
+@pytest.mark.parametrize("kept", [
+    "Derivative of Nested Absolute Value Functions",
+    "Area of square from diagonal vertices",
+    "Sum of determinants — telescoping",
+    "Perpendicular line through trig-point",
+])
+def test_maths_cleanup_distinct_subtopics_preserved(kept):
+    """Near-name distinct concepts must NOT be merged away."""
+    q = make_q(kept)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == kept
+
+
+# ── Chapter renames ────────────────────────────────────────────────────────
+
+def test_chapter_rename_height_and_distance():
+    q = {"q": 1, "chapter": "Height & Distance", "subject": "Maths"}
+    changed = apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
+    assert changed == 1
+    assert q["chapter"] == "Heights and Distances"
+
+def test_chapter_rename_canonical_unchanged():
+    q = {"q": 1, "chapter": "Heights and Distances", "subject": "Maths"}
+    changed = apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
+    assert changed == 0
+    assert q["chapter"] == "Heights and Distances"
+
+def test_chapter_rename_unmatched_unchanged():
+    q = {"q": 1, "chapter": "Differentiation", "subject": "Maths"}
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
+    assert q["chapter"] == "Differentiation"
+
+def test_chapter_rename_is_idempotent():
+    q = {"q": 1, "chapter": "Height & Distance", "subject": "Maths"}
+    exams = [make_exam([q])]
+    apply_chapter_renames(exams, CHAPTER_RENAMES)
+    apply_chapter_renames(exams, CHAPTER_RENAMES)
+    assert q["chapter"] == "Heights and Distances"
+
+def test_chapter_rename_empty_and_missing():
+    assert apply_chapter_renames([], CHAPTER_RENAMES) == 0
+    assert apply_chapter_renames([make_exam([{"q": 1}])], CHAPTER_RENAMES) == 0
+
+
 # ── Rename map completeness ────────────────────────────────────────────────
 
 def test_rename_map_has_no_self_references():
@@ -219,3 +312,13 @@ def test_rename_map_canonical_names_not_in_keys():
     for old in SUBTOPIC_RENAMES:
         assert old not in canonicals, \
             f"{old!r} is both a source and a target — rename chain detected"
+
+def test_chapter_rename_map_has_no_self_references():
+    for old, new in CHAPTER_RENAMES.items():
+        assert old != new, f"Self-reference in chapter rename map: {old!r}"
+
+def test_chapter_rename_map_canonical_names_not_in_keys():
+    canonicals = set(CHAPTER_RENAMES.values())
+    for old in CHAPTER_RENAMES:
+        assert old not in canonicals, \
+            f"{old!r} is both a source and a target — chapter rename chain detected"

@@ -65,6 +65,49 @@ const SUBTOPIC_RENAMES = {
   // Maths / Trigonometric Identities
   'Cosecant and Cotangent Identities': 'Reciprocal and Quotient Identities',
   'Secant and Tangent Identities':     'Reciprocal and Quotient Identities',
+
+  // ── Maths subject-wide cleanup (2026-06-16) ────────────────────────────
+  // Circles
+  'Radius of circle':                       'Radius of Circle',
+  'Tangent to a Circle':                    'Tangents to a Circle',
+  // Complex Numbers
+  'Argument of Complex Number':             'Argument of a Complex Number',
+  // Differentiation
+  'Derivative of Absolute Value Functions': 'Derivatives of Absolute Value Functions',
+  'Increasing/Decreasing Functions':        'Increasing and Decreasing Functions',
+  'Inverse Trigonometric Derivatives':      'Inverse Trigonometric Differentiation',
+  // Lines
+  'Diagonal of parallelogram':              'Diagonal of Parallelogram',
+  'Area of square — parallel side lines':   'Area of Square from Parallel Sides',
+  'Area of square from parallel sides':     'Area of Square from Parallel Sides',
+  'Collinearity condition':                 'Collinearity Condition',
+  'Collinearity of points':                 'Collinearity of Points',
+  'Distance between parallel lines':        'Distance Between Parallel Lines',
+  'Perpendicular line through point':       'Perpendicular Line Through a Point',
+  // Matrices & Determinants
+  'Adjoint of 2×2 matrix':                  'Adjoint of a Matrix',
+  'Determinant with cube roots of unity':   'Determinant with Cube Roots of Unity',
+  'Inverse of Matrix':                      'Inverse of a Matrix',
+  'Sum of two determinants':                'Sum of Determinants',
+  'Trigonometric determinant':              'Trigonometric Determinants',
+  // Probability
+  'Conditional probability':                'Conditional Probability',
+  // Quadratic Equations
+  'Common Root of Two Equations':           'Common Roots of Two Quadratics',
+  'Common roots of two quadratics':         'Common Roots of Two Quadratics',
+  'Complex Roots of Quadratic':             'Complex Roots of Quadratic Equations',
+  'Complex roots of quadratic equations':   'Complex Roots of Quadratic Equations',
+  'Ratio of roots':                         'Ratio of Roots',
+  // Sequence & Series
+  'Sum of infinite GP':                     'Sum of Infinite GP',
+  // Trigonometric Identities
+  'Double Angle Formula':                   'Double Angle Formulas',
+}
+
+// ── Chapter rename map (must stay in sync with merge_subtopics.py) ──────────
+const CHAPTER_RENAMES = {
+  // Maths — two spellings of the same chapter (2026-06-16)
+  'Height & Distance': 'Heights and Distances',
 }
 
 function applyRenames(questions) {
@@ -73,6 +116,11 @@ function applyRenames(questions) {
     const st = q.subtopic
     if (st && SUBTOPIC_RENAMES[st]) {
       q.subtopic = SUBTOPIC_RENAMES[st]
+      changed++
+    }
+    const ch = q.chapter
+    if (ch && CHAPTER_RENAMES[ch]) {
+      q.chapter = CHAPTER_RENAMES[ch]
       changed++
     }
   }
