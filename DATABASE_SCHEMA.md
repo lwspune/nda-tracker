@@ -19,8 +19,10 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Event logs | `lecture_absences`, `homework_pending`, `exam_absences` | 125 + 2 + 876 |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
+| Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
+| Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 
-16 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin).
+19 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin); `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -320,6 +322,32 @@ Index: `(teacher_id)`. **RLS ✓ with NO public policy** → anon/authenticated 
 
 ---
 
+## 10. Mentorship (2026-06-19)
+
+### `mentor_assignments` — teacher↔mentee map (one mentor per student)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `lws_id` | text PK | — | FK → `students(lws_id)` ON DELETE CASCADE. **PK enforces one mentor per student** — reassigning is an upsert on this key. |
+| `teacher_id` | text NOT NULL | — | `timetableTeachers[].id` (not a DB FK — timetable lives in `faculty_state` JSONB) |
+| `created_at` | timestamptz | `now()` | |
+
+Index: `(teacher_id)`. RLS ✓ authenticated (`faculty_rw`). Seeded by SQL from the mentor mapping; managed in-app via Settings → Mentorship (`mentorSlice` `fetchMentorAssignments`/`setMentorAssignment`/`removeMentorAssignment`) and read server-side by `api/send-mentor-nudges.js`.
+
+### `mentor_nudges` — daily-nudge event log (doubles as the rotation cursor)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `teacher_id` | text NOT NULL | — | The mentor who was sent this mentee |
+| `lws_id` | text NOT NULL | — | The mentee named in the nudge (not a DB FK — kept as a flat append-only log) |
+| `date` | text NOT NULL | — | `YYYY-MM-DD` IST send-day |
+| `created_at` | timestamptz | `now()` | |
+
+Indexes: `(teacher_id, date)`, `(lws_id)`. RLS ✓ authenticated (`faculty_rw`). **Append-only** — one row per (mentor, mentee) actually nudged. The daily pick is *derived* from this log (each mentee's nudge **count** → lowest tier first), so it is both the audit trail and the rotation state; never updated in place. Written only by `api/send-mentor-nudges.js` on a successful real send (test/dry-run never write). See CLAUDE.md → "Mentorship nudge" + [[feedback_event_log_over_derive]].
+
+---
+
 ## FK graph
 
 ```
@@ -338,6 +366,7 @@ Index: `(teacher_id)`. **RLS ✓ with NO public policy** → anon/authenticated 
          ├──→ lecture_absences (125, ON DELETE CASCADE)
          ├──→ homework_pending (2, ON DELETE CASCADE)
          ├──→ exam_absences (876, ON DELETE CASCADE)
+         ├──→ mentor_assignments (86, ON DELETE CASCADE)
          └──→ quiz_attempts (0, ON DELETE CASCADE)
 
         quizzes (0)
@@ -347,6 +376,7 @@ Index: `(teacher_id)`. **RLS ✓ with NO public policy** → anon/authenticated 
   students_meta (1)    ← no FKs (single-row config)
   teacher_feedback (499) ← no FKs (teacher_name is text, not a join)
   teacher_calendar_blocks ← no FKs (teacher_id is text; lives in faculty_state JSONB)
+  mentor_nudges (event log) ← no FKs (flat append-only; teacher_id/lws_id are text)
 ```
 
 ---
@@ -363,6 +393,7 @@ Index: `(teacher_id)`. **RLS ✓ with NO public policy** → anon/authenticated 
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The only role-restricted policy. |
 | **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |
+| `mentor_assignments`, `mentor_nudges` | ✓ | Authenticated only (`faculty_rw`). The cron send path reads/writes via the service-role client (no user session). |
 | **`student_logins`** | **✗ DISABLED** | **Exposed to `anon` + `authenticated`** |
 
 ### ⚠️ `student_logins` RLS gap
