@@ -8,6 +8,7 @@ import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
 import OfflineExamModal     from '../components/upload/OfflineExamModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
+import ExamIntegrityPanel   from './Exams/ExamIntegrityPanel'
 import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
 import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
 import ExamAbsencePreviewModal from './Exams/ExamAbsencePreviewModal'
@@ -39,6 +40,7 @@ export default function ExamsPage() {
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
   const [offlineModalOpen, setOfflineModalOpen]       = useState(false)
   const [expandedExamId, setExpandedExamId]           = useState(null)
+  const [integrityExamId, setIntegrityExamId]         = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
   const [reportsGenerating, setReportsGenerating]     = useState(null)
   const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
@@ -50,6 +52,10 @@ export default function ExamsPage() {
 
   function toggleInsights(id) {
     setExpandedExamId(prev => prev === id ? null : id)
+  }
+
+  function toggleIntegrity(id) {
+    setIntegrityExamId(prev => prev === id ? null : id)
   }
 
   function parseFailedNames(lines) {
@@ -189,6 +195,7 @@ export default function ExamsPage() {
   function goToPage(p) {
     setPage(p)
     setExpandedExamId(null)
+    setIntegrityExamId(null)
   }
 
   const isFiltered = subjectFilter !== 'all' || branchFilter !== 'all' || batchFilter !== 'all'
@@ -283,6 +290,7 @@ export default function ExamsPage() {
             const pctColor = p => p >= 70 ? 'text-success' : p >= 45 ? 'text-warning' : 'text-danger'
 
             const isExpanded = expandedExamId === exam.id
+            const isIntegrityOpen = integrityExamId === exam.id
 
             return (
               <Card key={exam.id} data-testid="exam-card" className="!p-0 overflow-hidden hover:border-accent/40 transition-colors">
@@ -350,6 +358,22 @@ export default function ExamsPage() {
                           }`}
                       >
                         📊 Insights {isExpanded ? '▲' : '▼'}
+                      </button>
+                    )}
+
+                    {/* Integrity (copying detection) toggle — admin + teacher */}
+                    {mode !== 'student' && exam.students.length > 0 && exam.questions.length > 0 && (
+                      <button
+                        onClick={() => toggleIntegrity(exam.id)}
+                        title="Answer-similarity / copying analysis"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
+                                    font-semibold border transition-all flex-shrink-0
+                          ${isIntegrityOpen
+                            ? 'bg-danger text-white border-danger'
+                            : 'bg-surface-2 text-ink-2 border-border hover:bg-red-50 hover:text-danger hover:border-red-300'
+                          }`}
+                      >
+                        🕵 Integrity {isIntegrityOpen ? '▲' : '▼'}
                       </button>
                     )}
 
@@ -454,6 +478,9 @@ export default function ExamsPage() {
 
                 {/* ── Insights panel ── */}
                 {isExpanded && <ExamInsightsPanel exam={exam} />}
+
+                {/* ── Integrity panel ── */}
+                {isIntegrityOpen && <ExamIntegrityPanel exam={exam} />}
               </Card>
             )
           })}
