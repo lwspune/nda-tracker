@@ -296,7 +296,7 @@ export default function ExamsPage() {
               <Card key={exam.id} data-testid="exam-card" className="!p-0 overflow-hidden hover:border-accent/40 transition-colors">
                 {/* ── Main exam row ── */}
                 <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 xl:gap-4 px-4 py-3">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 xl:min-w-[240px]">
                     <div className="font-bold text-[14px] text-ink truncate flex items-center gap-2">
                       {exam.name}
                       {!exam.questions.length && (
@@ -321,7 +321,7 @@ export default function ExamsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 xl:gap-4 xl:flex-shrink-0 flex-wrap">
+                  <div className="flex items-center gap-2 xl:gap-4 flex-wrap xl:justify-end min-w-0">
                     {/* Min / Avg / Max */}
                     {scores.length > 0 && (
                       <div className="flex items-end gap-4">
