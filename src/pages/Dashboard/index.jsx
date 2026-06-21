@@ -12,6 +12,7 @@ import PriorityChapters from './PriorityChapters'
 import BatchComparison from './BatchComparison'
 import AttendanceRollup from './AttendanceRollup'
 import AttendanceLeaders from './AttendanceLeaders'
+import IntegrityLeaders from './IntegrityLeaders'
 
 export default function DashboardPage() {
   const exams              = useStore(s => s.exams)
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const syllabusBatchBranches = useStore(s => s.syllabusBatchBranches)
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
   const fetchAttendanceLeadersData = useStore(s => s.fetchAttendanceLeadersData)
+  const getAllIntegrityIncidents   = useStore(s => s.getAllIntegrityIncidents)
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -174,6 +176,13 @@ export default function DashboardPage() {
       <AttendanceLeaders
         studentProfiles={studentProfiles}
         fetchAttendanceLeadersData={fetchAttendanceLeadersData}
+        setActiveStudent={setActiveStudent}
+      />
+
+      {/* Integrity incidents rollup — repeat-offender view; hidden when none */}
+      <IntegrityLeaders
+        studentProfiles={studentProfiles}
+        getAllIntegrityIncidents={getAllIntegrityIncidents}
         setActiveStudent={setActiveStudent}
       />
 

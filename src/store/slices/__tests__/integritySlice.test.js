@@ -99,6 +99,25 @@ describe('getIntegrityIncidentsForStudent', () => {
   })
 })
 
+describe('getAllIntegrityIncidents', () => {
+  it('returns all incident rows newest-first (Dashboard rollup)', async () => {
+    mockSession(true)
+    const rows = [{ id: 'a', lws_id: 'L1' }, { id: 'b', lws_id: 'L2' }]
+    const b = makeBuilder({ data: rows })
+    supabase.from.mockReturnValue(b)
+    const out = await slice.getAllIntegrityIncidents()
+    expect(out).toEqual(rows)
+    expect(supabase.from).toHaveBeenCalledWith('integrity_incidents')
+    expect(b.order).toHaveBeenCalledWith('created_at', { ascending: false })
+  })
+
+  it('returns [] with no session', async () => {
+    mockSession(false)
+    expect(await slice.getAllIntegrityIncidents()).toEqual([])
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+})
+
 describe('getIntegrityIncidentsForExam', () => {
   it('returns rows for the exam (drives the panel "logged" badge)', async () => {
     mockSession(true)

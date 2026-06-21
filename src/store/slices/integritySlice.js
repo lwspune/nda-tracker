@@ -66,6 +66,22 @@ export const createIntegritySlice = (_set, _get) => ({
     return data ?? []
   },
 
+  // Class-wide read — drives the Dashboard "Integrity Incidents" rollup. Returns
+  // all incident rows (newest first); aggregated per-student by buildIntegrityLeaders.
+  async getAllIntegrityIncidents() {
+    const session = await getSession()
+    if (!session) return []
+    const { data, error } = await supabase
+      .from('integrity_incidents')
+      .select('id, lws_id, student_name, exam_id, exam_name, exam_date, counterpart_name, status, created_at')
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('[integrity] getAll failed:', error)
+      return []
+    }
+    return data ?? []
+  },
+
   // Per-exam read — drives the "✓ logged" badge in the Exam Integrity panel.
   async getIntegrityIncidentsForExam(examId) {
     if (!examId) return []

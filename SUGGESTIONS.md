@@ -372,3 +372,39 @@ The `MenteeAssignments` panel (commit `f778897`) shipped with **slice-only** cov
 **How to apply:**
 - Manual: Settings → Mentorship → reassign a mentee (row moves to the new mentor group), remove one (drops + reappears in "no mentor" if Active), confirm counts + search filter.
 - Test: a `MentorshipTab`/`MenteeAssignments` render test mocking the store (`timetableTeachers`, `studentProfiles`, and the three `mentor*` actions) — assert unassigned-active detection and that `setMentorAssignment`/`removeMentorAssignment` fire with the right args. Mirror the store-mock pattern in `MonitoringTab.test.jsx`.
+
+---
+
+## 2026-06-21
+
+### Backfill `exam_results.choices` to widen copying-detection coverage
+
+The Exam Integrity panel (shipped 2026-06-20) can only analyze the **8 exams** uploaded since 2026-06-10 — chosen-option capture (`exam_results.choices`) didn't exist before then, and copying detection is impossible without it. Every older exam shows the "re-upload to enable" notice.
+
+**Why:** the detector is built, tested, and live, but its coverage is a thin recent slice. The full back-catalogue of mocks (the exams most worth auditing for patterns) is invisible to it. The fix is pure data entry, not code.
+
+**How to apply:** re-upload each older exam's original **Evalbee results XLS** (it still carries the `Q N Options` column) via Update Results — `parseExcelFull` repopulates `choices` on save, no migration needed. Prioritise the large full-syllabus mocks. Carry-forward: this is the same backfill the [2026-06-09 re-grade-from-stored-choices entry](#build-the-re-grade-from-stored-choices-action-now-that-choices-are-captured) lists as its precondition — doing it once unblocks **both** features (re-grade + integrity coverage).
+
+### ~~Cross-exam "repeat offender" integrity rollup — flavour 1 (incident-log aggregation)~~ — **DONE 2026-06-21**
+
+Shipped the incident-log flavour: pure `buildIntegrityLeaders(rows, studentProfiles)` ([src/lib/analytics/integrityLeaders.js](src/lib/analytics/integrityLeaders.js)) + `getAllIntegrityIncidents()` slice reader + `IntegrityLeaders.jsx` Dashboard widget (hide-when-empty, ranked repeat-first, expandable exam list, click-through). +9 tests; 1618 green. Empty until incidents accrue. **Flavour 2 (below) remains open.**
+
+### Cross-exam integrity rollup — flavour 2 (statistical re-detection across exams)
+
+The shipped flavour 1 only counts **admitted** incidents you logged by hand — it re-displays, it doesn't *discover*. The discovery value is flavour 2: run `buildExamIntegrityReport` across **all** choice-bearing exams and re-key the output **by student** to surface "statistically anomalous in N exams, M times with the same partner" — serial copiers nobody confronted.
+
+**Why:** recurrence across exams is the strongest, least-confoundable copying signal, and a per-exam panel is structurally blind to it. Flavour 1 can't find it (admissions only).
+
+**Why deferred (the data, not the worth) — verified 2026-06-21:** of 191 students across the 8 choice-bearing exams, **0 are in 3+ exams and only 38 in exactly 2** (one APJ 12th+6M cohort, across a Maths + a GAT exam). There is essentially no recurrence to find yet — gate this **behind the `choices` backfill** (the entry above) which widens per-student exam counts.
+
+**How to apply (when data exists):**
+- Aggregate `buildExamIntegrityReport` per student across exams, but **do NOT naively count "flagged in N exams"** — that treats correlated evidence as independent. A student with an idiosyncratic-but-honest distractor style + a genuine study partner who shares a method will co-flag repeatedly on the *same* innocent confound, manufacturing a fake serial cheater. Weight **same-partner recurrence** (genuinely strong) very differently from scattered low-z co-flags (likely the same hub/confound repeating). See `memory/reference_collusion_detection.md`.
+- Keep the "leads, not proof" framing — cross-exam aggregation amplifies apparent confidence, so the false-positive cost is higher than a single-exam flag. Validate the weighting against real recurrence before surfacing accusations.
+
+### Manually verify the Exam Integrity golden path in the browser
+
+The integrity feature (detection panel + admitted-incident logging) shipped with tests + lint green (1609 passing) but the end-to-end browser pass wasn't run — same gap noted for offline exams (2026-06-08), monitoring (2026-06-16), remediation (2026-06-18), and mentee-assignments (2026-06-19).
+
+**Why:** the wiring spans panel → `studentProfiles` name→lwsId resolution → `logIntegrityIncident` upsert → StudentView card → student/parent portal (`api/student-login` return). That's a lot of seams a unit test can't fully exercise; the global Definition of Done requires the manual pass.
+
+**How to apply:** as admin/teacher on a choice-bearing exam (e.g. the APJ 11th Maths mock), open 🕵 Integrity → confirm a flagged pair (Manas↔Saarth should be Tier B) → click "[name] admitted" → confirm the "✓ logged" badge → open that student in StudentView → see the red "⚠ Academic Integrity" card → log in to the student/parent portal for that student and confirm the card shows there too → finally test admin-only delete (× present for admin, absent for teacher).
