@@ -16,13 +16,13 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Activity logs | `student_attendance`, `student_logins` | 2402 + 193 |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
-| Event logs | `lecture_absences`, `homework_pending`, `exam_absences` | 125 + 2 + 876 |
+| Event logs | `lecture_absences`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 2 + 876 + 0 |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 
-19 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin); `teacher_calendar_blocks` has no public policy (service-role only).
+20 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin); `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -244,6 +244,25 @@ Indexes: `(date)`, `(lws_id, date)`, `(lws_id, resolved_at)`. RLS ✓ authentica
 | **UNIQUE** | `(exam_id, lws_id)` | | |
 
 Indexes: `(exam_id)`, `(lws_id)`, `(lws_id, marked_at DESC)`. RLS ✓ authenticated (`exam_absences_authenticated_all`). Written ONLY by `examAbsenceSlice.syncExamAbsences(examId)` (diff reconciliation — never direct INSERT elsewhere).
+
+### `integrity_incidents` — one row per (student, exam) confirmed copying incident
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `student_name` | text NOT NULL | — | Snapshot (survives canonical rename) |
+| `exam_id` | text | nullable | **NO FK** — snapshot, so the record survives exam delete/re-upload |
+| `exam_name` / `exam_date` | text | nullable | Snapshot |
+| `counterpart_name` / `counterpart_lws_id` | text | nullable | The other student in the flagged pair |
+| `shared_wrong` / `same_correct` / `diff` / `both_answered` | int | nullable | Evidence snapshot at log time |
+| `status` | text NOT NULL | `'admitted'` | The student agreed when confronted |
+| `note` | text | nullable | Free-text (unused by the one-click capture; reserved) |
+| `created_at` | timestamptz NOT NULL | `now()` | |
+| `created_by` | text | nullable | Recorder email (admin or teacher) |
+| **UNIQUE** | `(lws_id, exam_id)` | | Re-log = upsert, no duplicate |
+
+Indexes: `(lws_id)`, `(exam_id)`. RLS ✓ authenticated (`integrity_incidents_authenticated_all`). Written by `integritySlice.logIntegrityIncident` (admin OR teacher, from the Exam Integrity panel). Delete is admin-only (UI gate). Surfaced in StudentView's `IntegrityIncidents` card and the student/parent portal (`api/student-login.js` returns `integrityIncidents[]`). Does NOT alter marks.
 
 ---
 

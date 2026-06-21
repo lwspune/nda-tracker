@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import QuestionCard from '../../components/ui/QuestionCard'
+import useStore from '../../store/useStore'
 import { buildExamIntegrityReport, examMaxMarks } from '../../lib/analytics'
 
 // ── Exam Integrity (copying-detection) panel ──────────────────
@@ -27,9 +28,42 @@ function Metric({ label, value, title }) {
   )
 }
 
-function PairRow({ pair, exam, qIndex, maxMarks }) {
+// One-click "admitted" control for a single student in a flagged pair.
+function AdmitButton({ student, counterpart, lwsId, logged, onAdmit }) {
+  const first = (student.name || '').split(' ')[0] || student.name
+  if (logged) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg
+                       bg-green-50 text-green-700 border border-green-200">
+        ✓ {first} — logged
+      </span>
+    )
+  }
+  if (!lwsId) {
+    return (
+      <span title="This student isn't linked to a profile — link them in Students before logging."
+            className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg
+                       bg-surface-2 text-ink-3 border border-border cursor-not-allowed">
+        {first} — no profile
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={() => onAdmit(student, counterpart)}
+      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border
+                 bg-surface-2 text-ink-2 border-border hover:bg-red-50 hover:text-danger hover:border-red-300 transition-colors"
+    >
+      ✔ {first} admitted
+    </button>
+  )
+}
+
+function PairRow({ pair, exam, qIndex, maxMarks, nameToLws, loggedLws, onAdmit }) {
   const [open, setOpen] = useState(false)
   const pct = (v) => maxMarks > 0 ? `${Math.round((v / maxMarks) * 100)}%` : '—'
+  const aLws = nameToLws.get((pair.a.name || '').toLowerCase()) || null
+  const bLws = nameToLws.get((pair.b.name || '').toLowerCase()) || null
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-surface">
@@ -98,6 +132,13 @@ function PairRow({ pair, exam, qIndex, maxMarks }) {
           </div>
         </div>
       )}
+
+      {/* Admitted-incident action bar — one click per student (admin + teacher) */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t border-border bg-surface-2/40">
+        <span className="text-[10px] uppercase tracking-wide font-bold text-ink-3">Confronted &amp; admitted:</span>
+        <AdmitButton student={pair.a} counterpart={{ ...pair.b, lwsId: bLws }} lwsId={aLws} logged={!!aLws && loggedLws.has(aLws)} onAdmit={(s, c) => onAdmit(s, c, pair)} />
+        <AdmitButton student={pair.b} counterpart={{ ...pair.a, lwsId: aLws }} lwsId={bLws} logged={!!bLws && loggedLws.has(bLws)} onAdmit={(s, c) => onAdmit(s, c, pair)} />
+      </div>
     </div>
   )
 }
@@ -105,6 +146,55 @@ function PairRow({ pair, exam, qIndex, maxMarks }) {
 export default function ExamIntegrityPanel({ exam }) {
   const report = useMemo(() => buildExamIntegrityReport(exam), [exam])
   const maxMarks = examMaxMarks(exam)
+  const studentProfiles = useStore(s => s.studentProfiles)
+  const logIntegrityIncident = useStore(s => s.logIntegrityIncident)
+  const getIntegrityIncidentsForExam = useStore(s => s.getIntegrityIncidentsForExam)
+
+  // name (lowercased canonical OR variant) → lwsId, so a flagged exam-sheet name
+  // resolves to the profile we attach the incident to.
+  const nameToLws = useMemo(() => {
+    const m = new Map()
+    for (const [key, p] of Object.entries(studentProfiles || {})) {
+      if (p?.lwsId) m.set(key.toLowerCase(), p.lwsId)
+    }
+    return m
+  }, [studentProfiles])
+
+  // Which students already have a logged incident for THIS exam (drives the badge).
+  const [loggedLws, setLoggedLws] = useState(() => new Set())
+  useEffect(() => {
+    if (!report.available || typeof getIntegrityIncidentsForExam !== 'function' || !exam.id) return
+    let cancelled = false
+    getIntegrityIncidentsForExam(exam.id).then(rows => {
+      if (!cancelled) setLoggedLws(new Set((rows || []).map(r => r.lws_id)))
+    })
+    return () => { cancelled = true }
+  }, [report.available, exam.id, getIntegrityIncidentsForExam])
+
+  async function handleAdmit(student, counterpart, pair) {
+    const lwsId = nameToLws.get((student.name || '').toLowerCase())
+    if (!lwsId || typeof logIntegrityIncident !== 'function') return
+    const ok = window.confirm(
+      `Record a confirmed copying incident for ${student.name} on "${exam.name}"?\n\n` +
+      `This goes on the student's record and is visible to the student and parent. ` +
+      `Only an admin can remove it.`
+    )
+    if (!ok) return
+    const done = await logIntegrityIncident({
+      lwsId,
+      studentName:      student.name,
+      examId:           exam.id,
+      examName:         exam.name,
+      examDate:         exam.date,
+      counterpartName:  counterpart.name,
+      counterpartLwsId: counterpart.lwsId || null,
+      sharedWrong:      pair?.sameWrong,
+      sameCorrect:      pair?.sameCorrect,
+      diff:             pair?.diff,
+      bothAnswered:     pair?.bothAnswered,
+    })
+    if (done) setLoggedLws(prev => new Set(prev).add(lwsId))
+  }
   const qIndex = useMemo(() => {
     const m = new Map()
     ;(exam.questions || []).forEach(q => m.set(String(q.q), q))
@@ -166,7 +256,8 @@ export default function ExamIntegrityPanel({ exam }) {
         ) : (
           <div className="space-y-2">
             {report.pairs.map((pair, i) => (
-              <PairRow key={i} pair={pair} exam={exam} qIndex={qIndex} maxMarks={maxMarks} />
+              <PairRow key={i} pair={pair} exam={exam} qIndex={qIndex} maxMarks={maxMarks}
+                       nameToLws={nameToLws} loggedLws={loggedLws} onAdmit={handleAdmit} />
             ))}
           </div>
         )}

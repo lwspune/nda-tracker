@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import AttendanceRings from '../Attendance/AttendanceRings'
 import RecentIncidents from './RecentIncidents'
 import MissedExams from './MissedExams'
+import IntegrityIncidents from './IntegrityIncidents'
 import StudentQuizHistory from './StudentQuizHistory'
 import {
   getStudentExams, filterValidExams,
@@ -23,7 +24,7 @@ import { ProfileCard, ImprovementPlan } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
-export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null, homeworkPendingProp = null }) {
+export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null, homeworkPendingProp = null, integrityIncidentsProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
   const savedInsights      = useStore(s => s.savedInsights)
@@ -401,6 +402,12 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         lwsId={profile?.lwsId}
         exams={normalizedExams}
         examAbsencesProp={examAbsencesProp}
+      />
+
+      {/* Confirmed academic-integrity incidents — hidden when none */}
+      <IntegrityIncidents
+        lwsId={profile?.lwsId}
+        integrityIncidentsProp={integrityIncidentsProp}
       />
 
       {/* Chapter accordion — grouped with the audits below as the "diagnosis" cluster */}

@@ -305,7 +305,7 @@ export function StudentPortal({ data, onLogout }) {
           ) : (
             <>
               <StudentQuizzes mobile={data.profile?.mobile} />
-              <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} />
+              <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} integrityIncidentsProp={data.integrityIncidents || []} />
             </>
           )}
         </div>

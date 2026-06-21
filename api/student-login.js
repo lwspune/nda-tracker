@@ -208,6 +208,14 @@ export default async function handler(req, res) {
     .gte('date', sinceIso)
     .order('date', { ascending: false })
 
+  // Confirmed academic-integrity incidents (admitted copying). Self-contained —
+  // exam name/date + evidence are snapshotted on the row, no join needed.
+  const { data: integrityRows } = await supabase
+    .from('integrity_incidents')
+    .select('id, exam_id, exam_name, exam_date, counterpart_name, shared_wrong, diff, status, note, created_at, created_by')
+    .eq('lws_id', student.lws_id)
+    .order('created_at', { ascending: false })
+
   // ── 5a-ii. Fetch metadata for ABSENT exams (the student didn't sit them,
   // so they're not in `exams` above). Without this, the student-portal join
   // in MissedExams / RecentIncidents / AttendanceRings would drop all rows.
@@ -273,6 +281,7 @@ export default async function handler(req, res) {
         exam_batch:  meta?.batch ?? null,
       }
     }),
+    integrityIncidents: integrityRows || [],
     ndaFreqBySubject: stateRow.data?.ndaFreqBySubject || {},
   })
 }

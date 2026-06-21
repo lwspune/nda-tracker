@@ -19,6 +19,7 @@ import { createExamAbsenceSlice }    from './slices/examAbsenceSlice'
 import { createConfigSlice } from './slices/configSlice'
 import { createMonthlyReportSlice } from './slices/monthlyReportSlice'
 import { createMentorSlice } from './slices/mentorSlice'
+import { createIntegritySlice } from './slices/integritySlice'
 
 const useStore = create((set, get) => ({
   // ── Data state ────────────────────────────────────────────
@@ -288,6 +289,7 @@ const useStore = create((set, get) => ({
   ...createConfigSlice(set, get),
   ...createMonthlyReportSlice(set, get),
   ...createMentorSlice(set, get),
+  ...createIntegritySlice(set, get),
 }))
 
 export default useStore

@@ -42,6 +42,16 @@
 
 **Resend scope toggle**: when `failedNames` non-null, modal shows the amber `Failed & skipped only (N) / All students (M)` radio, defaulted to failed-only (same shape as `LateNotificationPreviewModal`). `bulkUpdateStudentContacts(edits)` runs before send to persist any parent-mobile edits.
 
+### Exam integrity — copying detection + admitted incidents (2026-06-20)
+
+**Detection (read-only).** The 🕵 Integrity toggle on each exam card (admin + teacher) renders `buildExamIntegrityReport(exam)` from [`src/lib/analytics/examIntegrity.js`](src/lib/analytics/examIntegrity.js) — a pure pairwise analysis over the captured chosen options (`exam_results.choices`, available only on uploads since 2026-06-10). The fingerprint of copying is **shared WRONG answers** (same incorrect option on the same question) + near-identical attempt/skip patterns, NOT shared correct answers. Two regimes: **Tier A** near-identical papers (`diff ≤ 5 && sameWrong ≥ 8`) catches clusters; **Tier B** z-score outliers (`z ≥ 4`) **gated by Harpp-Hogan ratio ≥ 1** so a weak-but-honest student who hits popular distractors with many peers (a high-`diff` "hub") is not flagged. Union-find groups flagged pairs into clusters/rings; roll-adjacency is a corroborating pill. Per-pair **Evidence** drill-down reuses `QuestionCard` to show exactly which questions both got identically wrong. `available:false` (with a notice) for offline exams and pre-2026-06-10 uploads. Output is **investigative leads, not proof** — stated in the panel.
+
+**Capture → incident.** A teacher confronts the flagged student(s) offline. If a student **admits**, the teacher clicks the one-click **"[name] admitted"** action on that pair row (a `window.confirm` guards the misclick, because only an admin can later delete). The panel resolves the exam-sheet name → `lwsId` via `studentProfiles` (canonical + variants, lowercased) and calls `integritySlice.logIntegrityIncident({...})`, which upserts an `integrity_incidents` row (one per student/exam; counterpart = the other flagged student). **Evidence (shared-wrong / diff / both-answered) and exam name/date are snapshotted onto the row** so the record stays factual even if the exam is re-uploaded or deleted (that's why `exam_id` has no FK). A "✓ logged" badge then shows on that student, fed by `getIntegrityIncidentsForExam(examId)`.
+
+**Surfacing.** `IntegrityIncidents.jsx` renders a red "⚠ Academic Integrity" card on `StudentView` (hide-when-empty, like `MissedExams`) listing exam · date · counterpart · evidence · note · recorder. Admin/teacher fetch via `getIntegrityIncidentsForStudent(lwsId)`; **the student/parent portal sees it too** via `integrityIncidentsProp` — `api/student-login.js` returns `integrityIncidents[]` (self-contained rows, no join) which threads App.jsx → StudentView → the card. **Delete (×) is admin-only** (`mode === 'admin'`); a teacher can log but not void a disciplinary record.
+
+**Non-goal.** Logging an incident does NOT change the student's marks — Evalbee-authoritative grading is untouched (a score consequence would be a separate, deliberate decision).
+
 ### Late marking & lecture-miss flow (Attendance page)
 
 Two related signals beyond daily P/A, both surfacing on the Attendance page (`src/pages/Attendance/index.jsx`):

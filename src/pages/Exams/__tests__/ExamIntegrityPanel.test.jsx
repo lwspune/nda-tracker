@@ -7,7 +7,12 @@ import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../../store/useStore', () => ({
-  default: (selector) => selector({ updateQuestion: vi.fn() }),
+  default: (selector) => selector({
+    updateQuestion: vi.fn(),
+    studentProfiles: {},
+    logIntegrityIncident: vi.fn(async () => true),
+    getIntegrityIncidentsForExam: vi.fn(async () => []),
+  }),
 }))
 
 import ExamIntegrityPanel from '../ExamIntegrityPanel'

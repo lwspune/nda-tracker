@@ -66,6 +66,7 @@ function makeMockClient({
   examRows         = [MOCK_EXAM_ROW],
   stateData        = MOCK_STATE,
   examAbsences     = [],
+  integrityIncidents = [],
   absentExamMeta   = null, // null = reuse examRows; pass [] for "no rows found"
   studentsError    = null,
   resultsError     = null,
@@ -148,6 +149,16 @@ function makeMockClient({
           gte:    vi.fn(() => builder),
           order:  vi.fn(() => builder),
           then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+        }
+        return builder
+      }
+      if (table === 'integrity_incidents') {
+        // chain: .select(...).eq('lws_id', X).order('created_at', ...) — await
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          order:  vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: integrityIncidents, error: null }).then(resolve),
         }
         return builder
       }
@@ -379,6 +390,25 @@ describe('POST /api/student-login', () => {
     const res = await call({ mobile: '9876543210' })
     const result = res.json.mock.calls[0][0]
     expect(result.examAbsences).toEqual([])
+  })
+
+  it('returns integrityIncidents[] in the response (student/parent visibility)', async () => {
+    const rows = [{
+      id: 'inc1', exam_id: 'e1', exam_name: 'Mock Test', exam_date: '2026-06-14',
+      counterpart_name: 'Saarth Deshmukh', shared_wrong: 18, diff: 8,
+      status: 'admitted', note: null, created_at: '2026-06-15T09:00:00Z', created_by: 't@lws.test',
+    }]
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ integrityIncidents: rows }))
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(result.integrityIncidents).toHaveLength(1)
+    expect(result.integrityIncidents[0]).toMatchObject({ id: 'inc1', exam_name: 'Mock Test', status: 'admitted' })
+  })
+
+  it('returns empty integrityIncidents[] when the student has none', async () => {
+    const res = await call({ mobile: '9876543210' })
+    const result = res.json.mock.calls[0][0]
+    expect(result.integrityIncidents).toEqual([])
   })
 
   it('enriches each examAbsences row with exam_name + exam_date + exam_batch from the exams table', async () => {
