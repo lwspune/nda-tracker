@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getSubjectHoursByBatch } from '../../lib/timetable'
+import { getSubjectHoursByBatch, getTeacherDayHours } from '../../lib/timetable'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -243,6 +243,7 @@ export default function TimetablePage() {
   const mode      = useMode()
   const isAdmin = mode === 'admin'
 
+  const isSuperadmin  = useStore(s => s.isSuperadmin)
   const timetables    = useStore(s => s.timetables)
   const teachers      = useStore(s => s.timetableTeachers)
   const mappings      = useStore(s => s.timetableMappings)
@@ -307,6 +308,7 @@ export default function TimetablePage() {
     const mins = r.endMinutes - r.startMinutes
     return sum + (mins > 0 ? mins / 60 * r.days.length : 0)
   }, 0)
+  const dayHours     = getTeacherDayHours(groupedRows)
 
   const [pngLoading, setPngLoading] = useState(false)
 
@@ -765,6 +767,21 @@ export default function TimetablePage() {
                           </th>
                         ))}
                       </tr>
+                      {isSuperadmin && (
+                        <tr>
+                          <th colSpan={3} className="border border-border bg-surface-2/60 px-3 py-1.5 text-right font-bold text-ink-3 text-[10px] uppercase tracking-wide">
+                            Hours / day
+                          </th>
+                          {DAYS.map(d => {
+                            const h = dayHours[d] ?? 0
+                            return (
+                              <th key={d} className={`border border-border bg-surface-2/60 px-2 py-1.5 text-center text-[11px] font-bold ${h > 0 ? 'text-ink-2' : 'text-ink-3/40'}`}>
+                                {h > 0 ? Number(h.toFixed(2)).toString() : '·'}
+                              </th>
+                            )
+                          })}
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
                       {groupedRows.map(row => (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTodaysLectures, getSubjectHoursByBatch } from '../timetable'
+import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours } from '../timetable'
 
 // Helper: build a minimal timetable shape matching what timetableSlice produces.
 function makeTimetable({ timeSlots = [], grid = {} } = {}) {
@@ -293,5 +293,59 @@ describe('getSubjectHoursByBatch', () => {
     expect(empty).toEqual({ batches: [], subjects: [], cell: {}, batchTotals: {}, subjectTotals: {}, grandTotal: 0 })
     expect(getSubjectHoursByBatch(null, MAPS).grandTotal).toBe(0)
     expect(getSubjectHoursByBatch(undefined, undefined).grandTotal).toBe(0)
+  })
+})
+
+// ── getTeacherDayHours ────────────────────────────────────
+// Operates on the grouped rows the Teacher Schedule view builds:
+//   { startMinutes, endMinutes, days: [dayName] }
+describe('getTeacherDayHours', () => {
+  it('returns all six weekdays zeroed for empty / bad input', () => {
+    const zero = { Monday: 0, Tuesday: 0, Wednesday: 0, Thursday: 0, Friday: 0, Saturday: 0 }
+    expect(getTeacherDayHours([])).toEqual(zero)
+    expect(getTeacherDayHours(null)).toEqual(zero)
+    expect(getTeacherDayHours(undefined)).toEqual(zero)
+  })
+
+  it('sums each row’s duration into every day it runs', () => {
+    // 9:00–10:45 = 1.75h on Mon+Fri; 10:00–11:00 = 1h on Mon+Tue+Wed
+    const rows = [
+      { startMinutes: 540, endMinutes: 645, days: ['Monday', 'Friday'] },
+      { startMinutes: 600, endMinutes: 660, days: ['Monday', 'Tuesday', 'Wednesday'] },
+    ]
+    expect(getTeacherDayHours(rows)).toEqual({
+      Monday: 2.75,   // 1.75 + 1
+      Tuesday: 1,
+      Wednesday: 1,
+      Thursday: 0,
+      Friday: 1.75,
+      Saturday: 0,
+    })
+  })
+
+  it('ignores rows with non-positive duration', () => {
+    const rows = [
+      { startMinutes: 600, endMinutes: 600, days: ['Monday'] }, // zero-length
+      { startMinutes: 660, endMinutes: 600, days: ['Tuesday'] }, // negative
+      { startMinutes: 540, endMinutes: 600, days: ['Wednesday'] }, // 1h
+    ]
+    const r = getTeacherDayHours(rows)
+    expect(r.Monday).toBe(0)
+    expect(r.Tuesday).toBe(0)
+    expect(r.Wednesday).toBe(1)
+  })
+
+  it('ignores days outside Mon–Sat (e.g. Sunday)', () => {
+    const rows = [{ startMinutes: 540, endMinutes: 600, days: ['Sunday', 'Monday'] }]
+    const r = getTeacherDayHours(rows)
+    expect(r.Monday).toBe(1)
+    expect(r).not.toHaveProperty('Sunday')
+  })
+
+  it('tolerates rows with missing days array', () => {
+    const rows = [{ startMinutes: 540, endMinutes: 600 }]
+    expect(getTeacherDayHours(rows)).toEqual({
+      Monday: 0, Tuesday: 0, Wednesday: 0, Thursday: 0, Friday: 0, Saturday: 0,
+    })
   })
 })

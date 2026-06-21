@@ -80,6 +80,29 @@ export function getTodaysLectures(timetable, date, mappings) {
   return results
 }
 
+const TEACHER_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+// Per-day teaching hours for a teacher, from the grouped schedule rows the
+// Teacher Schedule view builds (each carries { startMinutes, endMinutes, days[] }).
+// A class counts its full duration toward every day it runs (e.g. a 1.75h slot on
+// Mon+Fri adds 1.75h to both). Always returns all six weekdays keyed (zeroed),
+// so the renderer can look up each column directly. Rows with non-positive
+// duration, or days outside Mon–Sat, are ignored.
+export function getTeacherDayHours(groupedRows) {
+  const totals = {}
+  for (const day of TEACHER_WEEKDAYS) totals[day] = 0
+  if (!Array.isArray(groupedRows)) return totals
+  for (const row of groupedRows) {
+    const mins = (row?.endMinutes ?? 0) - (row?.startMinutes ?? 0)
+    if (mins <= 0) continue
+    const hours = mins / 60
+    for (const day of row?.days ?? []) {
+      if (day in totals) totals[day] += hours
+    }
+  }
+  return totals
+}
+
 // Pivots scheduled class hours by subject (rows) across batches/timetables
 // (columns) — the subject-side analogue of the Teacher Schedule's hours roll-up.
 // Walks every class cell (type:'class' with a resolvable mapping) and adds the
