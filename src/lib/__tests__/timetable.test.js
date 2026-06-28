@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours } from '../timetable'
+import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate } from '../timetable'
 
 // Helper: build a minimal timetable shape matching what timetableSlice produces.
 function makeTimetable({ timeSlots = [], grid = {} } = {}) {
@@ -347,5 +347,72 @@ describe('getTeacherDayHours', () => {
     expect(getTeacherDayHours(rows)).toEqual({
       Monday: 0, Tuesday: 0, Wednesday: 0, Thursday: 0, Friday: 0, Saturday: 0,
     })
+  })
+})
+
+// ── getWeekDates ──────────────────────────────────────────
+// Maps a "week of" anchor to a calendar date for each Mon–Sat column.
+describe('getWeekDates', () => {
+  // 2026-05-18 is a Monday; that week runs Mon 18 → Sat 23.
+  it('maps each weekday to its calendar Date for a mid-week anchor', () => {
+    const w = getWeekDates('2026-05-21') // Thursday
+    expect(w.Monday).toEqual(new Date(2026, 4, 18))
+    expect(w.Tuesday).toEqual(new Date(2026, 4, 19))
+    expect(w.Wednesday).toEqual(new Date(2026, 4, 20))
+    expect(w.Thursday).toEqual(new Date(2026, 4, 21))
+    expect(w.Friday).toEqual(new Date(2026, 4, 22))
+    expect(w.Saturday).toEqual(new Date(2026, 4, 23))
+  })
+
+  it('returns the same week when the anchor is the Monday itself', () => {
+    const w = getWeekDates('2026-05-18')
+    expect(w.Monday).toEqual(new Date(2026, 4, 18))
+    expect(w.Saturday).toEqual(new Date(2026, 4, 23))
+  })
+
+  it('groups a Sunday anchor with the preceding Mon–Sat week (ISO)', () => {
+    const w = getWeekDates('2026-05-24') // Sunday
+    expect(w.Monday).toEqual(new Date(2026, 4, 18))
+    expect(w.Saturday).toEqual(new Date(2026, 4, 23))
+  })
+
+  it('only includes the six grid weekdays (no Sunday)', () => {
+    const w = getWeekDates('2026-05-21')
+    expect(Object.keys(w)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'])
+  })
+
+  it('crosses a month boundary correctly', () => {
+    // 2026-06-01 is a Monday; the prior week's anchor 2026-05-29 (Fri) → Mon 25 May
+    const w = getWeekDates('2026-05-29')
+    expect(w.Monday).toEqual(new Date(2026, 4, 25))
+    expect(w.Saturday).toEqual(new Date(2026, 4, 30))
+  })
+
+  it('accepts a Date object as the anchor', () => {
+    const w = getWeekDates(new Date(2026, 4, 21))
+    expect(w.Monday).toEqual(new Date(2026, 4, 18))
+  })
+
+  it('returns null for falsy or invalid input', () => {
+    expect(getWeekDates(null)).toBeNull()
+    expect(getWeekDates(undefined)).toBeNull()
+    expect(getWeekDates('')).toBeNull()
+    expect(getWeekDates('not-a-date')).toBeNull()
+    expect(getWeekDates(new Date('nope'))).toBeNull()
+  })
+})
+
+// ── fmtDayDate ────────────────────────────────────────────
+describe('fmtDayDate', () => {
+  it('formats a Date as "D Mon"', () => {
+    expect(fmtDayDate(new Date(2026, 4, 21))).toBe('21 May')
+    expect(fmtDayDate(new Date(2026, 0, 1))).toBe('1 Jan')
+    expect(fmtDayDate(new Date(2026, 11, 31))).toBe('31 Dec')
+  })
+
+  it('returns an empty string for non-Date or invalid input', () => {
+    expect(fmtDayDate(null)).toBe('')
+    expect(fmtDayDate('2026-05-21')).toBe('')
+    expect(fmtDayDate(new Date('nope'))).toBe('')
   })
 })

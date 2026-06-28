@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getSubjectHoursByBatch, getTeacherDayHours } from '../../lib/timetable'
+import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate } from '../../lib/timetable'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -44,6 +44,16 @@ function parseTimeToMinutes(str) {
     return h * 60 + min
   }
   return null
+}
+
+// ISO 'YYYY-MM-DD' for the Monday of the current week (default "week of" anchor).
+function currentMondayISO() {
+  const d = new Date()
+  const sinceMonday = (d.getDay() + 6) % 7
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday)
+  const mm = String(mon.getMonth() + 1).padStart(2, '0')
+  const dd = String(mon.getDate()).padStart(2, '0')
+  return `${mon.getFullYear()}-${mm}-${dd}`
 }
 
 // Group raw entries into display rows sorted chronologically by start time
@@ -97,7 +107,7 @@ function detectClashes(rows) {
   return summaries
 }
 
-function downloadTimetableExcel(timetable, mappings, teachers = []) {
+function downloadTimetableExcel(timetable, mappings, teachers = [], weekDates = null) {
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const FONT = 'Times New Roman'
   const BORDER = { style: 'thin', color: { rgb: '000000' } }
@@ -147,9 +157,15 @@ function downloadTimetableExcel(timetable, mappings, teachers = []) {
   merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } })
   rowHeights.push({ hpt: 28 })
 
-  // Row 1: headers
-  rows.push(['Time', ...DAYS].map(h => cell(h, headerStyle)))
-  rowHeights.push({ hpt: 20 })
+  // Row 1: headers — append the week's calendar date under each day when set
+  rows.push([
+    cell('Time', headerStyle),
+    ...DAYS.map(day => {
+      const dateLabel = weekDates ? fmtDayDate(weekDates[day]) : ''
+      return cell(dateLabel ? `${day}\n${dateLabel}` : day, headerStyle)
+    }),
+  ])
+  rowHeights.push({ hpt: weekDates ? 30 : 20 })
 
   for (const slot of slots) {
     const timeLabel = `${slot.startTime} – ${slot.endTime}`
@@ -256,6 +272,9 @@ export default function TimetablePage() {
   const [selectedBranch, setSelectedBranch]     = useState(null)
   const [selectedTTId, setSelectedTTId]         = useState(null)
   const [selectedTeacherId, setSelectedTeacherId] = useState('')
+  const [weekAnchor, setWeekAnchor]             = useState(currentMondayISO())
+
+  const weekDates = weekAnchor ? getWeekDates(weekAnchor) : null
 
   const gridRef = useRef(null)
 
@@ -332,6 +351,10 @@ export default function TimetablePage() {
       th.style.padding       = '10px 14px'
       th.style.fontSize      = '11px'
       th.style.letterSpacing = '0.08em'
+    })
+    // Week-of date sub-line: lift to a readable tint on the dark header
+    clone.querySelectorAll('thead th div').forEach(div => {
+      div.style.color = '#a5b4fc'  // indigo-300
     })
     clone.querySelectorAll('tbody td').forEach(td => {
       td.style.borderColor = '#e2e8f0'  // crisp light border
@@ -541,6 +564,27 @@ export default function TimetablePage() {
 
               {activeTT && (
                 <>
+                  {/* Week-of picker — anchors the grid's Mon–Sat columns to calendar dates */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <label htmlFor="tt-week-of" className="text-[11px] font-bold text-ink-3 uppercase tracking-wide">
+                      Week of
+                    </label>
+                    <input
+                      id="tt-week-of"
+                      type="date"
+                      value={weekAnchor}
+                      onChange={e => setWeekAnchor(e.target.value)}
+                      className="input text-[12px] px-2 py-1"
+                    />
+                    {weekAnchor && (
+                      <button
+                        className="text-[11px] px-2 py-1 rounded border border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
+                        onClick={() => setWeekAnchor('')}
+                        title="Hide dates — show the plain weekly timetable"
+                      >Clear dates</button>
+                    )}
+                  </div>
+
                   <div ref={gridRef} className="inline-block min-w-full">
                     <TimetableGrid
                       timetable={activeTT}
@@ -548,6 +592,7 @@ export default function TimetablePage() {
                       teachers={teachers}
                       onCellClick={isAdmin ? handleCellClick : undefined}
                       readOnly={!isAdmin}
+                      weekDates={weekDates}
                     />
                     {activeTT.footnotes?.trim() && (
                       <div data-testid="timetable-footnotes" className="mt-3 px-1">
@@ -623,7 +668,7 @@ export default function TimetablePage() {
                         </button>
                         <button
                           className="btn text-[12px] px-3 py-1.5 border border-border text-ink-2 hover:border-accent/50 hover:text-ink transition-colors"
-                          onClick={() => downloadTimetableExcel(activeTT, mappings, teachers)}
+                          onClick={() => downloadTimetableExcel(activeTT, mappings, teachers, weekDates)}
                         >
                           ⬇ Excel
                         </button>

@@ -1,3 +1,5 @@
+import { fmtDayDate } from '../../lib/timetable'
+
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 function parseTimeToMinutes(str) {
@@ -21,7 +23,7 @@ function parseTimeToMinutes(str) {
   return null
 }
 
-export default function TimetableGrid({ timetable, mappings, teachers = [], onCellClick, readOnly = false }) {
+export default function TimetableGrid({ timetable, mappings, teachers = [], onCellClick, readOnly = false, weekDates = null }) {
   if (!timetable) return null
 
   const { grid } = timetable
@@ -77,11 +79,17 @@ export default function TimetableGrid({ timetable, mappings, teachers = [], onCe
             <th className="border border-border bg-surface-2 px-3 py-2 text-left font-bold text-ink-2 text-[11px] uppercase tracking-wide w-[130px]">
               Time
             </th>
-            {DAYS.map(day => (
-              <th key={day} className="border border-border bg-surface-2 px-2 py-2 font-bold text-ink-2 text-[11px] uppercase tracking-wide text-center">
-                {day.slice(0, 3)}
-              </th>
-            ))}
+            {DAYS.map(day => {
+              const dateLabel = weekDates ? fmtDayDate(weekDates[day]) : ''
+              return (
+                <th key={day} className="border border-border bg-surface-2 px-2 py-2 font-bold text-ink-2 text-[11px] uppercase tracking-wide text-center">
+                  {day.slice(0, 3)}
+                  {dateLabel && (
+                    <div className="text-[10px] font-medium text-ink-3 normal-case tracking-normal mt-0.5">{dateLabel}</div>
+                  )}
+                </th>
+              )
+            })}
             {!readOnly && (
               <th className="border border-border bg-surface-2 w-6" />
             )}

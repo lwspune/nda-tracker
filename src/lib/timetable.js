@@ -82,6 +82,46 @@ export function getTodaysLectures(timetable, date, mappings) {
 
 const TEACHER_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Normalises an ISO 'YYYY-MM-DD' string or Date into a local-midnight Date.
+// Returns null for falsy / unparseable input. Mirrors resolveDayName's parsing
+// so a date string is read as a *local* calendar date, not UTC.
+function toLocalDate(value) {
+  if (!value) return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+  }
+  const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+// Maps a "week of" anchor (any date in the week) to a calendar Date for each
+// Mon–Sat grid column. The week starts Monday (ISO): a Sunday anchor groups with
+// the *preceding* Mon–Sat week. Returns { Monday: Date, … Saturday: Date }, or
+// null for invalid input. Purely presentational — the grid itself stays weekly.
+export function getWeekDates(anchor) {
+  const base = toLocalDate(anchor)
+  if (!base) return null
+  const sinceMonday = (base.getDay() + 6) % 7 // Mon=0 … Sun=6
+  const monday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - sinceMonday)
+  const out = {}
+  TEACHER_WEEKDAYS.forEach((day, i) => {
+    out[day] = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)
+  })
+  return out
+}
+
+// Compact column-date label, e.g. "29 Jun". Empty string for non-Date / invalid.
+export function fmtDayDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+  return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`
+}
+
 // Per-day teaching hours for a teacher, from the grouped schedule rows the
 // Teacher Schedule view builds (each carries { startMinutes, endMinutes, days[] }).
 // A class counts its full duration toward every day it runs (e.g. a 1.75h slot on

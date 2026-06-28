@@ -71,4 +71,26 @@ describe('TimetableGrid — label on line 1, teacher on line 2', () => {
     render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
     expect(screen.getByText('Recess')).toBeInTheDocument()
   })
+
+  it('shows the week-of calendar date under each day header when weekDates is given', () => {
+    const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm1' } })
+    // Week of Mon 2026-05-18 → Sat 2026-05-23
+    const weekDates = {
+      Monday: new Date(2026, 4, 18),
+      Tuesday: new Date(2026, 4, 19),
+      Wednesday: new Date(2026, 4, 20),
+      Thursday: new Date(2026, 4, 21),
+      Friday: new Date(2026, 4, 22),
+      Saturday: new Date(2026, 4, 23),
+    }
+    render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} weekDates={weekDates} />)
+    expect(screen.getByText('18 May')).toBeInTheDocument()
+    expect(screen.getByText('23 May')).toBeInTheDocument()
+  })
+
+  it('omits header dates when weekDates is not provided', () => {
+    const tt = makeTimetable({ Monday: { type: 'class', mappingId: 'm1' } })
+    render(<TimetableGrid timetable={tt} mappings={MAPPINGS} teachers={TEACHERS} />)
+    expect(screen.queryByText(/\d+ May/)).not.toBeInTheDocument()
+  })
 })
