@@ -54,33 +54,35 @@ describe('pickDailyMentees', () => {
   const FIVE = [M('a'), M('b'), M('c'), M('d'), M('e')]
 
   it('returns [] for an empty roster', () => {
-    expect(pickDailyMentees([], [], { n: 3, today: '2026-06-22', rng: constRng })).toEqual([])
+    expect(pickDailyMentees([], [], { today: '2026-06-22', rng: constRng })).toEqual([])
   })
 
-  it('picks n on a fresh roster (no history)', () => {
-    const picks = pickDailyMentees(FIVE, [], { n: 3, today: '2026-06-22', rng: constRng })
-    expect(picks.map(p => p.lwsId)).toEqual(['a', 'b', 'c'])
+  it('picks 2 by default on a fresh roster (no history)', () => {
+    // No `n` passed → defaults to MENTEES_PER_DAY (2). Guards the cadence constant.
+    const picks = pickDailyMentees(FIVE, [], { today: '2026-06-22', rng: constRng })
+    expect(picks.map(p => p.lwsId)).toEqual(['a', 'b'])
   })
 
   it('finishes the current round before repeating anyone — short tail day', () => {
-    // a,b,c already nudged once this round; only d,e remain
+    // a,b,c,d already nudged once this round (two 2-mentee days); only e remains
     const log = [
       { lwsId: 'a', date: '2026-06-22' },
       { lwsId: 'b', date: '2026-06-22' },
-      { lwsId: 'c', date: '2026-06-22' },
+      { lwsId: 'c', date: '2026-06-23' },
+      { lwsId: 'd', date: '2026-06-23' },
     ]
-    const picks = pickDailyMentees(FIVE, log, { n: 3, today: '2026-06-23', rng: constRng })
-    expect(picks.map(p => p.lwsId)).toEqual(['d', 'e']) // only 2 — no round overlap
+    const picks = pickDailyMentees(FIVE, log, { n: 2, today: '2026-06-24', rng: constRng })
+    expect(picks.map(p => p.lwsId)).toEqual(['e']) // only 1 — no round overlap
   })
 
   it('starts a fresh round once everyone is level', () => {
     const log = FIVE.map(m => ({ lwsId: m.lwsId, date: '2026-06-22' })) // all count 1
-    const picks = pickDailyMentees(FIVE, log, { n: 3, today: '2026-06-24', rng: constRng })
-    expect(picks.map(p => p.lwsId)).toEqual(['a', 'b', 'c'])
+    const picks = pickDailyMentees(FIVE, log, { n: 2, today: '2026-06-24', rng: constRng })
+    expect(picks.map(p => p.lwsId)).toEqual(['a', 'b'])
   })
 
   it('never picks a higher-count mentee while a lower-count one waits', () => {
-    // a,b,c at count 2; d at count 1; e at count 1 → only d,e eligible
+    // a,b,c at count 2; d,e at count 1 → only d,e eligible
     const log = [
       { lwsId: 'a', date: '2026-06-20' }, { lwsId: 'a', date: '2026-06-23' },
       { lwsId: 'b', date: '2026-06-20' }, { lwsId: 'b', date: '2026-06-23' },
@@ -88,7 +90,7 @@ describe('pickDailyMentees', () => {
       { lwsId: 'd', date: '2026-06-20' },
       { lwsId: 'e', date: '2026-06-20' },
     ]
-    const picks = pickDailyMentees(FIVE, log, { n: 3, today: '2026-06-24', rng: constRng })
+    const picks = pickDailyMentees(FIVE, log, { n: 2, today: '2026-06-24', rng: constRng })
     expect(picks.map(p => p.lwsId)).toEqual(['d', 'e'])
   })
 
@@ -96,19 +98,18 @@ describe('pickDailyMentees', () => {
     const log = [
       { lwsId: 'a', date: '2026-06-22' },
       { lwsId: 'b', date: '2026-06-22' },
-      { lwsId: 'c', date: '2026-06-22' },
     ]
-    expect(pickDailyMentees(FIVE, log, { n: 3, today: '2026-06-22', rng: constRng })).toEqual([])
+    expect(pickDailyMentees(FIVE, log, { n: 2, today: '2026-06-22', rng: constRng })).toEqual([])
   })
 
   it('resumes a partial day — fills only the remainder', () => {
     const log = [{ lwsId: 'a', date: '2026-06-22' }] // 1 already sent today
-    const picks = pickDailyMentees(FIVE, log, { n: 3, today: '2026-06-22', rng: constRng })
-    expect(picks.map(p => p.lwsId)).toEqual(['b', 'c']) // 2 more, excluding a
+    const picks = pickDailyMentees(FIVE, log, { n: 2, today: '2026-06-22', rng: constRng })
+    expect(picks.map(p => p.lwsId)).toEqual(['b']) // 1 more, excluding a
   })
 
   it('returns all when roster smaller than n', () => {
-    const picks = pickDailyMentees([M('a'), M('b')], [], { n: 3, today: '2026-06-22', rng: constRng })
-    expect(picks.map(p => p.lwsId)).toEqual(['a', 'b'])
+    const picks = pickDailyMentees([M('a')], [], { n: 2, today: '2026-06-22', rng: constRng })
+    expect(picks.map(p => p.lwsId)).toEqual(['a'])
   })
 })

@@ -14,7 +14,7 @@
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
 
-export const MENTEES_PER_DAY = 3
+export const MENTEES_PER_DAY = 2
 
 function ordinal(day) {
   const j = day % 10, k = day % 100

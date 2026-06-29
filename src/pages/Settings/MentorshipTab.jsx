@@ -47,7 +47,7 @@ export default function MentorshipTab() {
       <Card>
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">Mentorship nudges</div>
         <p className="text-[13px] text-ink-2 leading-relaxed mb-3">
-          Each weekday morning every mentor is sent 3 mentees to check in with, rotating so everyone is
+          Each weekday morning every mentor is sent 2 mentees to check in with, rotating so everyone is
           covered before anyone repeats. This runs automatically (Mon–Fri). Use the tools below to preview
           today's picks or send yourself a test — neither advances the live rotation.
         </p>

@@ -136,7 +136,7 @@ describe('send-mentor-nudges — rotation send', () => {
     expect(res.body.dryRun).toBe(true)
     expect(res.body.planned).toHaveLength(1)
     expect(res.body.planned[0].teacher).toBe('Vilas Sir')
-    expect(res.body.planned[0].students).toHaveLength(3) // n=3 of 4 active
+    expect(res.body.planned[0].students).toHaveLength(2) // n=2 of 4 active
     expect(fetch).not.toHaveBeenCalled()
     expect(insertSpy).not.toHaveBeenCalled()
   })
