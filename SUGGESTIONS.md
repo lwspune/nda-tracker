@@ -164,7 +164,7 @@ Beyond the 12 keys already corrected, the audit left open: **7 defective questio
 
 ## 2026-06-09
 
-### Manually verify the offline-exam golden path in the browser
+### ~~Manually verify the offline-exam golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
 
 The offline-exam feature (totals-only, template upload — commit `b4f49fd`) shipped with full test + lint coverage (1429 Vitest passing) but the **golden-path browser check was not done** (the global Definition of Done requires it). The DB column + code are deployed, so it goes live on the next Vercel build.
 
@@ -257,7 +257,7 @@ Chapter-name validation was just downgraded to a non-blocking warning (DECISIONS
 
 ## 2026-06-16
 
-### Manually verify the WhatsApp result-monitoring golden path in the browser
+### ~~Manually verify the WhatsApp result-monitoring golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
 
 The monitoring-copy feature (commit `81761ce`) shipped with full unit/lint coverage (1512 Vitest passing) but the **end-to-end browser check was not done** (the global Definition of Done requires it). The Settings → Monitoring tab + the `monitorMobiles[]` body param + the `api/send-whatsapp.js` random-pick path are all deployed and go live on the next Vercel build; the seam (Settings edit → persist round-trip → real send → MONITOR message actually arrives on `9021869427`) is only unit-covered.
 
@@ -311,7 +311,7 @@ The remediation links show on EVERY wrong/skipped question. But not every miss i
 
 ## 2026-06-18
 
-### Manually verify the remediation links resolve on PYQ Vault (cross-app golden path)
+### ~~Manually verify the remediation links resolve on PYQ Vault (cross-app golden path)~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
 
 The wrong-answer "Learn this / Practice" feature (commits `d278e65` + `5a303f1`, 2026-06-17) shipped with full unit/lint coverage (~30 tests) but the **cross-app golden path was not confirmed in this log** — the links deep-link out to the sister **PYQ Vault** app's `/go/learn` + `/go/practice` redirects, and `remediation.js` builds them name-based / notes-slug-based. The unit tests assert the *URL we construct*, not that PYQ Vault actually resolves those slugs/names to a real page.
 
@@ -363,7 +363,7 @@ Shipped same session it was filed: `mentorSlice.js` (`fetchMentorAssignments`/`s
 
 </details>
 
-### Verify the Mentee-assignments UI golden path + add a component test
+### ~~Verify the Mentee-assignments UI golden path~~ — **DONE 2026-06-29** (browser pass; the optional component test remains open)
 
 The `MenteeAssignments` panel (commit `f778897`) shipped with **slice-only** coverage (`mentorSlice` 9 tests). The component itself — fetch-on-mount, reassign-moves-the-row, remove, the "active students with no mentor" list, the search filter — is untested and the browser golden path wasn't run (global Definition of Done requires it).
 
@@ -401,10 +401,42 @@ The shipped flavour 1 only counts **admitted** incidents you logged by hand — 
 - Aggregate `buildExamIntegrityReport` per student across exams, but **do NOT naively count "flagged in N exams"** — that treats correlated evidence as independent. A student with an idiosyncratic-but-honest distractor style + a genuine study partner who shares a method will co-flag repeatedly on the *same* innocent confound, manufacturing a fake serial cheater. Weight **same-partner recurrence** (genuinely strong) very differently from scattered low-z co-flags (likely the same hub/confound repeating). See `memory/reference_collusion_detection.md`.
 - Keep the "leads, not proof" framing — cross-exam aggregation amplifies apparent confidence, so the false-positive cost is higher than a single-exam flag. Validate the weighting against real recurrence before surfacing accusations.
 
-### Manually verify the Exam Integrity golden path in the browser
+### ~~Manually verify the Exam Integrity golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
 
 The integrity feature (detection panel + admitted-incident logging) shipped with tests + lint green (1609 passing) but the end-to-end browser pass wasn't run — same gap noted for offline exams (2026-06-08), monitoring (2026-06-16), remediation (2026-06-18), and mentee-assignments (2026-06-19).
 
 **Why:** the wiring spans panel → `studentProfiles` name→lwsId resolution → `logIntegrityIncident` upsert → StudentView card → student/parent portal (`api/student-login` return). That's a lot of seams a unit test can't fully exercise; the global Definition of Done requires the manual pass.
 
 **How to apply:** as admin/teacher on a choice-bearing exam (e.g. the APJ 11th Maths mock), open 🕵 Integrity → confirm a flagged pair (Manas↔Saarth should be Tier B) → click "[name] admitted" → confirm the "✓ logged" badge → open that student in StudentView → see the red "⚠ Academic Integrity" card → log in to the student/parent portal for that student and confirm the card shows there too → finally test admin-only delete (× present for admin, absent for teacher).
+
+### Resolve the 3 APJ teacher scheduling clashes
+
+A branch-wide scan of APJ (queried live from `faculty_state`, 2026-06-21) found three real teacher double-bookings: **Navneet Sir** Tue 11th-A Physics 1:45–2:50 ∩ 12th Physics 2:00–3:20; **Manisha Mam** Tue 11th-A English 3:00–4:00 ∩ 12th English 3:30–5:00; **Manisha Mam** Wed 11th-B English 1:45–2:50 ∩ 12th English 2:00–3:20. (All Asha Bade Mam Saturday overlaps are exam-block / proctoring tags, not teaching clashes — ignore.) The fix was scoped this session but the user said to hold off applying.
+
+**Why:** these are live conflicts in the current term timetable — a teacher physically can't be in two batches at once, so one batch is silently losing its lecture. 12th is the fixed anchor (its day is fully booked), so every fix has to move the 11th-grade lecture.
+
+**How to apply:** move via the in-app **EditCell flow** (not raw JSONB — the slot row owns the time, shared across days; see the CLAUDE.md Timetable slot-time invariant). Tuesday reshuffle of 11th-A's afternoon: English → 1:45–2:50 (vacated slot) and Physics → a free slot ≥3:20 (only the 4:00–6:30 Hi-Tea/Sports or the 8:30–9:30 morning self-study slot rows are free that day — both are break slots, so this is a policy call). Wednesday: 11th-B English → 4:00–5:05 (Hi-Tea) or assign a second English teacher. Verify each move clears the overlap **and** leaves the batch with no new student-side clash before saving.
+
+### Surface branch-wide teacher clashes in the UI
+
+The in-app clash detector (`detectClashes` in `TimetablePage.jsx`) only runs for the **currently-selected** teacher in the Teacher Schedule view. A clash between two teachers' batches is invisible unless someone happens to open that one teacher. The APJ clashes above were only found via an ad-hoc Supabase query.
+
+**Why:** scheduling conflicts are exactly the kind of thing that should be flagged automatically, not discovered by manual SQL. A faculty member building the timetable has no signal that a teacher is double-booked across batches.
+
+**How to apply:** add a branch-level (or all-teachers) clash roll-up — reuse the existing `groupScheduleRows` + `detectClashes` logic but iterate every `timetableTeachers` entry instead of one. Surface as a count/badge on the Timetable page (admin/superadmin), or a dedicated "Conflicts" tab listing each clash as `teacher · day · batch A ↔ batch B (overlap window)`. Keep it pure/testable like `getTeacherDayHours`.
+
+---
+
+## 2026-06-29
+
+### ~~Manually verify the timetable week-of-dates golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
+
+The "Week of" date feature (commit `b3118d9`) shipped with full unit/lint coverage (helper + grid-render tests, 43 green in the timetable area, prod build ✓) but the **end-to-end browser pass was not run** (global Definition of Done requires it). The picker → `weekDates` → grid header → PNG/Excel export seams are only unit-covered. Same gap noted for offline exams (2026-06-09), monitoring (2026-06-16), remediation (2026-06-18), mentee-assignments (2026-06-19), and integrity (2026-06-21).
+
+**Why:** the export seams in particular are unit-blind — the PNG path relies on the cloned `<table>` carrying the new header `<div>` along (plus a dark-header contrast tint applied only in the clone), and the Excel path emits `Mon\n29 Jun` into a styled `xlsx-js-style` cell with a taller header row. A wrong wrap/clip or a low-contrast date line wouldn't fail a test. A 2-minute pass confirms it before faculty prints a dated timetable.
+
+**How to apply:**
+- On the Timetable page (Student View), confirm the "Week of" picker defaults to the current week's Monday and each Mon–Sat header shows the right date beneath the day name; change the week and confirm the dates shift; click **Clear dates** and confirm the plain recurring grid returns.
+- Click **⬇ PNG** — confirm the dates appear under each day in the image and are legible on the dark indigo header (the indigo-300 tint).
+- Click **⬇ Excel** — open the file and confirm each day header cell shows the day name with the date on a second line, not clipped.
+- Edge: pick a Sunday in the picker and confirm the grid anchors to the *preceding* Mon–Sat week (ISO behaviour), not the next one.
