@@ -453,7 +453,7 @@ The hostel & mess feature (Phases 1+2, commits `5821163`/`f9a5760`/`b5bcdc5`) sh
 
 **How to apply:**
 - On `nda-tracker.vercel.app` (admin): Attendance → **Hostel & Mess**. Mark a Night Roll exception → Save → filter to Boys/Girls, mark one, Save → **reopen and confirm the other wing's marks survived** (the display-lens guarantee). Enter a headcount → **Reconcile & close** (tie = ✓; mismatch = OPEN incident). Switch to **Chain** → confirm a real unexplained boarder is flagged with the right first-break.
-- Warden alert rollout: get the Meta/Wabridge template approved → set `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` in Vercel (`SUPABASE_SERVICE_ROLE_KEY` already set) → add a warden number in the Hostel tab → **Send test via `redirectTo` to your own number to confirm the `[date, listText]` variable order** (order isn't knowable from the template ID — per the template-param rules) → flip the `variables` order in `api/send-hostel-alert.js` + the `reference_whatsapp_templates` row if swapped.
+- Warden alert rollout: get the Meta/Wabridge template approved → set `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` in Vercel (`SUPABASE_SERVICE_ROLE_KEY` already set) → add a warden number in the Hostel tab → **Send test via `redirectTo` to your own number to confirm the `[date, listText]` variable order** (order isn't knowable from the template ID — per the template-param rules) → flip the `variables` order in `api/send-attendance-alerts.js` + the `reference_whatsapp_templates` row if swapped.
 
 ### Hostel Phase 3 — alert durability: nightly cron + a "did we alert?" log + parent notify
 
@@ -462,7 +462,7 @@ The warden alert is currently **manual + stateless**. The endpoint already has a
 **Why:** a safety alert that only fires when someone remembers to press a button isn't a safety net. And without a send log, you can't answer "did we already alert the warden about Rahul tonight?" — the pending-aware pattern this project uses everywhere else ([[feedback_pending_aware_over_sent_flag]], [[feedback_event_log_over_derive]]) is exactly what's missing here.
 
 **How to apply:**
-- Add a `vercel.json` cron (e.g. post-night-roll, weekday evening IST) hitting `/api/send-hostel-alert` with the `CRON_SECRET`; gate weekdays in-handler as a backstop (mirror `send-mentor-nudges`).
+- Add a `vercel.json` cron (e.g. post-night-roll, weekday evening IST) hitting `/api/send-attendance-alerts` with the `CRON_SECRET`; gate weekdays in-handler as a backstop (mirror `send-mentor-nudges`).
 - Add a `hostel_alerts` event-log table (`date, checkpoint?, lws_ids[], sent_at, sent_by, recipients`) so re-runs are idempotent-aware and the board can show "alerted N of M"; scope re-sends to pending = unexplained − already-alerted.
 - Parent notification is a further step — highest value but most sensitive; needs false-positive control (only alert parents after the reconciliation gate is closed AND the absence is still unexplained) before it goes near parents.
 

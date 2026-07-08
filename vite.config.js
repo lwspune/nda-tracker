@@ -134,7 +134,7 @@ function localDataPlugin() {
         })
       })
 
-      // POST /api/send-late-notifications  /  /api/send-lecture-absences
+      // POST /api/send-late-notifications  /  /api/send-attendance-alerts  / …
       // In dev we re-use the same Vercel JS handlers, with a tiny shim that
       // parses the JSON body and adapts res to the Vercel res shape.
       function makeApiShim(handlerPath) {
@@ -161,13 +161,12 @@ function localDataPlugin() {
         }
       }
       server.middlewares.use('/api/send-late-notifications', makeApiShim('./api/send-late-notifications.js'))
-      server.middlewares.use('/api/send-lecture-absences',   makeApiShim('./api/send-lecture-absences.js'))
+      server.middlewares.use('/api/send-attendance-alerts',  makeApiShim('./api/send-attendance-alerts.js'))
       server.middlewares.use('/api/send-exam-absence',       makeApiShim('./api/send-exam-absence.js'))
       server.middlewares.use('/api/send-homework-pending',   makeApiShim('./api/send-homework-pending.js'))
       server.middlewares.use('/api/teacher-account',         makeApiShim('./api/teacher-account.js'))
       server.middlewares.use('/api/sync-calendar',           makeApiShim('./api/sync-calendar.js'))
       server.middlewares.use('/api/send-mentor-nudges',      makeApiShim('./api/send-mentor-nudges.js'))
-      server.middlewares.use('/api/send-hostel-alert',       makeApiShim('./api/send-hostel-alert.js'))
 
       // POST /api/send-whatsapp  { examName? }
       // Spawns send_results_whatsapp.py and returns { ok, sent, skipped, lines[] }

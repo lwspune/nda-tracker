@@ -18,9 +18,11 @@ function makeRes() {
   }
 }
 
+// send-lecture-absences was merged into send-attendance-alerts.js (dispatched by
+// body.kind==='lecture') to stay under Vercel's 12-function Hobby cap.
 async function call(body, { jwt = 'valid-jwt', method = 'POST' } = {}) {
-  const { default: handler } = await import('../send-lecture-absences.js')
-  const req = { method, headers: jwt ? { authorization: `Bearer ${jwt}` } : {}, body }
+  const { default: handler } = await import('../send-attendance-alerts.js')
+  const req = { method, headers: jwt ? { authorization: `Bearer ${jwt}` } : {}, body: { kind: 'lecture', ...body } }
   const res = makeRes()
   await handler(req, res)
   return { res }

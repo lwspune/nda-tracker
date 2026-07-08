@@ -632,8 +632,8 @@ export default function AttendancePage() {
           onClose={() => !sending && setLectureModal(null)}
           onConfirm={(students, redirectTo) =>
             confirmSend(
-              '/api/send-lecture-absences',
-              { date: lectureModal.date, redirectTo, students },
+              '/api/send-attendance-alerts',
+              { kind: 'lecture', date: lectureModal.date, redirectTo, students },
               'lecture-miss'
             )
           }

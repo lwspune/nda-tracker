@@ -2,7 +2,14 @@ import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { buildDailyChain, resolveOnLeave, buildWardenAlert } from '../src/lib/analytics/chain.js'
 
+// Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
+// deployment at 12). Dispatched by `kind` in the POST body:
+//   • kind: 'lecture' (default) — per-student lecture-miss alerts to student + parents.
+//   • kind: 'hostel'            — warden alert for APJ boarders who fell off the daily chain.
+// A bare GET (Vercel cron, Bearer CRON_SECRET) routes to the hostel handler.
+
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 function readEnvLocal() {
   try {
@@ -35,6 +42,14 @@ function asciiClean(s) {
     .trim()
 }
 
+function fmtDate(d) {
+  if (!d) return ''
+  const parts = d.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(isNaN)) return d
+  const [y, m, day] = parts
+  return `${day} ${MONTHS[m - 1]} ${y}`
+}
+
 function istTodayDmy() {
   const ist = new Date(Date.now() + 5.5 * 3600 * 1000)
   return `${String(ist.getUTCDate()).padStart(2, '0')}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${ist.getUTCFullYear()}`
@@ -50,26 +65,127 @@ function dayBounds(dmy) {
 
 async function sendWabridge(appKey, authKey, deviceId, templateId, destination, variables) {
   const payload = {
-    'app-key': appKey, 'auth-key': authKey,
-    'destination_number': destination, 'device_id': deviceId,
-    'template_id': templateId, variables,
+    'app-key':            appKey,
+    'auth-key':           authKey,
+    'destination_number': destination,
+    'device_id':          deviceId,
+    'template_id':        templateId,
+    variables,
   }
   try {
-    const r = await fetch(WABRIDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const r = await fetch(WABRIDGE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    })
     const data = await r.json()
-    if (data.status) return { ok: true, detail: String(data.data?.messageid || 'ok') }
+    if (data.status) return { ok: true,  detail: String(data.data?.messageid || 'ok') }
     return { ok: false, detail: data.message || 'Unknown error' }
   } catch (e) {
     return { ok: false, detail: String(e) }
   }
 }
 
-// Hostel warden alert — the "fell off the chain, unexplained" list for APJ
-// boarders on a given day. The chain is RECOMPUTED server-side from the tables
-// (single source of truth; never trusts a client-sent list). Triggered by:
+// ── Dispatcher ──────────────────────────────────────────────────────────────
+export default async function handler(req, res) {
+  const kind = req.body?.kind || req.query?.kind || (req.method === 'GET' ? 'hostel' : 'lecture')
+  if (kind === 'hostel') return handleHostelAlert(req, res)
+  return handleLectureAbsences(req, res)
+}
+
+// ── kind: 'lecture' — per-student lecture-miss alerts ────────────────────────
+async function handleLectureAbsences(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' })
+    return
+  }
+
+  const env = readEnvLocal()
+  const supabaseUrl  = env.VITE_SUPABASE_URL      || process.env.VITE_SUPABASE_URL      || ''
+  const supabaseAnon = env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+  const appKey     = env.WABRIDGE_APP_KEY        || process.env.WABRIDGE_APP_KEY        || ''
+  const authKey    = env.WABRIDGE_AUTH_KEY       || process.env.WABRIDGE_AUTH_KEY       || ''
+  const deviceId   = env.WABRIDGE_DEVICE_ID      || process.env.WABRIDGE_DEVICE_ID      || ''
+  const templateId = env.WABRIDGE_LECTURE_MISS_TEMPLATE_ID || process.env.WABRIDGE_LECTURE_MISS_TEMPLATE_ID || ''
+
+  if (!appKey || !authKey || !deviceId || !templateId) {
+    res.status(500).json({ ok: false, error: 'Wabridge lecture-miss template not configured. Set WABRIDGE_LECTURE_MISS_TEMPLATE_ID (plus app/auth/device) in Vercel env.' })
+    return
+  }
+
+  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
+  const anonClient = createClient(supabaseUrl, supabaseAnon)
+  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+
+  const { date, redirectTo, students } = req.body || {}
+  if (!date || !Array.isArray(students)) {
+    res.status(400).json({ ok: false, error: 'date and students[] are required' })
+    return
+  }
+
+  const dateLabel = fmtDate(date)
+  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+
+  const lines = []
+  let sent = 0, skipped = 0
+
+  for (const row of students) {
+    const name = (row.name || '').trim()
+    if (!name) continue
+
+    // subjects entries can be either { subject, startTime?, endTime? } objects
+    // (new shape, carries time) or plain strings (legacy fallback).
+    const entries = Array.isArray(row.subjects)
+      ? row.subjects
+          .map(s => typeof s === 'string' ? { subject: s } : s)
+          .filter(e => e?.subject)
+      : []
+    if (entries.length === 0) { lines.push(`  SKIP ${name} — no subjects`); skipped++; continue }
+
+    // ASCII-only, no parentheses, no newlines. Meta's WhatsApp template
+    // parameter validation silently drops messages whose variable values
+    // contain rich-formatting patterns (unicode dashes, parens with
+    // colons inside) OR newlines/tabs. Single line with comma-joined
+    // "Subject HH:MM AM to HH:MM PM" items is the shape that delivers.
+    const fmt = e => (e.startTime && e.endTime)
+      ? `${e.subject} ${e.startTime} to ${e.endTime}`
+      : e.subject
+    const subjectsVar = entries.map(fmt).join(', ')
+
+    const variables = [name, dateLabel, subjectsVar]
+
+    const destStudent = redirectNorm || normMobile(row.mobile)
+    if (destStudent) {
+      console.log(`[lecture] → ${name} student dest=${destStudent} redirect=${redirectNorm ?? 'none'} templateId=${templateId} varsCount=${variables.length} v3=${JSON.stringify(subjectsVar)}`)
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, variables)
+      if (ok) { lines.push(`  SENT → ${name} (student → ${destStudent})`); sent++ }
+      else    { lines.push(`  FAIL → ${name} (student → ${destStudent}): ${detail}`); skipped++ }
+    } else {
+      lines.push(`  SKIP ${name} — no mobile`); skipped++
+    }
+
+    for (const parentRaw of (row.parentMobiles || [])) {
+      const destParent = redirectNorm || normMobile(parentRaw)
+      console.log(`[lecture] → ${name} parent dest=${destParent} redirect=${redirectNorm ?? 'none'}`)
+      if (!destParent) { lines.push(`  SKIP ${name} parent ${parentRaw} — unrecognised format`); skipped++; continue }
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, variables)
+      if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++ }
+      else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
+    }
+  }
+
+  lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
+  res.status(200).json({ ok: true, sent, skipped, lines })
+}
+
+// ── kind: 'hostel' — warden alert for boarders who fell off the daily chain ──
+// The chain is RECOMPUTED server-side from the tables (single source of truth;
+// never trusts a client-sent list). Triggered by:
 //   • Admin (POST + admin JWT) — manual button; supports { dryRun, redirectTo, date }.
 //   • Vercel cron (GET, Authorization: Bearer <CRON_SECRET>) — cron-ready, not yet scheduled.
-export default async function handler(req, res) {
+async function handleHostelAlert(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' }); return
   }

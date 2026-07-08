@@ -152,10 +152,11 @@ describe('HostelTab — chain view', () => {
     fireEvent.click(alertBtn)
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/send-hostel-alert',
+      '/api/send-attendance-alerts',
       expect.objectContaining({ method: 'POST' }),
     ))
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body)
+    expect(body.kind).toBe('hostel')
     expect(body.date).toMatch(/^\d{2}-\d{2}-\d{4}$/)
     expect(await screen.findByText(/Warden alerted/i)).toBeInTheDocument()
   })

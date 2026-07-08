@@ -228,10 +228,10 @@ export default function HostelTab() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Sign in as admin to send alerts.')
-      const r = await fetch('/api/send-hostel-alert', {
+      const r = await fetch('/api/send-attendance-alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ kind: 'hostel', date }),
       })
       const data = await r.json()
       if (!r.ok || !data.ok) throw new Error(data.error || 'Alert failed')
