@@ -9,6 +9,7 @@ import { buildConsecutiveAbsent } from './consecutiveAbsent'
 import LateMarkingWidget from './LateMarkingWidget'
 import LectureLogTab from './LectureLogTab'
 import HomeworkLogTab from './HomeworkLogTab'
+import HostelTab from './HostelTab'
 import LateNotificationPreviewModal from './LateNotificationPreviewModal'
 import LectureMissPreviewModal from './LectureMissPreviewModal'
 import HomeworkPreviewModal from './HomeworkPreviewModal'
@@ -415,12 +416,26 @@ export default function AttendancePage() {
             Homework / Notes
           </button>
         )}
+        {mode === 'admin' && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'hostel'}
+            onClick={() => setActiveTab('hostel')}
+            className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+              ${activeTab === 'hostel' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+          >
+            Hostel &amp; Mess
+          </button>
+        )}
       </div>
 
       {activeTab === 'lecture-log' && mode === 'admin' ? (
         <LectureLogTab onSend={handleSendLectureMiss} />
       ) : activeTab === 'homework-log' && mode === 'admin' ? (
         <HomeworkLogTab onSend={handleSendHomework} />
+      ) : activeTab === 'hostel' && mode === 'admin' ? (
+        <HostelTab />
       ) : (
         <>
           {mode === 'admin' && (

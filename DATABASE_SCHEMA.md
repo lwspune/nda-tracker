@@ -17,6 +17,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
 | Event logs | `lecture_absences`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 2 + 876 + 0 |
+| Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
@@ -116,6 +117,58 @@ Original schema had `batch` + `eis_reg_no`; dropped 2026-05-07. UNIQUE was `(lws
 
 Index: `(lws_id, logged_in_at DESC)`.
 Written fire-and-forget by `api/student-login.js`. Read by `StudentView` (admin/teacher only).
+
+---
+
+## 3b. Hostel & mess (APJ boarders, Phase 1 — 2026-07-08)
+
+Boarder attendance across hostel roll + mess meals. **Exception-capture model**, mirroring `lecture_absences`: a row = a deviation from present; no row = present. Scoped to `branch='APJ'`. Admin-only writes. Slices: `checkpointSlice.js` + `leavesSlice.js`; the daily chain aggregator is `src/lib/analytics/chain.js`. UI: the **Hostel & Mess** tab in `src/pages/Attendance/`. See [`FLOWS.md`](./FLOWS.md) → "Hostel & Mess".
+
+### `checkpoint_absences` — hostel/mess exception rows
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text | — | FK → `students(lws_id)` |
+| `date` | text | — | `DD-MM-YYYY` (matches `student_attendance` / `lecture_absences`) |
+| `checkpoint` | text | — | `hostel_am` / `breakfast` / `lunch` / `dinner` / `hostel_pm` |
+| `status` | text | `'absent'` | `absent` / `sick` / `outpass` (`leave` lives in `leaves`) |
+| `note` | text | nullable | |
+| `created_by` | text | nullable | admin email |
+| `created_at` | timestamptz | `now()` | |
+| **UNIQUE** | `(lws_id, date, checkpoint)` | | delete-then-insert per (date, checkpoint) card |
+
+Index: `(date)`, `(lws_id)`. The `class` checkpoint in the chain view is **derived** from `student_attendance`, never stored here.
+
+### `leaves` — leave / out-pass (the honesty mechanism)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text | — | FK → `students(lws_id)` |
+| `from_ts` / `to_ts` | timestamptz | — | leave window |
+| `type` | text | `'leave'` | `leave` / `outpass` / `medical` |
+| `reason` | text | nullable | |
+| `approved_by` | text | nullable | admin email |
+| `created_at` | timestamptz | `now()` | |
+
+An active leave overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test). Index: `(lws_id)`, `(from_ts, to_ts)`.
+
+### `checkpoint_confirmations` — roll reconciliation gate
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `date` | text | — | `DD-MM-YYYY` |
+| `checkpoint` | text | — | roll only: `hostel_am` / `hostel_pm` |
+| `branch` | text | `'APJ'` | |
+| `expected_count` / `exception_count` / `confirmed_present` | int | — | reconciliation tallies |
+| `reconciled` | boolean | `false` | `confirmed_present == expected − exceptions`; **false = open incident** |
+| `confirmed_by` | text | nullable | admin email |
+| `confirmed_at` | timestamptz | `now()` | |
+| **UNIQUE** | `(date, checkpoint, branch)` | | one confirmation per roll per day |
+
+Also new on `students`: **`residential boolean NOT NULL default true`** — future day-scholar split; today all APJ are boarders so the roster scopes on `branch='APJ'` alone. RLS: all three tables carry `faculty_rw` (`FOR ALL TO authenticated USING(true) WITH CHECK(true)`), matching the sibling attendance tables.
 
 ---
 

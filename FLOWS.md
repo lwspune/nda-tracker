@@ -177,3 +177,18 @@ A coverage-rotation tool for the mentorship program: each mentor teacher is allo
 - **Mentee assignments** (`MenteeAssignments`, via `mentorSlice` `fetchMentorAssignments`/`setMentorAssignment`/`removeMentorAssignment`): reassign a mentee's mentor, remove from mentorship, and a highlighted **"active students with no mentor"** list so nobody silently falls out of the rotation. Teacher mobiles are entered in Settings → Teachers (the `timetableTeachers[].mobile` field).
 
 **Rollout dependency**: the cron is fail-closed — until `CRON_SECRET` is set in Vercel the scheduled call is rejected (no accidental sends). First real send also needs `WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID`, teacher mobiles, and a live test to confirm the `[date, students]` variable order (per the template-param rules — positional order isn't knowable from the template ID).
+
+### Hostel & Mess (APJ boarders, Phase 1 — 2026-07-08)
+Boarder attendance across the hostel/mess day, scoped to `branch='APJ'`. **Admin-only** tab in the Attendance page ([`src/pages/Attendance/HostelTab.jsx`](src/pages/Attendance/HostelTab.jsx)). **Exception-capture** (default-present) — the same model as the lecture log. Purpose: student safety/whereabouts + discipline; **in-app board only** (no WhatsApp yet). See [[project_hostel_attendance]].
+
+**Checkpoints** — 5 capturable: `hostel_am`, `breakfast`, `lunch`, `dinner`, `hostel_pm`. The chain view also shows a **`class`** column *derived* from `student_attendance` (never captured here); lectures are out of the Phase-1 chain.
+
+**Mark view** — pick a date + checkpoint; the APJ boarder roster loads all-green (Present). Tapping a boarder cycles Present → Absent → Sick → Out-pass → Present. Boarders with an active `leaves` row show a locked **Leave** state (pre-explained, not tappable). **Save** does a delete-then-insert of the exception set for that (date, checkpoint) via `setCheckpointExceptions` — no row = present.
+
+**Reconciliation gate** — the two roll checkpoints (`hostel_am`/`hostel_pm`) add a headcount gate. Expected-in-dorm = roster − *away* (away = absent + out-pass; sick counts as in-dorm). The warden enters the physical headcount and closes the roll: `confirmRoll` writes `checkpoint_confirmations` with `reconciled = (headcount == expected − away)`. A mismatch is persisted as **`reconciled=false` — an OPEN incident** the Chain view surfaces. Save exceptions before reconciling (the button is gated on a clean save).
+
+**Chain view** — `buildDailyChain` ([`src/lib/analytics/chain.js`](src/lib/analytics/chain.js), pure) composes hostel/mess exceptions + derived class attendance + active leaves into a per-boarder timeline. An **anomaly** = a checkpoint `status='absent'` with no covering leave → the boarder "fell off the chain"; `firstBreak` marks where. The board lists anomalies (and open unreconciled rolls) for the day — the same-day safety signal paper registers can't give.
+
+**Leaves** = the honesty mechanism: an active leave/out-pass overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test), so those gaps aren't anomalies. `leavesSlice` (`addLeave`/`getActiveLeaves`/`deleteLeave`).
+
+**Deferred (Phase 2+):** the board is already generic across all 5 checkpoints (Phase 2 = config only); WhatsApp warden/parent alerts, per-student boarding timeline in `StudentView`, compliance % reports, the day-scholar `residential` split, time-granular partial leave.
