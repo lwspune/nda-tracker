@@ -440,3 +440,36 @@ The "Week of" date feature (commit `b3118d9`) shipped with full unit/lint covera
 - Click **⬇ PNG** — confirm the dates appear under each day in the image and are legible on the dark indigo header (the indigo-300 tint).
 - Click **⬇ Excel** — open the file and confirm each day header cell shows the day name with the date on a second line, not clipped.
 - Edge: pick a Sunday in the picker and confirm the grid anchors to the *preceding* Mon–Sat week (ISO behaviour), not the next one.
+
+---
+
+## 2026-07-08
+
+### Verify the hostel golden path in the browser + finish the warden-alert rollout
+
+The hostel & mess feature (Phases 1+2, commits `5821163`/`f9a5760`/`b5bcdc5`) shipped with full unit/lint coverage (chain aggregator, both slices, endpoint, HostelTab) and a **DB-contract smoke test** (sentinel insert/read/delete of all three tables), but the **end-to-end browser pass was not run** — the session was non-interactive and the board needs a live Supabase **admin session** (only exists on Vercel). The warden alert is also inert until its env is set. Same manual-verify gap noted for offline exams / monitoring / remediation / mentee-assignments / integrity / week-of-dates.
+
+**Why:** the seams that unit tests can't reach — the marking→save round-trip, the reconciliation gate writing `checkpoint_confirmations`, the chain board flagging a real unexplained boarder, and (critically) the **filter-as-display-lens** guarantee that a filtered save doesn't drop hidden rows — are exactly where a regression hides. And the alert is half-live: code deployed, but nothing sends until the template + a warden number exist.
+
+**How to apply:**
+- On `nda-tracker.vercel.app` (admin): Attendance → **Hostel & Mess**. Mark a Night Roll exception → Save → filter to Boys/Girls, mark one, Save → **reopen and confirm the other wing's marks survived** (the display-lens guarantee). Enter a headcount → **Reconcile & close** (tie = ✓; mismatch = OPEN incident). Switch to **Chain** → confirm a real unexplained boarder is flagged with the right first-break.
+- Warden alert rollout: get the Meta/Wabridge template approved → set `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` in Vercel (`SUPABASE_SERVICE_ROLE_KEY` already set) → add a warden number in the Hostel tab → **Send test via `redirectTo` to your own number to confirm the `[date, listText]` variable order** (order isn't knowable from the template ID — per the template-param rules) → flip the `variables` order in `api/send-hostel-alert.js` + the `reference_whatsapp_templates` row if swapped.
+
+### Hostel Phase 3 — alert durability: nightly cron + a "did we alert?" log + parent notify
+
+The warden alert is currently **manual + stateless**. The endpoint already has a cron-secret auth branch (unused) and the chain recompute is server-side, so a nightly auto-send is a small add; but there's no record of who was alerted when.
+
+**Why:** a safety alert that only fires when someone remembers to press a button isn't a safety net. And without a send log, you can't answer "did we already alert the warden about Rahul tonight?" — the pending-aware pattern this project uses everywhere else ([[feedback_pending_aware_over_sent_flag]], [[feedback_event_log_over_derive]]) is exactly what's missing here.
+
+**How to apply:**
+- Add a `vercel.json` cron (e.g. post-night-roll, weekday evening IST) hitting `/api/send-hostel-alert` with the `CRON_SECRET`; gate weekdays in-handler as a backstop (mirror `send-mentor-nudges`).
+- Add a `hostel_alerts` event-log table (`date, checkpoint?, lws_ids[], sent_at, sent_by, recipients`) so re-runs are idempotent-aware and the board can show "alerted N of M"; scope re-sends to pending = unexplained − already-alerted.
+- Parent notification is a further step — highest value but most sensitive; needs false-positive control (only alert parents after the reconciliation gate is closed AND the absence is still unexplained) before it goes near parents.
+
+### Hostel Phase 3 — analytics + roster refinements
+
+Deferred non-alert follow-ups: **per-student boarding timeline** in `StudentView` (a hostel/mess history strip beside the existing lecture/attendance incidents — read-only, composes existing data); **compliance % reports** (per-boarder checkpoint attendance % over a range — pure queries over `checkpoint_absences` + `leaves`); the **day-scholar split** (flip some APJ students' `students.residential=false` + load the flag into `studentProfiles` so the roster scopes on `branch='APJ' AND residential`; the column already exists, defaults true); and **time-granular partial leave** (leave windows that cover only some checkpoints of a day — today leave coverage is day-granular, partial deviations are marked as an `outpass` checkpoint status instead).
+
+**Why:** these are the "compliance/parent-visibility" half of the original brief that Phase 1–2 (safety) didn't cover. Each is self-contained and low-risk; none is urgent.
+
+**How to apply:** pick per demand. The boarding timeline reuses `getCheckpointExceptionsForDate`-style reads keyed by student; compliance % is a new pure aggregator alongside `chain.js`; the day-scholar split needs `residential` added to the `studentSlice` profile mapping + the roster filter in `HostelTab` (there's already a code comment marking the hook point). See [[project_hostel_attendance]].
