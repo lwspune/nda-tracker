@@ -35,6 +35,11 @@ export const DEFAULTS = {
   // here on every real WhatsApp result blast (process observability). Seeded
   // with the predefined number; editable in Settings. Empty array = no monitoring.
   monitorMobiles: ['9021869427'],
+  // Warden alert numbers — recipients of the hostel "fell off the chain"
+  // unexplained-absence alert (APJ). Empty = no warden alerts. Editable in the
+  // Hostel & Mess tab. NOT the same channel as monitorMobiles (safety, not
+  // pipeline observability).
+  hostelAlertMobiles: [],
 }
 
 // Merge saved data with defaults (handles missing keys from old versions)

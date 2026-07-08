@@ -17,6 +17,17 @@
 
 export const CHECKPOINT_ORDER = ['hostel_am', 'breakfast', 'class', 'lunch', 'dinner', 'hostel_pm']
 
+// Human labels — shared by the marking board, the chain table, and the warden
+// alert so they never drift.
+export const CHECKPOINT_LABEL = {
+  hostel_am: 'Morning Roll',
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  hostel_pm: 'Night Roll',
+  class: 'Class',
+}
+
 // Which checkpoint statuses count as an unexplained break in the chain.
 // 'sick' / 'outpass' / 'leave' / 'late' are all explained → not anomalies.
 const ANOMALY_STATUS = 'absent'
@@ -91,4 +102,24 @@ export function buildDailyChain({
 
     return { ...student, statuses, anomaly: firstBreak !== null, firstBreak, onLeave }
   })
+}
+
+// Shape the warden alert from a computed chain. Returns the anomalies (boarders
+// who fell off the chain, unexplained), a plain-ASCII-friendly list string
+// ("Name - Checkpoint, …") for the WhatsApp variable, and a human message.
+// The caller (endpoint) is responsible for the final asciiClean before sending.
+//   chainRows: output of buildDailyChain
+//   dateLabel: pre-formatted date string for the message
+export function buildWardenAlert(chainRows = [], dateLabel = '') {
+  const anomalies = chainRows
+    .filter(r => r.anomaly)
+    .map(r => ({ lwsId: r.lwsId, name: r.name, firstBreak: r.firstBreak }))
+  const listText = anomalies
+    .map(a => `${a.name} - ${CHECKPOINT_LABEL[a.firstBreak] || a.firstBreak}`)
+    .join(', ')
+  const count = anomalies.length
+  const message = count === 0
+    ? `All boarders accounted for on ${dateLabel}.`
+    : `${count} boarder${count !== 1 ? 's' : ''} unaccounted on ${dateLabel}: ${listText}`
+  return { count, anomalies, listText, message }
 }

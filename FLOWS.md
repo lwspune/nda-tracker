@@ -178,8 +178,8 @@ A coverage-rotation tool for the mentorship program: each mentor teacher is allo
 
 **Rollout dependency**: the cron is fail-closed — until `CRON_SECRET` is set in Vercel the scheduled call is rejected (no accidental sends). First real send also needs `WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID`, teacher mobiles, and a live test to confirm the `[date, students]` variable order (per the template-param rules — positional order isn't knowable from the template ID).
 
-### Hostel & Mess (APJ boarders, Phase 1 — 2026-07-08)
-Boarder attendance across the hostel/mess day, scoped to `branch='APJ'`. **Admin-only** tab in the Attendance page ([`src/pages/Attendance/HostelTab.jsx`](src/pages/Attendance/HostelTab.jsx)). **Exception-capture** (default-present) — the same model as the lecture log. Purpose: student safety/whereabouts + discipline; **in-app board only** (no WhatsApp yet). See [[project_hostel_attendance]].
+### Hostel & Mess (APJ boarders, Phase 1–2 — 2026-07-08)
+Boarder attendance across the hostel/mess day, scoped to `branch='APJ'`. **Admin-only** tab in the Attendance page ([`src/pages/Attendance/HostelTab.jsx`](src/pages/Attendance/HostelTab.jsx)). **Exception-capture** (default-present) — the same model as the lecture log. Purpose: student safety/whereabouts + discipline. See [[project_hostel_attendance]].
 
 **Checkpoints** — 5 capturable: `hostel_am`, `breakfast`, `lunch`, `dinner`, `hostel_pm`. The chain view also shows a **`class`** column *derived* from `student_attendance` (never captured here); lectures are out of the Phase-1 chain.
 
@@ -191,4 +191,6 @@ Boarder attendance across the hostel/mess day, scoped to `branch='APJ'`. **Admin
 
 **Leaves** = the honesty mechanism: an active leave/out-pass overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test), so those gaps aren't anomalies. `leavesSlice` (`addLeave`/`getActiveLeaves`/`deleteLeave`).
 
-**Deferred (Phase 2+):** the board is already generic across all 5 checkpoints (Phase 2 = config only); WhatsApp warden/parent alerts, per-student boarding timeline in `StudentView`, compliance % reports, the day-scholar `residential` split, time-granular partial leave.
+**Warden alert (Phase 2)** — the Chain view has an **Alert warden** button + an inline warden-number editor (`hostelAlertMobiles[]`, config). Pressing it POSTs `{date}` to [`api/send-hostel-alert.js`](api/send-hostel-alert.js), which — with the service-role client — **re-loads roster + attendance + checkpoints + leaves and re-computes the chain server-side** (never trusts a client-sent list), then WhatsApps the unexplained list (`buildWardenAlert` → vars `[date, "Name - Checkpoint, …"]`) to each warden number. Admin-JWT (cron-secret branch wired but **not scheduled**). **Fail-closed** on missing `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` (dry run previews without it); only fires when count>0 and a number is configured; stateless (no send log yet). Var order + template are **provisional until a live redirect-to test** — see [[reference_whatsapp_templates]] + [[feedback_whatsapp_template_param_rules]].
+
+**Deferred (Phase 3+):** nightly cron auto-send, a persistent alert/notify log ("did we alert?"), parent notification, per-student boarding timeline in `StudentView`, compliance % reports, the day-scholar `residential` split, time-granular partial leave.

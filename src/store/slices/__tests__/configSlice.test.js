@@ -117,6 +117,21 @@ describe('setMonitorMobiles', () => {
   })
 })
 
+describe('setHostelAlertMobiles', () => {
+  it('normalises to last-10-digit, drops invalid, collapses dupes', () => {
+    const { get, slice } = makeStore({ hostelAlertMobiles: [] })
+    slice.setHostelAlertMobiles(['+91 90218 69427', '12345', '', '919021869427'])
+    expect(get().hostelAlertMobiles).toEqual(['9021869427'])
+  })
+
+  it('an empty list disables warden alerts and saves on change', () => {
+    const { get, saves, slice } = makeStore({ hostelAlertMobiles: ['9021869427'] })
+    slice.setHostelAlertMobiles([])
+    expect(get().hostelAlertMobiles).toEqual([])
+    expect(saves).toHaveLength(1)
+  })
+})
+
 describe('renameBranch', () => {
   it('renames the branch in branches[]', () => {
     const { get, slice } = makeStore({ branches: ['LWS Pune'] })

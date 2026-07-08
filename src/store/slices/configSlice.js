@@ -28,6 +28,17 @@ export const createConfigSlice = (set, get) => ({
     get()._save()
   },
 
+  // ── Warden alert numbers ────────────────────────────────────
+  // Same normalisation contract as setMonitorMobiles. Recipients of the hostel
+  // unexplained-absence alert (APJ). Seeded empty in DEFAULTS.
+  setHostelAlertMobiles(list) {
+    const clean = (Array.isArray(list) ? list : [])
+      .map(n => String(n ?? '').replace(/\D/g, '').slice(-10))
+      .filter(n => n.length === 10)
+    set({ hostelAlertMobiles: [...new Set(clean)] })
+    get()._save()
+  },
+
   // ── Branch CRUD ─────────────────────────────────────────────
   addBranch(name) {
     const trimmed = (name ?? '').trim()

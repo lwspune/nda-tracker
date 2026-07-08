@@ -10,12 +10,19 @@ const mockStore = {
   getConfirmationsForDate: vi.fn(),
   fetchDailyAttendance: vi.fn(),
   getActiveLeaves: vi.fn(),
+  hostelAlertMobiles: [],
+  setHostelAlertMobiles: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
 }))
 
+vi.mock('../../../lib/supabase', () => ({
+  supabase: { auth: { getSession: vi.fn() } },
+}))
+
+import { supabase } from '../../../lib/supabase'
 import HostelTab from '../HostelTab'
 
 const PROFILES = {
@@ -30,12 +37,14 @@ const PROFILES = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockStore.studentProfiles = PROFILES
+  mockStore.hostelAlertMobiles = []
   mockStore.getCheckpointExceptionsForDate.mockResolvedValue([])
   mockStore.fetchDailyAttendance.mockResolvedValue({ date: null, rows: [] })
   mockStore.getConfirmationsForDate.mockResolvedValue([])
   mockStore.getActiveLeaves.mockResolvedValue([])
   mockStore.setCheckpointExceptions.mockResolvedValue(true)
   mockStore.confirmRoll.mockResolvedValue(true)
+  supabase.auth.getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
 })
 
 describe('HostelTab — roster scoping', () => {
@@ -87,5 +96,37 @@ describe('HostelTab — chain view', () => {
     await screen.findByText('Aarav Nair')
     fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
     expect(await screen.findByText(/every boarder is accounted for/i)).toBeInTheDocument()
+  })
+
+  it('disables the warden alert when there are no anomalies', async () => {
+    mockStore.hostelAlertMobiles = ['9021869427']
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
+    expect(await screen.findByRole('button', { name: /Alert warden/ })).toBeDisabled()
+  })
+
+  it('fires the alert endpoint for the current date when an anomaly + warden number exist', async () => {
+    mockStore.hostelAlertMobiles = ['9021869427']
+    mockStore.getCheckpointExceptionsForDate.mockResolvedValue([
+      { lws_id: 'APJ-1', checkpoint: 'dinner', status: 'absent' },
+    ])
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, sent: 1, count: 1 }) })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
+    const alertBtn = await screen.findByRole('button', { name: /Alert warden \(1\)/ })
+    expect(alertBtn).toBeEnabled()
+    fireEvent.click(alertBtn)
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/send-hostel-alert',
+      expect.objectContaining({ method: 'POST' }),
+    ))
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body)
+    expect(body.date).toMatch(/^\d{2}-\d{2}-\d{4}$/)
+    expect(await screen.findByText(/Warden alerted/i)).toBeInTheDocument()
   })
 })

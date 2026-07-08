@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER } from '../chain'
+import { buildDailyChain, resolveOnLeave, buildWardenAlert, CHECKPOINT_ORDER } from '../chain'
 
 // ── resolveOnLeave ────────────────────────────────────────────
 // A leave explains a day when its [fromMs, toMs] window overlaps the day's
@@ -151,5 +151,41 @@ describe('buildDailyChain', () => {
   it('preserves roster order and carries name through', () => {
     const rows = buildDailyChain({ roster: ROSTER })
     expect(rows.map(r => r.name)).toEqual(['Aarav', 'Bhavya', 'Chirag'])
+  })
+})
+
+// ── buildWardenAlert ──────────────────────────────────────────
+
+describe('buildWardenAlert', () => {
+  it('returns count 0 and an all-clear message when nothing is anomalous', () => {
+    const chain = buildDailyChain({ roster: ROSTER })
+    const alert = buildWardenAlert(chain, '8th July 2026')
+    expect(alert.count).toBe(0)
+    expect(alert.listText).toBe('')
+    expect(alert.message).toMatch(/All boarders accounted for on 8th July 2026/)
+  })
+
+  it('lists each unexplained boarder with their first-break checkpoint label', () => {
+    const chain = buildDailyChain({
+      roster: ROSTER,
+      checkpointRows: [
+        { lws_id: 'S1', checkpoint: 'dinner', status: 'absent' },
+        { lws_id: 'S2', checkpoint: 'breakfast', status: 'absent' },
+      ],
+    })
+    const alert = buildWardenAlert(chain, '8th July 2026')
+    expect(alert.count).toBe(2)
+    expect(alert.listText).toBe('Aarav - Dinner, Bhavya - Breakfast')
+    expect(alert.message).toMatch(/2 boarders unaccounted on 8th July 2026: Aarav - Dinner, Bhavya - Breakfast/)
+    expect(alert.anomalies.map(a => a.lwsId)).toEqual(['S1', 'S2'])
+  })
+
+  it('excludes leave/sick/outpass (explained) boarders from the alert', () => {
+    const chain = buildDailyChain({
+      roster: ROSTER,
+      onLeaveIds: new Set(['S1']),
+      checkpointRows: [{ lws_id: 'S2', checkpoint: 'lunch', status: 'sick' }],
+    })
+    expect(buildWardenAlert(chain, 'x').count).toBe(0)
   })
 })

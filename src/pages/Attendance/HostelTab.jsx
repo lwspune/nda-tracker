@@ -1,21 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import useStore from '../../store/useStore'
+import { supabase } from '../../lib/supabase'
 import { EmptyState, Spinner, Alert } from '../../components/ui'
-import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER } from '../../lib/analytics/chain'
+import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
 // scoped to branch='APJ'. Phase 1 — see FLOWS.md "Hostel & Mess".
 
-const CHECKPOINT_LABEL = {
-  hostel_am: 'Morning Roll',
-  breakfast: 'Breakfast',
-  lunch: 'Lunch',
-  dinner: 'Dinner',
-  hostel_pm: 'Night Roll',
-  class: 'Class',
-}
 // Exception status cycle on tap: present → absent → sick → outpass → present.
 const STATUS_CYCLE = { undefined: 'absent', absent: 'sick', sick: 'outpass', outpass: undefined }
 const STATUS_META = {
@@ -56,6 +49,8 @@ export default function HostelTab() {
   const getConfirmationsForDate = useStore(s => s.getConfirmationsForDate)
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
   const getActiveLeaves = useStore(s => s.getActiveLeaves)
+  const hostelAlertMobiles = useStore(s => s.hostelAlertMobiles)
+  const setHostelAlertMobiles = useStore(s => s.setHostelAlertMobiles)
 
   const [view, setView] = useState('mark')          // 'mark' | 'chain'
   const [date, setDate] = useState(todayDmy)
@@ -72,6 +67,12 @@ export default function HostelTab() {
   const [checkpointRows, setCheckpointRows] = useState([])
   const [confirmations, setConfirmations] = useState([])
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
+
+  // Warden alert.
+  const [alerting, setAlerting] = useState(false)
+  const [alertResult, setAlertResult] = useState(null)
+  const [showAlertCfg, setShowAlertCfg] = useState(false)
+  const [newWarden, setNewWarden] = useState('')
 
   const isRoll = ROLL_CHECKPOINTS.includes(checkpoint)
 
@@ -173,6 +174,39 @@ export default function HostelTab() {
       loadDay()
     } else {
       setBanner({ type: 'error', msg: 'Reconcile failed — check your session.' })
+    }
+  }
+
+  function addWarden() {
+    const digits = newWarden.replace(/\D/g, '').slice(-10)
+    if (digits.length !== 10) return
+    setHostelAlertMobiles([...hostelAlertMobiles, digits])
+    setNewWarden('')
+  }
+  function removeWarden(n) {
+    setHostelAlertMobiles(hostelAlertMobiles.filter(x => x !== n))
+  }
+
+  // Fire the warden alert. The server RE-computes the chain for `date` and sends
+  // to the configured warden numbers — this button just triggers it.
+  async function sendWardenAlert() {
+    if (!supabase) { setAlertResult({ error: 'Supabase not configured locally — deploy to Vercel to send.' }); return }
+    setAlerting(true); setAlertResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sign in as admin to send alerts.')
+      const r = await fetch('/api/send-hostel-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ date }),
+      })
+      const data = await r.json()
+      if (!r.ok || !data.ok) throw new Error(data.error || 'Alert failed')
+      setAlertResult({ ok: data.sent > 0, sent: data.sent ?? 0, count: data.count ?? 0, message: data.message })
+    } catch (e) {
+      setAlertResult({ error: e.message })
+    } finally {
+      setAlerting(false)
     }
   }
 
@@ -329,6 +363,72 @@ export default function HostelTab() {
               ? <span className="text-success font-semibold">✓ No unexplained absences — every boarder is accounted for on {date}.</span>
               : <span className="text-danger font-semibold">{anomalies.length} boarder{anomalies.length !== 1 ? 's' : ''} fell off the chain (unexplained) on {date}.</span>}
           </div>
+
+          {/* Warden alert */}
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <button
+              type="button"
+              onClick={sendWardenAlert}
+              disabled={alerting || anomalies.length === 0 || hostelAlertMobiles.length === 0}
+              className="btn btn-primary min-h-[44px] px-5"
+            >
+              {alerting ? <Spinner size="sm" /> : `📣 Alert warden${anomalies.length ? ` (${anomalies.length})` : ''}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAlertCfg(v => !v)}
+              className="text-[12px] text-ink-3 underline hover:text-ink"
+            >
+              Warden numbers ({hostelAlertMobiles.length})
+            </button>
+            {anomalies.length > 0 && hostelAlertMobiles.length === 0 && (
+              <span className="text-[12px] text-yellow-400">Add a warden number to enable alerts</span>
+            )}
+          </div>
+
+          {showAlertCfg && (
+            <div className="card px-4 py-3 mb-3">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-ink-3 mb-2">Warden alert numbers</div>
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={newWarden}
+                  onChange={e => setNewWarden(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addWarden()}
+                  placeholder="10-digit mobile"
+                  className="form-input flex-1 text-[13px] font-mono min-h-[44px] px-3"
+                  aria-label="Warden mobile number"
+                />
+                <button type="button" onClick={addWarden} disabled={!newWarden.trim()} className="btn btn-primary px-4 min-h-[44px]">Add</button>
+              </div>
+              {hostelAlertMobiles.length === 0 ? (
+                <div className="text-[12px] text-ink-3 italic">No numbers — warden alerts are disabled.</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {hostelAlertMobiles.map(n => (
+                    <span key={n} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-surface-2 border border-border text-[13px] font-mono">
+                      {n}
+                      <button type="button" onClick={() => removeWarden(n)} aria-label={`Remove ${n}`} className="text-ink-3 hover:text-red-500 w-5 h-5 rounded-full flex items-center justify-center">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="text-[11px] text-ink-3 mt-2">Alerts fire only when you press <b>Alert warden</b>. The message is built server-side from this day's chain. Requires the Wabridge template to be configured (fails safe until then).</div>
+            </div>
+          )}
+
+          {alertResult && (
+            <div className="mb-3">
+              <Alert type={alertResult.error ? 'error' : 'success'}>
+                {alertResult.error
+                  ? `❌ ${alertResult.error}`
+                  : alertResult.sent > 0
+                    ? `✓ Warden alerted (${alertResult.count} boarder${alertResult.count !== 1 ? 's' : ''}).`
+                    : `${alertResult.message || 'Nothing to alert.'}`}
+                <button onClick={() => setAlertResult(null)} className="ml-3 text-[12px] underline">dismiss</button>
+              </Alert>
+            </div>
+          )}
+
           <div className="card overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead>
