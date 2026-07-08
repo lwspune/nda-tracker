@@ -26,9 +26,9 @@ import { supabase } from '../../../lib/supabase'
 import HostelTab from '../HostelTab'
 
 const PROFILES = {
-  'Aarav Nair':   { name: 'Aarav Nair',   lwsId: 'APJ-1', branch: 'APJ', accountStatus: 'Active' },
-  'Bhavya Rao':   { name: 'Bhavya Rao',   lwsId: 'APJ-2', branch: 'APJ', accountStatus: 'Active' },
-  'Chirag Set':   { name: 'Chirag Set',   lwsId: 'APJ-3', branch: 'APJ', accountStatus: 'Active' },
+  'Aarav Nair':   { name: 'Aarav Nair',   lwsId: 'APJ-1', branch: 'APJ', accountStatus: 'Active', gender: 'Male',   batches: ['APJ_NDA_11th'] },
+  'Bhavya Rao':   { name: 'Bhavya Rao',   lwsId: 'APJ-2', branch: 'APJ', accountStatus: 'Active', gender: 'Female', batches: ['APJ_NDA_11th'] },
+  'Chirag Set':   { name: 'Chirag Set',   lwsId: 'APJ-3', branch: 'APJ', accountStatus: 'Active', gender: 'Male',   batches: ['APJ_NDA_12th'] },
   'Day Scholar':  { name: 'Day Scholar',  lwsId: 'LWS-9', branch: 'LWS Pune', accountStatus: 'Active' }, // wrong branch
   'Quit Boarder': { name: 'Quit Boarder', lwsId: 'APJ-9', branch: 'APJ', accountStatus: 'Quit' },        // inactive
   'Variant Sp':   { name: 'Aarav Nair',   lwsId: 'APJ-1', branch: 'APJ', accountStatus: 'Active' },       // variant key
@@ -58,6 +58,36 @@ describe('HostelTab — roster scoping', () => {
     // Roster reflects 3 boarders — Aarav appears once despite the variant key
     // (no duplicate status button for him).
     expect(screen.getAllByLabelText(/Aarav Nair:/)).toHaveLength(1)
+  })
+})
+
+describe('HostelTab — marking-list filters', () => {
+  it('boys/girls filter narrows the list but not the roster tally', async () => {
+    render(<HostelTab />)
+    await screen.findByLabelText(/Aarav Nair: Present/)
+    fireEvent.click(screen.getByRole('button', { name: 'Girls' }))
+    // Only the girl remains in the list…
+    expect(screen.getByLabelText(/Bhavya Rao:/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Aarav Nair:/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Chirag Set:/)).not.toBeInTheDocument()
+    // …but the whole-hostel Roster/Expected tally is unchanged (3).
+    const gate = screen.getByText(/Reconciliation gate/i).closest('.card')
+    expect(gate).toHaveTextContent(/3 roster/)
+    expect(screen.getByText(/Showing/)).toHaveTextContent(/Showing 1 of 3/)
+  })
+
+  it('batch filter narrows the list to that batch', async () => {
+    render(<HostelTab />)
+    await screen.findByLabelText(/Aarav Nair: Present/)
+    fireEvent.change(screen.getByLabelText(/Filter by batch/), { target: { value: 'APJ_NDA_12th' } })
+    expect(screen.getByLabelText(/Chirag Set:/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Aarav Nair:/)).not.toBeInTheDocument()
+  })
+
+  it('hides the branch filter while APJ is the only hostel branch', async () => {
+    render(<HostelTab />)
+    await screen.findByLabelText(/Aarav Nair: Present/)
+    expect(screen.queryByLabelText(/Filter by branch/)).not.toBeInTheDocument()
   })
 })
 

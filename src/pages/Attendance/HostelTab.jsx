@@ -9,6 +9,11 @@ import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkp
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
 // scoped to branch='APJ'. Phase 1 — see FLOWS.md "Hostel & Mess".
 
+// Branches that have a hostel. Today just APJ (the boarder scope); adding a
+// second here makes the branch filter appear automatically. Could move to
+// config if hostel branches ever become faculty-managed.
+const HOSTEL_BRANCHES = ['APJ']
+
 // Exception status cycle on tap: present → absent → sick → outpass → present.
 const STATUS_CYCLE = { undefined: 'absent', absent: 'sick', sick: 'outpass', outpass: undefined }
 const STATUS_META = {
@@ -74,20 +79,48 @@ export default function HostelTab() {
   const [showAlertCfg, setShowAlertCfg] = useState(false)
   const [newWarden, setNewWarden] = useState('')
 
+  // Marking-list filters (display lens only — never narrow the save set,
+  // reconciliation tally, or alert, which stay whole-hostel).
+  const [fBranch, setFBranch] = useState('all')
+  const [fBatch, setFBatch] = useState('all')
+  const [fGender, setFGender] = useState('all')          // all | boys | girls
+
   const isRoll = ROLL_CHECKPOINTS.includes(checkpoint)
 
-  // APJ boarder roster (Active, non-variant profiles). residential filtering
-  // hooks in here once the profile carries the flag; today all APJ are boarders.
+  // Boarder roster (Active, non-variant profiles). Scoped to the hostel
+  // branch(es) — today just APJ; add here (or move to config) when another
+  // residential branch is onboarded. residential-flag filtering hooks in here
+  // once the profile carries the flag.
   const roster = useMemo(() => {
     const out = []
     for (const [key, p] of Object.entries(studentProfiles)) {
       if (!p || p.name !== key) continue                 // skip variant-keyed entries
-      if (p.branch !== 'APJ') continue
+      if (!HOSTEL_BRANCHES.includes(p.branch)) continue
       if (p.accountStatus && p.accountStatus !== 'Active') continue
-      out.push({ lwsId: p.lwsId, name: p.name })
+      out.push({ lwsId: p.lwsId, name: p.name, branch: p.branch, gender: p.gender, batches: p.batches || [] })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }, [studentProfiles])
+
+  // Filter options derived from the roster.
+  const branchOptions = useMemo(() => [...new Set(roster.map(r => r.branch))].sort(), [roster])
+  const batchOptions = useMemo(() => {
+    const inBranch = fBranch === 'all' ? roster : roster.filter(r => r.branch === fBranch)
+    return [...new Set(inBranch.flatMap(r => r.batches))].sort()
+  }, [roster, fBranch])
+
+  // The display subset. `roster` stays whole for save/reconciliation/alert.
+  const visibleRoster = useMemo(() => roster.filter(r => {
+    if (fBranch !== 'all' && r.branch !== fBranch) return false
+    if (fBatch !== 'all' && !r.batches.includes(fBatch)) return false
+    if (fGender !== 'all') {
+      const isGirl = r.gender === 'Female'
+      if (fGender === 'girls' && !isGirl) return false
+      if (fGender === 'boys' && isGirl) return false
+    }
+    return true
+  }), [roster, fBranch, fBatch, fGender])
+  const filtered = visibleRoster.length !== roster.length
 
   const loadDay = useCallback(async () => {
     setLoading(true)
@@ -277,18 +310,61 @@ export default function HostelTab() {
             ))}
           </div>
 
-          {/* Summary + tally */}
+          {/* Summary + tally (always whole-hostel — filters below don't shrink these) */}
           <div className="flex flex-wrap gap-3 mb-4 text-[12px]">
             <span className="card px-4 py-2">Roster <b className="text-ink">{roster.length}</b></span>
             <span className="card px-4 py-2">Exceptions <b className="text-red-400">{exceptionCount}</b></span>
             {isRoll && <span className="card px-4 py-2">Expected in dorm <b className="text-ink">{expectedInDorm}</b></span>}
           </div>
 
+          {/* Filters — narrow the marking LIST only (not the save/tally/alert) */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {branchOptions.length > 1 && (
+              <select
+                value={fBranch}
+                onChange={e => { setFBranch(e.target.value); setFBatch('all') }}
+                className="form-input text-[12px] min-h-[40px] px-2"
+                aria-label="Filter by branch"
+              >
+                <option value="all">All branches</option>
+                {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            )}
+            <select
+              value={fBatch}
+              onChange={e => setFBatch(e.target.value)}
+              className="form-input text-[12px] min-h-[40px] px-2 max-w-[220px]"
+              aria-label="Filter by batch"
+            >
+              <option value="all">All batches</option>
+              {batchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <div className="inline-flex rounded-lg border border-border overflow-hidden">
+              {[['all', 'All'], ['boys', 'Boys'], ['girls', 'Girls']].map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setFGender(v)}
+                  aria-pressed={fGender === v}
+                  className={`px-3 py-2 text-[12px] font-semibold min-h-[40px] ${fGender === v ? 'bg-accent text-black' : 'text-ink-3 hover:text-ink'}`}
+                >{label}</button>
+              ))}
+            </div>
+            {filtered && (
+              <span className="text-[12px] text-ink-3">
+                Showing <b className="text-ink">{visibleRoster.length}</b> of {roster.length}
+                <button type="button" onClick={() => { setFBranch('all'); setFBatch('all'); setFGender('all') }} className="ml-2 underline hover:text-ink">clear</button>
+              </span>
+            )}
+          </div>
+
           {loading ? (
             <div className="flex items-center gap-3 py-16 justify-center text-ink-3"><Spinner /> Loading…</div>
+          ) : visibleRoster.length === 0 ? (
+            <div className="card px-5 py-10 text-center text-[13px] text-ink-3">No boarders match these filters.</div>
           ) : (
             <div className="card divide-y divide-border">
-              {roster.map(st => {
+              {visibleRoster.map(st => {
                 const status = onLeaveIds.has(st.lwsId) ? 'leave' : (edits[st.lwsId] || 'present')
                 const onLeave = onLeaveIds.has(st.lwsId)
                 const meta = STATUS_META[status]
