@@ -47,6 +47,7 @@ export const createStudentSlice = (set, get) => ({
         mobile:        s.mobile || '',
         dob:           s.dob || '',
         gender:        s.gender || '',
+        residential:   s.residential ?? true,   // boarder unless explicitly a day-scholar (DB default true)
         branch:        s.branch || '',
         batches:       s.batches || [],
         parentMobiles: s.parent_mobiles || [],

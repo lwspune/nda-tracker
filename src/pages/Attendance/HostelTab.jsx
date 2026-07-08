@@ -87,16 +87,18 @@ export default function HostelTab() {
 
   const isRoll = ROLL_CHECKPOINTS.includes(checkpoint)
 
-  // Boarder roster (Active, non-variant profiles). Scoped to the hostel
-  // branch(es) — today just APJ; add here (or move to config) when another
-  // residential branch is onboarded. residential-flag filtering hooks in here
-  // once the profile carries the flag.
+  // Boarder roster (Active, residential, non-variant profiles). Scoped to the
+  // hostel branch(es) — today just APJ; add here (or move to config) when another
+  // residential branch is onboarded. Day-scholars (residential === false) are
+  // excluded — matches the warden-alert endpoint's `.eq('residential', true)`
+  // filter so the board and the alert agree on who is a boarder.
   const roster = useMemo(() => {
     const out = []
     for (const [key, p] of Object.entries(studentProfiles)) {
       if (!p || p.name !== key) continue                 // skip variant-keyed entries
       if (!HOSTEL_BRANCHES.includes(p.branch)) continue
       if (p.accountStatus && p.accountStatus !== 'Active') continue
+      if (p.residential === false) continue              // day-scholar → not a boarder
       out.push({ lwsId: p.lwsId, name: p.name, branch: p.branch, gender: p.gender, batches: p.batches || [] })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))

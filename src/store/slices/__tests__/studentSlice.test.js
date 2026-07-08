@@ -65,6 +65,19 @@ describe('importStudentsDB', () => {
     slice.importStudentsDB(students)
     expect(getState().studentList).toHaveLength(2)
   })
+
+  it('carries residential into the profile (defaults to boarder when unset)', () => {
+    const { slice, getState } = makeStore()
+    slice.importStudentsDB([
+      makeStudent({ lws_id: 'LWS-001', canonical_name: 'Boarder',     residential: true }),
+      makeStudent({ lws_id: 'LWS-002', canonical_name: 'Day Scholar', residential: false }),
+      makeStudent({ lws_id: 'LWS-003', canonical_name: 'Unset' }), // no residential → default boarder
+    ])
+    const p = getState().studentProfiles
+    expect(p['Boarder'].residential).toBe(true)
+    expect(p['Day Scholar'].residential).toBe(false)
+    expect(p['Unset'].residential).toBe(true)
+  })
 })
 
 // ── addNameVariant ────────────────────────────────────────────

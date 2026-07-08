@@ -168,7 +168,7 @@ An active leave overlapping a day explains **every** checkpoint that day (day-gr
 | `confirmed_at` | timestamptz | `now()` | |
 | **UNIQUE** | `(date, checkpoint, branch)` | | one confirmation per roll per day |
 
-Also new on `students`: **`residential boolean NOT NULL default true`** — future day-scholar split; today all APJ are boarders so the roster scopes on `branch='APJ'` alone. RLS: all three tables carry `faculty_rw` (`FOR ALL TO authenticated USING(true) WITH CHECK(true)`), matching the sibling attendance tables.
+Also on `students`: **`residential boolean NOT NULL default true`** — the boarder/day-scholar split. Day-scholars are `false`; both the Hostel & Mess board (`HostelTab` roster) and the warden-alert endpoint exclude them (`residential === false` / `.eq('residential', true)`), so they never appear as boarders. New students default to boarder. RLS: all three tables carry `faculty_rw` (`FOR ALL TO authenticated USING(true) WITH CHECK(true)`), matching the sibling attendance tables.
 
 **Warden alert (Phase 2)** adds no table — it's stateless. Recipients live in `faculty_state.data.hostelAlertMobiles[]` (config blob); `api/send-attendance-alerts.js` re-computes the chain server-side and WhatsApps the unexplained list. A persistent "did we alert?" log is deferred.
 

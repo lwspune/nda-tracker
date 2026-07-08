@@ -59,6 +59,16 @@ describe('HostelTab — roster scoping', () => {
     // (no duplicate status button for him).
     expect(screen.getAllByLabelText(/Aarav Nair:/)).toHaveLength(1)
   })
+
+  it('excludes APJ day-scholars (residential:false) from the boarder roster', async () => {
+    mockStore.studentProfiles = {
+      'Boarder One':   { name: 'Boarder One',   lwsId: 'APJ-1', branch: 'APJ', accountStatus: 'Active', residential: true },
+      'Day Scholar X': { name: 'Day Scholar X', lwsId: 'APJ-2', branch: 'APJ', accountStatus: 'Active', residential: false },
+    }
+    render(<HostelTab />)
+    await waitFor(() => expect(screen.getByText('Boarder One')).toBeInTheDocument())
+    expect(screen.queryByText('Day Scholar X')).not.toBeInTheDocument()
+  })
 })
 
 describe('HostelTab — marking-list filters', () => {

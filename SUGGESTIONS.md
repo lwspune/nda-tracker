@@ -468,8 +468,27 @@ The warden alert is currently **manual + stateless**. The endpoint already has a
 
 ### Hostel Phase 3 — analytics + roster refinements
 
-Deferred non-alert follow-ups: **per-student boarding timeline** in `StudentView` (a hostel/mess history strip beside the existing lecture/attendance incidents — read-only, composes existing data); **compliance % reports** (per-boarder checkpoint attendance % over a range — pure queries over `checkpoint_absences` + `leaves`); the **day-scholar split** (flip some APJ students' `students.residential=false` + load the flag into `studentProfiles` so the roster scopes on `branch='APJ' AND residential`; the column already exists, defaults true); and **time-granular partial leave** (leave windows that cover only some checkpoints of a day — today leave coverage is day-granular, partial deviations are marked as an `outpass` checkpoint status instead).
+Deferred non-alert follow-ups: **per-student boarding timeline** in `StudentView` (a hostel/mess history strip beside the existing lecture/attendance incidents — read-only, composes existing data); **compliance % reports** (per-boarder checkpoint attendance % over a range — pure queries over `checkpoint_absences` + `leaves`); the ~~**day-scholar split**~~ — **DONE 2026-07-08** (`importStudentsDB` now loads `residential` into `studentProfiles` as `s.residential ?? true`; `HostelTab` roster skips `residential===false`; the warden endpoint already filtered — day-scholars excluded from board **and** alert; Anvay Sawant LWS-554 is the first flagged day-scholar); and **time-granular partial leave** (leave windows that cover only some checkpoints of a day — today leave coverage is day-granular, partial deviations are marked as an `outpass` checkpoint status instead).
 
 **Why:** these are the "compliance/parent-visibility" half of the original brief that Phase 1–2 (safety) didn't cover. Each is self-contained and low-risk; none is urgent.
 
-**How to apply:** pick per demand. The boarding timeline reuses `getCheckpointExceptionsForDate`-style reads keyed by student; compliance % is a new pure aggregator alongside `chain.js`; the day-scholar split needs `residential` added to the `studentSlice` profile mapping + the roster filter in `HostelTab` (there's already a code comment marking the hook point). See [[project_hostel_attendance]].
+**How to apply:** pick per demand. The boarding timeline reuses `getCheckpointExceptionsForDate`-style reads keyed by student; compliance % is a new pure aggregator alongside `chain.js`. (The day-scholar split shipped 2026-07-08 — see the struck item above.) See [[project_hostel_attendance]].
+
+### APJ 11th batch-split — data-hygiene loose ends
+
+The Batch A↔B section split + day-scholar tagging (2026-07-08) surfaced anomalies the user deliberately left unactioned. Small integrity items, not blockers.
+
+**Why:** each will quietly skew a roster, a duplicate scan, or a class count if left — cheap to fix now, confusing later.
+
+**How to apply:**
+- **Pranali / Droupadi Sarpale (LWS-493)** — the printed Batch B list had *both* "Dropadi sarpale" and "Pranali sarpale" as separate roll numbers, but they collapse to one profile (LWS-493 carries `Droupadi Sarpale` as a name-variant). In **Find Duplicates**, verify whether these are two real girls mis-merged into one record; if so, split them (a distinct record + re-tag). See the cross-profile-collision note in [[reference_roster_reconciliation.md]].
+- **Zishan Shaikh (Batch B list roll 52)** — no profile anywhere in the DB (searched phonetic variants); not tagged. Import via the Students flow if a real 11th-B student. (Anvay Sawant, the other original not-found, was since imported → LWS-554.)
+- **Blocked students on live batch lists** — Kartik Shinde (LWS-473) + Ganesh Mane (LWS-505) are `account_status=Block` yet appear on the handwritten Batch B list and are tagged B. If the block is stale, reactivate; else leave (blocked students keep historical tags).
+
+### Push the day-scholar filter deploy (pending)
+
+The day-scholar wiring (studentSlice + HostelTab + tests + DATABASE_SCHEMA/FLOWS) is committed-ready in the working tree but **not yet committed/pushed**, so it isn't live on Vercel. Anvay Sawant is flagged `residential=false` in the DB but still shows on the prod board until this deploys.
+
+**Why:** the data change is live but the code that acts on it isn't — a half-applied state.
+
+**How to apply:** commit the working-tree changes (`feat(hostel): exclude day-scholars from the boarder board`) and push to `main`; verify on `nda-tracker.vercel.app` that Anvay Sawant no longer appears on the Hostel & Mess board.
