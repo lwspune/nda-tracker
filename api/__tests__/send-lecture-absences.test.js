@@ -37,9 +37,16 @@ function setEnv() {
   process.env.WABRIDGE_LECTURE_MISS_TEMPLATE_ID = 'lecture-template'
 }
 
-function setAuthOk() {
+// `leaveRows` = rows the leaves query returns (each { lws_id }); default none.
+// The handler reads leaves via `.from('leaves').select('lws_id').lte(...).or(...)`.
+function setAuthOk(leaveRows = []) {
   createClient.mockImplementation(() => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
+    from: () => ({
+      select: () => ({
+        lte: () => ({ or: () => Promise.resolve({ data: leaveRows, error: null }) }),
+      }),
+    }),
   }))
 }
 
@@ -145,6 +152,36 @@ describe('send-lecture-absences', () => {
     })
     const payload = JSON.parse(fetch.mock.calls[0][1].body)
     expect(payload.variables[2]).toBe('English')
+  })
+
+  it('skips a student who is on leave for the date (no student or parent alert)', async () => {
+    setEnv(); setAuthOk([{ lws_id: 'S1' }]); mockWabridge(true)
+    const { res } = await call({
+      date: '2026-07-10',
+      students: [
+        { lwsId: 'S1', name: 'On Leave Kid', mobile: '9876500001', parentMobiles: ['9876500002'], subjects: ['Maths'] },
+        { lwsId: 'S2', name: 'Present Kid',  mobile: '9876500003', parentMobiles: [], subjects: ['Maths'] },
+      ],
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.sent).toBe(1)                 // only the present kid
+    expect(res.body.onLeaveSkipped).toBe(1)
+    expect(res.body.lines.some(l => /On Leave Kid.*on leave/i.test(l))).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)        // no message for the on-leave kid
+  })
+
+  it('fails closed (500) when the leaves lookup errors', async () => {
+    setEnv(); mockWabridge(true)
+    createClient.mockImplementation(() => ({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
+      from: () => ({ select: () => ({ lte: () => ({ or: () => Promise.resolve({ data: null, error: { message: 'boom' } }) }) }) }),
+    }))
+    const { res } = await call({
+      date: '2026-07-10',
+      students: [{ lwsId: 'S1', name: 'Kid', mobile: '9876500001', parentMobiles: [], subjects: ['Maths'] }],
+    })
+    expect(res.statusCode).toBe(500)
+    expect(res.body.error).toMatch(/leaves/i)
   })
 
   it('counts Wabridge failures as skipped', async () => {

@@ -125,15 +125,34 @@ async function handleLectureAbsences(req, res) {
     return
   }
 
+  // Suppress alerts for students on an active leave that day — a boarder who went
+  // home should not get a "missed class" alert to their parents. `date` here is
+  // YYYY-MM-DD (see fmtDate). Read under the caller's session so faculty RLS
+  // applies; fail closed if the lookup errors (better to block than mis-alert).
+  const startIso = `${date}T00:00:00+05:30`
+  const endIso = `${date}T23:59:59+05:30`
+  const authed = createClient(supabaseUrl, supabaseAnon, { global: { headers: { Authorization: `Bearer ${jwt}` } } })
+  const { data: leaveRows, error: lErr } = await authed
+    .from('leaves').select('lws_id')
+    .lte('from_ts', endIso)
+    .or(`to_ts.is.null,to_ts.gte.${startIso}`)   // incl. open-ended (to_ts null)
+  if (lErr) { res.status(500).json({ ok: false, error: 'Failed to load leaves: ' + lErr.message }); return }
+  const onLeaveIds = new Set((leaveRows || []).map(r => r.lws_id))
+
   const dateLabel = fmtDate(date)
   const redirectNorm = redirectTo ? normMobile(redirectTo) : null
 
   const lines = []
-  let sent = 0, skipped = 0
+  let sent = 0, skipped = 0, onLeaveSkipped = 0
 
   for (const row of students) {
     const name = (row.name || '').trim()
     if (!name) continue
+
+    // On leave that day → skip entirely (no student or parent message).
+    if (row.lwsId && onLeaveIds.has(row.lwsId)) {
+      lines.push(`  SKIP ${name} — on leave`); onLeaveSkipped++; continue
+    }
 
     // subjects entries can be either { subject, startTime?, endTime? } objects
     // (new shape, carries time) or plain strings (legacy fallback).
@@ -176,8 +195,8 @@ async function handleLectureAbsences(req, res) {
     }
   }
 
-  lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
-  res.status(200).json({ ok: true, sent, skipped, lines })
+  lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}  On leave (suppressed): ${onLeaveSkipped}`)
+  res.status(200).json({ ok: true, sent, skipped, onLeaveSkipped, lines })
 }
 
 // ── kind: 'hostel' — warden alert for boarders who fell off the daily chain ──
