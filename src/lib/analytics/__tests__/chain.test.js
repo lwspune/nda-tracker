@@ -48,6 +48,23 @@ describe('resolveOnLeave', () => {
   it('returns an empty set for no leaves', () => {
     expect(resolveOnLeave([], DAY_START, DAY_END).size).toBe(0)
   })
+
+  // Open-ended leave: a null toMs means "still out, until closed" → covers every
+  // day at/after fromMs (persist-until-return model).
+  it('treats a null toMs as open-ended — covered for any day at/after fromMs', () => {
+    const ids = resolveOnLeave([{ lwsId: 'A', fromMs: 500, toMs: null }], DAY_START, DAY_END)
+    expect(ids.has('A')).toBe(true)
+  })
+
+  it('covers an open-ended leave that starts exactly at day end (inclusive)', () => {
+    const ids = resolveOnLeave([{ lwsId: 'A', fromMs: 2_000, toMs: null }], DAY_START, DAY_END)
+    expect(ids.has('A')).toBe(true)
+  })
+
+  it('excludes an open-ended leave for a day before it starts', () => {
+    const ids = resolveOnLeave([{ lwsId: 'A', fromMs: 2_100, toMs: null }], DAY_START, DAY_END)
+    expect(ids.has('A')).toBe(false)
+  })
 })
 
 // ── buildDailyChain ───────────────────────────────────────────

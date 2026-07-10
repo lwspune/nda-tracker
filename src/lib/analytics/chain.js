@@ -38,11 +38,15 @@ const ANOMALY_STATUS = 'absent'
 // single-checkpoint deviations are captured as an 'outpass' checkpoint status,
 // not as a leave row.
 //   leaves: [{ lwsId, fromMs, toMs }]  (caller maps from_ts/to_ts → epoch ms)
+// An OPEN-ENDED leave (toMs == null) means "still out, until closed" — it covers
+// every day at/after fromMs (persist-until-return). Callers MUST map a null
+// to_ts to toMs: null, not 0/NaN, or the overlap test misfires.
 export function resolveOnLeave(leaves = [], dayStartMs, dayEndMs) {
   const covered = new Set()
   for (const l of leaves) {
     if (l == null) continue
-    if (l.fromMs <= dayEndMs && l.toMs >= dayStartMs) covered.add(l.lwsId)
+    const openEnded = l.toMs == null
+    if (l.fromMs <= dayEndMs && (openEnded || l.toMs >= dayStartMs)) covered.add(l.lwsId)
   }
   return covered
 }

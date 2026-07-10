@@ -10,6 +10,7 @@ const mockStore = {
   getConfirmationsForDate: vi.fn(),
   fetchDailyAttendance: vi.fn(),
   getActiveLeaves: vi.fn(),
+  endLeave: vi.fn(),
   hostelAlertMobiles: [],
   setHostelAlertMobiles: vi.fn(),
 }
@@ -42,6 +43,7 @@ beforeEach(() => {
   mockStore.fetchDailyAttendance.mockResolvedValue({ date: null, rows: [] })
   mockStore.getConfirmationsForDate.mockResolvedValue([])
   mockStore.getActiveLeaves.mockResolvedValue([])
+  mockStore.endLeave.mockResolvedValue(true)
   mockStore.setCheckpointExceptions.mockResolvedValue(true)
   mockStore.confirmRoll.mockResolvedValue(true)
   supabase.auth.getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
@@ -127,6 +129,32 @@ describe('HostelTab — exception marking + reconciliation', () => {
     await waitFor(() => expect(mockStore.setCheckpointExceptions).toHaveBeenCalledWith(
       expect.any(String), 'hostel_pm', [{ lwsId: 'APJ-2', status: 'absent' }],
     ))
+  })
+})
+
+describe('HostelTab — on-leave panel', () => {
+  it('lists an open-ended leave (stale) and marks it returned via endLeave', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'lv-1', lws_id: 'APJ-1', from_ts: '2020-01-01T00:00:00.000Z', to_ts: null, type: 'leave' },
+    ])
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /On Leave/ }))
+
+    // The open-ended, long-running leave is surfaced and flagged stale.
+    expect(await screen.findByText(/open-ended/)).toBeInTheDocument()
+    expect(screen.getByText(/⚠ stale/)).toBeInTheDocument()
+
+    // Mark returned closes the leave (stamps to_ts) rather than deleting it.
+    fireEvent.click(screen.getByRole('button', { name: /Mark Aarav Nair returned/ }))
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv-1', expect.any(String)))
+  })
+
+  it('shows an empty state when no boarder is on leave', async () => {
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /On Leave/ }))
+    expect(await screen.findByText(/No boarders on leave/)).toBeInTheDocument()
   })
 })
 

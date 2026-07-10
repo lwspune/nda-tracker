@@ -146,13 +146,14 @@ Index: `(date)`, `(lws_id)`. The `class` checkpoint in the chain view is **deriv
 |---|---|---|---|
 | `id` | uuid PK | `gen_random_uuid()` | |
 | `lws_id` | text | — | FK → `students(lws_id)` |
-| `from_ts` / `to_ts` | timestamptz | — | leave window |
+| `from_ts` | timestamptz | — | leave start |
+| `to_ts` | timestamptz | **nullable** | leave end. **NULL = open-ended** ("still out, until closed") — persist-until-return model (2026-07-11) |
 | `type` | text | `'leave'` | `leave` / `outpass` / `medical` |
 | `reason` | text | nullable | |
 | `approved_by` | text | nullable | admin email |
 | `created_at` | timestamptz | `now()` | |
 
-An active leave overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test). Index: `(lws_id)`, `(from_ts, to_ts)`.
+An active leave overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test). An **open-ended** leave (`to_ts NULL`) covers every day at/after `from_ts` until closed. **Load-bearing:** both leave readers — `leavesSlice.getActiveLeaves` and `api/send-attendance-alerts.js` — must query `.or('to_ts.is.null,to_ts.gte.<dayStart>')` and map `to_ts null → toMs null` for `resolveOnLeave`; a plain `.gte('to_ts', …)` silently drops open leaves and flags their boarders as unexplained. Close a leave with `leavesSlice.endLeave(id, toTs)` (stamps `to_ts` — the boarder returned); the Hostel tab's **On Leave** panel surfaces open leaves with a days-out counter and flags any out ≥3 days as stale. Index: `(lws_id)`, `(from_ts, to_ts)`.
 
 ### `checkpoint_confirmations` — roll reconciliation gate
 

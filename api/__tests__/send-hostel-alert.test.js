@@ -50,7 +50,7 @@ function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], h
     from: t => {
       const result = resultFor(t)
       const b = {
-        select: () => b, eq: () => b, lte: () => b, gte: () => b,
+        select: () => b, eq: () => b, lte: () => b, gte: () => b, or: () => b,
         single: () => Promise.resolve(result),
         then: r => r(result),
       }

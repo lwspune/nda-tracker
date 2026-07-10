@@ -239,7 +239,10 @@ async function handleHostelAlert(req, res) {
   const { data: checkpointRows, error: cErr } = await svc.from('checkpoint_absences').select('lws_id, checkpoint, status').eq('date', day)
   if (cErr) { res.status(500).json({ ok: false, error: 'Failed to load checkpoints: ' + cErr.message }); return }
 
-  const { data: leaveRows, error: lErr } = await svc.from('leaves').select('lws_id, from_ts, to_ts').lte('from_ts', endIso).gte('to_ts', startIso)
+  // Overlap incl. open-ended leaves (to_ts null → still out). The null branch
+  // must match leavesSlice.getActiveLeaves, or an on-leave boarder wrongly shows
+  // as unexplained in the warden alert.
+  const { data: leaveRows, error: lErr } = await svc.from('leaves').select('lws_id, from_ts, to_ts').lte('from_ts', endIso).or(`to_ts.is.null,to_ts.gte.${startIso}`)
   if (lErr) { res.status(500).json({ ok: false, error: 'Failed to load leaves: ' + lErr.message }); return }
 
   const { data: stateRow, error: sErr } = await svc.from('faculty_state').select('data').eq('id', 1).single()
@@ -249,7 +252,9 @@ async function handleHostelAlert(req, res) {
   // ── Recompute the chain + shape the alert ──
   const rosterMapped = (roster || []).map(s => ({ lwsId: s.lws_id, name: s.canonical_name }))
   const onLeaveIds = resolveOnLeave(
-    (leaveRows || []).map(r => ({ lwsId: r.lws_id, fromMs: Date.parse(r.from_ts), toMs: Date.parse(r.to_ts) })),
+    // to_ts null → toMs null (open-ended); Date.parse(null) is NaN, which would
+    // break the overlap test, so map it explicitly.
+    (leaveRows || []).map(r => ({ lwsId: r.lws_id, fromMs: Date.parse(r.from_ts), toMs: r.to_ts == null ? null : Date.parse(r.to_ts) })),
     startMs, endMs,
   )
   const chain = buildDailyChain({ roster: rosterMapped, attendanceRows: attendanceRows || [], checkpointRows: checkpointRows || [], onLeaveIds })

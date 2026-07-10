@@ -26,6 +26,10 @@ const STATUS_META = {
 }
 // For a roll reconciliation, "away" = physically not in the dorm.
 const AWAY_STATUSES = new Set(['absent', 'outpass'])
+// An open leave out this many days or more is flagged for review — the guard
+// against a persist-until-return leave silently masking a boarder forever.
+const STALE_LEAVE_DAYS = 3
+const DAY_MS = 86_400_000
 
 function todayDmy() {
   const d = new Date()
@@ -54,10 +58,11 @@ export default function HostelTab() {
   const getConfirmationsForDate = useStore(s => s.getConfirmationsForDate)
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
   const getActiveLeaves = useStore(s => s.getActiveLeaves)
+  const endLeave = useStore(s => s.endLeave)
   const hostelAlertMobiles = useStore(s => s.hostelAlertMobiles)
   const setHostelAlertMobiles = useStore(s => s.setHostelAlertMobiles)
 
-  const [view, setView] = useState('mark')          // 'mark' | 'chain'
+  const [view, setView] = useState('mark')          // 'mark' | 'chain' | 'leave'
   const [date, setDate] = useState(todayDmy)
   const [checkpoint, setCheckpoint] = useState('hostel_pm')
   const [edits, setEdits] = useState({})            // lwsId → status (present omitted)
@@ -72,6 +77,7 @@ export default function HostelTab() {
   const [checkpointRows, setCheckpointRows] = useState([])
   const [confirmations, setConfirmations] = useState([])
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
+  const [leaveRows, setLeaveRows] = useState([])    // raw open leaves overlapping `date`
 
   // Warden alert.
   const [alerting, setAlerting] = useState(false)
@@ -134,16 +140,20 @@ export default function HostelTab() {
         (async () => {
           const { startMs, endMs } = dayBoundsMs(date)
           const rows = await getActiveLeaves(new Date(startMs).toISOString(), new Date(endMs).toISOString())
-          return resolveOnLeave(
-            rows.map(r => ({ lwsId: r.lws_id, fromMs: new Date(r.from_ts).getTime(), toMs: new Date(r.to_ts).getTime() })),
+          const ids = resolveOnLeave(
+            // to_ts null → toMs null (open-ended); new Date(null) is epoch 0,
+            // which would wrongly exclude the leave, so map it explicitly.
+            rows.map(r => ({ lwsId: r.lws_id, fromMs: new Date(r.from_ts).getTime(), toMs: r.to_ts == null ? null : new Date(r.to_ts).getTime() })),
             startMs, endMs,
           )
+          return { ids, rows }
         })(),
       ])
       setCheckpointRows(cpRows)
       setAttendanceRows(att.rows || [])
       setConfirmations(confs)
-      setOnLeaveIds(leaves)
+      setOnLeaveIds(leaves.ids)
+      setLeaveRows(leaves.rows)
       // Seed the marking grid from saved exceptions for the selected checkpoint.
       const forCp = {}
       for (const r of cpRows) if (r.checkpoint === checkpoint) forCp[r.lws_id] = r.status
@@ -212,6 +222,20 @@ export default function HostelTab() {
     }
   }
 
+  // Close an open leave — the boarder returned. Stamps to_ts to the END of the
+  // board's day, so `date` itself still reads as leave (they were out today) but
+  // tomorrow's checkpoints expect them present again.
+  async function handleMarkReturned(id) {
+    const { endMs } = dayBoundsMs(date)
+    const ok = await endLeave(id, new Date(endMs).toISOString())
+    if (ok) {
+      setBanner({ type: 'success', msg: 'Marked returned — leave closed as of ' + date + '.' })
+      loadDay()
+    } else {
+      setBanner({ type: 'error', msg: 'Could not close the leave — check your session.' })
+    }
+  }
+
   function addWarden() {
     const digits = newWarden.replace(/\D/g, '').slice(-10)
     if (digits.length !== 10) return
@@ -256,6 +280,37 @@ export default function HostelTab() {
     return !c || !c.reconciled
   })
 
+  // ── On-leave list (persist-until-return management) ─────────
+  const nameByLwsId = useMemo(() => {
+    const m = new Map()
+    for (const r of roster) m.set(r.lwsId, r.name)
+    return m
+  }, [roster])
+
+  // Boarders currently on leave for `date`, longest-out first so stale rise to
+  // the top. Scoped to the roster (APJ boarders). `daysOut` counts whole days
+  // from the leave's start to the board day.
+  const onLeaveList = useMemo(() => {
+    const dayStartMs = dayBoundsMs(date).startMs
+    return leaveRows
+      .filter(r => nameByLwsId.has(r.lws_id))
+      .map(r => {
+        const fromMs = new Date(r.from_ts).getTime()
+        const daysOut = Math.max(0, Math.floor((dayStartMs - fromMs) / DAY_MS))
+        return {
+          id: r.id,
+          lwsId: r.lws_id,
+          name: nameByLwsId.get(r.lws_id),
+          fromDmy: isoToDmy(r.from_ts.slice(0, 10)),
+          openEnded: r.to_ts == null,
+          daysOut,
+          stale: daysOut >= STALE_LEAVE_DAYS,
+        }
+      })
+      .sort((a, b) => b.daysOut - a.daysOut || a.name.localeCompare(b.name))
+  }, [leaveRows, nameByLwsId, date])
+  const staleCount = onLeaveList.filter(l => l.stale).length
+
   if (roster.length === 0) {
     return <EmptyState icon="🏠" title="No APJ boarders" sub="Hostel & mess tracking is scoped to the APJ branch. No Active APJ students found." />
   }
@@ -285,6 +340,14 @@ export default function HostelTab() {
             className={`px-4 py-2 text-[12px] font-semibold min-h-[44px] ${view === 'chain' ? 'bg-accent text-black' : 'text-ink-3 hover:text-ink'}`}
           >
             Chain {anomalies.length > 0 && <span className="ml-1 text-danger">({anomalies.length})</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('leave')}
+            aria-pressed={view === 'leave'}
+            className={`px-4 py-2 text-[12px] font-semibold min-h-[44px] border-l border-border ${view === 'leave' ? 'bg-accent text-black' : 'text-ink-3 hover:text-ink'}`}
+          >
+            On Leave {onLeaveList.length > 0 && <span className={`ml-1 ${staleCount > 0 ? 'text-danger' : 'text-ink-3'}`}>({onLeaveList.length})</span>}
           </button>
         </div>
       </div>
@@ -428,7 +491,7 @@ export default function HostelTab() {
             </div>
           )}
         </>
-      ) : (
+      ) : view === 'chain' ? (
         // ── Chain / anomaly board ──────────────────────────────
         <>
           {openRolls.length > 0 && (
@@ -535,6 +598,46 @@ export default function HostelTab() {
               </tbody>
             </table>
           </div>
+        </>
+      ) : (
+        // ── On Leave (persist-until-return management) ─────────
+        <>
+          <div className="mt-4 mb-3 text-[13px] text-ink-2">
+            {onLeaveList.length === 0
+              ? <span className="text-success font-semibold">✓ No boarders on leave on {date}.</span>
+              : <>
+                  <span className="font-semibold text-ink">{onLeaveList.length}</span> boarder{onLeaveList.length !== 1 ? 's' : ''} on leave on {date}
+                  {staleCount > 0 && <span className="text-danger font-semibold"> · {staleCount} out {STALE_LEAVE_DAYS}+ days — review</span>}
+                  <span className="block text-[12px] text-ink-3 mt-1">A leave persists (covering every checkpoint) until you mark the boarder returned. Close stale leaves so they don't mask a real absence.</span>
+                </>}
+          </div>
+
+          {onLeaveList.length > 0 && (
+            <div className="card divide-y divide-border">
+              {onLeaveList.map(l => (
+                <div key={l.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${l.stale ? 'bg-red-400/5' : ''}`}>
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setActiveStudent(l.name)}
+                      className="text-[13px] font-medium text-ink text-left hover:text-accent hover:underline"
+                    >{l.name}</button>
+                    <div className="text-[11px] font-mono text-ink-3 mt-0.5">
+                      since {l.fromDmy} · {l.daysOut} day{l.daysOut !== 1 ? 's' : ''} out
+                      {l.openEnded ? ' · open-ended' : ''}
+                      {l.stale && <span className="ml-1.5 text-danger font-semibold">⚠ stale</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleMarkReturned(l.id)}
+                    aria-label={`Mark ${l.name} returned`}
+                    className="btn btn-ghost text-[12px] min-h-[40px] px-3 whitespace-nowrap border border-border hover:border-accent hover:text-accent"
+                  >Mark returned</button>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

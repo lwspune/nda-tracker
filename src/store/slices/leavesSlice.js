@@ -14,12 +14,14 @@ async function getSession() {
 export const LEAVE_TYPES = ['leave', 'outpass', 'medical']
 
 export const createLeavesSlice = (_set, _get) => ({
-  // Grant a leave. `fromTs`/`toTs` are ISO timestamps. Stamped with the
-  // approving admin's email.
+  // Grant a leave. `fromTs` is an ISO timestamp. `toTs` is OPTIONAL — omitted or
+  // empty means an OPEN-ENDED leave (to_ts null → "still out, until closed"),
+  // the persist-until-return model. Stamped with the approving admin's email.
   async addLeave({ lwsId, fromTs, toTs, type = 'leave', reason = null }) {
-    if (!lwsId || !fromTs || !toTs) return false
+    if (!lwsId || !fromTs) return false
     if (!LEAVE_TYPES.includes(type)) return false
-    if (new Date(toTs).getTime() < new Date(fromTs).getTime()) return false
+    const to = (toTs == null || toTs === '') ? null : toTs
+    if (to != null && new Date(to).getTime() < new Date(fromTs).getTime()) return false
     const session = await getSession()
     if (!session) return false
     const { error } = await supabase
@@ -27,7 +29,7 @@ export const createLeavesSlice = (_set, _get) => ({
       .insert({
         lws_id: lwsId,
         from_ts: fromTs,
-        to_ts: toTs,
+        to_ts: to,
         type,
         reason,
         approved_by: session.user?.email ?? null,
@@ -49,7 +51,10 @@ export const createLeavesSlice = (_set, _get) => ({
       .from('leaves')
       .select('id, lws_id, from_ts, to_ts, type, reason, approved_by, created_at')
       .lte('from_ts', dayEndIso)   // starts on/before the day ends …
-      .gte('to_ts', dayStartIso)   // … and ends on/after the day starts → overlap
+      // … and ends on/after the day starts OR is open-ended (to_ts null → still
+      // out). The null branch is load-bearing: without it, open-ended leaves are
+      // silently dropped and their boarders flag as unexplained absences.
+      .or(`to_ts.is.null,to_ts.gte.${dayStartIso}`)
     if (error) {
       console.error('[leaves] getActiveLeaves failed:', error)
       return []
@@ -57,8 +62,24 @@ export const createLeavesSlice = (_set, _get) => ({
     return data ?? []
   },
 
-  // Revoke a leave outright (e.g. entered in error). Ending a leave early is a
-  // future refinement (set to_ts) — for now a leave is present or absent.
+  // Close/shorten a leave by stamping its to_ts — the boarder returned. Unlike
+  // deleteLeave (erase), this preserves that the student WAS on leave up to the
+  // return moment. This is how an open-ended leave gets bounded so it stops
+  // masking future checkpoints.
+  async endLeave(id, toTs) {
+    if (!id || !toTs) return false
+    const session = await getSession()
+    if (!session) return false
+    const { error } = await supabase.from('leaves').update({ to_ts: toTs }).eq('id', id)
+    if (error) {
+      console.error('[leaves] endLeave failed:', error)
+      return false
+    }
+    return true
+  },
+
+  // Revoke a leave outright (e.g. entered in error). Use endLeave to record a
+  // real return; use this only to erase a mistaken row.
   async deleteLeave(id) {
     if (!id) return false
     const session = await getSession()
