@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { getTodaysLectures } from '../../lib/timetable'
+import { resolveOnLeave } from '../../lib/analytics/chain'
 import MarkAbsenteesModal from './MarkAbsenteesModal'
 
 function todayIso() {
@@ -28,6 +29,8 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const mappings           = useStore(s => s.timetableMappings)
   const setForPeriod       = useStore(s => s.setLectureAbsenteesForPeriod)
   const getAbsencesForDate = useStore(s => s.getLectureAbsencesForDate)
+  const getActiveLeaves    = useStore(s => s.getActiveLeaves)
+  const endLeave           = useStore(s => s.endLeave)
   // Per-(date, batch) send history — keyed by `${date}|${batchName}` so two
   // batches sent on the same day stay independent. Read here to render the
   // contextual send-button label; AttendancePage writes it after each send.
@@ -44,6 +47,15 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   // Shape: { slotId, subject, startTime, endTime }.
   const [adhocLectures, setAdhocLectures] = useState([])
   const [adhocForm, setAdhocForm] = useState(null) // null = hidden; else { subject, start, end }
+  // Pooled lectures: extra batches whose students also attend this batch's
+  // periods (e.g. 6M sitting the 12th's lectures). Union into the roster so
+  // present→absent derivation covers them. In-session (re-pick after reload).
+  const [extraBatches, setExtraBatches] = useState([])
+  // Students on an active leave for `date` (hostel scope). Empty for non-hostel
+  // branches → the present/absent toggle just works with nothing locked.
+  const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
+  const [leaveRowByLwsId, setLeaveRowByLwsId] = useState({}) // lwsId → { id } for "mark returned"
+  const [leaveRefresh, setLeaveRefresh] = useState(0)        // bump to reload leaves
 
   // Available batches: union of all timetable batch names
   const availableBatches = useMemo(() => {
@@ -75,19 +87,25 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     return map
   }, [lectures, adhocLectures])
 
-  // Students in the selected batch (deduped, sorted by name)
+  // Roster = the selected batch PLUS any pooled "also attending" batches.
+  const rosterBatches = useMemo(
+    () => new Set([batchName, ...extraBatches].filter(Boolean)),
+    [batchName, extraBatches],
+  )
+
+  // Students across the roster batches (deduped, sorted by name).
   const studentsInBatch = useMemo(() => {
     if (!batchName) return []
     const seen = new Set()
     const out = []
     for (const p of Object.values(studentProfiles)) {
       if (!p?.lwsId || seen.has(p.lwsId)) continue
-      if (!Array.isArray(p.batches) || !p.batches.includes(batchName)) continue
+      if (!Array.isArray(p.batches) || !p.batches.some(b => rosterBatches.has(b))) continue
       seen.add(p.lwsId)
       out.push({ lwsId: p.lwsId, name: p.name })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
-  }, [studentProfiles, batchName])
+  }, [studentProfiles, batchName, rosterBatches])
 
   const batchIdSet = useMemo(
     () => new Set(studentsInBatch.map(s => s.lwsId)),
@@ -128,6 +146,40 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     })
     return () => { cancelled = true }
   }, [date, batchName, getAbsencesForDate, batchIdSet])
+
+  // Load the day's active leaves (hostel scope). Empty for non-hostel branches.
+  // `date` is YYYY-MM-DD; build IST day bounds for the overlap test.
+  useEffect(() => {
+    if (!date) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOnLeaveIds(new Set()); setLeaveRowByLwsId({})
+      return
+    }
+    let cancelled = false
+    const dayStartIso = `${date}T00:00:00+05:30`
+    const dayEndIso = `${date}T23:59:59+05:30`
+    getActiveLeaves(dayStartIso, dayEndIso).then(rows => {
+      if (cancelled) return
+      const ids = resolveOnLeave(
+        rows.map(r => ({ lwsId: r.lws_id, fromMs: Date.parse(r.from_ts), toMs: r.to_ts == null ? null : Date.parse(r.to_ts) })),
+        Date.parse(dayStartIso), Date.parse(dayEndIso),
+      )
+      const byId = {}
+      for (const r of rows) if (ids.has(r.lws_id) && !byId[r.lws_id]) byId[r.lws_id] = { id: r.id }
+      setOnLeaveIds(ids)
+      setLeaveRowByLwsId(byId)
+    })
+    return () => { cancelled = true }
+  }, [date, getActiveLeaves, leaveRefresh])
+
+  // Teacher reported an on-leave student PRESENT → they're back. Close the leave
+  // (stamp to_ts to end of this day) and reload so the row unlocks.
+  async function handleMarkReturned(lwsId) {
+    const row = leaveRowByLwsId[lwsId]
+    if (!row?.id) return
+    const ok = await endLeave(row.id, `${date}T23:59:59+05:30`)
+    if (ok) setLeaveRefresh(n => n + 1)
+  }
 
   async function handleSavePeriod(lwsIds) {
     if (!modalSlot?.slotId) return
@@ -202,7 +254,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
           <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3">Batch</span>
           <select
             value={batchName}
-            onChange={e => setBatchName(e.target.value)}
+            onChange={e => { setBatchName(e.target.value); setExtraBatches([]) }}
             aria-label="Batch"
             className="form-input text-[13px] min-h-[44px] px-3"
           >
@@ -210,6 +262,28 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
             {availableBatches.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </label>
+
+        {/* Pooled lectures: batches whose students also sit this batch's periods.
+            A <div> (not <label>) — these are toggle buttons, not a form control. */}
+        {batchName && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3">Also attending</span>
+            <div className="flex flex-wrap gap-1.5 max-w-[420px]">
+              {availableBatches.filter(b => b !== batchName).map(b => {
+                const on = extraBatches.includes(b)
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setExtraBatches(prev => on ? prev.filter(x => x !== b) : [...prev, b])}
+                    aria-pressed={on}
+                    className={`text-[11px] px-2 py-1.5 rounded-full border min-h-[36px] ${on ? 'border-accent text-accent bg-accent-soft/40' : 'border-border text-ink-3 hover:text-ink'}`}
+                  >{b}</button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <div className="ml-auto">
           {(() => {
             const history = batchName ? lectureMissSendHistory?.[`${date}|${batchName}`] : null
@@ -400,6 +474,8 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
         subject={modalSlot?.subject ?? ''}
         studentsInBatch={studentsInBatch}
         initialAbsentees={modalSlot ? (absencesBySlot[modalSlot.slotId] || []) : []}
+        onLeaveIds={onLeaveIds}
+        onMarkReturned={handleMarkReturned}
         onSave={handleSavePeriod}
         onClose={() => setModalSlot(null)}
       />

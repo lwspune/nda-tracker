@@ -86,7 +86,7 @@ describe('MarkAbsenteesModal', () => {
       />
     )
     fireEvent.click(screen.getByLabelText(/Karan Mehta/))
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
     expect(onSave).toHaveBeenCalledWith(['LWS-001', 'LWS-003'])
     expect(onClose).toHaveBeenCalled()
   })
@@ -139,7 +139,7 @@ describe('MarkAbsenteesModal', () => {
     fireEvent.click(screen.getByLabelText(/Ravi Kumar/))
     fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'arj' } })
     fireEvent.click(screen.getByLabelText(/Arjun Sharma/))
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
     expect(onSave).toHaveBeenCalledWith(expect.arrayContaining(['LWS-001', 'LWS-002']))
   })
 
@@ -154,5 +154,73 @@ describe('MarkAbsenteesModal', () => {
       />
     )
     expect(container.firstChild).toBeNull()
+  })
+})
+
+describe('MarkAbsenteesModal — present/absent toggle + leave-awareness', () => {
+  const ROSTER = [
+    { lwsId: 'A', name: 'Aaron' },
+    { lwsId: 'B', name: 'Bina' },
+    { lwsId: 'C', name: 'Cyrus' },
+  ]
+  function renderModal(props = {}) {
+    const onSave = vi.fn()
+    const onMarkReturned = vi.fn()
+    render(
+      <MarkAbsenteesModal
+        open date="2026-07-10" subject="Physics"
+        studentsInBatch={ROSTER} initialAbsentees={[]}
+        onLeaveIds={props.onLeaveIds ?? []}
+        onMarkReturned={onMarkReturned}
+        onSave={onSave} onClose={vi.fn()}
+      />,
+    )
+    return { onSave, onMarkReturned }
+  }
+
+  it('absent mode (default): saves exactly the tapped students', () => {
+    const { onSave } = renderModal()
+    fireEvent.click(screen.getByLabelText('Aaron'))
+    fireEvent.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(onSave).toHaveBeenCalledWith(['A'])
+  })
+
+  it('present mode: absent = roster − present', () => {
+    const { onSave } = renderModal()
+    fireEvent.click(screen.getByRole('button', { name: 'Present list' }))
+    fireEvent.click(screen.getByLabelText('Aaron'))    // Aaron present
+    fireEvent.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(onSave).toHaveBeenCalledWith(['B', 'C'])
+  })
+
+  it('an on-leave student is locked, tagged, and never logged absent', () => {
+    const { onSave } = renderModal({ onLeaveIds: ['B'] })
+    expect(screen.getByLabelText('Bina (on leave)')).toBeDisabled()
+    expect(screen.getByText('on leave')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Present list' }))
+    fireEvent.click(screen.getByLabelText('Aaron'))    // present → absent should be [C] only
+    fireEvent.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(onSave).toHaveBeenCalledWith(['C'])
+  })
+
+  it('the live preview reflects the derived absent + excluded-leave counts', () => {
+    renderModal({ onLeaveIds: ['B'] })
+    expect(screen.getByText('Will log absent').closest('span')).toHaveTextContent('0')
+    expect(screen.getByText('On leave (excluded)').closest('span')).toHaveTextContent('1')
+  })
+
+  it('fires onMarkReturned for an on-leave student reported present', () => {
+    const { onMarkReturned } = renderModal({ onLeaveIds: ['B'] })
+    fireEvent.click(screen.getByRole('button', { name: /Bina returned/ }))
+    expect(onMarkReturned).toHaveBeenCalledWith('B')
+  })
+
+  it('non-hostel branch (no leaves): plain present toggle, nothing locked', () => {
+    const { onSave } = renderModal({ onLeaveIds: [] })
+    expect(screen.queryByText('on leave')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Present list' }))
+    fireEvent.click(screen.getByLabelText('Aaron'))
+    fireEvent.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(onSave).toHaveBeenCalledWith(['B', 'C'])
   })
 })

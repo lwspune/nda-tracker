@@ -7,6 +7,8 @@ const mockStore = {
   timetableMappings: [],
   setLectureAbsenteesForPeriod: vi.fn(),
   getLectureAbsencesForDate: vi.fn(),
+  getActiveLeaves: vi.fn(),
+  endLeave: vi.fn(),
   lectureMissSendHistory: {},
 }
 
@@ -58,6 +60,8 @@ beforeEach(() => {
   mockStore.lectureMissSendHistory = {}
   mockStore.getLectureAbsencesForDate.mockResolvedValue([])
   mockStore.setLectureAbsenteesForPeriod.mockResolvedValue(true)
+  mockStore.getActiveLeaves.mockResolvedValue([])   // no leaves by default (non-hostel)
+  mockStore.endLeave.mockResolvedValue(true)
 })
 
 // ── tests ────────────────────────────────────────────────────
@@ -151,7 +155,7 @@ describe('LectureLogTab — marking flow', () => {
 
     const markBtns = screen.getAllByRole('button', { name: /mark absentees/i })
     fireEvent.click(markBtns[0]) // Maths
-    expect(await screen.findByText(/Mark absentees — Maths/)).toBeInTheDocument()
+    expect(await screen.findByText(/Mark attendance — Maths/)).toBeInTheDocument()
   })
 
   it('saving the modal calls setLectureAbsenteesForPeriod with the right args', async () => {
@@ -162,7 +166,7 @@ describe('LectureLogTab — marking flow', () => {
     // Modal shows; check Arjun and Ravi
     fireEvent.click(await screen.findByLabelText(/Arjun Sharma/))
     fireEvent.click(screen.getByLabelText(/Ravi Kumar/))
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
 
     await waitFor(() =>
       expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(
@@ -181,7 +185,7 @@ describe('LectureLogTab — marking flow', () => {
     // Save 1 absentee for Maths
     fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
     fireEvent.click(await screen.findByLabelText(/Arjun Sharma/))
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
 
     await screen.findByText(/1 absent/i)
   })
@@ -260,7 +264,7 @@ describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
     const markBtns = screen.getAllByRole('button', { name: /mark absentees/i })
     fireEvent.click(markBtns[markBtns.length - 1]) // the ad-hoc card (rendered last)
     fireEvent.click(await screen.findByLabelText(/Arjun Sharma/))
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
 
     await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(
       THURSDAY, expect.stringMatching(/^adhoc_/), 'Extra Maths Doubt', ['LWS-001'],
@@ -352,5 +356,45 @@ describe('LectureLogTab — resend states (read lectureMissSendHistory)', () => 
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
     await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /all notified · resend all/i })).toBeInTheDocument()
+  })
+})
+
+describe('LectureLogTab — pooled roster + leave-awareness', () => {
+  it('pooling an "Also attending" batch unions its students into the modal roster', async () => {
+    // Give batch B a timetable so it appears as a poolable chip; Karan is in B.
+    mockStore.timetables = [TIMETABLE, { ...TIMETABLE, id: 'tt2', batchName: 'LWS_NDA_2Y_(25-27)_B', grid: {}, timeSlots: [] }]
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+
+    // Karan (batch B) is not in the roster until pooled.
+    fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
+    expect(screen.queryByLabelText(/Karan Mehta/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    // Pool batch B → Karan joins the roster.
+    fireEvent.click(screen.getByRole('button', { name: 'LWS_NDA_2Y_(25-27)_B' }))
+    fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
+    expect(await screen.findByLabelText(/Karan Mehta/)).toBeInTheDocument()
+  })
+
+  it('locks an on-leave student in the modal (leaves loaded for the date)', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'lv1', lws_id: 'LWS-001', from_ts: '2026-05-20T00:00:00+05:30', to_ts: null },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getActiveLeaves).toHaveBeenCalled())
+    fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
+    expect(await screen.findByLabelText(/Arjun Sharma \(on leave\)/)).toBeDisabled()
+  })
+
+  it('marking an on-leave student "returned" calls endLeave for that leave', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'lv1', lws_id: 'LWS-001', from_ts: '2026-05-20T00:00:00+05:30', to_ts: null },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getActiveLeaves).toHaveBeenCalled())
+    fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
+    fireEvent.click(await screen.findByRole('button', { name: /Arjun Sharma returned/ }))
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv1', expect.stringContaining('2026-05-21')))
   })
 })
