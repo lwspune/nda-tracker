@@ -492,3 +492,31 @@ The day-scholar wiring (studentSlice + HostelTab + tests + DATABASE_SCHEMA/FLOWS
 **Why:** the data change is live but the code that acts on it isn't — a half-applied state.
 
 **How to apply:** commit the working-tree changes (`feat(hostel): exclude day-scholars from the boarder board`) and push to `main`; verify on `nda-tracker.vercel.app` that Anvay Sawant no longer appears on the Hostel & Mess board.
+
+---
+
+## 2026-07-11
+
+### Suppress on-leave students in the late-arrival + homework-pending alerts
+
+The lecture-miss alert now skips students on an active hostel leave (commit `84a393e`) — but the sibling parent-alert flows (`api/send-late-notifications.js` late-arrival, and the homework-pending send inside `api/send-attendance-alerts.js`/its caller) were **not** touched and almost certainly still message parents of boarders who went home. Same class of gap the lecture alert just closed.
+
+**Why:** a boarder on leave getting a "late to first lecture" or "homework pending" WhatsApp to their parents is wrong and erodes trust in the alerts — exactly the reason the lecture flow was fixed. It's a shipped feature so it needs a 360 + confirmation before reworking, but the fix pattern is already proven.
+
+**How to apply:** mirror the lecture fix — load the day's leaves with the null-safe query (`.lte('from_ts',endIso).or('to_ts.is.null,to_ts.gte.'+startIso)` via an authed user client), build an `onLeaveIds` Set, and skip any student whose `lwsId` is in it (report an `onLeaveSkipped` count; fail closed on a leaves-read error). Reuse `computeAbsentees`/`resolveOnLeave` semantics. Add a test per endpoint (on-leave suppressed; fail-closed). Note the late flow keys students differently — confirm it carries `lwsId` before matching.
+
+### Browser golden-path verify the leave lifecycle + present/absent lecture marking
+
+This session shipped a lot of leave-aware UI (On Leave tab: Put on leave / Mark returned / stale flag; lecture `MarkAbsenteesModal` present/absent toggle + leave-lock; `LectureLogTab` "Also attending" pooled roster) — all **test-verified but not click-verified** (sessions are non-interactive; the board needs a live Supabase admin session that only exists on Vercel). Same manual-verify gap logged for every prior feature.
+
+**Why:** the seams unit tests can't reach — `addLeave`→board round-trip, the present-mode derivation writing the right absentee set, the pooled-roster union actually pulling 6M students into a 12th period, the `endLeave` "returned?" closing a leave and unlocking the row — are where a regression hides. And the whole point (stop hand-entering leaves via SQL) only pays off if the UI works end-to-end.
+
+**How to apply:** on `nda-tracker.vercel.app` (admin, hard-refresh first): Hostel & Mess → **On Leave** → **+ Put on leave** → select 2 boarders → confirm they appear on the list open-ended, then **Mark returned** on one and confirm it closes. Attendance → **Lecture log** → pick the APJ 12th batch → **Also attending** = the 6M batch → open a period → toggle **Present list** → tap the present students → confirm the preview "will log absent N" matches roster−present−leave and an on-leave student shows locked with a "returned?" link.
+
+### Auto-close a leave when the student returns (class-attendance `P` signal)
+
+Deferred by design this session: "persist-until-return" leaves are closed **manually** (Mark returned). True auto-close ("mark present at a roll → leave ends") turned out ill-defined under exception-capture — default-present means "present" = *no row*, indistinguishable from "on leave, unmarked", so saving a roll can't safely close leaves. The one real positive present signal is the imported class attendance `P` (`student_attendance`).
+
+**Why:** an open-ended leave that nobody closes is a permanent blind spot — it suppresses every checkpoint anomaly for that student forever (the stale-leave ≥3-day flag is the current mitigation, not a fix). Auto-close tied to a real "they're back" observation would make persist-until-return safe without relying on someone remembering.
+
+**How to apply:** when the daily attendance import (or a roll marking) records a boarder as **present** while they hold an open leave, offer/apply an `endLeave(id, thatDay)` — surface it as a confirm ("N on-leave students marked present — close their leaves?") rather than silent auto-close, to avoid a stray `P` ending a real leave. Gate on a *positive* present signal only (attendance `P`), never on absence-of-exception. Ties into the existing On-Leave panel + `endLeave`.
