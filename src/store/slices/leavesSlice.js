@@ -13,6 +13,13 @@ async function getSession() {
 // instead (see checkpointSlice).
 export const LEAVE_TYPES = ['leave', 'outpass', 'medical']
 
+// Open-ended leaves are encoded as a far-future `to_ts` sentinel rather than
+// NULL. Both read the same under the null-aware query, but the sentinel is ALSO
+// readable by any stale client still on the pre-open-ended bundle (whose
+// `.gte('to_ts', …)` drops NULL) — see [[project_open_ended_leave]]. New leaves
+// created from the UI use this so they stay visible everywhere.
+export const OPEN_LEAVE_TO_TS = '2099-12-31T23:59:59+05:30'
+
 export const createLeavesSlice = (_set, _get) => ({
   // Grant a leave. `fromTs` is an ISO timestamp. `toTs` is OPTIONAL — omitted or
   // empty means an OPEN-ENDED leave (to_ts null → "still out, until closed"),

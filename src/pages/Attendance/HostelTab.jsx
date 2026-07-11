@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { EmptyState, Spinner, Alert } from '../../components/ui'
 import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
+import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
@@ -30,6 +31,8 @@ const AWAY_STATUSES = new Set(['absent', 'outpass'])
 // against a persist-until-return leave silently masking a boarder forever.
 const STALE_LEAVE_DAYS = 3
 const DAY_MS = 86_400_000
+// A leave at/after this instant is treated as open-ended (the 2099 sentinel).
+const OPEN_LEAVE_MS = Date.parse(OPEN_LEAVE_TO_TS)
 
 function todayDmy() {
   const d = new Date()
@@ -59,6 +62,7 @@ export default function HostelTab() {
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
   const getActiveLeaves = useStore(s => s.getActiveLeaves)
   const endLeave = useStore(s => s.endLeave)
+  const addLeave = useStore(s => s.addLeave)
   const hostelAlertMobiles = useStore(s => s.hostelAlertMobiles)
   const setHostelAlertMobiles = useStore(s => s.setHostelAlertMobiles)
 
@@ -78,6 +82,13 @@ export default function HostelTab() {
   const [confirmations, setConfirmations] = useState([])
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
   const [leaveRows, setLeaveRows] = useState([])    // raw open leaves overlapping `date`
+
+  // "Put on leave" form (On Leave view).
+  const [showAddLeave, setShowAddLeave] = useState(false)
+  const [addSel, setAddSel] = useState(() => new Set())   // lwsIds to put on leave
+  const [addReason, setAddReason] = useState('')
+  const [addQuery, setAddQuery] = useState('')
+  const [addingLeave, setAddingLeave] = useState(false)
 
   // Warden alert.
   const [alerting, setAlerting] = useState(false)
@@ -236,6 +247,43 @@ export default function HostelTab() {
     }
   }
 
+  // Boarders eligible to be put on leave = roster minus those already on leave,
+  // narrowed by the picker search.
+  const availableForLeave = useMemo(() => {
+    const q = addQuery.trim().toLowerCase()
+    return roster.filter(r => !onLeaveIds.has(r.lwsId) && (!q || r.name.toLowerCase().includes(q)))
+  }, [roster, onLeaveIds, addQuery])
+
+  function toggleAddSel(lwsId) {
+    setAddSel(prev => {
+      const next = new Set(prev)
+      if (next.has(lwsId)) next.delete(lwsId); else next.add(lwsId)
+      return next
+    })
+  }
+
+  // Put the selected boarders on an OPEN-ENDED leave from the board day (they
+  // stay on leave until "Mark returned"). Encoded with the 2099 sentinel.
+  async function handlePutOnLeave() {
+    const ids = [...addSel]
+    if (ids.length === 0) return
+    setAddingLeave(true)
+    const fromTs = `${dmyToIso(date)}T00:00:00+05:30`
+    const reason = addReason.trim() || null
+    let ok = 0
+    for (const lwsId of ids) {
+      if (await addLeave({ lwsId, fromTs, toTs: OPEN_LEAVE_TO_TS, reason })) ok++
+    }
+    setAddingLeave(false)
+    if (ok > 0) {
+      setBanner({ type: 'success', msg: `Put ${ok} student${ok !== 1 ? 's' : ''} on leave from ${date}.` })
+      setAddSel(new Set()); setAddReason(''); setAddQuery(''); setShowAddLeave(false)
+      loadDay()
+    } else {
+      setBanner({ type: 'error', msg: 'Could not add leave — check your session.' })
+    }
+  }
+
   function addWarden() {
     const digits = newWarden.replace(/\D/g, '').slice(-10)
     if (digits.length !== 10) return
@@ -302,7 +350,7 @@ export default function HostelTab() {
           lwsId: r.lws_id,
           name: nameByLwsId.get(r.lws_id),
           fromDmy: isoToDmy(r.from_ts.slice(0, 10)),
-          openEnded: r.to_ts == null,
+          openEnded: r.to_ts == null || Date.parse(r.to_ts) >= OPEN_LEAVE_MS,
           daysOut,
           stale: daysOut >= STALE_LEAVE_DAYS,
         }
@@ -602,6 +650,70 @@ export default function HostelTab() {
       ) : (
         // ── On Leave (persist-until-return management) ─────────
         <>
+          {/* Put students on leave */}
+          <div className="mt-4 mb-3">
+            {!showAddLeave ? (
+              <button
+                type="button"
+                onClick={() => setShowAddLeave(true)}
+                className="btn text-[12px] min-h-[40px] px-3 border border-border hover:border-accent hover:text-accent"
+                aria-label="Put students on leave"
+              >+ Put on leave</button>
+            ) : (
+              <div className="card px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[11px] font-mono uppercase tracking-widest text-ink-3">Put on leave — from {date}</div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddLeave(false); setAddSel(new Set()); setAddReason(''); setAddQuery('') }}
+                    className="text-[12px] text-ink-3 hover:text-ink underline"
+                  >cancel</button>
+                </div>
+                <input
+                  type="text"
+                  value={addQuery}
+                  onChange={e => setAddQuery(e.target.value)}
+                  placeholder="Search boarders…"
+                  aria-label="Search boarders to put on leave"
+                  className="form-input w-full text-[13px] min-h-[44px] px-3 mb-2"
+                />
+                <div className="space-y-1 max-h-[40vh] overflow-y-auto mb-3">
+                  {availableForLeave.length === 0 ? (
+                    <div className="text-[12px] text-ink-3 italic py-3 text-center">No boarders match (all shown are already on leave, or filtered out).</div>
+                  ) : availableForLeave.map(s => (
+                    <label key={s.lwsId} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-surface-2 cursor-pointer min-h-[40px]">
+                      <input
+                        type="checkbox"
+                        checked={addSel.has(s.lwsId)}
+                        onChange={() => toggleAddSel(s.lwsId)}
+                        className="w-4 h-4"
+                        aria-label={s.name}
+                      />
+                      <span className="text-[13px] text-ink">{s.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={addReason}
+                  onChange={e => setAddReason(e.target.value)}
+                  placeholder="Reason (optional)"
+                  aria-label="Leave reason"
+                  className="form-input w-full text-[13px] min-h-[44px] px-3 mb-3"
+                />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handlePutOnLeave}
+                    disabled={addingLeave || addSel.size === 0}
+                    className="btn btn-primary min-h-[44px] px-5"
+                  >{addingLeave ? <Spinner size="sm" /> : `Put ${addSel.size} on leave`}</button>
+                  <span className="text-[12px] text-ink-3">Open-ended — stays on leave until you Mark returned.</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="mt-4 mb-3 text-[13px] text-ink-2">
             {onLeaveList.length === 0
               ? <span className="text-success font-semibold">✓ No boarders on leave on {date}.</span>

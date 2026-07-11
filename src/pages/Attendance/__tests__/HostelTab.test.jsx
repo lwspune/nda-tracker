@@ -11,6 +11,7 @@ const mockStore = {
   fetchDailyAttendance: vi.fn(),
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
+  addLeave: vi.fn(),
   hostelAlertMobiles: [],
   setHostelAlertMobiles: vi.fn(),
 }
@@ -44,6 +45,7 @@ beforeEach(() => {
   mockStore.getConfirmationsForDate.mockResolvedValue([])
   mockStore.getActiveLeaves.mockResolvedValue([])
   mockStore.endLeave.mockResolvedValue(true)
+  mockStore.addLeave.mockResolvedValue(true)
   mockStore.setCheckpointExceptions.mockResolvedValue(true)
   mockStore.confirmRoll.mockResolvedValue(true)
   supabase.auth.getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
@@ -155,6 +157,31 @@ describe('HostelTab — on-leave panel', () => {
     await screen.findByText('Aarav Nair')
     fireEvent.click(screen.getByRole('button', { name: /On Leave/ }))
     expect(await screen.findByText(/No boarders on leave/)).toBeInTheDocument()
+  })
+
+  it('puts a selected boarder on an open-ended leave via addLeave (2099 sentinel)', async () => {
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /On Leave/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Put students on leave/ }))
+    fireEvent.click(await screen.findByLabelText('Aarav Nair'))          // pick a boarder
+    fireEvent.click(screen.getByRole('button', { name: /Put 1 on leave/ }))
+    await waitFor(() => expect(mockStore.addLeave).toHaveBeenCalledWith(
+      expect.objectContaining({ lwsId: 'APJ-1', toTs: '2099-12-31T23:59:59+05:30' }),
+    ))
+  })
+
+  it('excludes already-on-leave boarders from the put-on-leave picker', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'lv1', lws_id: 'APJ-1', from_ts: '2026-07-09T00:00:00+05:30', to_ts: null },
+    ])
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /On Leave/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Put students on leave/ }))
+    // Aarav (APJ-1) is already on leave → not offered in the picker; Bhavya is.
+    expect(screen.queryByLabelText('Aarav Nair')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Bhavya Rao')).toBeInTheDocument()
   })
 })
 
