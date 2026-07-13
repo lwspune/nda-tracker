@@ -270,7 +270,7 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | Delete an integrity incident | ✓ | — | — |
 | Attendance rings (student monthly % view) | ✓ (StudentView) | ✓ (StudentView) | ✓ (portal, inline scroll) |
 | Syllabus Tracker (edit) | ✓ | — | — |
-| ProjectedScoreCard | ✓ | ✓ | — |
+| Performance block (StudentView) — stat tiles (Latest Score / Exams Taken / Attempt Quality / Consistency) + ProjectedScoreCard | superadmin only (gated on `isSuperadmin`; regular admin, teacher, and student portal all hidden) | — | — |
 | WrongAnswerAudit / UnattemptedAudit | ✓ | ✓ | ✓ |
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |

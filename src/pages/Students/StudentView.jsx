@@ -30,6 +30,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const savedInsights      = useStore(s => s.savedInsights)
   const ndaFreqBySubject   = useStore(s => s.ndaFreqBySubject)
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
+  const isSuperadmin       = useStore(s => s.isSuperadmin)
   const mode               = useMode()
 
   const [subjectFilter, setSubjectFilter] = useState('Maths')
@@ -351,7 +352,10 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         </div>
       )}
 
-      {/* Stats row */}
+      {/* Stats row + Projected card — superadmin only (isSuperadmin is false in
+          teacher/student modes and for regular admins, so this hides the whole
+          performance block from everyone but the superadmin account) */}
+      {isSuperadmin && (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           label="Latest Score"
@@ -384,9 +388,10 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
           deltaUp={null}
         />
       </div>
+      )}
 
-      {/* Projected NDA Score — faculty + teacher only, only when freq data is configured */}
-      {mode !== 'student' && hasFreqData && projected.total > 0 && (
+      {/* Projected NDA Score — superadmin only, only when freq data is configured */}
+      {isSuperadmin && hasFreqData && projected.total > 0 && (
         <ProjectedScoreCard
           projected={projected}
           primarySubject={primarySubject}

@@ -12,6 +12,9 @@ const mockStore = {
   studentProfiles: {},
   savedInsights: { classReport: null, studentPlans: {} },
   ndaFreqBySubject: {},
+  // Stat tiles + Projected card are superadmin-only; default the tests to the
+  // superadmin view so the existing performance assertions still exercise them.
+  isSuperadmin: true,
   // RecentIncidents + MissedExams read these; in tests they just resolve to no data.
   getLectureAbsencesForStudent: vi.fn().mockResolvedValue([]),
   getExamAbsencesForStudent:    vi.fn().mockResolvedValue([]),
@@ -86,6 +89,7 @@ beforeEach(() => {
   mockStore.studentProfiles = {}
   mockStore.savedInsights = { classReport: null, studentPlans: {} }
   mockStore.ndaFreqBySubject = {}
+  mockStore.isSuperadmin = true
 })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -373,6 +377,48 @@ describe('StudentView — name variant normalization', () => {
     expect(screen.getByText('Mock 2')).toBeInTheDocument()
     const card = screen.getByText('Exams Taken').closest('.stat-card')
     expect(within(card).getByText('2')).toBeInTheDocument()
+  })
+})
+
+// ── Superadmin-only performance block (stat tiles + Projected card) ───────────
+// The Latest Score / Exams Taken / Attempt Quality / Consistency tiles and the
+// Projected NDA Score card are gated on isSuperadmin. Every non-superadmin
+// (regular admin, teacher, student portal) sees neither.
+
+describe('StudentView — performance block gated to superadmin', () => {
+  it('renders the stat tiles for a superadmin', () => {
+    mockStore.isSuperadmin = true
+    setExams([makeExam({ subject: 'Maths' })])
+    renderView()
+    expect(screen.getByText('Latest Score')).toBeInTheDocument()
+    expect(screen.getByText('Exams Taken')).toBeInTheDocument()
+    expect(screen.getByText('Attempt Quality')).toBeInTheDocument()
+    expect(screen.getByText('Consistency')).toBeInTheDocument()
+  })
+
+  it('hides the stat tiles from a non-superadmin', () => {
+    mockStore.isSuperadmin = false
+    setExams([makeExam({ subject: 'Maths' })])
+    renderView()
+    expect(screen.queryByText('Latest Score')).not.toBeInTheDocument()
+    expect(screen.queryByText('Exams Taken')).not.toBeInTheDocument()
+    expect(screen.queryByText('Attempt Quality')).not.toBeInTheDocument()
+    expect(screen.queryByText('Consistency')).not.toBeInTheDocument()
+  })
+
+  it('still renders exam content (history) for a non-superadmin', () => {
+    mockStore.isSuperadmin = false
+    setExams([makeExam({ subject: 'Maths', examName: 'Maths Test 1' })])
+    renderView()
+    expect(screen.getByText('Maths Test 1')).toBeInTheDocument()
+  })
+
+  it('hides the Projected NDA Score card from a non-superadmin', () => {
+    mockStore.isSuperadmin = false
+    mockStore.ndaFreqBySubject = { Maths: [{ chapter: 'Algebra', freq: 10 }] }
+    setExams([makeExam({ subject: 'Maths' })])
+    renderView()
+    expect(screen.queryByTestId('projected-score')).not.toBeInTheDocument()
   })
 })
 
