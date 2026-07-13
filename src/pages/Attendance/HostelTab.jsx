@@ -5,6 +5,7 @@ import { EmptyState, Spinner, Alert } from '../../components/ui'
 import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
+import { downloadHostelLeaveReportPdf } from '../../lib/hostelLeaveReportPdf'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
@@ -89,6 +90,7 @@ export default function HostelTab() {
   const [addReason, setAddReason] = useState('')
   const [addQuery, setAddQuery] = useState('')
   const [addingLeave, setAddingLeave] = useState(false)
+  const [downloadingReport, setDownloadingReport] = useState(false)
 
   // Warden alert.
   const [alerting, setAlerting] = useState(false)
@@ -116,7 +118,7 @@ export default function HostelTab() {
       if (!HOSTEL_BRANCHES.includes(p.branch)) continue
       if (p.accountStatus && p.accountStatus !== 'Active') continue
       if (p.residential === false) continue              // day-scholar → not a boarder
-      out.push({ lwsId: p.lwsId, name: p.name, branch: p.branch, gender: p.gender, batches: p.batches || [] })
+      out.push({ lwsId: p.lwsId, name: p.name, branch: p.branch, gender: p.gender, batches: p.batches || [], mobile: p.mobile || '', parentMobiles: p.parentMobiles || [] })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }, [studentProfiles])
@@ -334,6 +336,11 @@ export default function HostelTab() {
     for (const r of roster) m.set(r.lwsId, r.name)
     return m
   }, [roster])
+  const rosterByLwsId = useMemo(() => {
+    const m = new Map()
+    for (const r of roster) m.set(r.lwsId, r)
+    return m
+  }, [roster])
 
   // Boarders currently on leave for `date`, longest-out first so stale rise to
   // the top. Scoped to the roster (APJ boarders). `daysOut` counts whole days
@@ -358,6 +365,34 @@ export default function HostelTab() {
       .sort((a, b) => b.daysOut - a.daysOut || a.name.localeCompare(b.name))
   }, [leaveRows, nameByLwsId, date])
   const staleCount = onLeaveList.filter(l => l.stale).length
+
+  // Download the day's on-leave boarders as a PDF, grouped gender → class
+  // (9th → 6M), batch-wise. Covers the WHOLE day's leaves — deliberately
+  // independent of the Mark-view display filters.
+  async function handleDownloadReport() {
+    if (onLeaveList.length === 0) return
+    setDownloadingReport(true)
+    try {
+      const rows = onLeaveList.map(l => {
+        const r = rosterByLwsId.get(l.lwsId)
+        return {
+          lwsId: l.lwsId,
+          name: l.name,
+          gender: r?.gender || '',
+          batch: r?.batches?.[0] || '',
+          since: l.fromDmy,
+          daysOut: l.daysOut,
+          mobile: r?.mobile || '',
+          parent: (r?.parentMobiles || []).join(', '),
+        }
+      })
+      await downloadHostelLeaveReportPdf({ date, rows })
+    } catch (e) {
+      setBanner({ type: 'error', msg: `Could not build the report — ${e.message}` })
+    } finally {
+      setDownloadingReport(false)
+    }
+  }
 
   if (roster.length === 0) {
     return <EmptyState icon="🏠" title="No APJ boarders" sub="Hostel & mess tracking is scoped to the APJ branch. No Active APJ students found." />
@@ -653,12 +688,21 @@ export default function HostelTab() {
           {/* Put students on leave */}
           <div className="mt-4 mb-3">
             {!showAddLeave ? (
-              <button
-                type="button"
-                onClick={() => setShowAddLeave(true)}
-                className="btn text-[12px] min-h-[40px] px-3 border border-border hover:border-accent hover:text-accent"
-                aria-label="Put students on leave"
-              >+ Put on leave</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLeave(true)}
+                  className="btn text-[12px] min-h-[40px] px-3 border border-border hover:border-accent hover:text-accent"
+                  aria-label="Put students on leave"
+                >+ Put on leave</button>
+                <button
+                  type="button"
+                  onClick={handleDownloadReport}
+                  disabled={downloadingReport || onLeaveList.length === 0}
+                  className="btn text-[12px] min-h-[40px] px-3 border border-border hover:border-accent hover:text-accent"
+                  aria-label="Download daily hostel-leave report as PDF"
+                >{downloadingReport ? <Spinner size="sm" /> : `⬇ Download report (${onLeaveList.length})`}</button>
+              </div>
             ) : (
               <div className="card px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
