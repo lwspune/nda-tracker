@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import { loadFromDisk, saveToStorage, clearStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
+import { loadFromDisk, saveToStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
 import { IS_READ_ONLY } from '../config'
-import { migrateFreq, exportDB, importDB } from '../lib/persistence'
+import { migrateFreq } from '../lib/persistence'
 import { DEFAULTS, hydrate, seedBranches } from './slices/defaults'
 import { createExamsSlice } from './slices/examsSlice'
 import { createQuizSlice } from './slices/quizSlice'
@@ -160,23 +160,6 @@ const useStore = create((set, get) => ({
   openUploadModal()  { set({ uploadModalOpen: true }) },
   closeUploadModal() { set({ uploadModalOpen: false }) },
 
-  // ── Export / Import ───────────────────────────────────────
-  exportDB() {
-    const { exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog } = get()
-    exportDB({ exams, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog })
-  },
-
-  importDB(json) {
-    try {
-      const { nextState, result } = importDB(json, get())
-      set(nextState)
-      get()._save()
-      return result
-    } catch (e) {
-      throw new Error('Import failed: ' + e.message)
-    }
-  },
-
   // ── Load exams from normalised Supabase tables ───────────
   async loadExamsFromSupabase() {
     const exams = await fetchExamsFromSupabase()
@@ -231,12 +214,6 @@ const useStore = create((set, get) => ({
       ndaFreqBySubject: migrateFreq(data),
       savedInsights:    DEFAULTS.savedInsights,
     })
-  },
-
-  // ── Clear all ─────────────────────────────────────────────
-  clearAll() {
-    clearStorage()
-    set({ ...DEFAULTS, activePage: 'dashboard', activeStudent: null, uploadModalOpen: false })
   },
 
   // ── WhatsApp send history (faculty only, persisted) ──────

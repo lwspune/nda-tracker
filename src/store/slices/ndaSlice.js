@@ -20,11 +20,6 @@ export const createNdaSlice = (set, get) => ({
     get()._save()
   },
 
-  setApiKey(key) {
-    set({ apiKey: key })
-    get()._save()
-  },
-
   recordCost(entry) {
     set(s => ({ costLog: [...s.costLog, entry] }))
     get()._save()

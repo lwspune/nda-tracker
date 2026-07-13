@@ -5,7 +5,6 @@ import { supabase } from './lib/supabase'
 import { ModeContext } from './context/ModeContext'
 import { loadFromSupabase } from './store/persist'
 import Sidebar from './components/layout/Sidebar'
-import ApiBar from './components/layout/ApiBar'
 import UploadModal from './components/upload/UploadModal'
 import ExamsPage from './pages/Exams'
 import QuizzesPage from './pages/Quizzes'
@@ -128,7 +127,6 @@ export default function App() {
       <div className="flex min-h-screen bg-bg">
         <Sidebar />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
-          <div className="hidden md:block"><ApiBar /></div>
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}
           </main>
@@ -165,7 +163,6 @@ function OnlineAdminPortal({ onLogout }) {
       <div className="flex min-h-screen bg-bg">
         <Sidebar onLogout={onLogout} />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
-          <div className="hidden md:block"><ApiBar /></div>
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}
           </main>
