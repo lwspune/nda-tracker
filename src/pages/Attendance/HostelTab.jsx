@@ -341,6 +341,13 @@ export default function HostelTab() {
     for (const r of roster) m.set(r.lwsId, r)
     return m
   }, [roster])
+  // lwsId → open-leave id, so the meal grid can close a leave in place when a
+  // boarder shows up (an explicit "returned?" tap, mirroring the class modal).
+  const leaveIdByLwsId = useMemo(() => {
+    const m = new Map()
+    for (const r of leaveRows) if (nameByLwsId.has(r.lws_id) && !m.has(r.lws_id)) m.set(r.lws_id, r.id)
+    return m
+  }, [leaveRows, nameByLwsId])
 
   // Boarders currently on leave for `date`, longest-out first so stale rise to
   // the top. Scoped to the roster (APJ boarders). `daysOut` counts whole days
@@ -523,15 +530,25 @@ export default function HostelTab() {
                       onClick={() => setActiveStudent(st.name)}
                       className="text-[13px] font-medium text-ink text-left hover:text-accent hover:underline"
                     >{st.name}</button>
-                    <button
-                      type="button"
-                      disabled={onLeave}
-                      onClick={() => cycle(st.lwsId)}
-                      aria-label={`${st.name}: ${meta.label}${onLeave ? ' (on leave)' : ', tap to change'}`}
-                      className={`text-[11px] font-bold font-mono px-3 py-1.5 rounded-full border min-h-[36px] min-w-[92px]
-                        ${status === 'present' ? 'border-transparent' : 'border'} ${meta.cls}
-                        ${onLeave ? 'opacity-70 cursor-default' : 'hover:brightness-110'}`}
-                    >{meta.label}</button>
+                    <div className="flex items-center gap-2">
+                      {onLeave && leaveIdByLwsId.has(st.lwsId) && (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkReturned(leaveIdByLwsId.get(st.lwsId))}
+                          aria-label={`Mark ${st.name} returned`}
+                          className="text-[11px] font-semibold text-accent underline underline-offset-2 min-h-[36px] px-2 hover:text-ink"
+                        >returned?</button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={onLeave}
+                        onClick={() => cycle(st.lwsId)}
+                        aria-label={`${st.name}: ${meta.label}${onLeave ? ' (on leave)' : ', tap to change'}`}
+                        className={`text-[11px] font-bold font-mono px-3 py-1.5 rounded-full border min-h-[36px] min-w-[92px]
+                          ${status === 'present' ? 'border-transparent' : 'border'} ${meta.cls}
+                          ${onLeave ? 'opacity-70 cursor-default' : 'hover:brightness-110'}`}
+                      >{meta.label}</button>
+                    </div>
                   </div>
                 )
               })}

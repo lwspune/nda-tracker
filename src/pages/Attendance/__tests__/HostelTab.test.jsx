@@ -185,6 +185,28 @@ describe('HostelTab — on-leave panel', () => {
   })
 })
 
+describe('HostelTab — inline returned in the meal grid', () => {
+  it('renders an inline "returned?" on an on-leave row that closes the leave via endLeave', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'lv-7', lws_id: 'APJ-1', from_ts: '2026-07-09T00:00:00+05:30', to_ts: null, type: 'leave' },
+    ])
+    render(<HostelTab />)
+    // On the default meal grid the on-leave boarder is locked…
+    const statusBtn = await screen.findByLabelText(/Aarav Nair: Leave \(on leave\)/)
+    expect(statusBtn).toBeDisabled()
+    // …and carries an inline "returned?" that closes the leave in place — an
+    // explicit present-at-the-meal fact, mirroring the class marking modal.
+    fireEvent.click(screen.getByRole('button', { name: /Mark Aarav Nair returned/ }))
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv-7', expect.any(String)))
+  })
+
+  it('shows no "returned?" affordance when the boarder is not on leave', async () => {
+    render(<HostelTab />)
+    await screen.findByLabelText(/Aarav Nair: Present/)
+    expect(screen.queryByRole('button', { name: /Mark Aarav Nair returned/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('HostelTab — chain view', () => {
   it('reports all-accounted-for when there are no exceptions', async () => {
     render(<HostelTab />)
