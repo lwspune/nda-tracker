@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { parseStudentsExcel, parseExcelFull } from '../../../lib/excel'
 import { mergeStudents, enrichWithRollNos, applyManualMatch } from '../../../lib/mergeStudents'
 import { loadExistingStudents } from '../../../lib/students/loadExistingStudents'
+import { dominantBranch } from '../../../lib/students/dominantBranch'
 import useStore from '../../../store/useStore'
 
 export default function useImportFlow() {
@@ -70,7 +71,15 @@ export default function useImportFlow() {
       const existingStudents = await loadExistingStudents()
       setParsedRows(importedRows)
       setExistingCache(existingStudents)
-      const result = mergeStudents(existingStudents, importedRows, { defaultBranch: selectedBranch })
+
+      // Roster is effectively single-branch: if the user hasn't hand-picked a
+      // branch yet, seed the default with the dominant one (≥80% of branched
+      // students). Safe because the write is fill-only — a wrong guess can
+      // never move an existing student, only fill blanks on new/blank rows.
+      const effectiveBranch = selectedBranch || dominantBranch(existingStudents)
+      if (effectiveBranch !== selectedBranch) setSelectedBranchState(effectiveBranch)
+
+      const result = mergeStudents(existingStudents, importedRows, { defaultBranch: effectiveBranch })
       setMergeResult(result)
     } catch (e) {
       setStudentError('Error reading file: ' + e.message)

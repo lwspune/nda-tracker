@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Alert } from '../ui'
 import { SUBJECTS } from '../../lib/ndaFreq'
 import { getExamBatches } from '../../lib/analytics'
+import { dominantBranch } from '../../lib/students/dominantBranch'
 import useStore from '../../store/useStore'
 
 export default function Step2Review({ state, onChange, onNext, onBack }) {
@@ -26,6 +27,17 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
   const syllabusBatches  = useStore(s => s.syllabusBatches) || []
   const hasProfiles      = Object.keys(studentProfiles).length > 0
   const hasCentralBatches = syllabusBatches.length > 0
+
+  // Roster is effectively single-branch: seed the Branch field with the
+  // dominant branch (≥80% of profiles) when it's untouched. `undefined` means
+  // "never set"; an empty string means the user explicitly cleared it, so we
+  // leave that alone. Same fill-only spirit as the Student-import default.
+  const autoBranch = dominantBranch(Object.values(studentProfiles))
+  useEffect(() => {
+    if (branch === undefined && autoBranch) {
+      onChange({ branch: autoBranch })
+    }
+  }, [branch, autoBranch, onChange])
 
   // Current selected batches — parsed from the comma-joined state.batch field.
   // Auto-detect is used as the initial pre-selection only when state.batch is unset.
@@ -186,6 +198,7 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
       {/* ── Branch ───────────────────────────────────────── */}
       <div className="mb-5">
         <label className="form-label">Branch
+          {autoBranch && currentBranch === autoBranch && <AutoBadge />}
           {!hasProfiles && (
             <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-ink-3">
               import Students DB to enable dropdown

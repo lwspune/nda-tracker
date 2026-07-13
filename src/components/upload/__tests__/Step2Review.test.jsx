@@ -74,6 +74,66 @@ describe('Step2Review — subject normalization', () => {
   })
 })
 
+// ── Branch auto-seed (dominant-branch default) ──────────────────────────────
+
+const dominantProfiles = {
+  ...Object.fromEntries(
+    Array.from({ length: 9 }, (_, i) => [`s${i}`, { branch: 'LWS Pune' }])
+  ),
+  x: { branch: 'APJ' }, // 9/10 = 90% → LWS Pune dominates
+}
+
+const mixedProfiles = {
+  a: { branch: 'LWS Pune' }, b: { branch: 'LWS Pune' }, c: { branch: 'LWS Pune' },
+  d: { branch: 'APJ' }, e: { branch: 'APJ' },              // 3/5 = 60%, no dominant
+}
+
+function branchLabel() {
+  return screen.getByText(
+    (_content, el) =>
+      el?.tagName === 'LABEL' &&
+      el.className.includes('form-label') &&
+      el.textContent.startsWith('Branch')
+  )
+}
+
+describe('Step2Review — branch auto-seed', () => {
+  it('seeds the dominant branch when state.branch is undefined', () => {
+    const { onChange } = renderWith({ branch: undefined }, { studentProfiles: dominantProfiles })
+    expect(onChange).toHaveBeenCalledWith({ branch: 'LWS Pune' })
+  })
+
+  it('does NOT seed when the roster has no ≥80% dominant branch', () => {
+    const { onChange } = renderWith({ branch: undefined }, { studentProfiles: mixedProfiles })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does NOT seed when branch is "" (user explicitly cleared it)', () => {
+    const { onChange } = renderWith({ branch: '' }, { studentProfiles: dominantProfiles })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does NOT seed when branch is already set to a value', () => {
+    const { onChange } = renderWith({ branch: 'APJ' }, { studentProfiles: dominantProfiles })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does NOT seed when there are no student profiles', () => {
+    const { onChange } = renderWith({ branch: undefined }, { studentProfiles: {} })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the auto-filled badge when the branch equals the dominant', () => {
+    renderWith({ branch: 'LWS Pune' }, { studentProfiles: dominantProfiles })
+    expect(within(branchLabel()).getByText('auto-filled')).toBeInTheDocument()
+  })
+
+  it('does not show the auto-filled badge for a non-dominant branch', () => {
+    renderWith({ branch: 'APJ' }, { studentProfiles: dominantProfiles })
+    expect(within(branchLabel()).queryByText('auto-filled')).not.toBeInTheDocument()
+  })
+})
+
 // ── Batch multi-select (central-only, comma-joined) ─────────────────────────
 
 describe('Step2Review — batch multi-select', () => {
