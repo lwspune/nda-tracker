@@ -238,6 +238,33 @@ export const createStudentSlice = (set, get) => ({
     }
   },
 
+  // Reversible on/off switch for portal access + analytics visibility.
+  // 'Block' hides the student from analytics/reports/alerts AND revokes their
+  // student-portal login (enforced server-side in api/student-login.js).
+  // 'Active' restores both. History is untouched — the opposite of deleteStudent.
+  async setAccountStatus(lwsId, status) {
+    if (!lwsId) return
+
+    const session = await getSession()
+    if (session) {
+      try {
+        await supabase.from('students')
+          .update({ account_status: status, updated_at: new Date().toISOString() })
+          .eq('lws_id', lwsId)
+        await refreshStudents(get)
+      } catch (_) { /* no-op */ }
+    } else {
+      try {
+        const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+        if (!existing?.students) return
+        const students = existing.students.map(s =>
+          s.lws_id === lwsId ? { ...s, account_status: status } : s
+        )
+        await persistStudentsDB(get, existing, students)
+      } catch (_) { /* no-op */ }
+    }
+  },
+
   async addNameVariant(lwsId, variantName) {
     if (!lwsId || !variantName) return
 

@@ -35,6 +35,7 @@ export default function StudentsTable({
   onSelect,
   onEdit,
   onDelete,
+  onSetStatus,
   isAdmin = false,
   centralBranches = [],
   centralBatches = [],
@@ -160,6 +161,7 @@ export default function StudentsTable({
         >
           <option value="all">All statuses</option>
           <option value="Active">Active</option>
+          <option value="Block">Blocked</option>
           <option value="Quit">Quit</option>
         </select>
 
@@ -245,8 +247,12 @@ export default function StudentsTable({
                     </td>
                     <td className="px-3 py-2 font-mono text-ink-2 hidden md:table-cell">{s.mobile || '—'}</td>
                     <td className="px-3 py-2">
-                      <Badge variant={s.accountStatus === 'Active' ? 'green' : 'gray'}>
-                        {s.accountStatus || '—'}
+                      <Badge variant={
+                        s.accountStatus === 'Active' ? 'green'
+                        : s.accountStatus === 'Block' ? 'red'
+                        : 'gray'
+                      }>
+                        {s.accountStatus === 'Block' ? 'Blocked' : (s.accountStatus || '—')}
                       </Badge>
                     </td>
                     {showAlign && (
@@ -282,6 +288,8 @@ export default function StudentsTable({
                           availableBranches={centralBranches.length ? centralBranches : allBranches}
                           availableBatches={centralBatches.length ? centralBatches : allBatches}
                           batchBranches={Object.keys(batchBranchMap).length ? batchBranchMap : null}
+                          accountStatus={s.accountStatus || ''}
+                          onSetStatus={onSetStatus}
                           onSave={(patch) => {
                             onEdit && onEdit(s.lwsId, s.name, patch)
                             setEditingId(null)

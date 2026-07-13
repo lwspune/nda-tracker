@@ -15,6 +15,7 @@ export default function StudentsPage() {
   const setActiveStudent       = useStore(s => s.setActiveStudent)
   const updateBranchBatch      = useStore(s => s.updateStudentBranchBatch)
   const deleteStudent          = useStore(s => s.deleteStudent)
+  const setAccountStatus       = useStore(s => s.setAccountStatus)
   const branches               = useStore(s => s.branches)
   const syllabusBatches        = useStore(s => s.syllabusBatches)
   const syllabusBatchBranches  = useStore(s => s.syllabusBatchBranches)
@@ -106,6 +107,7 @@ export default function StudentsPage() {
           onSelect={setActiveStudent}
           onEdit={(lwsId, name, patch) => updateBranchBatch(lwsId, name, patch)}
           onDelete={isAdmin ? (lwsId) => deleteStudent(lwsId) : undefined}
+          onSetStatus={isAdmin ? (lwsId, status) => setAccountStatus(lwsId, status) : undefined}
           isAdmin={isAdmin}
           centralBranches={branches}
           centralBatches={syllabusBatches}

@@ -217,3 +217,57 @@ describe('StudentRowEditor — Delete', () => {
     expect(message).toMatch(/login/i)
   })
 })
+
+describe('StudentRowEditor — Block / Unblock', () => {
+  it('renders a Block button when the student is Active and onSetStatus is provided', () => {
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Active', onSetStatus: vi.fn() })} />)
+    expect(screen.getByRole('button', { name: /^block$/i })).toBeInTheDocument()
+  })
+
+  it('renders an Unblock button when the student is already Blocked', () => {
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Block', onSetStatus: vi.fn() })} />)
+    expect(screen.getByRole('button', { name: /unblock/i })).toBeInTheDocument()
+  })
+
+  it('does NOT render a Block/Unblock button when onSetStatus is not provided', () => {
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Active' })} />)
+    expect(screen.queryByRole('button', { name: /block/i })).not.toBeInTheDocument()
+  })
+
+  it('calls onSetStatus with Block when confirmed', async () => {
+    const user = userEvent.setup()
+    const onSetStatus = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Active', onSetStatus })} />)
+    await user.click(screen.getByRole('button', { name: /^block$/i }))
+    expect(onSetStatus).toHaveBeenCalledWith('LWS-001', 'Block')
+  })
+
+  it('calls onSetStatus with Active when unblocking', async () => {
+    const user = userEvent.setup()
+    const onSetStatus = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Block', onSetStatus })} />)
+    await user.click(screen.getByRole('button', { name: /unblock/i }))
+    expect(onSetStatus).toHaveBeenCalledWith('LWS-001', 'Active')
+  })
+
+  it('does NOT call onSetStatus when the confirm is cancelled', async () => {
+    const user = userEvent.setup()
+    const onSetStatus = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<StudentRowEditor {...makeProps({ accountStatus: 'Active', onSetStatus })} />)
+    await user.click(screen.getByRole('button', { name: /^block$/i }))
+    expect(onSetStatus).not.toHaveBeenCalled()
+  })
+
+  it('block confirm message names the student and warns about lost portal access', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<StudentRowEditor {...makeProps({ name: 'Aarav Sharma', accountStatus: 'Active', onSetStatus: vi.fn() })} />)
+    await user.click(screen.getByRole('button', { name: /^block$/i }))
+    const message = confirmSpy.mock.calls[0][0]
+    expect(message).toMatch(/Aarav Sharma/)
+    expect(message).toMatch(/log ?in|access|portal|dashboard/i)
+  })
+})

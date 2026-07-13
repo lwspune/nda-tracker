@@ -11,10 +11,13 @@ export default function StudentRowEditor({
   availableBranches   = [],
   availableBatches    = [],
   batchBranches       = null,
+  accountStatus       = '',
   onSave,
   onCancel,
   onDelete,
+  onSetStatus,
 }) {
+  const isBlocked = accountStatus === 'Block'
   const [branch, setBranch]     = useState(initialBranch)
   const [batches, setBatches]   = useState(initialBatches)
   const [pendingBatch, setPendingBatch] = useState('')
@@ -42,6 +45,22 @@ export default function StudentRowEditor({
 
   function save() {
     onSave({ branch, batches })
+  }
+
+  function toggleBlock() {
+    if (!onSetStatus) return
+    if (isBlocked) {
+      const msg = `Unblock ${name || 'this student'}?\n\n`
+        + 'They will be able to log in to their student dashboard again and will '
+        + 'reappear in analytics, reports, and alerts.'
+      if (window.confirm(msg)) onSetStatus(lwsId, 'Active')
+    } else {
+      const msg = `Block ${name || 'this student'}?\n\n`
+        + 'They will no longer be able to log in to their student dashboard, and '
+        + 'they will be hidden from analytics, reports, and alerts. Their history '
+        + 'is kept — you can unblock them at any time.'
+      if (window.confirm(msg)) onSetStatus(lwsId, 'Block')
+    }
   }
 
   function requestDelete() {
@@ -139,6 +158,27 @@ export default function StudentRowEditor({
         >
           Cancel
         </button>
+        {onSetStatus && (
+          isBlocked ? (
+            <button
+              type="button"
+              onClick={toggleBlock}
+              className="text-[12px] min-h-[36px] px-4 rounded-md border border-success/40
+                         text-success hover:bg-success/10 transition-colors"
+            >
+              Unblock
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleBlock}
+              className="text-[12px] min-h-[36px] px-4 rounded-md border border-warning/50
+                         text-warning hover:bg-warning/10 transition-colors"
+            >
+              Block
+            </button>
+          )
+        )}
         {onDelete && (
           <button
             type="button"

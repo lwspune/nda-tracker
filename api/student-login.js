@@ -13,6 +13,15 @@ function readEnvLocal() {
   } catch { return {} }
 }
 
+// Account statuses that revoke portal access. The gate fails CLOSED on these
+// explicit values but fails OPEN on blank/unknown — many legacy rows have no
+// account_status and must still be able to log in. (Deliberately the opposite
+// of the analytics posture, which excludes blanks.)
+const INACTIVE_STATUSES = new Set(['Block', 'Quit', 'Inactive'])
+function isInactive(student) {
+  return INACTIVE_STATUSES.has(String(student?.account_status || '').trim())
+}
+
 function normMobile(m) {
   if (!m) return null
   let s = String(m).replace(/\D/g, '')
@@ -75,26 +84,35 @@ export default async function handler(req, res) {
     return
   }
 
+  // Drop inactive (Block/Quit/Inactive) students before resolution. A blocked
+  // sibling is hidden from the picker; if the number resolves ONLY to inactive
+  // students, deny with a specific message rather than a generic not-found.
+  const activeCandidates = candidates.filter(c => !isInactive(c))
+  if (activeCandidates.length === 0) {
+    res.status(403).json({ error: 'This account is inactive. Please contact LWS Pune.' })
+    return
+  }
+
   let student
   if (lwsId) {
     // Disambiguation step (sibling picker) OR session restore. The lwsId is only
-    // honoured when it is actually among the candidates for this number — never
-    // trust a client-supplied lwsId on its own, or any number could pull any
-    // student's data.
-    student = candidates.find(c => c.lws_id === lwsId)
+    // honoured when it is actually among the active candidates for this number —
+    // never trust a client-supplied lwsId on its own, or any number could pull
+    // any student's data. A blocked student's lwsId is not in activeCandidates.
+    student = activeCandidates.find(c => c.lws_id === lwsId)
     if (!student) {
       res.status(404).json({ error: 'That student is not linked to this mobile number.' })
       return
     }
-  } else if (candidates.length === 1) {
-    student = candidates[0]
+  } else if (activeCandidates.length === 1) {
+    student = activeCandidates[0]
   } else {
     // Multiple students share this number (siblings) — return a lightweight
     // picker payload (no exam data, no login recorded). The client re-calls with
     // the chosen lwsId.
     res.status(200).json({
       multiple: true,
-      candidates: candidates.map(c => ({
+      candidates: activeCandidates.map(c => ({
         lwsId:   c.lws_id,
         name:    c.canonical_name,
         branch:  c.branch || '',

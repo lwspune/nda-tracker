@@ -550,3 +550,73 @@ describe('POST /api/student-login — parent number + sibling picker', () => {
     expect(res.status).toHaveBeenCalledWith(404)
   })
 })
+
+// ── Inactive-account gating (Block / Quit / Inactive) ─────────────────────────
+//
+// account_status ∈ {Block, Quit, Inactive} revokes portal access. The gate fails
+// CLOSED on those explicit values but fails OPEN on blank/unknown — many legacy
+// rows have no account_status and must still be able to log in. (This is the
+// deliberate opposite of the analytics posture, which excludes blanks.)
+
+describe('POST /api/student-login — inactive account gating', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    process.env.VITE_SUPABASE_URL = 'https://test.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
+  })
+
+  it('denies login with 403 when the student is Blocked (no exam data)', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, account_status: 'Block' }],
+    }))
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(403)
+    const result = res.json.mock.calls[0][0]
+    expect(result.error).toEqual(expect.any(String))
+    expect(result.exams).toBeUndefined()
+  })
+
+  it('does not record a login for a blocked student', async () => {
+    const client = makeMockClient({ students: [{ ...MOCK_STUDENT, account_status: 'Block' }] })
+    vi.mocked(createClient).mockReturnValue(client)
+    await call({ mobile: '9876543210' })
+    expect(client.loginInsert).not.toHaveBeenCalled()
+  })
+
+  it.each(['Quit', 'Inactive'])('denies login with 403 for account_status=%s', async (status) => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, account_status: status }],
+    }))
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('allows login when account_status is blank (legacy rows must not be locked out)', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, account_status: '' }],
+    }))
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(200)
+  })
+
+  it('hides a blocked sibling from the picker, logging the active one in directly', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [SIBLING_A, { ...SIBLING_B, account_status: 'Block' }],
+    }))
+    const res = await call({ mobile: '9111111111' })
+    // Only SIBLING_A remains active → direct login, no picker
+    expect(res.status).toHaveBeenCalledWith(200)
+    const result = res.json.mock.calls[0][0]
+    expect(result.multiple).toBeUndefined()
+    expect(result.lwsId).toBe('LWS001')
+  })
+
+  it('returns 403 when a supplied lwsId resolves to a blocked student', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      students: [{ ...MOCK_STUDENT, account_status: 'Block' }],
+    }))
+    const res = await call({ mobile: '9876543210', lwsId: 'LWS001' })
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+})

@@ -201,3 +201,35 @@ describe('deleteStudent', () => {
     expect(getState().studentProfiles['Alice Sharma']).toBeDefined()
   })
 })
+
+// ── setAccountStatus ─────────────────────────────────────────
+
+describe('setAccountStatus', () => {
+  beforeEach(() => { vi.restoreAllMocks() })
+
+  it('blocks the matching student without touching others (dev path)', async () => {
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma', account_status: 'Active' }),
+      makeStudent({ lws_id: 'LWS-002', canonical_name: 'Bob Kumar',    account_status: 'Active' }),
+    ])
+    const { slice, getState } = makeStore()
+    await slice.setAccountStatus('LWS-001', 'Block')
+    expect(getState().studentProfiles['Alice Sharma'].accountStatus).toBe('Block')
+    expect(getState().studentProfiles['Bob Kumar'].accountStatus).toBe('Active')
+  })
+
+  it('unblocks by writing the status back to Active', async () => {
+    mockFetch([makeStudent({ lws_id: 'LWS-001', canonical_name: 'Alice Sharma', account_status: 'Block' })])
+    const { slice, getState } = makeStore()
+    await slice.setAccountStatus('LWS-001', 'Active')
+    expect(getState().studentProfiles['Alice Sharma'].accountStatus).toBe('Active')
+  })
+
+  it('does nothing and does not call fetch when lwsId is empty', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const { slice } = makeStore()
+    await slice.setAccountStatus('', 'Block')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
