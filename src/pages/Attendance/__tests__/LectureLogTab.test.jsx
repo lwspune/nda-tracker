@@ -387,7 +387,7 @@ describe('LectureLogTab — pooled roster + leave-awareness', () => {
     expect(await screen.findByLabelText(/Arjun Sharma \(on leave\)/)).toBeDisabled()
   })
 
-  it('marking an on-leave student "returned" calls endLeave for that leave', async () => {
+  it('marking an on-leave student "returned" closes the leave as of the previous day (THURSDAY itself becomes markable)', async () => {
     mockStore.getActiveLeaves.mockResolvedValue([
       { id: 'lv1', lws_id: 'LWS-001', from_ts: '2026-05-20T00:00:00+05:30', to_ts: null },
     ])
@@ -395,6 +395,8 @@ describe('LectureLogTab — pooled roster + leave-awareness', () => {
     await waitFor(() => expect(mockStore.getActiveLeaves).toHaveBeenCalled())
     fireEvent.click(screen.getAllByRole('button', { name: /mark absentees/i })[0])
     fireEvent.click(await screen.findByRole('button', { name: /Arjun Sharma returned/ }))
-    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv1', expect.stringContaining('2026-05-21')))
+    // THURSDAY = 2026-05-21 → leave closes end of 2026-05-20 (IST), i.e. the
+    // day before, so the student is expected present on THURSDAY itself.
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv1', expect.stringContaining('2026-05-20')))
   })
 })

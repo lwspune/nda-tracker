@@ -236,13 +236,13 @@ export default function HostelTab() {
   }
 
   // Close an open leave — the boarder returned. Stamps to_ts to the END of the
-  // board's day, so `date` itself still reads as leave (they were out today) but
-  // tomorrow's checkpoints expect them present again.
+  // PREVIOUS day, so `date` itself is no longer a leave day and unlocks for
+  // marking (the boarder was seen at a meal today).
   async function handleMarkReturned(id) {
-    const { endMs } = dayBoundsMs(date)
-    const ok = await endLeave(id, new Date(endMs).toISOString())
+    const { startMs } = dayBoundsMs(date)
+    const ok = await endLeave(id, new Date(startMs - 1).toISOString())
     if (ok) {
-      setBanner({ type: 'success', msg: 'Marked returned — leave closed as of ' + date + '.' })
+      setBanner({ type: 'success', msg: 'Marked returned — present from ' + date + '.' })
       loadDay()
     } else {
       setBanner({ type: 'error', msg: 'Could not close the leave — check your session.' })

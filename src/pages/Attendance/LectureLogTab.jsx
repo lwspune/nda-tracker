@@ -173,11 +173,14 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   }, [date, getActiveLeaves, leaveRefresh])
 
   // Teacher reported an on-leave student PRESENT → they're back. Close the leave
-  // (stamp to_ts to end of this day) and reload so the row unlocks.
+  // as of the END OF THE PREVIOUS day, so `date` itself is a normal (markable)
+  // day, then reload so the row unlocks.
   async function handleMarkReturned(lwsId) {
     const row = leaveRowByLwsId[lwsId]
     if (!row?.id) return
-    const ok = await endLeave(row.id, `${date}T23:59:59+05:30`)
+    const prevEnd = new Date(`${date}T00:00:00+05:30`)
+    prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1)
+    const ok = await endLeave(row.id, prevEnd.toISOString())
     if (ok) setLeaveRefresh(n => n + 1)
   }
 

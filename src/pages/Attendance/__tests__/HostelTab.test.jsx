@@ -198,6 +198,11 @@ describe('HostelTab — inline returned in the meal grid', () => {
     // explicit present-at-the-meal fact, mirroring the class marking modal.
     fireEvent.click(screen.getByRole('button', { name: /Mark Aarav Nair returned/ }))
     await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv-7', expect.any(String)))
+    // Closes as of the END OF THE PREVIOUS day, so the board day itself unlocks
+    // for marking (the boarder was seen at the meal today).
+    const toTs = Date.parse(mockStore.endLeave.mock.calls[0][1])
+    const boardDayStart = new Date(); boardDayStart.setHours(0, 0, 0, 0)
+    expect(toTs).toBeLessThan(boardDayStart.getTime())
   })
 
   it('shows no "returned?" affordance when the boarder is not on leave', async () => {
