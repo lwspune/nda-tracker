@@ -120,7 +120,7 @@ export function ToppersPageHeader({ subject }) {
         🏆 Topper Dashboard
       </h1>
       <p className="text-[13px] text-ink-2 mt-1">
-        Students above threshold — ranked by projected NDA {subject} score
+        Students above the projected-marks threshold — ranked by projected NDA {subject} score
       </p>
     </div>
   )

@@ -3,10 +3,16 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+// Freq covers the chapters the fixtures use so each attendee projects well above
+// the page's default projected-marks floor — isolates the batch/subject filtering
+// under test from the threshold gate.
 const mockStore = {
   exams: [],
-  ndaFreqBySubject: {},
-  ndaMarksBySubject: {},
+  ndaFreqBySubject: {
+    Maths: [{ chapter: 'Algebra', pct: 100 }],
+    GAT:   [{ chapter: 'GK',      pct: 100 }],
+  },
+  ndaMarksBySubject: { Maths: 300, GAT: 300 },
   studentProfiles: {},
   setActiveStudent: vi.fn(),
 }

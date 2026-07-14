@@ -66,11 +66,14 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
   return { total: Math.round(totalProjected), breakdown }
 }
 
-// Toppers — students above threshold sorted by projected score
+// Toppers — students whose PROJECTED score meets the threshold, sorted by projected.
+// threshold:             minimum projected marks (absolute, same scale as totalMarks).
+//                        0 = no floor (return every scored student — the Dashboard's
+//                        getClassProjectedAvg relies on this). Gate is `>=`.
 // opts.validNames:       Set<string> — when provided, only considers those students
 // opts.studentProfiles:  camelCase profile map — when provided, each student's exams are
 //                        filtered to those on/after their regDate before scoring
-export function getToppers(exams, ndaFreq, threshold = 0.7, totalMarks = 300, opts = {}) {
+export function getToppers(exams, ndaFreq, threshold = 0, totalMarks = 300, opts = {}) {
   const { validNames, studentProfiles: profiles } = opts
 
   // Build case-insensitive name → profile map for regDate lookups
@@ -106,10 +109,12 @@ export function getToppers(exams, ndaFreq, threshold = 0.7, totalMarks = 300, op
         const max = examMaxMarks(exam)
         return max > 0 ? student.totalMarks / max : 0
       })
+      // avgPct is no longer the gate — kept for the card's "avg %" chip + sort option.
       const avgPct = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0
-      if (avgPct < threshold) return null
 
-      const projected   = computeProjectedScore(name, scopedExams, ndaFreq, totalMarks)
+      const projected = computeProjectedScore(name, scopedExams, ndaFreq, totalMarks)
+      if (projected.total < threshold) return null   // gate on projected marks
+
       const aq          = computeAttemptQuality(name, scopedExams)
       const consistency = computeConsistency(name, scopedExams)
       return { name, avgPct, projected: projected.total, attemptQuality: aq, consistency }

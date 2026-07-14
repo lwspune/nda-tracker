@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeProjectedScore } from '../projection'
+import { computeProjectedScore, getToppers } from '../projection'
 
 // Helper: build a single-exam fixture for one student answering Functions questions.
 // `qs` is an array of { subtopic, verdict } — verdict 1 correct / -1 wrong / 0 skipped.
@@ -61,5 +61,41 @@ describe('computeProjectedScore — pooled (no per-subtopic averaging)', () => {
     expect(v.accuracy).toBeNull()
     expect(v.projected).toBe(0)
     expect(v.gap).toBeCloseTo(30, 5)
+  })
+})
+
+describe('getToppers — gates on projected marks (absolute), not avg %', () => {
+  // One exam, 2 Functions questions, freq = 100% Functions → marksAtStake = 300.
+  // Hi: both correct  → accuracy 1, wrongRate 0 → projected 300.
+  // Lo: both wrong    → accuracy 0, wrongRate 1 → projected max(0, −99) = 0.
+  const FN_FREQ = [{ chapter: 'Functions', pct: 100 }]
+  const exams = [{
+    id: 'e1', date: '2026-07-01', name: 'Mock', subject: 'Maths',
+    marking: { correct: 4, wrong: -1 },
+    questions: [
+      { q: 1, chapter: 'Functions', subtopic: 'A' },
+      { q: 2, chapter: 'Functions', subtopic: 'B' },
+    ],
+    students: [
+      { name: 'Hi', totalMarks: 8, responses: { 1: 1, 2: 1 } },
+      { name: 'Lo', totalMarks: 0, responses: { 1: -1, 2: -1 } },
+    ],
+  }]
+
+  it('keeps only students whose projected score meets the marks threshold', () => {
+    // threshold = 100 MARKS. Hi (projected 300) qualifies; Lo (projected 0) drops.
+    // (Under the old avg-% gate, 100 was a fraction and dropped everyone.)
+    const toppers = getToppers(exams, FN_FREQ, 100, 300)
+    expect(toppers.map(t => t.name)).toEqual(['Hi'])
+  })
+
+  it('threshold 0 returns every scored student (incl. projected-0) — dashboard reuse relies on this', () => {
+    const toppers = getToppers(exams, FN_FREQ, 0, 300)
+    expect(toppers.map(t => t.name).sort()).toEqual(['Hi', 'Lo'])
+  })
+
+  it('ranks qualifiers by projected score descending', () => {
+    const toppers = getToppers(exams, FN_FREQ, 0, 300)
+    expect(toppers.map(t => t.projected)).toEqual([300, 0])
   })
 })

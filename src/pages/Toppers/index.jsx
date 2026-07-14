@@ -18,7 +18,7 @@ export default function ToppersPage() {
   const studentProfiles    = useStore(s => s.studentProfiles)
   const setActiveStudent = useStore(s => s.setActiveStudent)
 
-  const [threshold, setThreshold]     = useState(50)
+  const [threshold, setThreshold]     = useState(60)  // minimum projected marks
   const [batchFilter, setBatchFilter] = useState('all')
   const [subjectFilter, setSubjectFilter] = useState('Maths')  // Maths is the main NDA paper; projection is per-subject
   const [sortBy, setSortBy]           = useState('projected')
@@ -54,6 +54,9 @@ export default function ToppersPage() {
   const ndaFreq    = getFreqForSubject(ndaFreqBySubject, activeSubject)
   const hasFreqData = ndaFreq.length > 0
   const subjectMaxScore = ndaMarksBySubject?.[activeSubject] ?? 300
+  // Gate threshold is projected MARKS; clamp to the active subject's ceiling so a
+  // stale value from a larger-max subject can't silently empty the list.
+  const marksThreshold = Math.min(threshold, subjectMaxScore)
 
   // Valid students: those whose matched profile has a regDate, AND — when a batch
   // is selected — who are CURRENT members of that batch (not just co-attendees of
@@ -83,9 +86,9 @@ export default function ToppersPage() {
 
   // Get toppers above threshold — scoped to valid students, per-student regDate filtering inside
   const rawToppers = useMemo(
-    () => getToppers(filteredExams, ndaFreq, threshold / 100, subjectMaxScore,
+    () => getToppers(filteredExams, ndaFreq, marksThreshold, subjectMaxScore,
       { validNames, studentProfiles }),
-    [filteredExams, ndaFreq, threshold, subjectMaxScore, validNames, studentProfiles]
+    [filteredExams, ndaFreq, marksThreshold, subjectMaxScore, validNames, studentProfiles]
   )
 
   // Enrich each topper with batch + biggest opportunity.
@@ -152,16 +155,16 @@ export default function ToppersPage() {
         {/* Threshold */}
         <div className="flex items-center gap-2">
           <label className="text-[12px] font-semibold text-ink-2 whitespace-nowrap">
-            Threshold:
+            Min projected:
           </label>
           <input
             type="number"
-            min="1" max="100" step="5"
+            min="0" max={subjectMaxScore} step="5"
             value={threshold}
-            onChange={e => setThreshold(Math.min(100, Math.max(1, parseInt(e.target.value) || 50)))}
+            onChange={e => setThreshold(Math.min(subjectMaxScore, Math.max(0, parseInt(e.target.value) || 0)))}
             className="w-16 text-center form-input text-[13px] font-mono font-bold"
           />
-          <span className="text-[12px] text-ink-3">% avg score</span>
+          <span className="text-[12px] text-ink-3">/ {subjectMaxScore} marks</span>
         </div>
 
         {/* Subject filter */}
@@ -204,7 +207,7 @@ export default function ToppersPage() {
         </select>
 
         <div className="ml-auto text-[12px] text-ink-3 font-mono">
-          <span className="font-bold text-ink">{toppers.length}</span> student{toppers.length !== 1 ? 's' : ''} above {threshold}%
+          <span className="font-bold text-ink">{toppers.length}</span> student{toppers.length !== 1 ? 's' : ''} projected ≥ {marksThreshold}
         </div>
       </div>
 
@@ -222,7 +225,7 @@ export default function ToppersPage() {
             <StatCard label="Projected Score" value="—" color="text-ink-3" />
           )}
           <StatCard label="Avg Quality"   value={avgAQ !== null ? `${(avgAQ * 100).toFixed(0)}%` : '—'} color="text-indigo-400" />
-          <StatCard label="Threshold"     value={`${threshold}%`}        color="text-ink-2" />
+          <StatCard label="Threshold"     value={`${marksThreshold}/${subjectMaxScore}`} color="text-ink-2" />
         </div>
       )}
 
@@ -230,7 +233,7 @@ export default function ToppersPage() {
       {sorted.length === 0 ? (
         <EmptyState
           icon="🎯"
-          title={`No students above ${threshold}%`}
+          title={`No students projected ≥ ${marksThreshold}`}
           sub="Try lowering the threshold"
         />
       ) : (
