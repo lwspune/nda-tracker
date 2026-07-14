@@ -103,9 +103,13 @@ export function computeStudentChapterStats(name, exams, qSubject = null) {
   // Compute weighted scores and trends
   Object.values(result).forEach(subs => {
     Object.values(subs).forEach(sub => {
-      // Weighted score
+      // Weighted score. weightedSum / weightTotal are also kept so consumers can
+      // pool questions across a chapter's subtopics (see computeProjectedScore)
+      // instead of averaging each subtopic's ratio with an equal vote.
       const weightedSum = sub.scores.reduce((s, v, i) => s + v * sub.weights[i], 0)
       const weightTotal = sub.weights.reduce((s, v) => s + v, 0)
+      sub.weightedSum   = weightedSum
+      sub.weightTotal   = weightTotal
       sub.weightedScore = weightTotal > 0 ? weightedSum / weightTotal : 0
 
       // Attempt quality: correct / (correct + wrong) — excludes skips

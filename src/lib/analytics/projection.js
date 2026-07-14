@@ -29,21 +29,22 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
 
     const subs = chapterStats[chKey]
 
-    // Use recency-weighted score per subtopic (same as chapter heatmap)
-    // weightedScore already accounts for recency — recent exams weighted higher
-    let weightedScoreSum = 0, weightedScoreCount = 0
+    // Pool every question in the chapter into one recency-weighted accuracy
+    // (Σ score×weight / Σ weight). We deliberately do NOT average the per-subtopic
+    // ratios — that gave a 1-question subtopic the same vote as a 20-question one.
+    // weightedSum/weightTotal already fold in recency + the skip half-weight.
+    let weightedSum = 0, weightTotal = 0
     let totalWrong = 0, totalAttempted = 0
 
     Object.values(subs).forEach(s => {
-      // Weighted accuracy — recency-aware
-      weightedScoreSum += s.weightedScore
-      weightedScoreCount++
+      weightedSum += s.weightedSum
+      weightTotal += s.weightTotal
       // Wrong rate uses raw counts — recency doesn't change the penalty ratio
       totalWrong += s.wrong
       totalAttempted += s.correct + s.wrong
     })
 
-    const accuracy  = weightedScoreCount > 0 ? weightedScoreSum / weightedScoreCount : 0
+    const accuracy  = weightTotal > 0 ? weightedSum / weightTotal : 0
     const wrongRate = totalAttempted > 0 ? totalWrong / totalAttempted : 0
 
     // Expected marks = accuracy × marksAtStake − wrongRate × marksAtStake × 0.33
