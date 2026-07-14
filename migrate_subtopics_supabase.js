@@ -102,6 +102,22 @@ const SUBTOPIC_RENAMES = {
   'Sum of infinite GP':                     'Sum of Infinite GP',
   // Trigonometric Identities
   'Double Angle Formula':                   'Double Angle Formulas',
+
+  // ── Maths cleanup (2026-07-14) ─────────────────────────────────────────
+  // Vectors
+  'Position Vectors and Section':           'Position Vectors and Section Formula',
+  // Applications of Integration
+  'Area Bounded by a Curve, Lines, and Axes': 'Area Bounded by Curves, Lines, and Axes',
+  'Area Bounded by Curves, Axes, and Lines':  'Area Bounded by Curves, Lines, and Axes',
+  // Lines
+  'Acute angle between two specific lines':  'Acute angle between two lines',
+  // Complex Numbers — cube-roots-of-unity same-concept fold
+  'Cube roots of unity — powers':           'Cube Roots of Unity',
+  'Cube roots of unity — product':          'Cube Roots of Unity',
+  'Cube roots — multiple of 3 exponent':    'Cube Roots of Unity',
+  'High powers via cube roots periodicity': 'Cube Roots of Unity',
+  'Sum of powers of cube roots':            'Cube Roots of Unity',
+  'Sum of products of cube roots':          'Cube Roots of Unity',
 }
 
 // ── Chapter rename map (must stay in sync with merge_subtopics.py) ──────────

@@ -268,6 +268,41 @@ def test_maths_cleanup_distinct_subtopics_preserved(kept):
     assert q["subtopic"] == kept
 
 
+# ── Maths cleanup (2026-07-14) ─────────────────────────────────────────────
+
+@pytest.mark.parametrize("old,new", [
+    # Vectors
+    ("Position Vectors and Section",             "Position Vectors and Section Formula"),
+    # Applications of Integration
+    ("Area Bounded by a Curve, Lines, and Axes", "Area Bounded by Curves, Lines, and Axes"),
+    ("Area Bounded by Curves, Axes, and Lines",  "Area Bounded by Curves, Lines, and Axes"),
+    # Lines
+    ("Acute angle between two specific lines",   "Acute angle between two lines"),
+    # Complex Numbers — cube-roots-of-unity same-concept fold
+    ("Cube roots of unity — powers",             "Cube Roots of Unity"),
+    ("Cube roots of unity — product",            "Cube Roots of Unity"),
+    ("Cube roots — multiple of 3 exponent",      "Cube Roots of Unity"),
+    ("High powers via cube roots periodicity",   "Cube Roots of Unity"),
+    ("Sum of powers of cube roots",              "Cube Roots of Unity"),
+    ("Sum of products of cube roots",            "Cube Roots of Unity"),
+])
+def test_maths_cleanup_2026_07_14(old, new):
+    q = make_q(old)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == new
+
+@pytest.mark.parametrize("kept", [
+    "Modulus of expression with cube roots",
+    "Geometric interpretation of cube roots of unity",
+    "Root of determinant equation with cube roots",
+])
+def test_maths_cleanup_2026_07_14_distinct_preserved(kept):
+    """Distinct cube-root concepts must NOT be folded into Cube Roots of Unity."""
+    q = make_q(kept)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == kept
+
+
 # ── Chapter renames ────────────────────────────────────────────────────────
 
 def test_chapter_rename_height_and_distance():
