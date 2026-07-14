@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { fmtMarks, getIssues } from '../ExamHistoryTable'
+import { render, screen, fireEvent } from '@testing-library/react'
+import ExamHistoryTable, { fmtMarks, getIssues } from '../ExamHistoryTable'
 
 describe('fmtMarks — bracketed marks suffix', () => {
   it('prefixes positive totals with +', () => {
@@ -54,5 +55,29 @@ describe('getIssues — wrong/skipped vs all questions', () => {
 
   it('studentAnswer is null when the exam predates choice capture (no choices map)', () => {
     expect(getIssues(exam, student).every(i => i.studentAnswer === null)).toBe(true)
+  })
+})
+
+describe('ExamHistoryTable — click an exam to see the parent-facing report', () => {
+  const scores = [{
+    name: 'Mock Test 1', date: '2026-05-01', score: 40, max: 100, pct: 0.4,
+    correct: 10, wrong: 5, na: 5,
+    exam: {
+      id: 'exam1', name: 'Mock Test 1', date: '2026-05-01',
+      marking: { correct: 4, wrong: -1 },
+      questions: [{ q: 1 }, { q: 2 }],
+    },
+    student: {
+      totalMarks: 40, correct: 10, incorrect: 5, notAttempted: 5,
+      responses: { 1: 1, 2: -1 }, choices: { 1: 'A', 2: 'B' },
+    },
+  }]
+
+  it('reveals the parent WhatsApp report (score summary) when the exam name is clicked', () => {
+    render(<ExamHistoryTable scores={scores} />)
+    // Hidden until clicked
+    expect(screen.queryByText(/Your Result/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Mock Test 1/i }))
+    expect(screen.getByText(/Your Result/i)).toBeInTheDocument()
   })
 })

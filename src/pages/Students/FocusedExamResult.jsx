@@ -4,10 +4,12 @@ import QuestionCard from '../../components/ui/QuestionCard'
 import { getIssues } from './ExamHistoryTable'
 
 /**
- * FocusedExamResult — student-portal-only "you clicked the result link" landing.
+ * FocusedExamResult — the "you clicked the result link" report.
  *
- * When a parent/student arrives via the WhatsApp result deep-link (`?exam=<id>`),
- * this surfaces THAT exam's report at the top of the portal — score summary +
+ * Primary use: the student portal. When a parent/student arrives via the WhatsApp
+ * result deep-link (`?exam=<id>`), this surfaces THAT exam's report at the top of
+ * the portal. Also reused faculty-side in ExamHistoryTable so staff can see the
+ * exact report a parent gets — score summary +
  * a simple per-question table (Q no · your answer · correct answer · show
  * question) — so they don't have to hunt for it in the full exam-history table
  * below. The detailed difficulty-grouped panel (ExamIssuesPanel) is deliberately

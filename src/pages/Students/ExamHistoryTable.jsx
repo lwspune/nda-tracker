@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card, CardTitle, Badge } from '../../components/ui'
 import QuestionCard from '../../components/ui/QuestionCard'
+import FocusedExamResult from './FocusedExamResult'
 
 const PAGE_SIZE = 5
 
@@ -156,8 +157,11 @@ export function ExamIssuesPanel({ exam, student, includeAll = false }) {
 // ── Main component ────────────────────────────────────────────
 
 export default function ExamHistoryTable({ scores }) {
-  const [page, setPage]         = useState(0)
-  const [openRows, setOpenRows] = useState(new Set())
+  const [page, setPage]             = useState(0)
+  const [openRows, setOpenRows]     = useState(new Set())
+  // Rows whose full parent-facing report (the exact view sent via WhatsApp) is
+  // expanded. Separate from openRows (the difficulty-grouped "N issues" drill-down).
+  const [reportRows, setReportRows] = useState(new Set())
 
   // Display newest first; scores prop stays chronological for stat-card calculations
   const display    = [...scores].reverse()
@@ -167,6 +171,14 @@ export default function ExamHistoryTable({ scores }) {
 
   function toggleRow(idx) {
     setOpenRows(prev => {
+      const next = new Set(prev)
+      next.has(idx) ? next.delete(idx) : next.add(idx)
+      return next
+    })
+  }
+
+  function toggleReport(idx) {
+    setReportRows(prev => {
       const next = new Set(prev)
       next.has(idx) ? next.delete(idx) : next.add(idx)
       return next
@@ -195,15 +207,29 @@ export default function ExamHistoryTable({ scores }) {
           </thead>
           <tbody>
             {visible.map((s, i) => {
-              const absIdx   = start + i
-              const isOpen   = openRows.has(absIdx)
-              const issues   = s.exam && s.student ? getIssues(s.exam, s.student) : []
-              const hasIssues = issues.length > 0
+              const absIdx     = start + i
+              const isOpen     = openRows.has(absIdx)
+              const isReportOpen = reportRows.has(absIdx)
+              const issues     = s.exam && s.student ? getIssues(s.exam, s.student) : []
+              const hasIssues  = issues.length > 0
+              const canReport  = Boolean(s.exam && s.student)
 
               return (
                 <>
                   <tr key={absIdx} className="border-b border-border/50 hover:bg-surface-2">
-                    <td className="py-2 pr-3 pl-4 font-medium">{s.name}</td>
+                    <td className="py-2 pr-3 pl-4 font-medium">
+                      {canReport ? (
+                        <button
+                          onClick={() => toggleReport(absIdx)}
+                          aria-expanded={isReportOpen}
+                          title="See the full report exactly as a parent gets it on WhatsApp"
+                          className="text-left font-medium text-accent hover:underline
+                                     focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded"
+                        >
+                          {s.name}
+                        </button>
+                      ) : s.name}
+                    </td>
                     <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{s.date}</td>
                     <td className="py-2 pr-3 font-bold">{s.score}</td>
                     <td className="py-2 pr-3 text-success font-mono">
@@ -243,6 +269,14 @@ export default function ExamHistoryTable({ scores }) {
                       )}
                     </td>
                   </tr>
+                  {isReportOpen && canReport && (
+                    <tr key={`${absIdx}-report`}>
+                      <td colSpan={8} className="p-3 bg-surface-2/30 border-t border-border">
+                        {/* The exact parent-facing report the WhatsApp deep-link opens */}
+                        <FocusedExamResult examId={s.exam.id} exams={[{ ...s.exam, students: [s.student] }]} />
+                      </td>
+                    </tr>
+                  )}
                   {isOpen && s.exam && s.student && (
                     <tr key={`${absIdx}-panel`}>
                       <td colSpan={8} className="p-0">
@@ -261,7 +295,7 @@ export default function ExamHistoryTable({ scores }) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-border">
           <button
-            onClick={() => { setPage(p => p - 1); setOpenRows(new Set()) }}
+            onClick={() => { setPage(p => p - 1); setOpenRows(new Set()); setReportRows(new Set()) }}
             disabled={page === 0}
             className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-border
                        bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
@@ -273,7 +307,7 @@ export default function ExamHistoryTable({ scores }) {
             {Array.from({ length: totalPages }, (_, i) => (
               <button
                 key={i}
-                onClick={() => { setPage(i); setOpenRows(new Set()) }}
+                onClick={() => { setPage(i); setOpenRows(new Set()); setReportRows(new Set()) }}
                 className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg text-[11px] font-bold transition-all flex items-center justify-center
                   ${i === page
                     ? 'bg-accent text-white'
@@ -285,7 +319,7 @@ export default function ExamHistoryTable({ scores }) {
             ))}
           </div>
           <button
-            onClick={() => { setPage(p => p + 1); setOpenRows(new Set()) }}
+            onClick={() => { setPage(p => p + 1); setOpenRows(new Set()); setReportRows(new Set()) }}
             disabled={page === totalPages - 1}
             className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-border
                        bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
