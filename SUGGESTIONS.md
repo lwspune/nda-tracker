@@ -520,3 +520,49 @@ Deferred by design this session: "persist-until-return" leaves are closed **manu
 **Why:** an open-ended leave that nobody closes is a permanent blind spot — it suppresses every checkpoint anomaly for that student forever (the stale-leave ≥3-day flag is the current mitigation, not a fix). Auto-close tied to a real "they're back" observation would make persist-until-return safe without relying on someone remembering.
 
 **How to apply:** when the daily attendance import (or a roll marking) records a boarder as **present** while they hold an open leave, offer/apply an `endLeave(id, thatDay)` — surface it as a confirm ("N on-leave students marked present — close their leaves?") rather than silent auto-close, to avoid a stray `P` ending a real leave. Gate on a *positive* present signal only (attendance `P`), never on absence-of-exception. Ties into the existing On-Leave panel + `endLeave`.
+
+---
+
+## 2026-07-14
+
+### Align (or deliberately keep divergent) `getPriorityChapters` accuracy vs the pooled projection
+
+The projected-score accuracy was reworked (2026-07-14) to **pool a chapter's questions** (`Σ score×weight / Σ weight`) instead of averaging per-subtopic ratios — see `computeProjectedScore` in [src/lib/analytics/projection.js](src/lib/analytics/projection.js) and the DECISIONS.md entry. The Dashboard's **Priority Chapters** widget (`getPriorityChapters` in `src/lib/analytics/dashboard.js`) still computes chapter accuracy its own way (`priority = weightPct × (1 − accuracy)`), so the two surfaces can now disagree slightly on a chapter's accuracy for the same student/cohort. This divergence was **deliberately deferred** to keep the projection change's blast radius small.
+
+**Why:** two Dashboard/Toppers surfaces showing different "accuracy" for the same chapter is a subtle credibility gap — a teacher comparing the Projected card's Functions accuracy against the Priority Chapters list may see mismatched numbers. Low urgency (numbers are close and priority is a *ranking*, not an absolute), rising if faculty start cross-reading the two.
+
+**How to apply:**
+- Decide: (a) **align** `getPriorityChapters` to the same pooled `Σ score×weight / Σ weight` method (extract a shared `chapterAccuracy(subs)` helper both call, so they can't drift), or (b) **keep divergent on purpose** and document why (priority is class-level weightage×gap, projection is per-student potential — arguably different questions).
+- If aligning: it's class-level (uses `computeChapterStats`, not the per-student `computeStudentChapterStats`), so the pooled helper needs a counts-based variant or the raw weighted sums exposed there too. TDD against `dashboard.test.js`'s existing `getPriorityChapters` block.
+
+### Reconsider the Toppers default projected-marks floor (currently a flat 60)
+
+The Toppers "Min projected" gate defaults to **60 marks** (`useState(60)` in `src/pages/Toppers/index.jsx`), clamped to the active subject's ceiling. It's a reasonable NDA-Maths cut but is subject-agnostic — on a small-max subject (e.g. a 40-mark paper) 60 clamps to the max and the list can look oddly gated, and on a real cohort the "right" floor varies.
+
+**Why:** purely a default-value ergonomics question, not a correctness issue (faculty can adjust the input any time). Worth a glance only if faculty report the default hides too many / too few students, or once non-Maths subjects use the Toppers page more.
+
+**How to apply:** either lower the default to `0` (threshold becomes purely opt-in narrowing, list shows everyone ranked) or derive a per-subject default as a fraction of `subjectMaxScore` (e.g. `Math.round(subjectMaxScore * 0.2)`) computed once when the subject is known. Both are a few lines in `ToppersPage`.
+
+### Cross-subject subtopic merges — the non-Maths remainder of the 2026-07-14 scan (backfill ledger)
+
+The 2026-07-14 subtopic cleanup (commit `a2c1d03`) applied **Maths only** by explicit user scope: 4 duplicate groups + the cube-roots-of-unity same-concept fold (79 questions consolidated in Supabase; twin maps + TDD updated). The full `/subtopic-analyse` scan (2,652 rows, all subjects) surfaced **~13 more high-confidence merges in other subjects** that were deliberately **not** applied. Logging them here so the remainder survives across sessions rather than needing a re-scan.
+
+**High-confidence groups found (counts from the 2026-07-14 scan — re-verify exact live strings before writing, per [[feedback_query_database_before_reasoning]]):**
+- **English / Ordering of Words in a Sentence** — `Sentence Rearrangement` (5) → `Sentence Rearrangement (PQRS)` (50). *Biggest single win, 55 Qs.*
+- **English / Reading Comprehension** — `Factual Detail Recall` (4) → `Factual Detail Retrieval` (15). 19 Qs.
+- **English / Fill in the Blanks** — `Grammar - Articles and Determiners` (1) → `Articles and Determiners` (1).
+- **English / Parts of Speech** — `Determiners & Pronouns` (1) → `Determiners and Pronouns` (1) (`&`/`and`).
+- **English / Idioms & Phrases** — `Change & Transition Idioms` (1) → `Change & Transformation Idioms` (1).
+- **Chemistry / Atomic Structure** — `Isotopes and average atomic mass` (1) → `Isotopes and Average Atomic Mass` (4) (casing); `Electronic configuration and shells` (1) → `Electronic Configuration` (2).
+- **Chemistry / Chemical Reactions** — `Physical vs chemical processes` (1) → `Physical vs chemical changes` (3).
+- **Chemistry / Matter & Its Classification** — `Separation of liquid mixtures` (1) → `Separation of mixtures` (1).
+- **Chemistry / Periodic Table** — `Noble gases` (1) → `Noble Gases` (1) (casing).
+- **Physics / Motion in a Straight Line** — `Distance and Displacement` (1) → `Distance vs Displacement` (1).
+- **Physics / Electrostatics** — `Electrostatic Potential` (1) → `Electric Potential` (1); **keep `Electric Potential Energy` separate** (distinct concept).
+- **Polity / Constitutional Framework** — `Basic Features of Constitution` (1) → `Features of Constitution` (1).
+
+**Why:** same rationale as the Maths pass — split subtopics fragment the per-subtopic signal that drill-downs, wrong-answer audits, and remediation links read (chapter-level projection is unaffected — it pools across all a chapter's questions). ~106 non-Maths questions affected. Not urgent (English/Ordering at 55 Qs is the only large one); the rest are low-volume tidy-ups. Worth folding into one pass next time the merge maps are touched, rather than a separate round.
+
+**Explicitly NOT to merge** (algorithm false positives — distinct concepts): `Molality`/`Molarity`; `Atomic mass number`/`Atomic Number`; `First`/`Second Ionization Enthalpy`; the `Common Chemicals` set; the `Avogadro's Number and …` set; `Concave`/`Convex Mirror`; `Inferential`/`Literal Comprehension`; the cloud-type set; `Basic Concepts of Latitude`/`Longitude`; `Ashrama`/`Varna System`; the `Vocabulary -` and `Phrasal Verbs with '…'` sets; `Active to Passive` tense variants. Also the deliberately-granular optional groups (English Question-Tags, Chemistry Mole-Concept `Formula`/`Molar`/`Empirical` mass distinctions).
+
+**How to apply:** same recipe as the Maths pass — for each group add a `SUBTOPIC_RENAMES` entry to **both** `merge_subtopics.py` and `migrate_subtopics_supabase.js` (keep the twin maps in sync), add TDD coverage to `tests/test_subtopic_merge.py` (rename asserts + distinct-preserved guards), run the JS `--dry-run` against live Supabase to confirm exact-string matches and expected counts, then apply + verify old strings → 0 rows / canonicals consolidated. Re-verify the literal strings first — they may have shifted since the 2026-07-14 scan (Binary Numbers was already clean by then).
