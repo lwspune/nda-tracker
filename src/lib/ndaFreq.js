@@ -16,50 +16,50 @@ export const SUBJECTS = [
 ]
 
 // ── Per-subject default chapter frequency tables ─────────────────────────────
-// Maths: derived from PYQ analysis 2018–2024 (16 papers, 120 Qs, 300 marks each)
-// Other subjects: empty by default — faculty can configure via Dashboard freq editor
-// pct = percentage of paper; NDA Maths marks = pct × 3
+// Maths: PYQ Vault weightage — 2,160 questions across 2017–2026 papers
+// (pyqvault.com/guide/nda-maths). Other subjects: empty by default — faculty
+// can configure via the freq editor. pct = % share of the paper; NDA Maths
+// marks = pct × 3. Shares are normalised to sum to exactly 100 (0.2% shaved
+// off the top row vs the source's rounded 100.2%).
 
 export const NDA_FREQ_BY_SUBJECT = {
   // Chapter NAMES are the canonical NDA Maths taxonomy from PYQ Vault (the
   // content master) — kept in sync so an auto-generated tagged sheet validates
   // cleanly. `getValidChapters` reads this list for validation; the freq CHART
   // reads each user's persisted `ndaFreqBySubject`, so these pct values only
-  // seed new installs. Where PYQ Vault splits a chapter the parent pct was
-  // split too (Differentiation→+Application of Derivatives, Integration→
-  // Indefinite+Definite, Probability→+Binomial Distribution), keeping the total.
+  // seed new installs.
   Maths: [
-    { chapter: 'Logarithms',                  pct: 2.5 },
-    { chapter: 'Linear Inequalities',         pct: 1.7 },
-    { chapter: 'Functions',                   pct: 2.5 },
-    { chapter: 'Binary Numbers',              pct: 1.7 },
-    { chapter: 'Matrices & Determinants',     pct: 8.3 },
-    { chapter: 'Complex Numbers',             pct: 4.2 },
-    { chapter: 'Quadratic Equations',         pct: 3.3 },
-    { chapter: 'Sequence & Series',           pct: 3.3 },
-    { chapter: 'Permutation & Combination',   pct: 3.3 },
+    { chapter: 'Logarithms',                  pct: 1.3 },
+    { chapter: 'Linear Inequalities',         pct: 0.2 },
+    { chapter: 'Functions',                   pct: 5.0 },
+    { chapter: 'Binary Numbers',              pct: 0.6 },
+    { chapter: 'Matrices & Determinants',     pct: 7.7 },
+    { chapter: 'Complex Numbers',             pct: 3.3 },
+    { chapter: 'Quadratic Equations',         pct: 2.9 },
+    { chapter: 'Sequence & Series',           pct: 4.1 },
+    { chapter: 'Permutation & Combination',   pct: 3.6 },
     { chapter: 'Binomial Theorem',            pct: 2.5 },
-    { chapter: 'Sets & Relations',            pct: 2.5 },
-    { chapter: 'Trigonometric Identities',    pct: 4.2 },
-    { chapter: 'Trigonometric Equations',     pct: 2.5 },
-    { chapter: 'Height & Distance',           pct: 2.5 },
-    { chapter: 'Inverse Trigonometry',        pct: 2.5 },
-    { chapter: 'Properties of Triangle',      pct: 2.5 },
-    { chapter: 'Differentiation',             pct: 5.8 },
-    { chapter: 'Application of Derivatives',  pct: 2.5 },
-    { chapter: 'Indefinite Integration',      pct: 5.0 },
-    { chapter: 'Definite Integration',        pct: 3.3 },
-    { chapter: 'Applications of Integration', pct: 2.5 },
-    { chapter: 'Limits & Continuity',         pct: 3.3 },
-    { chapter: 'Differential Equations',      pct: 2.5 },
-    { chapter: 'Lines',                       pct: 3.3 },
-    { chapter: 'Circles',                     pct: 2.5 },
-    { chapter: 'Conics',                      pct: 2.5 },
-    { chapter: 'Vectors',                     pct: 4.2 },
-    { chapter: '3D Geometry',                 pct: 4.2 },
-    { chapter: 'Statistics',                  pct: 5.8 },
-    { chapter: 'Probability',                 pct: 3.3 },
-    { chapter: 'Binomial Distribution',       pct: 1.7 },
+    { chapter: 'Sets & Relations',            pct: 3.2 },
+    { chapter: 'Trigonometric Identities',    pct: 6.4 },
+    { chapter: 'Trigonometric Equations',     pct: 1.5 },
+    { chapter: 'Height & Distance',           pct: 1.1 },
+    { chapter: 'Inverse Trigonometry',        pct: 1.6 },
+    { chapter: 'Properties of Triangle',      pct: 2.3 },
+    { chapter: 'Differentiation',             pct: 3.9 },
+    { chapter: 'Application of Derivatives',  pct: 3.4 },
+    { chapter: 'Indefinite Integration',      pct: 1.9 },
+    { chapter: 'Definite Integration',        pct: 3.1 },
+    { chapter: 'Applications of Integration', pct: 1.2 },
+    { chapter: 'Limits & Continuity',         pct: 3.8 },
+    { chapter: 'Differential Equations',      pct: 2.9 },
+    { chapter: 'Lines',                       pct: 4.5 },
+    { chapter: 'Circles',                     pct: 1.3 },
+    { chapter: 'Conics',                      pct: 1.8 },
+    { chapter: 'Vectors',                     pct: 4.5 },
+    { chapter: '3D Geometry',                 pct: 4.1 },
+    { chapter: 'Statistics',                  pct: 7.4 },
+    { chapter: 'Probability',                 pct: 7.5 },
+    { chapter: 'Binomial Distribution',       pct: 1.4 },
   ],
   English:   [],
   Physics:   [],
