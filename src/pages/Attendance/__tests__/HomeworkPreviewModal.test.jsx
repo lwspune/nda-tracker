@@ -29,6 +29,20 @@ beforeEach(() => {
 })
 
 describe('HomeworkPreviewModal — pending-aware (item level)', () => {
+  it('excludes a blocked (Block) student from the list and the confirm payload', () => {
+    mockStore.studentProfiles = {
+      ...PROFILES,
+      'Blocked Boy': { name: 'Blocked Boy', lwsId: 'LWS-003', mobile: '9999999999', parentMobiles: [], accountStatus: 'Block' },
+    }
+    const items = { ...ITEMS, 'LWS-003': [{ subject: 'Maths', chapter: 'Trig', type: 'homework' }] }
+    const onConfirm = vi.fn()
+    render(<HomeworkPreviewModal date="2026-06-05" itemsByLwsId={items} notifiedItemKeys={null} onConfirm={onConfirm} onClose={vi.fn()} />)
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(screen.queryByText('Blocked Boy')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    expect(onConfirm.mock.calls[0][0].map(r => r.lwsId).sort()).toEqual(['LWS-001', 'LWS-002'])
+  })
+
   it('does not show the scope banner on a first send (notifiedItemKeys null)', () => {
     render(<HomeworkPreviewModal date="2026-06-05" itemsByLwsId={ITEMS} notifiedItemKeys={null} onConfirm={vi.fn()} onClose={vi.fn()} />)
     expect(screen.queryByText(/pending only/i)).not.toBeInTheDocument()

@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { isBlockedStatus } from '../src/lib/accountStatus.js'
 
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
 const TRACKER_BASE = 'https://nda-tracker.vercel.app/'
@@ -141,17 +142,20 @@ export default async function handler(req, res) {
 
   const { data: studentRows } = await supabase
     .from('students')
-    .select('canonical_name, mobile, parent_mobiles, name_variants')
+    .select('canonical_name, mobile, parent_mobiles, name_variants, account_status')
 
   const mobileMap = {}
   const parentMap = {}
   const canonicalMap = {}   // any name-key (canonical or variant, lc) → canonical roster spelling
+  const blockedKeys = new Set()   // name-keys whose student is Block/Quit/Inactive — never messaged
   for (const s of (studentRows || [])) {
     const name = (s.canonical_name || '').trim()
     const keys = [name.toLowerCase(), ...(s.name_variants || []).map(v => v.trim().toLowerCase())]
+    const blocked = isBlockedStatus(s.account_status)
     for (const key of keys) {
       if (!key) continue
       canonicalMap[key] = name
+      if (blocked)                 blockedKeys.add(key)
       if (s.mobile)                mobileMap[key] = s.mobile
       if (s.parent_mobiles?.length) parentMap[key] = s.parent_mobiles
     }
@@ -170,6 +174,13 @@ export default async function handler(req, res) {
     const filter = new Set(students.map(n => n.toLowerCase()))
     results = results.filter(r => filter.has((r.name || '').toLowerCase()))
   }
+
+  // Never message a blocked / quit / inactive student — drop them before any leg
+  // (student, parent, AND the monitor sample). Server-enforced so an omitted or
+  // stale client filter can't opt them back in. Mirrors the login gate.
+  const beforeBlock = results.length
+  results = results.filter(r => !blockedKeys.has((r.name || '').toLowerCase()))
+  const blocked = beforeBlock - results.length
 
   const lines = []
   let sent = 0, skipped = 0, monitor = 0
@@ -247,6 +258,7 @@ export default async function handler(req, res) {
     }
   }
 
+  if (blocked) lines.push(`Excluded ${blocked} blocked/inactive student(s).`)
   lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
-  res.status(200).json({ ok: true, sent, skipped, monitor, lines })
+  res.status(200).json({ ok: true, sent, skipped, monitor, blocked, lines })
 }

@@ -32,6 +32,27 @@ describe('LectureMissPreviewModal', () => {
     'LWS-002': [{ subject: 'English', startTime: '11:00 AM', endTime: '12:00 PM' }],
   }
 
+  it('excludes a blocked (Block) student from the list and the confirm payload', () => {
+    mockStore.studentProfiles = {
+      ...PROFILES,
+      'Blocked Boy': { name: 'Blocked Boy', lwsId: 'LWS-003', mobile: '9999999999', parentMobiles: [], accountStatus: 'Block' },
+    }
+    const absences = { ...ABSENCES, 'LWS-003': [{ subject: 'Maths', startTime: '9:00 AM', endTime: '10:00 AM' }] }
+    const onConfirm = vi.fn()
+    render(
+      <LectureMissPreviewModal
+        date="2026-05-21"
+        absencesByLwsId={absences}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(screen.queryByText('Blocked Boy')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    expect(onConfirm.mock.calls[0][0].map(r => r.lwsId).sort()).toEqual(['LWS-001', 'LWS-002'])
+  })
+
   it('renders one row per student with their missed subjects listed (formatted with time)', () => {
     render(
       <LectureMissPreviewModal

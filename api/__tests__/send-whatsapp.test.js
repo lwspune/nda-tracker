@@ -217,6 +217,61 @@ describe('POST /api/send-whatsapp', () => {
     expect(body.sent).toBe(1)
   })
 
+  // ── Blocked-contact guard ──────────────────────────────────────────────────
+  // A blocked / quit / inactive student must never be messaged, even when they
+  // still have an exam_results row (e.g. blocked after sitting the exam). Server
+  // enforced (fail-safe) — the client can't opt them back in by omitting a filter.
+
+  it('never sends to a Block student (dropped before student + parent legs)', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [
+          { canonical_name: 'Arjun Sharma', mobile: '9876543210', parent_mobiles: ['9000000001'], name_variants: [], account_status: 'Active' },
+          { canonical_name: 'Ravi Kumar',   mobile: '9123456789', parent_mobiles: ['9000000002'], name_variants: [], account_status: 'Block' },
+        ],
+      }),
+    })
+    const res = await call({ examName: 'NDA Test 1' })
+    const body = res.json.mock.calls[0][0]
+    // Arjun: student + parent = 2 sent. Ravi (Block): 0.
+    expect(body.sent).toBe(2)
+    expect(body.blocked).toBe(1)
+    // Ravi's numbers never hit the wire.
+    const dests = global.fetch.mock.calls.map(c => JSON.parse(c[1].body).destination_number)
+    expect(dests).not.toContain('919123456789')
+    expect(dests).not.toContain('919000000002')
+  })
+
+  it('excludes a Block student from the monitoring sample', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [
+          { canonical_name: 'Arjun Sharma', mobile: '9876543210', parent_mobiles: [], name_variants: [], account_status: 'Active' },
+          { canonical_name: 'Ravi Kumar',   mobile: '9123456789', parent_mobiles: [], name_variants: [], account_status: 'Block' },
+        ],
+      }),
+    })
+    await call({ examName: 'NDA Test 1', monitorMobiles: ['9021869427'] })
+    const monitorCall = global.fetch.mock.calls.find(c => JSON.parse(c[1].body).destination_number === '919021869427')
+    // The sampled name is always the only non-blocked student.
+    expect(JSON.parse(monitorCall[1].body).variables[0]).toBe('Arjun Sharma')
+  })
+
+  it('treats a blank/legacy status as active (still sends)', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        students: [
+          { canonical_name: 'Arjun Sharma', mobile: '9876543210', parent_mobiles: [], name_variants: [], account_status: '' },
+          { canonical_name: 'Ravi Kumar',   mobile: '9123456789', parent_mobiles: [], name_variants: [] }, // no field at all
+        ],
+      }),
+    })
+    const res = await call({ examName: 'NDA Test 1' })
+    const body = res.json.mock.calls[0][0]
+    expect(body.sent).toBe(2)
+    expect(body.blocked).toBe(0)
+  })
+
   it('uses exam name from exams table (case-insensitive match)', async () => {
     const res = await call({ examName: 'nda test 1' })
     // Should still find the exam and return 200

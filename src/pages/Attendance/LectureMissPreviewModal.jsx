@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
+import { isBlockedStatus } from '../../lib/accountStatus'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -31,16 +32,19 @@ function buildRows(absencesByLwsId, studentProfiles) {
   for (const p of Object.values(studentProfiles)) {
     if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
   }
-  return Object.entries(absencesByLwsId).map(([lwsId, items]) => {
+  const out = []
+  for (const [lwsId, items] of Object.entries(absencesByLwsId)) {
     const p = byLwsId[lwsId]
-    return {
+    if (p && isBlockedStatus(p.accountStatus)) continue  // never message a blocked contact
+    out.push({
       lwsId,
       name:          p?.name ?? lwsId,
       mobile:        p?.mobile ?? '',
       parentMobiles: (p?.parentMobiles ?? []).join(', '),
       subjects:      items.map(normaliseEntry),
-    }
-  })
+    })
+  }
+  return out
 }
 
 // notifiedLwsIds: string[] of already-notified students from prior sends; null = first send.

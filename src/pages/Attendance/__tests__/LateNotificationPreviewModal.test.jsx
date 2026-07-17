@@ -213,6 +213,44 @@ describe('LateNotificationPreviewModal', () => {
     expect(sentRows.map(r => r.name)).toEqual(['Arjun Sharma', 'Ravi Kumar'])
   })
 
+  // ── Blocked-contact guard ──────────────────────────────────────
+
+  it('excludes a blocked (Block) student from the list and the confirm payload', () => {
+    mockStore.studentProfiles = {
+      ...PROFILES,
+      'Blocked Boy': { name: 'Blocked Boy', lwsId: 'LWS-003', mobile: '9999999999', parentMobiles: [], accountStatus: 'Block' },
+    }
+    const onConfirm = vi.fn()
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-001', 'LWS-003']}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(screen.queryByText('Blocked Boy')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /confirm send/i }))
+    const rows = onConfirm.mock.calls[0][0]
+    expect(rows.map(r => r.lwsId)).toEqual(['LWS-001'])
+  })
+
+  it('keeps a blank/legacy-status student (fail open, still notified)', () => {
+    mockStore.studentProfiles = {
+      'Legacy Lad': { name: 'Legacy Lad', lwsId: 'LWS-004', mobile: '9000000004', parentMobiles: [], accountStatus: '' },
+    }
+    render(
+      <LateNotificationPreviewModal
+        date="2026-05-21"
+        lateLwsIds={['LWS-004']}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Legacy Lad')).toBeInTheDocument()
+  })
+
   it('only the pending (un-notified) rows are visible by default on a resend', () => {
     render(
       <LateNotificationPreviewModal
