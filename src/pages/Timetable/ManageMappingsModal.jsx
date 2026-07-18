@@ -46,6 +46,12 @@ export default function ManageMappingsModal({ onClose }) {
     return teachers.find(t => t.id === tid)?.name ?? '—'
   }
 
+  // Alphabetical by displayed label (label + teacher suffix); non-mutating copy.
+  const sortedMappings = [...mappings].sort((a, b) => {
+    const key = m => `${m.label}${m.teacherId ? ` (${teacherName(m.teacherId)})` : ''}`
+    return key(a).localeCompare(key(b), undefined, { sensitivity: 'base', numeric: true })
+  })
+
   return (
     <ModalShell title="Manage Subject Mappings" onClose={onClose} wide>
       {/* Add new */}
@@ -101,7 +107,7 @@ export default function ManageMappingsModal({ onClose }) {
           <p className="text-[12px] text-ink-3 italic">No mappings yet.</p>
         ) : (
           <div className="space-y-1.5">
-            {mappings.map(m => (
+            {sortedMappings.map(m => (
               <div key={m.id} className="group">
                 {editingId === m.id ? (
                   <div className="bg-surface-2 rounded-lg p-3 space-y-2">

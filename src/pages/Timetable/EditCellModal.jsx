@@ -29,6 +29,15 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
     return teachers.find(t => t.id === tid)?.name ?? null
   }
 
+  function mappingLabel(m) {
+    return `${m.label}${m.teacherId ? ` (${teacherName(m.teacherId) ?? ''})` : ''}`
+  }
+
+  // Alphabetical by displayed label (label + teacher suffix); non-mutating copy.
+  const sortedMappings = [...mappings].sort((a, b) =>
+    mappingLabel(a).localeCompare(mappingLabel(b), undefined, { sensitivity: 'base', numeric: true })
+  )
+
   function handleSave() {
     if (isSpan) {
       setTimetableSpanCell(timetableId, slotId, breakLabel)
@@ -87,9 +96,9 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
             onChange={e => setSelectedMappingId(e.target.value)}
           >
             <option value="">— Select —</option>
-            {mappings.map(m => (
+            {sortedMappings.map(m => (
               <option key={m.id} value={m.id}>
-                {m.label}{m.teacherId ? ` (${teacherName(m.teacherId) ?? ''})` : ''}
+                {mappingLabel(m)}
               </option>
             ))}
           </select>
