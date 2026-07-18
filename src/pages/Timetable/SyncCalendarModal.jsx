@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import ModalShell from './ModalShell'
+import { sortTeachersByName } from '../../lib/timetable'
 
 // Calls /api/sync-calendar with the admin session JWT.
 async function callSync(body) {
@@ -69,7 +70,7 @@ export default function SyncCalendarModal({ onClose, teachers = [] }) {
           disabled={phase === 'applying'}
         >
           <option value="">All teachers</option>
-          {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {sortTeachersByName(teachers).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         {!teacherId && (
           <p className="text-[10px] text-ink-3 mt-1">Tip: sync one teacher first and confirm it lands on their calendar before the full run.</p>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import useStore from '../../store/useStore'
 import ModalShell from './ModalShell'
+import { sortTeachersByName } from '../../lib/timetable'
 
 export default function ManageMappingsModal({ onClose }) {
   const teachers               = useStore(s => s.timetableTeachers)
@@ -52,6 +53,8 @@ export default function ManageMappingsModal({ onClose }) {
     return key(a).localeCompare(key(b), undefined, { sensitivity: 'base', numeric: true })
   })
 
+  const sortedTeachers = sortTeachersByName(teachers)
+
   return (
     <ModalShell title="Manage Subject Mappings" onClose={onClose} wide>
       {/* Add new */}
@@ -85,7 +88,7 @@ export default function ManageMappingsModal({ onClose }) {
               onChange={e => setTeacherId(e.target.value)}
             >
               <option value="">— None —</option>
-              {teachers.map(t => (
+              {sortedTeachers.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -137,7 +140,7 @@ export default function ManageMappingsModal({ onClose }) {
                           onChange={e => setEditTeacherId(e.target.value)}
                         >
                           <option value="">— None —</option>
-                          {teachers.map(t => (
+                          {sortedTeachers.map(t => (
                             <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>

@@ -5,6 +5,14 @@
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+// Alphabetical-by-name copy of a teacher list; never mutates the input.
+// Used by every teacher dropdown so the ordering is consistent across the feature.
+export function sortTeachersByName(teachers = []) {
+  return [...teachers].sort((a, b) =>
+    (a?.name ?? '').localeCompare(b?.name ?? '', undefined, { sensitivity: 'base', numeric: true })
+  )
+}
+
 function parseTimeToMinutes(str) {
   if (!str) return 0
   const s = String(str).trim().toUpperCase()

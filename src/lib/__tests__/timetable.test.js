@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate } from '../timetable'
+import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName } from '../timetable'
 
 // Helper: build a minimal timetable shape matching what timetableSlice produces.
 function makeTimetable({ timeSlots = [], grid = {} } = {}) {
@@ -414,5 +414,36 @@ describe('fmtDayDate', () => {
     expect(fmtDayDate(null)).toBe('')
     expect(fmtDayDate('2026-05-21')).toBe('')
     expect(fmtDayDate(new Date('nope'))).toBe('')
+  })
+})
+
+// ── sortTeachersByName ────────────────────────────────────
+describe('sortTeachersByName', () => {
+  it('sorts teachers alphabetically by name, case-insensitively', () => {
+    const teachers = [
+      { id: 't1', name: 'Mayur Sir' },
+      { id: 't2', name: 'Akash Sir' },
+      { id: 't3', name: 'vishal sir' },
+      { id: 't4', name: 'Deepak Sir' },
+    ]
+    expect(sortTeachersByName(teachers).map(t => t.name)).toEqual([
+      'Akash Sir', 'Deepak Sir', 'Mayur Sir', 'vishal sir',
+    ])
+  })
+
+  it('does not mutate the input array', () => {
+    const teachers = [{ id: 't1', name: 'B' }, { id: 't2', name: 'A' }]
+    const original = [...teachers]
+    sortTeachersByName(teachers)
+    expect(teachers).toEqual(original)
+    expect(teachers[0].id).toBe('t1')
+  })
+
+  it('tolerates missing names and empty / bad input', () => {
+    expect(sortTeachersByName([])).toEqual([])
+    expect(sortTeachersByName()).toEqual([])
+    const teachers = [{ id: 't1' }, { id: 't2', name: 'A' }]
+    // Nameless teacher sorts as empty string → first; no throw.
+    expect(sortTeachersByName(teachers).map(t => t.id)).toEqual(['t1', 't2'])
   })
 })

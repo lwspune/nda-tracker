@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import useStore from '../../store/useStore'
 import { Card } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
+import { sortTeachersByName } from '../../lib/timetable'
 
 const MIN_PASSWORD = 8
 
@@ -238,7 +239,7 @@ export default function TeachersTab() {
           <p className="text-[13px] text-ink-3 italic">No teachers yet — add one above.</p>
         ) : (
           <div className="divide-y divide-border">
-            {teachers.map(t => {
+            {sortTeachersByName(teachers).map(t => {
               const usage = usageFor(t.id)
               const hasLogin = !!t.email && authEmails.has(t.email.toLowerCase())
               const status = actionStatus?.teacherId === t.id ? actionStatus : null

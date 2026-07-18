@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import useStore from '../../store/useStore'
 import ModalShell from './ModalShell'
+import { sortTeachersByName } from '../../lib/timetable'
 
 const STATUSES = ['Planned', 'Completed', 'Cancelled']
 
@@ -202,7 +203,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
             className="input w-full"
           >
             <option value="">— Unassigned —</option>
-            {teachers.map(t => (
+            {sortTeachersByName(teachers).map(t => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>

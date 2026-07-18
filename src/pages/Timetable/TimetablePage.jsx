@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate } from '../../lib/timetable'
+import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName } from '../../lib/timetable'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -729,7 +729,7 @@ export default function TimetablePage() {
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {teachers.map(t => (
+                {sortTeachersByName(teachers).map(t => (
                   <button
                     key={t.id}
                     onClick={() => setSelectedTeacherId(t.id)}
