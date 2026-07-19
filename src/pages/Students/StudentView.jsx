@@ -16,6 +16,8 @@ import {
   examMaxMarks,
 } from '../../lib/analytics'
 import { getFreqForSubject } from '../../lib/ndaFreq'
+import { buildFocusAreas } from '../../lib/focusAreas'
+import FocusAreas from './FocusAreas'
 import ChapterAccordion from './ChapterAccordion'
 import ProjectedScoreCard from './ProjectedScoreCard'
 import WrongAnswerAudit from './WrongAnswerAudit'
@@ -237,6 +239,12 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   // "not available" rather than "no weaknesses found".
   const allOffline = examData.length > 0 && examData.every(({ exam }) => !exam.questions?.length)
 
+  // "Where to focus" — concept-graph root-cause + sequencing advice. NDA-Maths
+  // only (the graph is Maths-specific) and needs per-question data (not offline).
+  const focusAreas = primarySubject === 'Maths' && !allOffline
+    ? buildFocusAreas({ breakdown: projected.breakdown, wrongAudit, skippedAudit, subject: primarySubject })
+    : { startHere: [], readyToLearn: [] }
+
   // Chapter summary for accordion
   const chapterSummary = Object.entries(chapterStats).map(([ch, subs]) => {
     const vals = Object.values(subs)
@@ -414,6 +422,9 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
         lwsId={profile?.lwsId}
         integrityIncidentsProp={integrityIncidentsProp}
       />
+
+      {/* Where to focus — actionable head of the diagnosis cluster (renders nothing when no signal) */}
+      <FocusAreas startHere={focusAreas.startHere} readyToLearn={focusAreas.readyToLearn} />
 
       {/* Chapter accordion — grouped with the audits below as the "diagnosis" cluster */}
       <Card>

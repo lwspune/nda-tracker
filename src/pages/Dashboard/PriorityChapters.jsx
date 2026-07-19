@@ -6,7 +6,7 @@ import { scoreBg } from '../../lib/analytics'
 // class accuracy so faculty can see what to teach next: high weight + low accuracy.
 const TOP_N = 14
 
-export default function PriorityChapters({ rows, subject }) {
+export default function PriorityChapters({ rows, subject, rootCauseByChapter = {} }) {
   const visible = (rows || []).slice(0, TOP_N)
 
   return (
@@ -30,7 +30,14 @@ export default function PriorityChapters({ rows, subject }) {
             <tbody>
               {visible.map(r => (
                 <tr key={r.chapter} className="border-b border-border/50">
-                  <td className="py-2 pr-4 font-medium text-ink">{r.chapter}</td>
+                  <td className="py-2 pr-4 font-medium text-ink">
+                    {r.chapter}
+                    {rootCauseByChapter[r.chapter] && (
+                      <span className="block text-[10px] font-normal text-accent mt-0.5">
+                        ↳ root cause: {rootCauseByChapter[r.chapter]}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 font-mono text-ink-2 whitespace-nowrap">
                     {r.weightPct.toFixed(1)}% <span className="text-ink-3">· {Math.round(r.marks)}m</span>
                   </td>

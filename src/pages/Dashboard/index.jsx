@@ -7,6 +7,7 @@ import {
   getPerformanceSeries, getPriorityChapters, getBatchComparison,
 } from '../../lib/analytics'
 import { getFreqForSubject, NDA_TOTAL_MARKS_BY_SUBJECT } from '../../lib/ndaFreq'
+import { rootCauseMap } from '../../lib/conceptGraph'
 import PerformanceTrend from './PerformanceTrend'
 import PriorityChapters from './PriorityChapters'
 import BatchComparison from './BatchComparison'
@@ -102,6 +103,13 @@ export default function DashboardPage() {
   const priorityRows = getPriorityChapters(prioritySubjectExams, freq, totalMarks, { validNames })
   const batchRows    = getBatchComparison(prioritySubjectExams, studentProfiles, freq, totalMarks)
 
+  // Root-cause annotation: when a weak priority chapter's weakness traces to a
+  // deeper weak prerequisite, surface it ("↳ root cause: X"). Concept graph is
+  // NDA-Maths-specific, so only meaningful for the Maths subject.
+  const rootCauseByChapter = prioritySubject === 'Maths'
+    ? rootCauseMap(priorityRows, { threshold: 0.5 })
+    : {}
+
   const chapterRows = Object.entries(chapterStats).map(([ch, subs]) => {
     let correct = 0, total = 0
     Object.values(subs).forEach(s => { correct += s.correct; total += s.total })
@@ -193,7 +201,7 @@ export default function DashboardPage() {
 
       {/* Priority chapters + Batch comparison */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <PriorityChapters rows={priorityRows} subject={prioritySubject} />
+        <PriorityChapters rows={priorityRows} subject={prioritySubject} rootCauseByChapter={rootCauseByChapter} />
         {batchRows.length > 1
           ? <BatchComparison rows={batchRows} />
           : (
