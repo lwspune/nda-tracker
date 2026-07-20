@@ -68,7 +68,7 @@ function drawHeader(doc, report) {
   doc.setFontSize(10)
   doc.text('LWS PUNE', W - M.right, M.top + 4, { align: 'right' })
 
-  // Two-line meta block (left): Name + Month
+  // Two-line meta block (left): Name + Period
   const labelX = M.left
   const valueX = M.left + 30
   let y = M.top + 14
@@ -77,12 +77,12 @@ function drawHeader(doc, report) {
   doc.setFontSize(9)
   doc.setTextColor(...C.ink2)
   doc.text('Name:', labelX, y)
-  doc.text('Month:', labelX, y + 5)
+  doc.text('Period:', labelX, y + 5)
 
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...C.ink)
   doc.text(report.meta.name || '—', valueX, y)
-  doc.text(report.meta.monthLabel || '', valueX, y + 5)
+  doc.text(report.meta.rangeLabel || '', valueX, y + 5)
 
   return y + 11     // y position to continue from
 }
@@ -92,7 +92,7 @@ async function drawExamTable(doc, y, report, autoTable) {
     doc.setFont('helvetica', 'italic')
     doc.setFontSize(9)
     doc.setTextColor(...C.ink2)
-    doc.text('No exams taken this month.', M.left, y + 4)
+    doc.text('No exams taken this period.', M.left, y + 4)
     return y + 10
   }
 
@@ -277,7 +277,7 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
   y = drawAttendance(doc, y, report, autoTable)
   y = drawHomework(doc, y, report)
   y = drawRemark(doc, y, remark)
-  y = drawNextMonthFocus(doc, y, report)
+  drawNextMonthFocus(doc, y, report)
   drawFooter(doc)
 
   return doc.output('blob')
@@ -285,7 +285,7 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
 
 export async function downloadMonthlyReportPdf(report, { remark = '', save = true } = {}) {
   const blob = await buildMonthlyReportPdfBlob(report, { remark })
-  const filename = `${safeFile(report.meta.name)}_${safeFile(report.meta.monthLabel)}_Report.pdf`
+  const filename = `${safeFile(report.meta.name)}_${safeFile(report.meta.rangeLabel)}_Report.pdf`
   if (save) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

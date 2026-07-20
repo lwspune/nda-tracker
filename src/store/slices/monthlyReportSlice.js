@@ -27,7 +27,7 @@ function groupBy(rows, key) {
 }
 
 export const createMonthlyReportSlice = (_set, _get) => ({
-  async fetchMonthlyReportData(month, cohortLwsIds) {
+  async fetchMonthlyReportData(from, to, cohortLwsIds) {
     if (!supabase) return null
     const session = await getSession()
     if (!session) return null
@@ -40,8 +40,7 @@ export const createMonthlyReportSlice = (_set, _get) => ({
       }
     }
 
-    const monthLike = `${month}-%`
-
+    // Inclusive [from, to] window on the date-bound tables ('YYYY-MM-DD').
     const [
       { data: attendance,      error: attErr },
       { data: lectureAbsences, error: lecErr },
@@ -51,18 +50,18 @@ export const createMonthlyReportSlice = (_set, _get) => ({
       supabase.from('student_attendance')
         .select('lws_id, date, status')
         .in('lws_id', cohortLwsIds)
-        .like('date', monthLike),
+        .gte('date', from).lte('date', to),
       supabase.from('lecture_absences')
         .select('lws_id, date, slot_id, subject')
         .in('lws_id', cohortLwsIds)
-        .like('date', monthLike),
+        .gte('date', from).lte('date', to),
       supabase.from('exam_absences')
         .select('lws_id, exam_id, marked_at, notified_at')
         .in('lws_id', cohortLwsIds),
       supabase.from('homework_pending')
         .select('lws_id, date, subject, chapter, type, resolved_at')
         .in('lws_id', cohortLwsIds)
-        .like('date', monthLike),
+        .gte('date', from).lte('date', to),
     ])
 
     if (attErr || lecErr || exaErr || hwErr) {

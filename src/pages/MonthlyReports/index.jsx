@@ -7,48 +7,79 @@ import ReportRow from './ReportRow'
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-// 'YYYY-MM' for the previous calendar month — the default when the page opens.
-function previousMonth(today = new Date()) {
-  const y = today.getFullYear()
-  const m = today.getMonth()     // 0–11 of current month
-  const prev = new Date(y, m - 1, 1)
-  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+// 'YYYY-MM-DD' for a date object.
+function iso(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// 'YYYY-MM' → 'Jan 2026'
-function monthLabel(month) {
-  const [y, m] = month.split('-')
-  return `${SHORT_MONTHS[Number(m) - 1]} ${y}`
+// First & last calendar day of the previous month — the default range the page
+// opens with (keeps parity with the old "previous calendar month" default).
+function previousMonthRange(today = new Date()) {
+  const y = today.getFullYear()
+  const m = today.getMonth()               // 0–11 of current month
+  const from = new Date(y, m - 1, 1)        // 1st of previous month
+  const to   = new Date(y, m, 0)            // day 0 of this month → last of previous
+  return { from: iso(from), to: iso(to) }
+}
+
+// Range → human label, mirroring monthlyReportBuilder.rangeLabel: a whole
+// calendar month collapses to 'Jan 2026', otherwise a spanning label. Used only
+// for the ZIP archive filename (per-PDF filenames come from the builder).
+function rangeLabel(from, to) {
+  if (!from || !to) return ''
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  const lastOfFrom = new Date(fy, fm, 0).getDate()
+  if (fy === ty && fm === tm && fd === 1 && td === lastOfFrom) {
+    return `${SHORT_MONTHS[fm - 1]} ${fy}`
+  }
+  const left = fy === ty ? `${fd} ${SHORT_MONTHS[fm - 1]}` : `${fd} ${SHORT_MONTHS[fm - 1]} ${fy}`
+  return `${left} - ${td} ${SHORT_MONTHS[tm - 1]} ${ty}`
 }
 
 export default function MonthlyReportsPage() {
   const exams                  = useStore(s => s.exams)
   const studentProfiles        = useStore(s => s.studentProfiles)
-  const syllabusBatches        = useStore(s => s.syllabusBatches) || []
+  // Raw store references (referentially stable from Zustand) — coalesce nullish
+  // at point of use so they stay stable useMemo/useState deps.
+  const syllabusBatches        = useStore(s => s.syllabusBatches)
+  const syllabusBatchBranches  = useStore(s => s.syllabusBatchBranches)
+  const branches               = useStore(s => s.branches)
   const syllabusPrograms       = useStore(s => s.syllabusPrograms)
   const batchChapterTimelines  = useStore(s => s.batchChapterTimelines)
   const fetchMonthlyReportData = useStore(s => s.fetchMonthlyReportData)
 
-  const [month, setMonth] = useState(previousMonth())
-  const [batch, setBatch] = useState(syllabusBatches[0] || '')
+  const defaultRange = previousMonthRange()
+  const [from, setFrom] = useState(defaultRange.from)
+  const [to, setTo] = useState(defaultRange.to)
+  const [branch, setBranch] = useState('')          // '' = all branches
+  // Batches visible in the dropdown, narrowed by the selected branch.
+  const batchOptions = useMemo(() => {
+    const all = syllabusBatches || []
+    const map = syllabusBatchBranches || {}
+    return branch ? all.filter(b => map[b] === branch) : all
+  }, [syllabusBatches, syllabusBatchBranches, branch])
+  const [batch, setBatch] = useState((syllabusBatches || [])[0] || '')
   const [generated, setGenerated] = useState(null)   // { dataByLwsId } | null
   const [generating, setGenerating] = useState(false)
   const [remarks, setRemarks] = useState({})        // { [lwsId]: string }, transient
   const [bulkBusy, setBulkBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const rangeInvalid = !from || !to || from > to
+
   const cohort = useMemo(() =>
-    batch ? getMonthlyReportCohort(studentProfiles, batch, month) : []
-  , [studentProfiles, batch, month])
+    batch && !rangeInvalid ? getMonthlyReportCohort(studentProfiles, batch, to) : []
+  , [studentProfiles, batch, to, rangeInvalid])
 
   async function handleGenerate() {
-    if (!batch || cohort.length === 0) return
+    if (!batch || rangeInvalid || cohort.length === 0) return
     setGenerating(true)
     setError('')
     setGenerated(null)
     try {
       const lwsIds = cohort.map(p => p.lwsId).filter(Boolean)
-      const data = await fetchMonthlyReportData(month, lwsIds)
+      const data = await fetchMonthlyReportData(from, to, lwsIds)
       if (data === null) {
         setError('Failed to load attendance / absence data. Try again.')
         return
@@ -68,7 +99,8 @@ export default function MonthlyReportsPage() {
     const lwsId = profile.lwsId
     return buildMonthlyReport({
       profile,
-      month,
+      from,
+      to,
       exams,
       attendance:      generated?.attendanceByLwsId?.[lwsId]      || [],
       lectureAbsences: generated?.lectureAbsencesByLwsId?.[lwsId] || [],
@@ -93,7 +125,7 @@ export default function MonthlyReportsPage() {
     setBulkBusy(true)
     setError('')
     try {
-      const label = monthLabel(month)
+      const label = rangeLabel(from, to)
       const items = cohort.map(profile => {
         const report = reportFor(profile)
         return {
@@ -112,30 +144,64 @@ export default function MonthlyReportsPage() {
   }
 
   // Reset preview when controls change so users don't see mismatched data.
-  function setMonthAndClear(v) { setMonth(v); setGenerated(null); setRemarks({}) }
-  function setBatchAndClear(v) { setBatch(v); setGenerated(null); setRemarks({}) }
+  function clearPreview() { setGenerated(null); setRemarks({}) }
+  function setFromAndClear(v) { setFrom(v); clearPreview() }
+  function setToAndClear(v) { setTo(v); clearPreview() }
+  function setBatchAndClear(v) { setBatch(v); clearPreview() }
+  // Changing branch narrows the batch list — drop a now-hidden batch selection.
+  function setBranchAndClear(v) {
+    setBranch(v)
+    if (v && batch && (syllabusBatchBranches || {})[batch] !== v) setBatch('')
+    clearPreview()
+  }
 
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-[20px] font-extrabold text-ink mb-1">Monthly Reports</h1>
         <p className="text-[12px] text-ink-3">
-          Generate per-student PDF report cards for parents. Default month is the previous calendar month.
+          Generate per-student PDF report cards for parents. Defaults to the previous calendar month — adjust the date range for any window.
         </p>
       </div>
 
       {/* Controls */}
       <div className="card p-4 mb-5">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[160px]">
-            <label htmlFor="month-input" className="form-label mb-1.5">Month</label>
+          <div className="flex-1 min-w-[140px]">
+            <label htmlFor="from-input" className="form-label mb-1.5">From</label>
             <input
-              id="month-input"
-              type="month"
-              value={month}
-              onChange={e => setMonthAndClear(e.target.value)}
+              id="from-input"
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={e => setFromAndClear(e.target.value)}
               className="form-input text-[13px]"
             />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label htmlFor="to-input" className="form-label mb-1.5">To</label>
+            <input
+              id="to-input"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={e => setToAndClear(e.target.value)}
+              className="form-input text-[13px]"
+            />
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <label htmlFor="branch-select" className="form-label mb-1.5">Branch</label>
+            <select
+              id="branch-select"
+              value={branch}
+              onChange={e => setBranchAndClear(e.target.value)}
+              className="form-input text-[13px]"
+            >
+              <option value="">All branches</option>
+              {(branches || []).map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
           </div>
           <div className="flex-1 min-w-[200px]">
             <label htmlFor="batch-select" className="form-label mb-1.5">Batch</label>
@@ -146,7 +212,7 @@ export default function MonthlyReportsPage() {
               className="form-input text-[13px]"
             >
               <option value="">— select —</option>
-              {syllabusBatches.map(b => (
+              {batchOptions.map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
@@ -154,7 +220,7 @@ export default function MonthlyReportsPage() {
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={!batch || cohort.length === 0 || generating}
+            disabled={!batch || rangeInvalid || cohort.length === 0 || generating}
             className="btn btn-primary text-[13px] min-h-[44px] px-5
                        disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -163,9 +229,11 @@ export default function MonthlyReportsPage() {
         </div>
 
         <div className="mt-3 text-[12px] text-ink-3">
-          {batch
-            ? <>Cohort: <span className="font-semibold text-ink">{cohort.length}</span> student{cohort.length !== 1 ? 's' : ''}</>
-            : <>Pick a batch to see the cohort.</>}
+          {rangeInvalid
+            ? <span className="text-danger">Pick a valid date range — the “From” date must be on or before “To”.</span>
+            : batch
+              ? <>Cohort: <span className="font-semibold text-ink">{cohort.length}</span> student{cohort.length !== 1 ? 's' : ''}</>
+              : <>Pick a batch to see the cohort.</>}
         </div>
 
         {error && (
@@ -207,7 +275,7 @@ export default function MonthlyReportsPage() {
 
       {generated && cohort.length === 0 && (
         <div className="card px-4 py-8 text-center text-[13px] text-ink-3 italic">
-          No active students in this batch are registered before {month}.
+          No active students in this batch are registered on or before {to}.
         </div>
       )}
 

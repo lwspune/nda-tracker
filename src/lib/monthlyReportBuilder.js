@@ -1,7 +1,12 @@
-// Pure builder for the monthly report card. Given a student profile, a month
-// ('YYYY-MM'), and the relevant arrays (already filtered to this student where
-// applicable), returns a sections object the PDF lib renders. Compute-on-demand
-// — no persistence; re-running with the same inputs returns the same output.
+// Pure builder for the monthly report card. Given a student profile, a date
+// range (`from`/`to`, both 'YYYY-MM-DD', inclusive), and the relevant arrays
+// (already filtered to this student where applicable), returns a sections object
+// the PDF lib renders. Compute-on-demand — no persistence; re-running with the
+// same inputs returns the same output.
+//
+// The range replaces the earlier single-'YYYY-MM' month. A whole-calendar-month
+// range (1st → last day) still renders as "Jun 2026" (see rangeLabel) so the
+// default previous-month report is visually unchanged.
 
 import { examMaxMarks } from './analyticsHelpers'
 
@@ -13,14 +18,21 @@ function monthLabel(month /* 'YYYY-MM' */) {
   return `${MONTH_NAMES[Number(m) - 1]} ${y}`
 }
 
+// 'YYYY-MM-DD' → 'YYYY-MM' (the month it falls in)
+function monthOf(dateStr) {
+  return dateStr.slice(0, 7)
+}
+
 function nextMonth(month) {
   const [y, m] = month.split('-').map(Number)
   if (m === 12) return `${y + 1}-01`
   return `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
-function dateInMonth(dateStr, month) {
-  return typeof dateStr === 'string' && dateStr.startsWith(month + '-')
+// Inclusive [from, to] window on ISO date strings (lexical compare is correct
+// for zero-padded 'YYYY-MM-DD').
+function inRange(dateStr, from, to) {
+  return typeof dateStr === 'string' && dateStr >= from && dateStr <= to
 }
 
 // 'YYYY-MM' → 'YYYY-MM-31' (last day; handles month length + leap years).
@@ -28,6 +40,24 @@ function lastDayOf(month) {
   const [y, m] = month.split('-').map(Number)
   const date = new Date(y, m, 0)   // day=0 of next month → last day of this month
   return `${y}-${String(m).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// Human label for the range. Collapses an exact whole calendar month to
+// "Jun 2026"; otherwise "5 Jan - 20 Jan 2026" (drops the year on the left when
+// both ends share it), or "20 Dec 2025 - 5 Jan 2026" across a year boundary.
+// ASCII hyphen only (WinAnsi-safe for the PDF).
+function rangeLabel(from, to) {
+  const fM = monthOf(from)
+  if (fM === monthOf(to) && from === `${fM}-01` && to === lastDayOf(fM)) {
+    return monthLabel(fM)
+  }
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  const left = fy === ty
+    ? `${fd} ${MONTH_NAMES[fm - 1]}`
+    : `${fd} ${MONTH_NAMES[fm - 1]} ${fy}`
+  const right = `${td} ${MONTH_NAMES[tm - 1]} ${ty}`
+  return `${left} - ${right}`
 }
 
 // 'YYYY-MM-DD' → 'D Mon' (e.g. '2026-01-03' → '3 Jan')
@@ -46,7 +76,8 @@ function findEntry(exam, profile) {
 
 export function buildMonthlyReport({
   profile,
-  month,
+  from,
+  to,
   exams,
   attendance,
   lectureAbsences,
@@ -61,7 +92,7 @@ export function buildMonthlyReport({
   // ── examTable ──────────────────────────────────────────────────────────
   const tableRows = []
   for (const exam of exams) {
-    if (!dateInMonth(exam.date, month)) continue
+    if (!inRange(exam.date, from, to)) continue
     if (regDate && exam.date < regDate) continue
     const entry = findEntry(exam, profile)
     if (entry) {
@@ -82,7 +113,7 @@ export function buildMonthlyReport({
   for (const row of examAbsences || []) {
     const exam = examById.get(row.exam_id)
     if (!exam) continue
-    if (!dateInMonth(exam.date, month)) continue
+    if (!inRange(exam.date, from, to)) continue
     if (regDate && exam.date < regDate) continue
     tableRows.push({
       examId: exam.id,
@@ -100,7 +131,7 @@ export function buildMonthlyReport({
   let present = 0, absent = 0, late = 0
   const lateDates = []
   for (const row of attendance || []) {
-    if (!dateInMonth(row.date, month)) continue
+    if (!inRange(row.date, from, to)) continue
     if (row.status === 'P') present++
     else if (row.status === 'A') absent++
     else if (row.status === 'L') { late++; lateDates.push(shortDate(row.date)) }
@@ -111,12 +142,12 @@ export function buildMonthlyReport({
     ? Math.round(((present + late) / totalWorkingDays) * 100)
     : 0
   const missedLectureRows = (lectureAbsences || [])
-    .filter(r => dateInMonth(r.date, month))
+    .filter(r => inRange(r.date, from, to))
     .map(r => ({ date: shortDate(r.date), subject: r.subject || '' }))
 
-  // ── homework / notes flagged this month (all flagged, resolved or not) ──
+  // ── homework / notes flagged in the range (all flagged, resolved or not) ──
   const homeworkFlagged = (homework || [])
-    .filter(r => dateInMonth(r.date, month))
+    .filter(r => inRange(r.date, from, to))
     .sort((a, b) => a.date.localeCompare(b.date))   // sort raw ISO before formatting
     .map(r => ({
       date: shortDate(r.date),
@@ -127,9 +158,11 @@ export function buildMonthlyReport({
     }))
 
   // ── next month focus ───────────────────────────────────────────────────
+  // Anchored to the month after the range's END month, so the default
+  // previous-month report still surfaces the current teaching month.
   let nextMonthFocus = null
   if (batch) {
-    const next = nextMonth(month)
+    const next = nextMonth(monthOf(to))
     const batchTimelines = (batchChapterTimelines || {})[batch] || {}
     const chapters = []
     for (const [programId, subjects] of Object.entries(batchTimelines)) {
@@ -160,8 +193,9 @@ export function buildMonthlyReport({
       rollNo: profile.rollNo || '',
       branch: profile.branch || '',
       batch,
-      month,
-      monthLabel: monthLabel(month),
+      from,
+      to,
+      rangeLabel: rangeLabel(from, to),
     },
     examTable: tableRows,
     attendance: {
@@ -177,13 +211,14 @@ export function buildMonthlyReport({
   }
 }
 
-// Returns the list of student profiles that should receive a monthly report
-// for the given (batch, month). Cohort = Active accountStatus + batches[]
-// contains batchName + regDate ≤ last day of month. Skips variant-keyed
-// entries (p.name !== key). Sorted by name. Empty when batchName is falsy.
-export function getMonthlyReportCohort(studentProfiles, batchName, month) {
+// Returns the list of student profiles that should receive a report for the
+// given (batch, toDate). Cohort = Active accountStatus + batches[] contains
+// batchName + regDate ≤ toDate (the range's inclusive end, 'YYYY-MM-DD'). Skips
+// variant-keyed entries (p.name !== key). Sorted by name. Empty when batchName
+// is falsy.
+export function getMonthlyReportCohort(studentProfiles, batchName, toDate) {
   if (!batchName) return []
-  const cutoff = lastDayOf(month)
+  const cutoff = toDate
   const out = []
   for (const [key, p] of Object.entries(studentProfiles || {})) {
     if (!p || p.name !== key) continue

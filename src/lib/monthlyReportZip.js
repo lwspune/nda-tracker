@@ -37,6 +37,6 @@ function safeFile(s) {
     .replace(/^_+|_+$/g, '')            // trim leading/trailing _
 }
 
-export function zipFilename(batch, monthLabel) {
-  return `${safeFile(batch)}_${safeFile(monthLabel)}_Reports.zip`
+export function zipFilename(batch, rangeLabel) {
+  return `${safeFile(batch)}_${safeFile(rangeLabel)}_Reports.zip`
 }

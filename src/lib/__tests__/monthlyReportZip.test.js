@@ -11,10 +11,10 @@ import {
   zipFilename,
 } from '../monthlyReportZip'
 
-function sampleReport(name, monthLabel = 'Jan 2026') {
+function sampleReport(name, rangeLabel = 'Jan 2026') {
   return {
     meta: { lwsId: 'LWS-X', name, rollNo: '1', branch: 'LWS Pune',
-            batch: 'B', month: '2026-01', monthLabel },
+            batch: 'B', from: '2026-01-01', to: '2026-01-31', rangeLabel },
     examTable: [],
     attendance: { present: 0, absent: 0, late: 0, missedLectures: 0,
                   totalWorkingDays: 0, attendancePercentage: 0,

@@ -12,8 +12,9 @@ function sampleReport(over = {}) {
       name: 'Aksheet Patil',
       branch: 'LWS Pune',
       batch: 'LWS_NDA_2Y_(26-28)_A',
-      month: '2026-01',
-      monthLabel: 'Jan 2026',
+      from: '2026-01-01',
+      to: '2026-01-31',
+      rangeLabel: 'Jan 2026',
     },
     examTable: [
       { examName: 'Geog - Atmospheric Belts', subject: 'Geog',    date: '2026-01-03', marks: 216, percentage: 68, attended: true },

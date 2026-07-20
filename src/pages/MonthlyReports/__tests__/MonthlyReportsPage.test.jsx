@@ -46,6 +46,11 @@ beforeEach(() => {
       'Bob':   activeStudent('Bob',   'LWS-002'),
     },
     syllabusBatches: ['LWS_NDA_2Y_(26-28)_A', 'APJ_NDA_2Y_(26-28)'],
+    syllabusBatchBranches: {
+      'LWS_NDA_2Y_(26-28)_A': 'LWS Pune',
+      'APJ_NDA_2Y_(26-28)':   'APJ',
+    },
+    branches: ['LWS Pune', 'APJ'],
     syllabusPrograms: [],
     batchChapterTimelines: {},
     fetchMonthlyReportData: mockFetch,
@@ -56,11 +61,25 @@ beforeEach(() => {
 })
 
 describe('MonthlyReportsPage', () => {
-  it('renders month + batch pickers and a Generate button', () => {
+  it('renders From/To date pickers, branch + batch selects, and a Generate button', () => {
     render(<MonthlyReportsPage />)
-    expect(screen.getByLabelText(/^Month$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^From$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^To$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Branch$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Batch$/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^generate$/i })).toBeInTheDocument()
+  })
+
+  it('narrows the batch list to the selected branch', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    const batchSel = screen.getByLabelText(/^Batch$/i)
+    // Before filtering, both batches are options.
+    expect(batchSel.querySelectorAll('option[value]:not([value=""])')).toHaveLength(2)
+
+    await user.selectOptions(screen.getByLabelText(/^Branch$/i), 'APJ')
+    const opts = [...batchSel.querySelectorAll('option')].map(o => o.value).filter(Boolean)
+    expect(opts).toEqual(['APJ_NDA_2Y_(26-28)'])
   })
 
   it('shows the cohort count after picking a batch', () => {
@@ -79,14 +98,15 @@ describe('MonthlyReportsPage', () => {
     expect(btn).toBeDisabled()
   })
 
-  it('triggers fetchMonthlyReportData with month + cohort lws_ids when Generate is clicked', async () => {
+  it('triggers fetchMonthlyReportData with from, to + cohort lws_ids when Generate is clicked', async () => {
     const user = userEvent.setup()
     render(<MonthlyReportsPage />)
     await user.click(screen.getByRole('button', { name: /^generate$/i }))
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-    const [month, lwsIds] = mockFetch.mock.calls[0]
-    expect(typeof month).toBe('string')
-    expect(month).toMatch(/^\d{4}-\d{2}$/)
+    const [from, to, lwsIds] = mockFetch.mock.calls[0]
+    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(from <= to).toBe(true)
     expect(lwsIds.sort()).toEqual(['LWS-001', 'LWS-002'])
   })
 
@@ -110,7 +130,8 @@ describe('MonthlyReportsPage', () => {
     await waitFor(() => expect(mockDownload).toHaveBeenCalledTimes(1))
     const [reportArg, optsArg] = mockDownload.mock.calls[0]
     expect(reportArg.meta.name).toBeTruthy()
-    expect(reportArg.meta.month).toMatch(/^\d{4}-\d{2}$/)
+    expect(reportArg.meta.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(reportArg.meta.to).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(optsArg).toEqual({ remark: '' })
   })
 
@@ -173,14 +194,14 @@ describe('MonthlyReportsPage', () => {
     await waitFor(() => expect(screen.getByText(/failed to load/i)).toBeInTheDocument())
   })
 
-  it('changing the month after generating clears the preview list (so user does not see mismatched data)', async () => {
+  it('changing the date range after generating clears the preview list (so user does not see mismatched data)', async () => {
     const user = userEvent.setup()
     render(<MonthlyReportsPage />)
     await user.click(screen.getByRole('button', { name: /^generate$/i }))
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
-    await user.clear(screen.getByLabelText(/^Month$/i))
-    await user.type(screen.getByLabelText(/^Month$/i), '2026-03')
+    await user.clear(screen.getByLabelText(/^From$/i))
+    await user.type(screen.getByLabelText(/^From$/i), '2026-03-01')
 
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
   })

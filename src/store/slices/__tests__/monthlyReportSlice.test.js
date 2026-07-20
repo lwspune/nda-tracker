@@ -13,7 +13,8 @@ function makeBuilder({ data = [], error = null } = {}) {
   b.select = vi.fn(() => b)
   b.eq     = vi.fn(() => b)
   b.in     = vi.fn(() => b)
-  b.like   = vi.fn(() => b)
+  b.gte    = vi.fn(() => b)
+  b.lte    = vi.fn(() => b)
   b.then   = (resolve, reject) =>
     Promise.resolve({ data, error }).then(resolve, reject)
   return b
@@ -46,20 +47,20 @@ beforeEach(async () => {
 describe('fetchMonthlyReportData — no-op cases', () => {
   it('returns null when supabase client is unavailable', async () => {
     mockClient = null
-    const result = await slice.fetchMonthlyReportData('2026-01', ['LWS-001'])
+    const result = await slice.fetchMonthlyReportData('2026-01-01', '2026-01-31', ['LWS-001'])
     expect(result).toBeNull()
   })
 
   it('returns null when no session', async () => {
     mockClient = makeMockClient({ session: null })
-    const result = await slice.fetchMonthlyReportData('2026-01', ['LWS-001'])
+    const result = await slice.fetchMonthlyReportData('2026-01-01', '2026-01-31', ['LWS-001'])
     expect(result).toBeNull()
     expect(mockClient.from).not.toHaveBeenCalled()
   })
 
   it('returns empty groupings when cohort is empty', async () => {
     mockClient = makeMockClient()
-    const result = await slice.fetchMonthlyReportData('2026-01', [])
+    const result = await slice.fetchMonthlyReportData('2026-01-01', '2026-01-31', [])
     expect(result).toEqual({
       attendanceByLwsId: {},
       lectureAbsencesByLwsId: {},
@@ -71,7 +72,7 @@ describe('fetchMonthlyReportData — no-op cases', () => {
 })
 
 describe('fetchMonthlyReportData — bulk fetch + groupBy', () => {
-  it('issues one query per table with .in(lws_ids) and .like(date prefix) for date-bound tables', async () => {
+  it('issues one query per table with .in(lws_ids) and an inclusive .gte/.lte date window for date-bound tables', async () => {
     const att = makeBuilder({ data: [] })
     const lec = makeBuilder({ data: [] })
     const exa = makeBuilder({ data: [] })
@@ -83,22 +84,25 @@ describe('fetchMonthlyReportData — bulk fetch + groupBy', () => {
       },
     })
 
-    await slice.fetchMonthlyReportData('2026-01', ['LWS-001', 'LWS-002'])
+    await slice.fetchMonthlyReportData('2026-01-05', '2026-02-15', ['LWS-001', 'LWS-002'])
 
     expect(mockClient.from).toHaveBeenCalledWith('student_attendance')
     expect(mockClient.from).toHaveBeenCalledWith('lecture_absences')
     expect(mockClient.from).toHaveBeenCalledWith('exam_absences')
 
     expect(att.in).toHaveBeenCalledWith('lws_id', ['LWS-001', 'LWS-002'])
-    expect(att.like).toHaveBeenCalledWith('date', '2026-01-%')
+    expect(att.gte).toHaveBeenCalledWith('date', '2026-01-05')
+    expect(att.lte).toHaveBeenCalledWith('date', '2026-02-15')
 
     expect(lec.in).toHaveBeenCalledWith('lws_id', ['LWS-001', 'LWS-002'])
-    expect(lec.like).toHaveBeenCalledWith('date', '2026-01-%')
+    expect(lec.gte).toHaveBeenCalledWith('date', '2026-01-05')
+    expect(lec.lte).toHaveBeenCalledWith('date', '2026-02-15')
 
     expect(exa.in).toHaveBeenCalledWith('lws_id', ['LWS-001', 'LWS-002'])
     // exam_absences are NOT filtered by date at the SQL level — exam.date lives
     // on a different table; we filter client-side via the in-memory exams[] array.
-    expect(exa.like).not.toHaveBeenCalled()
+    expect(exa.gte).not.toHaveBeenCalled()
+    expect(exa.lte).not.toHaveBeenCalled()
   })
 
   it('groups rows by lws_id across all three tables', async () => {
@@ -124,7 +128,7 @@ describe('fetchMonthlyReportData — bulk fetch + groupBy', () => {
       },
     })
 
-    const result = await slice.fetchMonthlyReportData('2026-01', ['LWS-001', 'LWS-002'])
+    const result = await slice.fetchMonthlyReportData('2026-01-01', '2026-01-31', ['LWS-001', 'LWS-002'])
 
     expect(result.attendanceByLwsId['LWS-001']).toHaveLength(2)
     expect(result.attendanceByLwsId['LWS-002']).toHaveLength(1)
@@ -142,7 +146,7 @@ describe('fetchMonthlyReportData — bulk fetch + groupBy', () => {
         exam_absences:      [makeBuilder({ data: [] })],
       },
     })
-    const result = await slice.fetchMonthlyReportData('2026-01', ['LWS-001'])
+    const result = await slice.fetchMonthlyReportData('2026-01-01', '2026-01-31', ['LWS-001'])
     expect(result).toBeNull()
   })
 })

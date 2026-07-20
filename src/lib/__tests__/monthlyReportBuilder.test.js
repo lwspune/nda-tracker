@@ -45,13 +45,16 @@ function entry(over = {}) {
   }
 }
 
+// A whole-calendar-month range (the default range the page opens with).
+const JAN = { from: '2026-01-01', to: '2026-01-31' }
+
 // ── meta ────────────────────────────────────────────────────────────────────
 
 describe('buildMonthlyReport — meta section', () => {
-  it('returns name, lws id, roll no, branch, batch, formatted month label', () => {
+  it('returns name, lws id, roll no, branch, batch, from/to, and a collapsed whole-month rangeLabel', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [],
       lectureAbsences: [],
@@ -64,15 +67,36 @@ describe('buildMonthlyReport — meta section', () => {
     expect(r.meta.rollNo).toBe('56')
     expect(r.meta.branch).toBe('LWS Pune')
     expect(r.meta.batch).toBe('LWS_NDA_2Y_(26-28)_A')
-    expect(r.meta.month).toBe('2026-01')
-    expect(r.meta.monthLabel).toBe('Jan 2026')
+    expect(r.meta.from).toBe('2026-01-01')
+    expect(r.meta.to).toBe('2026-01-31')
+    expect(r.meta.rangeLabel).toBe('Jan 2026')   // exact whole month → collapsed label
+  })
+
+  it('renders a spanning rangeLabel (same year) when the range is not a whole month', () => {
+    const r = buildMonthlyReport({
+      profile: profile(),
+      from: '2026-01-05', to: '2026-01-20',
+      exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
+      batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+    expect(r.meta.rangeLabel).toBe('5 Jan - 20 Jan 2026')
+  })
+
+  it('renders a spanning rangeLabel across a year boundary', () => {
+    const r = buildMonthlyReport({
+      profile: profile(),
+      from: '2025-12-20', to: '2026-01-05',
+      exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
+      batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+    expect(r.meta.rangeLabel).toBe('20 Dec 2025 - 5 Jan 2026')
   })
 })
 
 // ── examTable ───────────────────────────────────────────────────────────────
 
 describe('buildMonthlyReport — exam table', () => {
-  it('includes the student row for each attended exam in the month', () => {
+  it('includes the student row for each attended exam in the range', () => {
     const e = exam({
       id: 'e1', name: 'Maths - Circle', date: '2026-01-09', subject: 'Maths',
       questions: Array(30).fill({}),
@@ -80,7 +104,7 @@ describe('buildMonthlyReport — exam table', () => {
     })
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [e],
       attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -99,7 +123,7 @@ describe('buildMonthlyReport — exam table', () => {
     const e = exam({ id: 'e2', name: 'Maths - Circle', date: '2026-01-09', students: [] })
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [e],
       attendance: [], lectureAbsences: [],
       examAbsences: [{ exam_id: 'e2', marked_at: '2026-01-09T10:00Z' }],
@@ -112,13 +136,13 @@ describe('buildMonthlyReport — exam table', () => {
     expect(r.examTable[0].percentage).toBeNull()
   })
 
-  it('excludes exams outside the month window', () => {
+  it('excludes exams outside the date range', () => {
     const dec = exam({ id: 'eA', date: '2025-12-30', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
     const jan = exam({ id: 'eB', date: '2026-01-09', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
     const feb = exam({ id: 'eC', date: '2026-02-01', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [dec, jan, feb],
       attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -126,12 +150,38 @@ describe('buildMonthlyReport — exam table', () => {
     expect(r.examTable.map(x => x.examName)).toEqual([jan.name])
   })
 
-  it('excludes exams whose date is before the student regDate (joined mid-month)', () => {
+  it('includes exams on the range boundaries (from and to are inclusive)', () => {
+    const first = exam({ id: 'eA', name: 'First', date: '2026-01-05', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
+    const last  = exam({ id: 'eB', name: 'Last',  date: '2026-01-20', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
+    const r = buildMonthlyReport({
+      profile: profile(),
+      from: '2026-01-05', to: '2026-01-20',
+      exams: [first, last],
+      attendance: [], lectureAbsences: [], examAbsences: [],
+      batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+    expect(r.examTable.map(x => x.examName)).toEqual(['First', 'Last'])
+  })
+
+  it('spans multiple months when the range crosses a month boundary', () => {
+    const jan = exam({ id: 'eA', name: 'Jan exam', date: '2026-01-28', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
+    const feb = exam({ id: 'eB', name: 'Feb exam', date: '2026-02-03', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
+    const r = buildMonthlyReport({
+      profile: profile(),
+      from: '2026-01-15', to: '2026-02-15',
+      exams: [jan, feb],
+      attendance: [], lectureAbsences: [], examAbsences: [],
+      batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+    expect(r.examTable.map(x => x.examName)).toEqual(['Jan exam', 'Feb exam'])
+  })
+
+  it('excludes exams whose date is before the student regDate (joined mid-range)', () => {
     const early = exam({ id: 'eA', date: '2026-01-03', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
     const late  = exam({ id: 'eB', date: '2026-01-20', students: [entry({ totalMarks: 10 })], questions: Array(30).fill({}) })
     const r = buildMonthlyReport({
       profile: profile({ regDate: '2026-01-10' }),
-      month: '2026-01',
+      ...JAN,
       exams: [early, late],
       attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -147,7 +197,7 @@ describe('buildMonthlyReport — exam table', () => {
     })
     const r = buildMonthlyReport({
       profile: profile({ nameVariants: ['Aksheet Patil', 'Aksheet patil'] }),
-      month: '2026-01',
+      ...JAN,
       exams: [e],
       attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -162,7 +212,7 @@ describe('buildMonthlyReport — exam table', () => {
     const c = exam({ id: 'eC', date: '2026-01-16', students: [entry({ totalMarks: 5 })], questions: Array(30).fill({}) })
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [a, b, c],
       attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -174,10 +224,10 @@ describe('buildMonthlyReport — exam table', () => {
 // ── attendance ──────────────────────────────────────────────────────────────
 
 describe('buildMonthlyReport — attendance', () => {
-  it('counts P, A, L from attendance rows within the month', () => {
+  it('counts P, A, L from attendance rows within the range', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [
         { date: '2026-01-02', status: 'P' },
@@ -198,7 +248,7 @@ describe('buildMonthlyReport — attendance', () => {
   it('computes attendancePercentage = (P + L) / (P + A + L) * 100, rounded', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [
         ...Array(22).fill({ status: 'P' }).map((row, i) => ({ ...row, date: `2026-01-${String(i + 1).padStart(2, '0')}` })),
@@ -210,10 +260,10 @@ describe('buildMonthlyReport — attendance', () => {
     expect(r.attendance.attendancePercentage).toBe(96)   // 22 / 23 → 95.65 → 96
   })
 
-  it('excludes attendance rows outside the month', () => {
+  it('excludes attendance rows outside the range', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [
         { date: '2025-12-30', status: 'P' },
@@ -230,7 +280,7 @@ describe('buildMonthlyReport — attendance', () => {
   it('lists late dates formatted (D Mon)', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [
         { date: '2026-01-03', status: 'L' },
@@ -242,16 +292,16 @@ describe('buildMonthlyReport — attendance', () => {
     expect(r.attendance.lateDates).toEqual(['3 Jan', '12 Jan'])
   })
 
-  it('counts missed lectures and includes detail (date + subject), within month', () => {
+  it('counts missed lectures and includes detail (date + subject), within range', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [],
       lectureAbsences: [
         { date: '2026-01-05', slot_id: 's1', subject: 'Physics' },
         { date: '2026-01-12', slot_id: 's2', subject: 'Maths' },
-        { date: '2025-12-30', slot_id: 's3', subject: 'English' },  // out of month
+        { date: '2025-12-30', slot_id: 's3', subject: 'English' },  // out of range
       ],
       examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -263,10 +313,10 @@ describe('buildMonthlyReport — attendance', () => {
     ])
   })
 
-  it('handles a month with zero attendance rows (totalWorkingDays = 0, percentage = 0)', () => {
+  it('handles a range with zero attendance rows (totalWorkingDays = 0, percentage = 0)', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [],
       attendance: [],
       lectureAbsences: [], examAbsences: [],
@@ -280,10 +330,10 @@ describe('buildMonthlyReport — attendance', () => {
 // ── next month focus ────────────────────────────────────────────────────────
 
 describe('buildMonthlyReport — next month focus', () => {
-  it("lists chapters scheduled for the following month from batchChapterTimelines", () => {
+  it("lists chapters scheduled for the month after the range's end month", () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      ...JAN,
       exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {
         'LWS_NDA_2Y_(26-28)_A': {
@@ -310,10 +360,24 @@ describe('buildMonthlyReport — next month focus', () => {
     ])
   })
 
-  it('returns null when no chapters are scheduled for next month', () => {
+  it("anchors to the month after the range's TO month for a multi-month range", () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-01',
+      from: '2026-01-15', to: '2026-02-15',
+      exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
+      batchChapterTimelines: {
+        'LWS_NDA_2Y_(26-28)_A': { 'prog1': { 'subj1': { 'chap1': '2026-03' } } },
+      },
+      syllabusPrograms: [{ id: 'prog1', subjects: [{ id: 'subj1', name: 'Maths', chapters: [{ id: 'chap1', name: 'Limits' }] }] }],
+    })
+    expect(r.nextMonthFocus.monthLabel).toBe('Mar 2026')   // month after Feb (the TO month)
+    expect(r.nextMonthFocus.chapters).toEqual([{ subject: 'Maths', chapter: 'Limits' }])
+  })
+
+  it('returns null when no chapters are scheduled for the following month', () => {
+    const r = buildMonthlyReport({
+      profile: profile(),
+      ...JAN,
       exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {
         'LWS_NDA_2Y_(26-28)_A': { 'prog1': { 'subj1': { 'chap1': '2026-04' } } },
@@ -326,7 +390,7 @@ describe('buildMonthlyReport — next month focus', () => {
   it('returns null when the student has no batch', () => {
     const r = buildMonthlyReport({
       profile: profile({ batches: [] }),
-      month: '2026-01',
+      ...JAN,
       exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: { 'X': { 'p': { 's': { 'c': '2026-02' } } } },
       syllabusPrograms: [],
@@ -334,10 +398,10 @@ describe('buildMonthlyReport — next month focus', () => {
     expect(r.nextMonthFocus).toBeNull()
   })
 
-  it('rolls over the year correctly when month is December', () => {
+  it('rolls over the year correctly when the TO month is December', () => {
     const r = buildMonthlyReport({
       profile: profile(),
-      month: '2026-12',
+      from: '2026-12-01', to: '2026-12-31',
       exams: [], attendance: [], lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {
         'LWS_NDA_2Y_(26-28)_A': { 'prog1': { 'subj1': { 'chap1': '2027-01' } } },
@@ -353,11 +417,11 @@ describe('buildMonthlyReport — next month focus', () => {
 
 describe('buildMonthlyReport — homework flagged', () => {
   const base = {
-    profile: profile(), month: '2026-06', exams: [], attendance: [],
+    profile: profile(), from: '2026-06-01', to: '2026-06-30', exams: [], attendance: [],
     lectureAbsences: [], examAbsences: [], batchChapterTimelines: {}, syllabusPrograms: [],
   }
 
-  it('includes all homework flagged that month (resolved or not), sorted by date', () => {
+  it('includes all homework flagged in the range (resolved or not), sorted by date', () => {
     const r = buildMonthlyReport({
       ...base,
       homework: [
@@ -370,7 +434,7 @@ describe('buildMonthlyReport — homework flagged', () => {
     expect(r.homeworkFlagged[1]).toMatchObject({ date: '12 Jun', subject: 'Physics', resolved: false })
   })
 
-  it('excludes homework from other months', () => {
+  it('excludes homework outside the range', () => {
     const r = buildMonthlyReport({
       ...base,
       homework: [{ date: '2026-05-30', subject: 'Maths', chapter: 'X', type: 'homework', resolved_at: null }],
@@ -386,7 +450,7 @@ describe('buildMonthlyReport — homework flagged', () => {
 // ── getMonthlyReportCohort ──────────────────────────────────────────────────
 
 describe('getMonthlyReportCohort', () => {
-  const month = '2026-01'
+  const toDate = '2026-01-31'   // last day of the range
   const target = 'LWS_NDA_2Y_(26-28)_A'
 
   function p(over = {}) {
@@ -397,12 +461,12 @@ describe('getMonthlyReportCohort', () => {
     }
   }
 
-  it('includes Active students whose batch matches and regDate is on or before month-end', () => {
+  it('includes Active students whose batch matches and regDate is on or before the range end', () => {
     const profiles = {
       Alice: p({ lwsId: 'LWS-001', name: 'Alice' }),
       Bob:   p({ lwsId: 'LWS-002', name: 'Bob' }),
     }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name)).toEqual(['Alice', 'Bob'])
   })
 
@@ -411,7 +475,7 @@ describe('getMonthlyReportCohort', () => {
       Alice: p({ name: 'Alice' }),
       Bob:   p({ lwsId: 'LWS-002', name: 'Bob', accountStatus: 'Block' }),
     }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name)).toEqual(['Alice'])
   })
 
@@ -420,31 +484,31 @@ describe('getMonthlyReportCohort', () => {
       Alice: p({ name: 'Alice' }),
       Bob:   p({ lwsId: 'LWS-002', name: 'Bob', batches: ['APJ_NDA_2Y_(26-28)'] }),
     }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name)).toEqual(['Alice'])
   })
 
-  it('excludes students whose regDate is after the last day of the month', () => {
+  it('excludes students whose regDate is after the range end date', () => {
     const profiles = {
       Alice: p({ name: 'Alice' }),
       Bob:   p({ lwsId: 'LWS-002', name: 'Bob', regDate: '2026-02-15' }),
       Cara:  p({ lwsId: 'LWS-003', name: 'Cara', regDate: '2026-01-31' }),  // boundary — included
     }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name).sort()).toEqual(['Alice', 'Cara'])
   })
 
   it('skips variant-keyed entries (only counts canonical p.name === key)', () => {
     const alice = p({ name: 'Alice', nameVariants: ['Alice', 'Alicia'] })
     const profiles = { Alice: alice, Alicia: alice }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name)).toEqual(['Alice'])
   })
 
   it('returns an empty array when no batch is supplied', () => {
     const profiles = { Alice: p({ name: 'Alice' }) }
-    expect(getMonthlyReportCohort(profiles, '', month)).toEqual([])
-    expect(getMonthlyReportCohort(profiles, null, month)).toEqual([])
+    expect(getMonthlyReportCohort(profiles, '', toDate)).toEqual([])
+    expect(getMonthlyReportCohort(profiles, null, toDate)).toEqual([])
   })
 
   it('sorts the cohort by name', () => {
@@ -453,7 +517,7 @@ describe('getMonthlyReportCohort', () => {
       Bob:  p({ lwsId: 'LWS-002', name: 'Bob' }),
       Alice: p({ name: 'Alice' }),
     }
-    const cohort = getMonthlyReportCohort(profiles, target, month)
+    const cohort = getMonthlyReportCohort(profiles, target, toDate)
     expect(cohort.map(s => s.name)).toEqual(['Alice', 'Bob', 'Zara'])
   })
 })
