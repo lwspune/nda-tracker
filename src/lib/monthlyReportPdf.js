@@ -132,89 +132,74 @@ async function drawExamTable(doc, y, report, autoTable) {
   return doc.lastAutoTable.finalY + 4
 }
 
-// Always show present (even when 0), and only the others when non-zero.
-// Avoids a noisy line full of zeros for students with a clean month.
-// Exported for unit testing — caller uses it implicitly through drawAttendance.
-export function attendanceDescriptor(a) {
-  const parts = [`${a.present} present`]
-  if (a.absent > 0)         parts.push(`${a.absent} absent`)
-  if (a.late > 0)           parts.push(`${a.late} late`)
-  if (a.missedLectures > 0) parts.push(`${a.missedLectures} missed lecture${a.missedLectures !== 1 ? 's' : ''}`)
-  return parts.join(' \xB7 ')   // " · " (U+00B7, inside WinAnsi)
-}
+// Builds the ordered attendance / conduct blocks as pure {label, value} data —
+// exception-only: a block is included ONLY when it has something to report, so a
+// clean month renders just the positive attendance line (or nothing).
+//   • Attendance — shown whenever attendance was recorded (totalWorkingDays > 0);
+//     omitted at 0/0. Numerator = present + late (they showed up, some late).
+//   • Late days — omitted at zero (same source as attendance).
+//   • Missed lectures / Homework incomplete — exception logs; omitted when empty.
+//     Homework counts ONLY unresolved items.
+// Exported for unit testing; drawn by drawConduct.
+export function conductBlocks(report) {
+  const a = report.attendance || {}
+  const blocks = []
 
-function drawAttendance(doc, y, report, autoTable) {
-  const a = report.attendance
-  const row = [
-    attendanceDescriptor(a),
-    `${a.present + a.late} / ${a.totalWorkingDays}`,
-    `${a.attendancePercentage}%`,
-  ]
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Attendance', 'Days', 'Percentage']],
-    body: [row],
-    margin: { left: M.left, right: M.right },
-    styles: { fontSize: 9, cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 } },
-    headStyles: { fillColor: C.ink, textColor: C.white, fontStyle: 'bold', fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 'auto' },
-      1: { halign: 'right', cellWidth: 32 },
-      2: { halign: 'right', cellWidth: 28 },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 2) {
-        data.cell.styles.textColor = pctColor(report.attendance.attendancePercentage)
-        data.cell.styles.fontStyle = 'bold'
-      }
-    },
-  })
-
-  let nextY = doc.lastAutoTable.finalY + 3
-
-  // Late + missed-lecture detail line (only when non-zero)
-  if (a.lateDates.length || a.missedLectureDetails.length) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(...C.ink2)
-    if (a.lateDates.length) {
-      doc.text(`Late: ${a.lateDates.join(', ')}`, M.left, nextY)
-      nextY += 4
-    }
-    if (a.missedLectureDetails.length) {
-      const msg = a.missedLectureDetails.map(r => `${r.date} ${r.subject}`).join(', ')
-      doc.text(`Missed lectures: ${msg}`, M.left, nextY)
-      nextY += 4
-    }
+  if (a.totalWorkingDays > 0) {
+    blocks.push({
+      label: 'ATTENDANCE',
+      value: `${a.present + a.late} / ${a.totalWorkingDays} days present (${a.attendancePercentage}%)`,
+    })
   }
-
-  return nextY + 2
+  if (a.late > 0) {
+    blocks.push({ label: `LATE DAYS (${a.late})`, value: (a.lateDates || []).join(', ') })
+  }
+  const missed = a.missedLectureDetails || []
+  if (missed.length > 0) {
+    blocks.push({
+      label: `MISSED LECTURES (${missed.length})`,
+      value: missed.map(r => `${r.date} ${r.subject || ''}`.trim()).join(', '),
+    })
+  }
+  const incomplete = (report.homeworkFlagged || []).filter(h => !h.resolved)
+  if (incomplete.length > 0) {
+    blocks.push({
+      label: `HOMEWORK INCOMPLETE (${incomplete.length})`,
+      value: incomplete.map(h => {
+        const head = [h.subject, h.chapter].filter(Boolean).join(' \xB7 ')  // " · " (WinAnsi)
+        return head ? `${h.date} - ${head}` : h.date
+      }).join(', '),
+    })
+  }
+  return blocks
 }
 
-// All homework / notes flagged this month (resolved or not). Compact wrapped
-// line, only drawn when there's at least one item.
-function drawHomework(doc, y, report) {
-  const items = report.homeworkFlagged || []
-  if (items.length === 0) return y
+// Renders the conduct blocks stacked vertically — bold LABEL header, the actual
+// data on the line below. The Attendance value is colour-coded by percentage;
+// the rest are plain. Draws nothing when there are no blocks.
+function drawConduct(doc, y, report) {
+  const blocks = conductBlocks(report)
+  if (blocks.length === 0) return y
   const W = doc.internal.pageSize.getWidth()
+  const maxW = W - M.left - M.right
+  let cursor = y + 4
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8.5)
-  doc.setTextColor(...C.ink)
-  doc.text('Homework / Notes flagged:', M.left, y + 4)
+  for (const b of blocks) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...C.ink)
+    doc.text(b.label, M.left, cursor)
+    cursor += 4
 
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...C.ink2)
-  const list = items.map(h => {
-    const t = h.type === 'both' ? 'Homework + Notes' : h.type === 'notes' ? 'Notes' : 'Homework'
-    const head = [h.subject, h.chapter].filter(Boolean).join(' \xB7 ')
-    return `${h.date} ${head} (${t})`
-  }).join(', ')
-  const wrapped = doc.splitTextToSize(list, W - M.left - M.right - 44)
-  doc.text(wrapped, M.left + 44, y + 4)
-
-  return y + 5 + wrapped.length * 3.5
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...(b.label === 'ATTENDANCE'
+      ? pctColor(report.attendance.attendancePercentage)
+      : C.ink2))
+    const wrapped = doc.splitTextToSize(b.value || '', maxW)
+    doc.text(wrapped, M.left, cursor)
+    cursor += wrapped.length * 3.6 + 3.5
+  }
+  return cursor
 }
 
 function drawRemark(doc, y, remark) {
@@ -274,8 +259,7 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
 
   let y = drawHeader(doc, report)
   y = await drawExamTable(doc, y, report, autoTable)
-  y = drawAttendance(doc, y, report, autoTable)
-  y = drawHomework(doc, y, report)
+  y = drawConduct(doc, y, report)
   y = drawRemark(doc, y, remark)
   drawNextMonthFocus(doc, y, report)
   drawFooter(doc)

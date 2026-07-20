@@ -3,7 +3,7 @@
 // on the realistic input shapes (empty report, full report with all sections).
 
 import { describe, it, expect } from 'vitest'
-import { downloadMonthlyReportPdf, buildMonthlyReportPdfBlob, attendanceDescriptor } from '../monthlyReportPdf'
+import { downloadMonthlyReportPdf, buildMonthlyReportPdfBlob, conductBlocks } from '../monthlyReportPdf'
 
 function sampleReport(over = {}) {
   return {
@@ -79,30 +79,84 @@ describe('buildMonthlyReportPdfBlob — smoke', () => {
   })
 })
 
-describe('attendanceDescriptor', () => {
-  it('includes every segment when all four counts are non-zero', () => {
-    expect(attendanceDescriptor({ present: 22, absent: 1, late: 3, missedLectures: 2 }))
-      .toBe('22 present \xB7 1 absent \xB7 3 late \xB7 2 missed lectures')
+describe('conductBlocks — exception-only attendance / conduct section', () => {
+  function att(over = {}) {
+    return {
+      present: 10, absent: 1, late: 0, missedLectures: 0,
+      totalWorkingDays: 12, attendancePercentage: 92,
+      lateDates: [], missedLectureDetails: [],
+      ...over,
+    }
+  }
+  const report = (attendance, homeworkFlagged = []) => ({ attendance, homeworkFlagged })
+
+  it('shows the Attendance block as "(present+late) / total days present (pct%)"', () => {
+    // present 10 + late 0 = 10 of 12
+    const [block] = conductBlocks(report(att()))
+    expect(block).toEqual({ label: 'ATTENDANCE', value: '10 / 12 days present (92%)' })
   })
 
-  it('omits absent/late/missed segments when zero, keeps present', () => {
-    expect(attendanceDescriptor({ present: 22, absent: 0, late: 0, missedLectures: 0 }))
-      .toBe('22 present')
+  it('counts late days into the present numerator (they showed up, just late)', () => {
+    const blocks = conductBlocks(report(att({ present: 8, late: 2, absent: 2, totalWorkingDays: 12, attendancePercentage: 83, lateDates: ['3 Jan', '12 Jan'] })))
+    expect(blocks[0]).toEqual({ label: 'ATTENDANCE', value: '10 / 12 days present (83%)' })
   })
 
-  it('only includes the segments that are non-zero (sparse mix)', () => {
-    expect(attendanceDescriptor({ present: 20, absent: 2, late: 0, missedLectures: 1 }))
-      .toBe('20 present \xB7 2 absent \xB7 1 missed lecture')
+  it('OMITS the Attendance block entirely when there are no working days (0/0)', () => {
+    const blocks = conductBlocks(report(att({ present: 0, absent: 0, late: 0, totalWorkingDays: 0, attendancePercentage: 0 })))
+    expect(blocks.find(b => b.label === 'ATTENDANCE')).toBeUndefined()
   })
 
-  it("uses singular 'missed lecture' when count is 1", () => {
-    expect(attendanceDescriptor({ present: 22, absent: 0, late: 0, missedLectures: 1 }))
-      .toBe('22 present \xB7 1 missed lecture')
+  it('OMITS the Late days block when there were zero late days, even with attendance data', () => {
+    const blocks = conductBlocks(report(att({ late: 0, lateDates: [] })))
+    expect(blocks.find(b => b.label.startsWith('LATE DAYS'))).toBeUndefined()
   })
 
-  it("shows '0 present' when there are no working days (the row never reads empty)", () => {
-    expect(attendanceDescriptor({ present: 0, absent: 0, late: 0, missedLectures: 0 }))
-      .toBe('0 present')
+  it('shows the Late days block with count in the header and the actual dates below', () => {
+    const blocks = conductBlocks(report(att({ present: 8, late: 2, totalWorkingDays: 12, attendancePercentage: 83, lateDates: ['3 Jan', '12 Jan'] })))
+    const late = blocks.find(b => b.label.startsWith('LATE DAYS'))
+    expect(late).toEqual({ label: 'LATE DAYS (2)', value: '3 Jan, 12 Jan' })
+  })
+
+  it('OMITS Missed lectures when empty; shows count + "date subject" list when present', () => {
+    expect(conductBlocks(report(att())).find(b => b.label.startsWith('MISSED LECTURES'))).toBeUndefined()
+    const blocks = conductBlocks(report(att({
+      missedLectures: 2,
+      missedLectureDetails: [{ date: '5 Jan', subject: 'Physics' }, { date: '12 Jan', subject: 'Maths' }],
+    })))
+    const missed = blocks.find(b => b.label.startsWith('MISSED LECTURES'))
+    expect(missed).toEqual({ label: 'MISSED LECTURES (2)', value: '5 Jan Physics, 12 Jan Maths' })
+  })
+
+  it('Homework incomplete counts ONLY unresolved items and lists them', () => {
+    const hw = [
+      { date: '12 Jun', subject: 'Physics', chapter: 'Laws', type: 'notes', resolved: false },
+      { date: '4 Jun',  subject: 'Maths',   chapter: 'Stats', type: 'homework', resolved: true },  // resolved → excluded
+    ]
+    const blocks = conductBlocks(report(att(), hw))
+    const homework = blocks.find(b => b.label.startsWith('HOMEWORK INCOMPLETE'))
+    expect(homework).toEqual({ label: 'HOMEWORK INCOMPLETE (1)', value: '12 Jun - Physics \xB7 Laws' })
+  })
+
+  it('OMITS Homework incomplete when every flagged item is resolved', () => {
+    const hw = [{ date: '4 Jun', subject: 'Maths', chapter: 'Stats', type: 'homework', resolved: true }]
+    expect(conductBlocks(report(att(), hw)).find(b => b.label.startsWith('HOMEWORK INCOMPLETE'))).toBeUndefined()
+  })
+
+  it('returns blocks in order: Attendance, Late days, Missed lectures, Homework incomplete', () => {
+    const hw = [{ date: '12 Jun', subject: 'Physics', chapter: 'Laws', type: 'notes', resolved: false }]
+    const blocks = conductBlocks(report(att({
+      present: 8, late: 2, totalWorkingDays: 12, attendancePercentage: 83,
+      lateDates: ['3 Jan', '12 Jan'],
+      missedLectures: 1, missedLectureDetails: [{ date: '5 Jan', subject: 'Physics' }],
+    }), hw))
+    expect(blocks.map(b => b.label)).toEqual([
+      'ATTENDANCE', 'LATE DAYS (2)', 'MISSED LECTURES (1)', 'HOMEWORK INCOMPLETE (1)',
+    ])
+  })
+
+  it('returns an empty array when nothing was recorded (no attendance, no exceptions)', () => {
+    const blocks = conductBlocks(report(att({ present: 0, absent: 0, late: 0, totalWorkingDays: 0, attendancePercentage: 0 })))
+    expect(blocks).toEqual([])
   })
 })
 
