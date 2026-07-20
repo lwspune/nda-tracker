@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react'
 import { parseExcelFull, parseTagsFile } from '../../lib/excel'
 import { validateTags, validateGatSubjects } from '../../lib/validateTags'
+import { findKeyMismatches } from '../../lib/answerKeyCheck'
 import { detectBatch } from '../../lib/matchStudents'
 import { Alert, Spinner, DropZone } from '../ui'
 import ValidationIssuesPanel from './ValidationIssuesPanel'
+import KeyMismatchPanel from './KeyMismatchPanel'
 import useStore from '../../store/useStore'
 
 export default function Step1Upload({ onNext, onCancel }) {
@@ -22,14 +24,36 @@ export default function Step1Upload({ onNext, onCancel }) {
   const [tagsSubject, setTagsSubject]         = useState('Maths')
   const [detectedSubjectFromTags, setDetectedSubjectFromTags] = useState(null)
 
+  // Answer-key cross-check (tags "Answer" vs results "Q N Key"). Populated on the
+  // first "Extract Details" click; the user resolves each conflict before proceeding.
+  const [keyMismatches, setKeyMismatches] = useState([])
+  const [keyChoices, setKeyChoices]       = useState({}) // { [q]: 'results' | 'tags' }
+  const [keyCheckShown, setKeyCheckShown] = useState(false)
+
   const xlsxRef = useRef()
   const tagsRef = useRef()
+
+  // Any file change invalidates a computed key cross-check — force it to re-run.
+  function resetKeyCheck() {
+    setKeyMismatches([])
+    setKeyChoices({})
+    setKeyCheckShown(false)
+  }
+
+  function pickKey(q, source) {
+    setKeyChoices(prev => ({ ...prev, [q]: source }))
+  }
+
+  function handleXlsxFile(file) {
+    setXlsxFile(file)
+    resetKeyCheck()
+  }
 
   function handleDrop(e, type) {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (!file) return
-    if (type === 'xlsx') { setXlsxFile(file); setXlsxDragging(false) }
+    if (type === 'xlsx') { handleXlsxFile(file); setXlsxDragging(false) }
     // tags drop is handled entirely by handleTagsChange — do not set state here
     else setTagsDragging(false)
   }
@@ -40,6 +64,7 @@ export default function Step1Upload({ onNext, onCancel }) {
     setTagIssues([])
     setFixedTags(null)
     setDetectedSubjectFromTags(null)
+    resetKeyCheck()
     if (!file) return
 
     try {
@@ -130,11 +155,37 @@ export default function Step1Upload({ onNext, onCancel }) {
         }
       }
 
-      // Results-Excel "Q N Key" wins over tags-file "Answer".
-      // (Evalbee key is the source of truth; tags file is a fallback when Key is blank.)
+      // Cross-check the two independent answer keys: tags-file "Answer" vs the
+      // results-Excel "Q N Key" (Evalbee). A conflict means one is wrong — surface it
+      // and let the user pick, rather than silently letting Evalbee overwrite.
       const answerKeys = extracted.answerKeys || {}
+      let keyMismatchList = []
       if (tags) {
-        tags = tags.map(t => answerKeys[t.q] ? { ...t, answer: answerKeys[t.q] } : t)
+        keyMismatchList = findKeyMismatches(tags, answerKeys)
+
+        // First pass with conflicts: show the resolver (default to the Evalbee/results
+        // key) and stop here — the user resolves, then clicks again to proceed.
+        if (keyMismatchList.length && !keyCheckShown) {
+          const defaults = {}
+          keyMismatchList.forEach(m => { defaults[m.q] = keyChoices[m.q] || 'results' })
+          setKeyMismatches(keyMismatchList)
+          setKeyChoices(defaults)
+          setKeyCheckShown(true)
+          setLoading(false)
+          return
+        }
+
+        const mismatchByQ = {}
+        keyMismatchList.forEach(m => { mismatchByQ[m.q] = m })
+        tags = tags.map(t => {
+          const mm = mismatchByQ[t.q]
+          if (mm) {
+            const src = keyChoices[t.q] || 'results'
+            return { ...t, answer: src === 'tags' ? mm.tagsAnswer : mm.resultsAnswer }
+          }
+          // No conflict: the results key fills a blank / confirms the tags answer.
+          return answerKeys[t.q] ? { ...t, answer: answerKeys[t.q] } : t
+        })
       }
 
       // Re-validate with the resolved subject so the warning panel reflects the final
@@ -162,6 +213,7 @@ export default function Step1Upload({ onNext, onCancel }) {
         tags,
         tagsSource,
         answerKeys,
+        keyMismatches: keyMismatchList.map(m => ({ ...m, chosen: keyChoices[m.q] || 'results' })),
         // Batch detection
         detectedBatch:      batchResult.batch,
         batchConfidence:    batchResult.confidence,
@@ -199,7 +251,7 @@ export default function Step1Upload({ onNext, onCancel }) {
             onDragOver={e => { e.preventDefault(); setXlsxDragging(true) }}
             onDragLeave={() => setXlsxDragging(false)}
             onDrop={e => handleDrop(e, 'xlsx')}
-            onChange={e => setXlsxFile(e.target.files[0])}
+            onChange={e => handleXlsxFile(e.target.files[0])}
           />
         </div>
 
@@ -242,6 +294,15 @@ export default function Step1Upload({ onNext, onCancel }) {
         </div>
       )}
 
+      {/* Answer-key cross-check — tags "Answer" vs results "Q N Key" */}
+      {keyMismatches.length > 0 && (
+        <KeyMismatchPanel
+          mismatches={keyMismatches}
+          choices={keyChoices}
+          onPick={pickKey}
+        />
+      )}
+
       {error && (
         <Alert type="error">
           <span>⚠️</span><span>{error}</span>
@@ -255,7 +316,9 @@ export default function Step1Upload({ onNext, onCancel }) {
           disabled={loading || !xlsxFile}
           className="btn btn-primary"
         >
-          {loading ? <><Spinner size="sm" /> Reading files…</> : 'Extract Details →'}
+          {loading ? <><Spinner size="sm" /> Reading files…</>
+            : keyMismatches.length > 0 ? 'Continue →'
+            : 'Extract Details →'}
         </button>
       </div>
     </div>
