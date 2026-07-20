@@ -578,3 +578,18 @@ The blocked-contact gate shipped 2026-07-17 ([[project_whatsapp_block_gate]]) is
 **Why:** the project's own Backend-Integrity rule keeps recipient/business logic server-side; the client filter is a UX correctness aid, not a security boundary. Low urgency (the UI is the only real send path today, 0 blank-status rows on the roster), rising if any endpoint is ever called from a stale client or externally.
 
 **How to apply:** in each of the four endpoints, after assembling the recipient list, load `account_status` for the target students (by `lws_id`, or by mobile/name where no id is carried) and drop `isBlockedStatus(...)` rows before the Wabridge loop — reuse `import { isBlockedStatus } from '../src/lib/accountStatus.js'` (api already imports from `../src/lib/*`). Add a test per endpoint (blocked dropped; blank kept). **Companion to the open 2026-07-11 entry** "Suppress on-leave students in the late-arrival + homework-pending alerts" — both are the same shape (server-side recipient filter on these endpoints) and are best done in one pass: load leaves + status together, skip on either. Note the predicate difference to reconcile at the same time: exam-absence + analytics use `!== 'Active'` (fail-closed on blank) while the new send gate uses the block-set (fail-open on blank); pick one deliberately (block-set is the login-gate-authoritative "blocked contact" definition).
+
+---
+
+## 2026-07-20
+
+### Feed the upload key-resolver into the re-grade action (carry-forward)
+
+The answer-key cross-check shipped this session (`KeyMismatchPanel` + `findKeyMismatches`, commit `d9ae77c`) lets faculty override the Evalbee `Q N Key` with the tags-file `Answer` at Step 1 of upload. Picking "Tags" is an explicit assertion that **Evalbee's key — and therefore Evalbee's grading of that question — is wrong**. But the cross-check only sets the *displayed* answer/solution/analytics (`questions[].answer`); `total_marks`/`responses` stay at Evalbee's original (now-known-wrong) grading. This is a **new, at-upload trigger** for the already-open **"Build the re-grade-from-stored-choices action"** entry (2026-06-09 above) — not a separate feature.
+
+**Why:** an upload-time key override is the moment faculty is *most certain* a key is wrong, yet today it silently leaves scores/ranks wrong for exactly those questions. The two features compose: the resolver already threads the chosen keys into wizard state (`keyMismatches[]` with `chosen`, passed at `onNext`), so `regradeFromChoices` has its input ready.
+
+**How to apply:**
+- Do the re-grade entry first (it's the prerequisite; this is just a new entry point into it).
+- When built, after an upload where the user overrode ≥1 conflict to the Tags key, offer (or auto-open) the re-grade **preview** for that exam — corrected `questions[].answer` × captured `exam_results.choices` × `marking` makes it deterministic.
+- Keep it preview-gated/opt-in like the parent entry — overriding display ≠ auto-shifting grading authority Evalbee→app.
