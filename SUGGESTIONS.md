@@ -593,3 +593,19 @@ The answer-key cross-check shipped this session (`KeyMismatchPanel` + `findKeyMi
 - Do the re-grade entry first (it's the prerequisite; this is just a new entry point into it).
 - When built, after an upload where the user overrode ≥1 conflict to the Tags key, offer (or auto-open) the re-grade **preview** for that exam — corrected `questions[].answer` × captured `exam_results.choices` × `marking` makes it deterministic.
 - Keep it preview-gated/opt-in like the parent entry — overriding display ≠ auto-shifting grading authority Evalbee→app.
+
+### Browser golden-path verify the Monthly Reports date-range + branch + conduct-block PDF
+
+The Monthly Reports rework this session (custom From→To range + branch-narrows-batch, commit `4fecd00`; exception-only stacked conduct blocks in the PDF, commit `13b422c`) shipped **test-verified but not click-verified** — sessions are non-interactive, no browser driver is available, and the Generate→download flow needs a live Supabase **admin session** (only on Vercel). A sample PDF *was* rendered headlessly end-to-end (valid, all four conduct blocks), but the real UI seams weren't driven. Same manual-verify gap logged for every prior feature.
+
+**Why:** the unit tests cover `conductBlocks`/`rangeLabel`/cohort exactly and the fetch signature, but not: the date pickers → `fetchMonthlyReportData(from,to,ids)` round-trip, the Branch dropdown actually narrowing the Batch list, the invalid-range Generate-disable, and — the one thing no headless check can confirm — the **visual layout/spacing** of the stacked blocks and the "Period:" header on a real multi-student batch. FLOWS.md notes PDF layout is "reviewed out of band."
+
+**How to apply:** on `nda-tracker.vercel.app` (admin): Sidebar → Monthly Reports → pick a Branch (confirm the Batch list narrows to that branch's batches) → pick a Batch → confirm the default range = previous month and cohort count → set a custom From→To that spans part of a month (confirm the header reads e.g. "5 Jun - 20 Jun 2026", a whole month reads "Jun 2026") → Generate → download one PDF and eyeball the stacked conduct blocks (Attendance line present; Late/Missed/Homework blocks appear only when non-empty; a clean student shows just Attendance or none) → download the ZIP and confirm the filename carries the range label. Edge: set From > To and confirm Generate is disabled with the inline hint.
+
+### Align the on-screen ReportRow preview with the PDF's conduct signals
+
+The Monthly Reports **preview card** (`src/pages/MonthlyReports/ReportRow.jsx`) still shows its original 4 stat tiles (Exams taken · Missed exams · Attendance **%** · Late days) and was left unchanged when the **PDF** conduct section was redesigned (2026-07-20). So the admin preview and the downloadable PDF now diverge: the preview shows attendance as a bare `%` (not "10 / 12 days present"), and it surfaces neither **missed lectures** nor **homework-incomplete**, both of which now appear in the PDF. Flagged to the user at build time and deliberately deferred (scope was the downloadable report).
+
+**Why:** low-stakes cosmetic/consistency — an admin scanning the preview gets a different picture than the parent gets in the PDF. Not wrong, just inconsistent; worth aligning if faculty find the mismatch confusing, or when the preview is next touched.
+
+**How to apply:** either (a) reuse the pure `conductBlocks(report)` from `monthlyReportPdf.js` to drive a compact preview strip (single source of truth for the omit rules + "X/Y days present" wording), or (b) minimally change the preview's Attendance tile to "X / Y" + add missed-lecture / homework-incomplete tiles. Option (a) keeps preview and PDF from drifting. `conductBlocks` is already exported and pure, so no new logic — just a render mapping. Keep it a preview *summary* (counts), not the full detail lists the PDF shows.
