@@ -18,26 +18,26 @@ describe('buildFocusAreas — student "where to focus" view-model', () => {
     expect(fa.startHere[0].from).toEqual(expect.arrayContaining(['B', 'C']))
   })
 
-  it("builds one bundled Practice link from the student's wrong+skipped subtopics in the root chapter", () => {
-    const breakdown = [{ chapter: 'A', accuracy: 0.2 }]
-    const wrongAudit = [{ chapter: 'A', subtopic: 'sub-one', wrong: 2 }]
-    const skippedAudit = [{ chapter: 'A', subtopic: 'sub-two', skipped: 1 }]
-    const fa = buildFocusAreas({ breakdown, wrongAudit, skippedAudit, subject: 'Maths', graph: TOY })
-    expect(fa.startHere[0].practiceUrl).toContain('subtopic=sub-one')
-    expect(fa.startHere[0].practiceUrl).toContain('subtopic=sub-two')
-  })
-
-  it('omits the Practice link for subjects with no practice bank', () => {
-    const breakdown = [{ chapter: 'A', accuracy: 0.2 }]
-    const wrongAudit = [{ chapter: 'A', subtopic: 'sub-one', wrong: 2 }]
-    const fa = buildFocusAreas({ breakdown, wrongAudit, subject: 'English', graph: TOY })
-    expect(fa.startHere[0].practiceUrl).toBeNull()
-  })
-
-  it('omits the Practice link when the root chapter has no logged weak subtopics', () => {
+  it('builds a chapter-level Learn + Practice link for each root chapter', () => {
     const breakdown = [{ chapter: 'A', accuracy: 0.2 }]
     const fa = buildFocusAreas({ breakdown, subject: 'Maths', graph: TOY })
+    expect(fa.startHere[0].learnUrl).toContain('/go/learn?chapter=A')
+    expect(fa.startHere[0].practiceUrl).toContain('/go/practice?')
+    expect(fa.startHere[0].practiceUrl).toContain('chapter=A')
+    expect(fa.startHere[0].practiceUrl).toContain('subject=Maths')
+  })
+
+  it('shows the chapter-level Practice link even with no logged weak subtopics', () => {
+    const breakdown = [{ chapter: 'A', accuracy: 0.2 }]
+    const fa = buildFocusAreas({ breakdown, subject: 'Maths', graph: TOY })
+    expect(fa.startHere[0].practiceUrl).toContain('chapter=A')
+  })
+
+  it('omits the Practice link for subjects with no practice bank (but keeps Learn)', () => {
+    const breakdown = [{ chapter: 'A', accuracy: 0.2 }]
+    const fa = buildFocusAreas({ breakdown, subject: 'English', graph: TOY })
     expect(fa.startHere[0].practiceUrl).toBeNull()
+    expect(fa.startHere[0].learnUrl).toContain('/go/learn?chapter=A')
   })
 
   it('lists the ready-to-learn frontier (prereqs mastered, chapter not yet mastered)', () => {

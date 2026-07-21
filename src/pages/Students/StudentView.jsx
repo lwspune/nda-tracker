@@ -242,7 +242,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   // "Where to focus" — concept-graph root-cause + sequencing advice. NDA-Maths
   // only (the graph is Maths-specific) and needs per-question data (not offline).
   const focusAreas = primarySubject === 'Maths' && !allOffline
-    ? buildFocusAreas({ breakdown: projected.breakdown, wrongAudit, skippedAudit, subject: primarySubject })
+    ? buildFocusAreas({ breakdown: projected.breakdown, subject: primarySubject })
     : { startHere: [], readyToLearn: [] }
 
   // Chapter summary for accordion

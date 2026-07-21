@@ -10,6 +10,8 @@ import {
   examLearnUrl,
   examPracticeUrl,
   examRemediationLinks,
+  chapterLearnUrl,
+  chapterPracticeUrl,
 } from '../remediation.js'
 
 const q = (subtopic, conceptSlug) => ({ q: 1, question: 'x', subtopic, conceptSlug })
@@ -163,5 +165,45 @@ describe('examRemediationLinks', () => {
     const { learnUrl, practiceUrl } = examRemediationLinks(exq({ subtopic: undefined }))
     expect(learnUrl).toBeNull()
     expect(practiceUrl).toBeNull()
+  })
+})
+
+describe('chapterLearnUrl', () => {
+  it('builds a chapter-only /go/learn URL (notes chapter index)', () => {
+    expect(chapterLearnUrl('Vectors')).toBe(
+      `${PYQVAULT_URL}/go/learn?chapter=Vectors`
+    )
+  })
+  it('encodes chapter names with spaces / ampersands', () => {
+    expect(chapterLearnUrl('Sets & Relations')).toBe(
+      `${PYQVAULT_URL}/go/learn?chapter=Sets+%26+Relations`
+    )
+  })
+  it('returns null for a blank / missing chapter', () => {
+    expect(chapterLearnUrl('')).toBeNull()
+    expect(chapterLearnUrl(undefined)).toBeNull()
+    expect(chapterLearnUrl(null)).toBeNull()
+  })
+})
+
+describe('chapterPracticeUrl', () => {
+  it('builds a chapter-only /go/practice URL with subject + exam', () => {
+    expect(chapterPracticeUrl('Vectors', 'Maths')).toBe(
+      `${PYQVAULT_URL}/go/practice?subject=Maths&chapter=Vectors&exam=NDA`
+    )
+  })
+  it('accepts a custom exam', () => {
+    expect(chapterPracticeUrl('Vectors', 'Maths', 'CDS')).toBe(
+      `${PYQVAULT_URL}/go/practice?subject=Maths&chapter=Vectors&exam=CDS`
+    )
+  })
+  it('omits subject when not given', () => {
+    expect(chapterPracticeUrl('Vectors')).toBe(
+      `${PYQVAULT_URL}/go/practice?chapter=Vectors&exam=NDA`
+    )
+  })
+  it('returns null for a blank / missing chapter', () => {
+    expect(chapterPracticeUrl('', 'Maths')).toBeNull()
+    expect(chapterPracticeUrl(null, 'Maths')).toBeNull()
   })
 })

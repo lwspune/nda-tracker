@@ -3,7 +3,8 @@ import { Card, CardTitle } from '../../components/ui'
 // "Where to focus" — the actionable head of the diagnosis cluster. Turns the
 // concept-graph analysis into two lists a student acts on:
 //   • Start here      — weak chapters traced to their deepest weak prerequisite,
-//                       each with a bundled Practice link (their own weak subtopics).
+//                       each with a chapter-level Learn link (fix the foundation
+//                       first) and, for Maths, a Practice link.
 //   • Ready to learn  — the unlockable frontier (prereqs mastered).
 // Shown to students (their own view) and faculty (viewing a student). Renders
 // nothing when there's no signal, so callers can mount it unconditionally.
@@ -26,6 +27,18 @@ export default function FocusAreas({ startHere = [], readyToLearn = [] }) {
                 <span className="font-semibold text-accent">{s.chapter}</span>
                 {s.from.length > 0 && (
                   <span className="text-ink-3"> — your gaps in {s.from.join(', ')} trace back here</span>
+                )}
+                {s.learnUrl && (
+                  <a
+                    href={s.learnUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Learn ${s.chapter}`}
+                    className="ml-1.5 text-accent underline underline-offset-2 whitespace-nowrap
+                               focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+                  >
+                    Learn →
+                  </a>
                 )}
                 {s.practiceUrl && (
                   <a

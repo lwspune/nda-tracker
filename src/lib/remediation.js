@@ -110,3 +110,28 @@ export function examPracticeUrl(q, exam = 'NDA') {
 export function examRemediationLinks(q) {
   return { learnUrl: examLearnUrl(q), practiceUrl: examPracticeUrl(q) }
 }
+
+// ── Chapter-level remediation ──────────────────────────────────────────────
+// The "Where to focus" widget points at whole chapters (root-cause concepts),
+// not individual subtopics. PYQ Vault's /go routes resolve a chapter NAME to
+// its notes chapter index (learn) or the chapter's practice set (practice),
+// degrading to the /notes or /browse index when a chapter has no content yet.
+
+// "Learn" → the /notes chapter index for this chapter.
+export function chapterLearnUrl(chapter) {
+  if (!chapter) return null
+  const p = new URLSearchParams()
+  p.set('chapter', String(chapter))
+  return `${PYQVAULT_URL}/go/learn?${p.toString()}`
+}
+
+// "Practice" → the chapter's practice set. Subject picks the corpus PYQ-Vault-
+// side (Maths → practice bank, else → PYQ); pass it when known.
+export function chapterPracticeUrl(chapter, subject, exam = 'NDA') {
+  if (!chapter) return null
+  const p = new URLSearchParams()
+  if (subject) p.set('subject', String(subject))
+  p.set('chapter', String(chapter))
+  p.set('exam', exam)
+  return `${PYQVAULT_URL}/go/practice?${p.toString()}`
+}

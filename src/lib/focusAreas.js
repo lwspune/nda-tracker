@@ -5,18 +5,17 @@
 // wrong/skipped audits (per-subtopic weakness) — so it adds no new pipeline.
 //
 // startHere:    weak chapters grouped under their deepest weak prerequisite (the
-//               root cause), weakest root first, each with one bundled Practice
-//               link built from the student's own wrong+skipped subtopics in that
-//               root chapter (Maths only — the practice bank is Maths today).
+//               root cause), weakest root first, each with a chapter-level Learn
+//               link (the notes chapter index) and — for Maths — a chapter-level
+//               Practice link. Both resolve PYQ-Vault-side, degrading gracefully
+//               when a chapter has no notes/practice content yet.
 // readyToLearn: the unlockable frontier — not-yet-mastered chapters whose every
 //               prerequisite is mastered, closest-to-mastery first.
 import { getRootCauseChain, getReadyToLearn, CHAPTER_PREREQS } from './conceptGraph'
-import { buildPracticeUrl, hasPracticeBank } from './remediation'
+import { chapterLearnUrl, chapterPracticeUrl, hasPracticeBank } from './remediation'
 
 export function buildFocusAreas({
   breakdown = [],
-  wrongAudit = [],
-  skippedAudit = [],
   subject = 'Maths',
   weakThreshold = 0.5,
   masteredThreshold = 0.7,
@@ -24,14 +23,6 @@ export function buildFocusAreas({
 } = {}) {
   const accByChapter = {}
   breakdown.forEach(r => { accByChapter[r.chapter] = r.accuracy ?? null })
-
-  // Distinct subtopic names the student got wrong or skipped, per chapter.
-  const weakSubtopics = {}
-  ;[...wrongAudit, ...skippedAudit].forEach(a => {
-    if (!a || !a.chapter || !a.subtopic) return
-    if (!weakSubtopics[a.chapter]) weakSubtopics[a.chapter] = new Set()
-    weakSubtopics[a.chapter].add(a.subtopic)
-  })
 
   // Group weak chapters under their root cause.
   const byRoot = new Map()
@@ -44,11 +35,12 @@ export function buildFocusAreas({
 
   const startHere = [...byRoot.values()]
     .sort((x, y) => (x.rootAccuracy ?? 1) - (y.rootAccuracy ?? 1))
-    .map(({ chapter, from }) => {
-      const subs = [...(weakSubtopics[chapter] || [])]
-      const practiceUrl = hasPracticeBank(subject) && subs.length ? buildPracticeUrl(subs) : null
-      return { chapter, from, practiceUrl }
-    })
+    .map(({ chapter, from }) => ({
+      chapter,
+      from,
+      learnUrl: chapterLearnUrl(chapter),
+      practiceUrl: hasPracticeBank(subject) ? chapterPracticeUrl(chapter, subject) : null,
+    }))
 
   const readyToLearn = getReadyToLearn(accByChapter, { masteredThreshold, graph })
     .sort((a, b) => {
