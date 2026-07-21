@@ -609,3 +609,19 @@ The Monthly Reports **preview card** (`src/pages/MonthlyReports/ReportRow.jsx`) 
 **Why:** low-stakes cosmetic/consistency — an admin scanning the preview gets a different picture than the parent gets in the PDF. Not wrong, just inconsistent; worth aligning if faculty find the mismatch confusing, or when the preview is next touched.
 
 **How to apply:** either (a) reuse the pure `conductBlocks(report)` from `monthlyReportPdf.js` to drive a compact preview strip (single source of truth for the omit rules + "X/Y days present" wording), or (b) minimally change the preview's Attendance tile to "X / Y" + add missed-lecture / homework-incomplete tiles. Option (a) keeps preview and PDF from drifting. `conductBlocks` is already exported and pure, so no new logic — just a render mapping. Keep it a preview *summary* (counts), not the full detail lists the PDF shows.
+
+---
+
+## 2026-07-21
+
+### Ship + browser-verify the chapter-level Learn/Practice links on "Where to focus" (deploy PYQ Vault FIRST)
+
+This session fixed the student **"Where to focus"** card's Practice link (it fell through to the generic `/browse?kind=practice` bank because it sent bare subtopic *names* with no subject/chapter) and added a **Learn →** link, both now **chapter-level**. Two repos changed, both green + lint-clean via TDD, but **nothing is committed or deployed yet**. nda-tracker: `chapterLearnUrl`/`chapterPracticeUrl` in `src/lib/remediation.js`, `src/lib/focusAreas.js` emits `learnUrl`+`practiceUrl`, `FocusAreas.jsx` renders Learn (primary) + Practice. PYQ Vault (`Question_Bank`): `goLinks.ts` `BY_CHAPTER`/`getChapterByName`/`buildChapterLearnPath`, `/go/learn` chapter fallback, `/go/practice` NAME mode fires on `subject && chapter` alone. See [[reference_remediation_links]] point 3.
+
+**Why:** the links are the user-visible fix that started this session — worthless until live. **Deploy order is load-bearing:** the tracker's new URLs (`/go/learn?chapter=…`, chapter-only `/go/practice`) only resolve once the PYQ Vault route changes are live, so ship `Question_Bank` first, then nda-tracker. The cross-app golden path can only be checked after both deploy (sessions are non-interactive; no browser driver) — same manual-verify gap logged for every prior feature.
+
+**How to apply:**
+- Commit both repos (separate `feat:` commits) — PYQ Vault first, confirm its deploy is live, then nda-tracker.
+- On `nda-tracker.vercel.app`, open a student with a populated "Where to focus" card (e.g. Pooja): click **Learn →** on a chapter → confirm it lands on that chapter's notes index (`/notes/nda-maths/<chapter>`), and **Practice →** on a Maths chapter → confirm it lands on the chapter-filtered practice bank (not the generic browse).
+- Confirm graceful degrade: a focus chapter with **no notes** lands on the `/notes` index (not a 404); a chapter with **no practice questions** lands on `/browse` — acceptable fallbacks, but note which chapters hit them (notes/practice coverage is incomplete) in case coverage should be prioritised.
+- Pre-existing lint note: `StudentView.jsx:119` has 4 `set-state-in-effect` errors (baseline, unrelated to this change — a line not touched); leave them per the CLAUDE.md "add the disable comment only if you touch those lines" rule.
