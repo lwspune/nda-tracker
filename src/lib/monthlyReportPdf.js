@@ -17,6 +17,12 @@ const C = {
 
 const M = { left: 18, right: 18, top: 16 }   // page margins (mm)
 
+// Next-month focus is hidden until the PDF can render Devanagari — jsPDF's
+// built-in helvetica is WinAnsi-only, so Hindi/Marathi chapter names garble
+// (see SUGGESTIONS.md 2026-07-25). Flip to true once a Unicode-capable font is
+// embedded. The builder + drawNextMonthFocus stay intact behind this flag.
+const SHOW_NEXT_MONTH_FOCUS = false
+
 function safeFile(s) {
   return (s || 'student').replace(/[^A-Za-z0-9_-]+/g, '_')
 }
@@ -261,7 +267,7 @@ export async function buildMonthlyReportPdfBlob(report, { remark = '' } = {}) {
   y = await drawExamTable(doc, y, report, autoTable)
   y = drawConduct(doc, y, report)
   y = drawRemark(doc, y, remark)
-  drawNextMonthFocus(doc, y, report)
+  if (SHOW_NEXT_MONTH_FOCUS) drawNextMonthFocus(doc, y, report)
   drawFooter(doc)
 
   return doc.output('blob')

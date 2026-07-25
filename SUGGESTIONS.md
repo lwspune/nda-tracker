@@ -625,3 +625,19 @@ This session fixed the student **"Where to focus"** card's Practice link (it fel
 - On `nda-tracker.vercel.app`, open a student with a populated "Where to focus" card (e.g. Pooja): click **Learn →** on a chapter → confirm it lands on that chapter's notes index (`/notes/nda-maths/<chapter>`), and **Practice →** on a Maths chapter → confirm it lands on the chapter-filtered practice bank (not the generic browse).
 - Confirm graceful degrade: a focus chapter with **no notes** lands on the `/notes` index (not a 404); a chapter with **no practice questions** lands on `/browse` — acceptable fallbacks, but note which chapters hit them (notes/practice coverage is incomplete) in case coverage should be prioritised.
 - Pre-existing lint note: `StudentView.jsx:119` has 4 `set-state-in-effect` errors (baseline, unrelated to this change — a line not touched); leave them per the CLAUDE.md "add the disable comment only if you touch those lines" rule.
+
+---
+
+## 2026-07-25
+
+### Re-enable the "next-month focus" line once the report PDF can render Devanagari
+
+The Monthly Report PDF's "…focus:" line (batch's next-month teaching schedule) is **hidden as of 2026-07-25** — flag `SHOW_NEXT_MONTH_FOCUS = false` in `src/lib/monthlyReportPdf.js`. Root cause: jsPDF's built-in `helvetica` is a Standard-14 WinAnsi (Latin-1) font with no Devanagari glyphs, so Hindi/Marathi chapter names garbled (`Hindi: ->0$ .9?.>`, `Marathi: $B ,A&M'@ …`) while Latin subjects rendered fine. `drawNextMonthFocus` + the `nextMonthFocus` builder logic (`monthlyReportBuilder.js`) are intact behind the flag — this is a display suppression only.
+
+**Why:** it's a parent-facing report card; shipping garbled Hindi/Marathi is worse than omitting the line. The fix is real work (a Unicode font), not a one-liner, so it was deferred. Note the same helvetica-only limit affects **every** PDF generator (`examPdf.js`, `studentReportPdf.js`, `hostelLeaveReportPdf.js`, and this file's conduct/exam sections) — any Devanagari there garbles too; only the focus line was actively hit.
+
+**How to apply:** pick one —
+1. **Embed Noto Sans Devanagari TTF** (`addFileToVFS` + `addFont`, regular + bold), switch the focus/chapter text to it. ⚠ jsPDF does **no complex-script shaping** — matras/conjuncts may render mis-ordered even with the glyphs present; verify real chapter names before trusting it. +~300–600 KB bundle.
+2. **html2canvas → image PDF** (html2canvas is already a dep for the timetable PNG). Browser shapes Devanagari correctly; output is rasterized (non-selectable) and heavier. Larger rewrite.
+3. **Romanize/transliterate** the Devanagari chapter names for the report. Cheap, correct Latin output, loses native script — changes what the report says.
+Recommendation: (2) if native script must look right, (1) is the trap (looks fixed, can ship malformed). Then flip `SHOW_NEXT_MONTH_FOCUS = true`.
