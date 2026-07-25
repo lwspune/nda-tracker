@@ -1,6 +1,27 @@
 import { useState } from 'react'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
+import { getScienceStream, STREAM_LABELS } from '../../lib/syllabus/scienceStream'
+
+// ── Physics/Chemistry/Biology badge (Science chapters only) ───
+const STREAM_BADGE_STYLES = {
+  P: 'bg-sky-100 text-sky-800',
+  C: 'bg-violet-100 text-violet-800',
+  B: 'bg-green-100 text-green-800',
+}
+
+function StreamBadge({ stream }) {
+  if (!stream) return null
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-5 h-[18px] mr-2 rounded text-[10px] font-bold font-mono align-middle ${STREAM_BADGE_STYLES[stream]}`}
+      title={STREAM_LABELS[stream]}
+      aria-label={STREAM_LABELS[stream]}
+    >
+      {stream}
+    </span>
+  )
+}
 
 // ── Timeline helpers ──────────────────────────────────────────
 function formatTimeline(val) {
@@ -195,7 +216,10 @@ export default function SubjectAccordion({ subject, program, batchName, onEdit }
                     )}
                     {chapters.map(ch => (
                       <tr key={ch.id} className="border-t border-border/50 hover:bg-surface-2/50 transition-colors">
-                        <td className="px-4 py-2 text-ink-2 leading-snug">{ch.name}</td>
+                        <td className="px-4 py-2 text-ink-2 leading-snug">
+                          <StreamBadge stream={getScienceStream(subject.name, ch.name)} />
+                          {ch.name}
+                        </td>
                         <TimelineCell
                           value={getChapterTimeline(batchName, program.id, subject.id, ch.id)}
                           onSave={val => setChapterTimeline(batchName, program.id, subject.id, ch.id, val)}
