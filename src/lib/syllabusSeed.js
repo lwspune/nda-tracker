@@ -1683,67 +1683,72 @@ export const SYLLABUS_SEED = [
         "chapters": [
           {
             "id": "ch_0030",
-            "name": "Optics and Natural Phenomenon of Life",
+            "name": "Light and Optics (21.6%)",
             "group": null
           },
           {
             "id": "ch_0031",
-            "name": "Electricity",
-            "group": null
-          },
-          {
-            "id": "ch_0032",
-            "name": "Montion in 1D and 2D",
+            "name": "Electricity and Magnetism (20.7%)",
             "group": null
           },
           {
             "id": "ch_0033",
-            "name": "Newtons Laws of Motion and Friction",
-            "group": null
-          },
-          {
-            "id": "ch_0034",
-            "name": "Work Power Energy",
-            "group": null
-          },
-          {
-            "id": "ch_0035",
-            "name": "Magnetic Effect of Current and Magnetism",
-            "group": null
-          },
-          {
-            "id": "ch_0036",
-            "name": "Electromagnetic Induction",
-            "group": null
-          },
-          {
-            "id": "ch_0037",
-            "name": "EM Waves",
-            "group": null
-          },
-          {
-            "id": "ch_0038",
-            "name": "Gravitation",
-            "group": null
-          },
-          {
-            "id": "ch_0039",
-            "name": "Solids and Liquids",
+            "name": "Laws of Motion and Forces (9.1%)",
             "group": null
           },
           {
             "id": "ch_0040",
-            "name": "Heat Transfer",
-            "group": null
-          },
-          {
-            "id": "ch_0041",
-            "name": "Thermodynamics",
+            "name": "Heat and Thermodynamics (8.7%)",
             "group": null
           },
           {
             "id": "ch_0042",
-            "name": "Sound and SHM",
+            "name": "Sound (7.6%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0001",
+            "name": "Modern Physics (5.6%)",
+            "group": null
+          },
+          {
+            "id": "ch_0032",
+            "name": "Kinematics and Motion (5.3%)",
+            "group": null
+          },
+          {
+            "id": "ch_0034",
+            "name": "Work, Energy and Power (5.1%)",
+            "group": null
+          },
+          {
+            "id": "ch_0039",
+            "name": "Fluid Mechanics and Properties of Matter (5.1%)",
+            "group": null
+          },
+          {
+            "id": "ch_0038",
+            "name": "Gravitation (3.8%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0002",
+            "name": "Units, Measurement and Dimensions (3.1%)",
+            "group": null
+          },
+          {
+            "id": "ch_mo9z5uac",
+            "name": "Oscillations and Waves (2.9%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0003",
+            "name": "Astronomy and Space (0.9%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0004",
+            "name": "Energy Sources (0.4%)",
             "group": null
           }
         ]
@@ -1753,83 +1758,63 @@ export const SYLLABUS_SEED = [
         "name": "Chemistry",
         "chapters": [
           {
-            "id": "ch_0043",
-            "name": "Matter in Surrounding",
-            "group": null
-          },
-          {
-            "id": "ch_0044",
-            "name": "Basics of Chemistry",
-            "group": null
-          },
-          {
-            "id": "ch_0045",
-            "name": "Gaseous State of Matter",
-            "group": null
-          },
-          {
-            "id": "ch_0046",
-            "name": "Atoms and Molecules",
-            "group": null
-          },
-          {
-            "id": "ch_0047",
-            "name": "Structure of Atom",
-            "group": null
-          },
-          {
-            "id": "ch_0048",
-            "name": "Chemical Reaction and Equation",
-            "group": null
-          },
-          {
-            "id": "ch_0049",
-            "name": "Metals and non-metals",
-            "group": null
-          },
-          {
-            "id": "ch_0050",
-            "name": "Acids, Bases, and Salts",
+            "id": "ch_0057",
+            "name": "Carbon and Its Compounds (17.2%)",
             "group": null
           },
           {
             "id": "ch_0051",
-            "name": "Periodic Table",
+            "name": "Atomic Structure and Periodic Classification (13.4%)",
+            "group": null
+          },
+          {
+            "id": "ch_0050",
+            "name": "Acids, Bases and Salts (12.6%)",
+            "group": null
+          },
+          {
+            "id": "ch_0043",
+            "name": "Matter and Its States (11.5%)",
+            "group": null
+          },
+          {
+            "id": "ch_0048",
+            "name": "Chemical Reactions (11.5%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0005",
+            "name": "Industrial and Applied Chemistry (10.7%)",
+            "group": null
+          },
+          {
+            "id": "ch_0049",
+            "name": "Metals and Non-Metals (6.5%)",
             "group": null
           },
           {
             "id": "ch_0052",
-            "name": "Hydrogen",
+            "name": "Hydrogen and Water (4.2%)",
             "group": null
           },
           {
-            "id": "ch_0053",
-            "name": "S block",
-            "group": null
-          },
-          {
-            "id": "ch_0054",
-            "name": "P block",
-            "group": null
-          },
-          {
-            "id": "ch_0055",
-            "name": "Uses of D & F block",
-            "group": null
-          },
-          {
-            "id": "ch_0056",
-            "name": "Redox Reaction",
-            "group": null
-          },
-          {
-            "id": "ch_0057",
-            "name": "Carbon and Its compounds",
+            "id": "ch_moqxbv8p",
+            "name": "Chemical Bonding (4.2%)",
             "group": null
           },
           {
             "id": "ch_0058",
-            "name": "Chemistry in Everyday Life",
+            "name": "Chemistry in Everyday Life (3.8%)",
+            "group": null
+          },
+          {
+            "id": "ch_0046",
+            "name": "Mole Concept and Stoichiometry (3.4%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0006",
+            "name": "Practical Chemistry (1.1%)",
             "group": null
           }
         ]
@@ -1839,88 +1824,48 @@ export const SYLLABUS_SEED = [
         "name": "Biology",
         "chapters": [
           {
-            "id": "ch_0059",
-            "name": "The Fundamental Unit of Life",
-            "group": null
-          },
-          {
-            "id": "ch_0060",
-            "name": "Tissues",
-            "group": null
-          },
-          {
-            "id": "ch_0061",
-            "name": "Diversity in Living Organisms",
-            "group": null
-          },
-          {
-            "id": "ch_0062",
-            "name": "Why Do We Fall Ill?",
-            "group": null
-          },
-          {
-            "id": "ch_0063",
-            "name": "Natural Resources",
-            "group": null
-          },
-          {
             "id": "ch_0064",
-            "name": "Life Processes",
-            "group": null
-          },
-          {
-            "id": "ch_0065",
-            "name": "Control and Coordination",
-            "group": null
-          },
-          {
-            "id": "ch_0066",
-            "name": "How Do Organisms Reproduce?",
-            "group": null
-          },
-          {
-            "id": "ch_0067",
-            "name": "Heredity and Evolution",
-            "group": null
-          },
-          {
-            "id": "ch_0068",
-            "name": "Our Environment",
-            "group": null
-          },
-          {
-            "id": "ch_0069",
-            "name": "Anatomy of Flowering Plants",
+            "name": "Human Physiology (27.4%)",
             "group": null
           },
           {
             "id": "ch_0070",
-            "name": "Cell: The Unit of Life",
+            "name": "Cell Biology (23.2%)",
             "group": null
           },
           {
-            "id": "ch_0071",
-            "name": "Breathing and Exchange of Gases",
+            "id": "ch_0069",
+            "name": "Plant Biology (15.3%)",
             "group": null
           },
           {
-            "id": "ch_0072",
-            "name": "Body Fluids and Circulation",
+            "id": "ch_0062",
+            "name": "Microbiology and Disease (11.1%)",
             "group": null
           },
           {
-            "id": "ch_0073",
-            "name": "Reproduction in Organisms",
+            "id": "ch_0066",
+            "name": "Reproduction (6.8%)",
             "group": null
           },
           {
-            "id": "ch_0074",
-            "name": "Sexual Reproduction in Flowering Plants",
+            "id": "ch_0068",
+            "name": "Ecology and Environment (6.3%)",
             "group": null
           },
           {
-            "id": "ch_0075",
-            "name": "Human Reproduction",
+            "id": "ch_0061",
+            "name": "Biodiversity and Classification (5.8%)",
+            "group": null
+          },
+          {
+            "id": "ch_0067",
+            "name": "Genetics and Evolution (2.1%)",
+            "group": null
+          },
+          {
+            "id": "ch_pv0007",
+            "name": "Biochemistry (2.1%)",
             "group": null
           }
         ]

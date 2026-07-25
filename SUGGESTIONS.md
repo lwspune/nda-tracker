@@ -641,3 +641,11 @@ The Monthly Report PDF's "…focus:" line (batch's next-month teaching schedule)
 2. **html2canvas → image PDF** (html2canvas is already a dep for the timetable PNG). Browser shapes Devanagari correctly; output is rasterized (non-selectable) and heavier. Larger rewrite.
 3. **Romanize/transliterate** the Devanagari chapter names for the report. Cheap, correct Latin output, loses native script — changes what the report says.
 Recommendation: (2) if native script must look right, (1) is the trap (looks fixed, can ship malformed). Then flip `SHOW_NEXT_MONTH_FOCUS = true`.
+
+### Strip the "(x%)" weightage suffix before re-enabling the next-month focus line
+
+The NDA Program's **Physics / Chemistry / Biology** syllabus chapters were rebuilt on **2026-07-25** to PYQ Vault's taxonomy, and each chapter name now carries its PYQ weightage inline — e.g. `Light and Optics (21.6%)`, `Human Physiology (27.4%)`. Chapter names are display-only in the Syllabus tracker (the join key is `chapter.id`), so this is safe there.
+
+**Why it matters here:** `monthlyReportBuilder.js` (~L178) copies `chapter.name` verbatim into `nextMonthFocus.chapters`, which `monthlyReportPdf.js` prints on a **parent-facing** report card. Today that line is hidden behind `SHOW_NEXT_MONTH_FOCUS = false` (see the Devanagari entry above), so nothing leaks — but whoever flips that flag will start printing `Sept focus: Physics — Light and Optics (21.6%)` to parents, which reads as internal exam-analytics noise on a student report.
+
+**How to apply:** when re-enabling, strip the suffix at the render boundary, not in the data — a one-line `name.replace(/\s*\(\d+(\.\d+)?%\)\s*$/, '')` in `drawNextMonthFocus` (or in the builder's `chapters.push`). Don't remove the weightage from the syllabus chapter names; it's the whole point of the rebuild. Also re-check any *future* consumer that surfaces syllabus chapter names to students or parents — the weightage suffix is a faculty-facing annotation only.
