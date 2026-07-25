@@ -48,50 +48,229 @@ describe('loadFromSupabase', () => {
   })
 })
 
+// Chainable `update().eq()...select()` mock. `eq` returns the same chain so the
+// guarded (two `.eq`s) and unguarded (one) paths both work; `select` resolves.
+function makeUpdateChain({ rows = [{ updated_at: 'v-new' }], error = null } = {}) {
+  const chain = {}
+  chain.eq = vi.fn(() => chain)
+  chain.select = vi.fn(() => Promise.resolve({ data: rows, error }))
+  const update = vi.fn(() => chain)
+  return { update, chain }
+}
+
+// Fresh module instance — `knownVersion` / `staleLock` are module-level singletons
+// (one tab = one instance), so each concurrency test needs its own copy.
+async function freshPersist() {
+  vi.resetModules()
+  const persist = await import('../persist')
+  const { supabase: sb } = await import('../../lib/supabase')
+  return { persist, sb }
+}
+
+function sessionActive(sb) {
+  sb.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'faculty-id' } } } })
+}
+
 describe('saveToSupabase', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('calls update when faculty session is active', async () => {
-    const mockEq = vi.fn().mockResolvedValue({ error: null })
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockEq })
-    supabase.from.mockReturnValue({ update: mockUpdate })
-    supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'faculty-id' } } },
-    })
+    const { update, chain } = makeUpdateChain()
+    supabase.from.mockReturnValue({ update })
+    sessionActive(supabase)
 
-    saveToSupabase({ exams: [], studentProfiles: {} })
-    await new Promise(r => setTimeout(r, 0))
+    await saveToSupabase({ exams: [], studentProfiles: {} })
 
-    expect(mockUpdate).toHaveBeenCalled()
-    expect(mockEq).toHaveBeenCalledWith('id', 1)
+    expect(update).toHaveBeenCalled()
+    expect(chain.eq).toHaveBeenCalledWith('id', 1)
   })
 
   it('strips exams from the JSONB blob before saving to faculty_state', async () => {
-    const mockEq = vi.fn().mockResolvedValue({ error: null })
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockEq })
-    supabase.from.mockReturnValue({ update: mockUpdate })
-    supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'faculty-id' } } },
-    })
+    const { update } = makeUpdateChain()
+    supabase.from.mockReturnValue({ update })
+    sessionActive(supabase)
 
-    saveToSupabase({ exams: [{ id: 'exam1' }], quizzes: [{ id: 'q1' }], studentProfiles: { Alice: {} } })
-    await new Promise(r => setTimeout(r, 0))
+    await saveToSupabase({ exams: [{ id: 'exam1' }], quizzes: [{ id: 'q1' }], studentProfiles: { Alice: {} } })
 
-    const savedData = mockUpdate.mock.calls[0][0].data
+    const savedData = update.mock.calls[0][0].data
     expect(savedData).not.toHaveProperty('exams')
     expect(savedData).not.toHaveProperty('quizzes')
     expect(savedData).toHaveProperty('studentProfiles')
   })
 
   it('skips update when no session (teacher/student mode)', async () => {
-    const mockUpdate = vi.fn()
-    supabase.from.mockReturnValue({ update: mockUpdate })
+    const update = vi.fn()
+    supabase.from.mockReturnValue({ update })
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
 
-    saveToSupabase({ exams: [] })
-    await new Promise(r => setTimeout(r, 0))
+    await saveToSupabase({ exams: [] })
 
-    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+// ── Optimistic-concurrency guard ─────────────────────────────────────────────
+// faculty_state is one whole-blob, last-write-wins row. A client that loaded
+// before someone else's write must NOT be allowed to flush its stale copy over
+// them (incident 2026-07-25). The guard predicates the update on the version the
+// client last read, and hard-stops saving once it loses.
+describe('saveToSupabase — optimistic concurrency guard', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function mockLoad(sb, { data = {}, updated_at = 'v1' } = {}) {
+    sb.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: { data, updated_at }, error: null }),
+        }),
+      }),
+    })
+  }
+
+  it('captures updated_at on load and sends it as the update predicate', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+
+    const { update, chain } = makeUpdateChain()
+    sb.from.mockReturnValue({ update })
+    sessionActive(sb)
+    await persist.saveToSupabase({ studentProfiles: {} })
+
+    expect(chain.eq).toHaveBeenCalledWith('id', 1)
+    expect(chain.eq).toHaveBeenCalledWith('updated_at', 'v1')
+  })
+
+  it('saves unguarded when no version is known (never loaded)', async () => {
+    const { persist, sb } = await freshPersist()
+    const { update, chain } = makeUpdateChain()
+    sb.from.mockReturnValue({ update })
+    sessionActive(sb)
+
+    await persist.saveToSupabase({ studentProfiles: {} })
+
+    expect(update).toHaveBeenCalled()
+    expect(chain.eq).toHaveBeenCalledWith('id', 1)
+    expect(chain.eq).toHaveBeenCalledTimes(1)   // no version predicate
+  })
+
+  it('advances the known version after a successful save', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const first = makeUpdateChain()
+    sb.from.mockReturnValue({ update: first.update })
+    await persist.saveToSupabase({ a: 1 })
+    const writtenVersion = first.update.mock.calls[0][0].updated_at
+
+    const second = makeUpdateChain()
+    sb.from.mockReturnValue({ update: second.update })
+    await persist.saveToSupabase({ a: 2 })
+
+    // the 2nd save must predicate on what the 1st actually wrote, not the loaded 'v1'
+    expect(second.chain.eq).toHaveBeenCalledWith('updated_at', writtenVersion)
+    expect(second.chain.eq).not.toHaveBeenCalledWith('updated_at', 'v1')
+  })
+
+  it('fires the conflict callback and does NOT advance the version when zero rows match', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+
+    const { update } = makeUpdateChain({ rows: [] })   // row moved under us
+    sb.from.mockReturnValue({ update })
+    await persist.saveToSupabase({ a: 1 })
+
+    expect(onConflict).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses every subsequent save once stale (no clobber attempts)', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const losing = makeUpdateChain({ rows: [] })
+    sb.from.mockReturnValue({ update: losing.update })
+    await persist.saveToSupabase({ a: 1 })
+
+    const after = makeUpdateChain()
+    sb.from.mockReturnValue({ update: after.update })
+    await persist.saveToSupabase({ a: 2 })
+    await persist.saveToSupabase({ a: 3 })
+
+    expect(after.update).not.toHaveBeenCalled()
+  })
+
+  it('does not fire the conflict callback twice for repeated saves', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+
+    const losing = makeUpdateChain({ rows: [] })
+    sb.from.mockReturnValue({ update: losing.update })
+    await persist.saveToSupabase({ a: 1 })
+    await persist.saveToSupabase({ a: 2 })
+
+    expect(onConflict).toHaveBeenCalledTimes(1)
+  })
+
+  it('serialises overlapping in-tab saves so the 2nd is not a false conflict', async () => {
+    // _save() is fire-and-forget on every mutation, so rapid edits overlap. Without
+    // serialisation the 2nd save would still hold the 1st's pre-write version and be
+    // rejected — the guard would fire during ordinary typing.
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+
+    const seen = []
+    const chain = {}
+    chain.eq = vi.fn((col, val) => { if (col === 'updated_at') seen.push(val); return chain })
+    let written = null
+    chain.select = vi.fn(() => Promise.resolve({ data: [{ updated_at: written }], error: null }))
+    const update = vi.fn(patch => { written = patch.updated_at; return chain })
+    sb.from.mockReturnValue({ update })
+
+    // dispatched back-to-back without awaiting the first
+    const a = persist.saveToSupabase({ a: 1 })
+    const b = persist.saveToSupabase({ a: 2 })
+    await Promise.all([a, b])
+
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(onConflict).not.toHaveBeenCalled()
+    expect(seen[0]).toBe('v1')          // 1st predicates on the loaded version
+    expect(seen[1]).toBe(update.mock.calls[0][0].updated_at)  // 2nd on what the 1st wrote
+  })
+
+  it('leaves the version alone on a transport error so a retry is still guarded', async () => {
+    const { persist, sb } = await freshPersist()
+    mockLoad(sb, { updated_at: 'v1' })
+    await persist.loadFromSupabase()
+    sessionActive(sb)
+
+    const failing = makeUpdateChain({ rows: null, error: { message: 'network' } })
+    sb.from.mockReturnValue({ update: failing.update })
+    await persist.saveToSupabase({ a: 1 })
+
+    const retry = makeUpdateChain()
+    sb.from.mockReturnValue({ update: retry.update })
+    await persist.saveToSupabase({ a: 1 })
+
+    expect(retry.chain.eq).toHaveBeenCalledWith('updated_at', 'v1')
   })
 })
 

@@ -94,6 +94,8 @@ The application uses **two storage patterns** in the same Supabase project. New 
 
 A single row (`id=1`) with a `jsonb` column holding configuration-style state: the syllabus tree, timetable definitions, exam schedules, cost log, send history. Fire-and-forget UPDATE on every Zustand mutation.
 
+Because the whole blob is rewritten on every save, concurrent clients would otherwise overwrite each other wholesale. Since 2026-07-25 the write is **version-guarded**: `persist.js` holds the `updated_at` it last read (`knownVersion`) and predicates the UPDATE on it. Losing that race means this client is stale, so it stops saving, raises `onSaveConflict` → `saveConflict` → `StaleDataBanner`, and only a reload recovers. Saves are serialised so overlapping fire-and-forget writes don't self-conflict. See `GUARDRAILS.md` + `DECISIONS.md` (2026-07-25).
+
 Use this for state where:
 - There is no need to query individual elements by ID from a serverless function
 - The whole blob is read at session start and written as one unit
@@ -300,7 +302,8 @@ The high-level code map is §6. This is the exhaustive file→purpose inventory 
 | `create_teacher_account.js` | Admin script — creates/updates Supabase auth user with `role='teacher'` metadata. Usage: `node create_teacher_account.js <email> <password>` |
 | `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler |
-| `src/store/persist.js` | Dev: disk via Vite plugin. Prod admin: Supabase `faculty_state`. Teacher/student: no-op. |
+| `src/store/persist.js` | Dev: disk via Vite plugin. Prod admin: Supabase `faculty_state` (version-guarded — `knownVersion` + `onSaveConflict`). Teacher/student: no-op. |
+| `src/components/layout/StaleDataBanner.jsx` | Admin-only "Your data is out of date · Reload" banner; renders when `saveConflict` is set (no dismiss — reload is the only recovery) |
 | `src/lib/supabase.js` | Null-guarded Supabase client (returns `null` if env vars absent) |
 | `src/stubs/empty.js` | One-line `export default {}` — aliased from `stream` in `vite.config.js` so xlsx's optional `require('stream')` short-circuits cleanly instead of throwing on Vite's externalised-module stub. |
 | `vercel.json` | SPA rewrite rule — all non-`/data/|api/` paths → `index.html` |

@@ -16,6 +16,10 @@ export const DEFAULTS = {
   lastDeployedAt: null,
   hydrated: IS_READ_ONLY,
   isSuperadmin: false, // session-derived (user_metadata.role==='superadmin'); never persisted
+  // Set once persist.js rejects a save because faculty_state moved under us. Never
+  // persisted (it describes this tab's session, not the data) and never cleared in
+  // app code — only a reload recovers. Keep OUT of persist.js saveToStorage.
+  saveConflict: false,
 
   syllabusPrograms: [],
   syllabusBatches: [],

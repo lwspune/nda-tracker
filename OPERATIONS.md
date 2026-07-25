@@ -36,6 +36,12 @@ For column-level schema see [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md). For th
    select count(*) from exam_results where exam_id = '<exam_id>';
    ```
 
+**Special case — a red "Your data is out of date" banner is showing (or the console says `Save rejected — faculty_state changed in another session`).** This is the optimistic-concurrency guard (2026-07-25), not a failure: another session wrote `faculty_state` after this tab loaded, so this tab's copy is stale and **all saving has been stopped deliberately** to avoid overwriting the other session's work. Everything typed since the banner appeared is unsaved and will be lost.
+
+- **Recovery:** reload the page. That re-reads Supabase, refreshes `knownVersion`, and clears the lock. There is no in-app dismiss by design.
+- **If it fires repeatedly for one user:** someone else (or a direct SQL/MCP edit) is writing `faculty_state` concurrently. Check `select updated_at from faculty_state where id = 1;` — if it keeps moving, find the other writer before blaming the guard.
+- **After any direct SQL edit to `faculty_state.data`:** tell every open admin tab to reload, then re-verify the DB. The guard makes a stale tab fail loudly instead of silently reverting you, but it does **not** merge.
+
 **Recovery:** If state and DB are out of sync, re-trigger the mutation from the UI (e.g. re-save the form). The dual-path will retry.
 
 ---

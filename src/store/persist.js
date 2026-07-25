@@ -18,11 +18,39 @@ const API = '/api/data'
 
 // ── Supabase helpers (prod admin mode) ───────────────────────
 
+// ── Optimistic concurrency on the faculty_state blob ─────────
+// `faculty_state.data` is ONE whole-document row written last-write-wins, and
+// saveToStorage below serialises *every* allow-listed key at once. So a client
+// holding a stale copy silently reverts anyone who wrote after it loaded — any
+// mutation, from any page, in any tab (incident 2026-07-25: a direct SQL syllabus
+// rewrite was reverted ~2 min later by one idle admin tab).
+//
+// The guard predicates each update on the `updated_at` this client last saw.
+// Losing the race means our copy is stale, so we stop saving entirely rather than
+// clobber — a reload (which re-reads Supabase) is the only recovery.
+//
+// Module-level, not store state: one tab = one module instance, which is exactly
+// the scope of "the version this client last read". Keeping it out of the store
+// also avoids the set({...DEFAULTS}) clobber footgun that bites non-persisted
+// session flags (see isSuperadmin in useStore.initStore).
+let knownVersion = null
+let staleLock = false
+const conflictListeners = new Set()
+
+/** Subscribe to "this client is stale, saves are stopped". Returns an unsubscribe fn. */
+export function onSaveConflict(cb) {
+  conflictListeners.add(cb)
+  return () => conflictListeners.delete(cb)
+}
+
 export async function loadFromSupabase() {
   if (!supabase) return null
   const { data, error } = await supabase
-    .from('faculty_state').select('data').eq('id', 1).single()
+    .from('faculty_state').select('data, updated_at').eq('id', 1).single()
   if (error) return null
+  // A fresh read makes this client current again — clear any prior stale lock.
+  knownVersion = data?.updated_at ?? null
+  staleLock = false
   return data?.data ?? null
 }
 
@@ -133,17 +161,47 @@ export async function loadQuizzesFromSupabase() {
   }))
 }
 
+// Saves are serialised through this chain. `_save()` is fire-and-forget on every
+// mutation, so rapid edits overlap; without ordering, save #2 would still hold
+// #1's pre-write version and be rejected as a false conflict mid-typing.
+let saveChain = Promise.resolve()
+
 export function saveToSupabase(data) {
-  if (!supabase) return
-  supabase.auth.getSession().then(async ({ data: { session } }) => {
-    if (!session) return
-    // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
-    const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
-    const { error } = await supabase.from('faculty_state')
-      .update({ data: rest, updated_at: new Date().toISOString() })
-      .eq('id', 1)
-    if (error) console.error('[persist] Supabase save failed:', error)
+  if (!supabase) return Promise.resolve()
+  saveChain = saveChain.then(() => doSave(data)).catch(err => {
+    console.error('[persist] Supabase save failed:', err)
   })
+  return saveChain
+}
+
+async function doSave(data) {
+  if (staleLock) return                    // already lost the race — never clobber
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return
+  // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
+  const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
+
+  const nextVersion = new Date().toISOString()
+  let q = supabase.from('faculty_state')
+    .update({ data: rest, updated_at: nextVersion })
+    .eq('id', 1)
+  // Unguarded only when we never read a version (first-run dev migration, or a
+  // save racing hydration) — predicating on null would match nothing and brick saves.
+  if (knownVersion) q = q.eq('updated_at', knownVersion)
+  const { data: rows, error } = await q.select('updated_at')
+
+  // Transport failure: leave knownVersion alone so a retry is still guarded.
+  if (error) { console.error('[persist] Supabase save failed:', error); return }
+
+  if (knownVersion && (!rows || rows.length === 0)) {
+    staleLock = true
+    console.error('[persist] Save rejected — faculty_state changed in another session. Reload required.')
+    for (const cb of conflictListeners) {
+      try { cb() } catch (e) { console.error('[persist] onSaveConflict listener threw:', e) }
+    }
+    return
+  }
+  knownVersion = nextVersion
 }
 
 // ── Sync load (unused in prod — kept for legacy LS migration guard) ──────────

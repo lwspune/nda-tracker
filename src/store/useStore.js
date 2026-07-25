@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { loadFromDisk, saveToStorage, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
+import { loadFromDisk, saveToStorage, onSaveConflict, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
 import { IS_READ_ONLY } from '../config'
 import { migrateFreq } from '../lib/persistence'
@@ -42,6 +42,11 @@ const useStore = create((set, get) => ({
   // Prod (faculty): Supabase session detected → loads from faculty_state table.
   // Prod (teacher/student): no session → sets hydrated immediately.
   async initStore() {
+    // A rejected save means another session wrote after we loaded — surface it and
+    // stop trusting this tab's copy. Registered before any save can fire; persist.js
+    // has already stopped writing by the time this runs.
+    onSaveConflict(() => set({ saveConflict: true }))
+
     // Runtime hostname check — see persist.js for why we avoid import.meta.env.DEV here
     if (IS_READ_ONLY) {
       if (supabase) {
