@@ -28,6 +28,10 @@ const mockStore = {
   timetableMappings: [],
   setLectureAbsenteesForPeriod: vi.fn().mockResolvedValue(true),
   getLectureAbsencesForDate: vi.fn().mockResolvedValue([]),
+  // FilingBoard, via the Lecture log tab
+  timetableTeachers: [],
+  submitLecture: vi.fn().mockResolvedValue(true),
+  getSubmissionsForDate: vi.fn().mockResolvedValue([]),
 }
 
 vi.mock('../../../store/useStore', () => ({

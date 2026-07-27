@@ -13,7 +13,9 @@ export function sortTeachersByName(teachers = []) {
   )
 }
 
-function parseTimeToMinutes(str) {
+// Exported for src/lib/teacherDay.js, which orders one teacher's periods across
+// several batches (each batch has its own slot rows, so string sort won't do).
+export function parseTimeToMinutes(str) {
   if (!str) return 0
   const s = String(str).trim().toUpperCase()
   const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)

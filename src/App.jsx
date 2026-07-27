@@ -25,6 +25,8 @@ import FocusedExamResult from './pages/Students/FocusedExamResult'
 import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
 import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
+import SchoolAttendancePage from './pages/SchoolAttendance'
+import { isSchoolAttendancePath } from './lib/routing'
 export default function App() {
   const activePage = useStore(s => s.activePage)
   const hydrated   = useStore(s => s.hydrated)
@@ -82,14 +84,27 @@ export default function App() {
 
   // ── Read-only (Vercel / GitHub Pages) mode ─────────────────
   if (IS_READ_ONLY) {
+    // /school-attendance — the link teachers get. Same URL for everyone; what
+    // it shows is decided by whoever is signed in on that device. Signed out,
+    // this falls through to the login page and lands back here afterwards
+    // (the path isn't rewritten away).
+    if (supabaseSession && isSchoolAttendancePath(window.location.pathname, import.meta.env.BASE_URL)) {
+      return (
+        <SchoolAttendanceRoute
+          session={supabaseSession}
+          onLogout={() => supabase.auth.signOut()}
+        />
+      )
+    }
+
     // Teacher role — individual Supabase account with role='teacher'
     if (supabaseSession?.user?.user_metadata?.role === 'teacher') {
-      return <TeacherPortal onLogout={() => supabase.auth.signOut()} />
+      return <TeacherPortal session={supabaseSession} onLogout={() => supabase.auth.signOut()} />
     }
 
     // Online admin — Supabase session without teacher role metadata
     if (supabaseSession) {
-      return <OnlineAdminPortal onLogout={() => supabase.auth.signOut()} />
+      return <OnlineAdminPortal session={supabaseSession} onLogout={() => supabase.auth.signOut()} />
     }
 
     // Student portal
@@ -108,6 +123,10 @@ export default function App() {
 
   // ── Dev admin mode (localhost) ──────────────────────────────
   const pages = {
+    // No Supabase session on localhost, so there's no email to resolve to a
+    // teacher — the page renders its "not linked to a teacher record" state.
+    // Kept registered so the route exists in dev.
+    schoolAttendance: <SchoolAttendancePage />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
     quizzes:    <QuizzesPage />,
@@ -138,12 +157,59 @@ export default function App() {
   )
 }
 
+// ── /school-attendance (standalone) ────────────────────────────
+// Chrome-free, mobile-first: the teacher opens the link, sees their own periods
+// for today, files them, done. Rendered for any staff session — a teacher on
+// their phone or an admin checking the same surface.
+//
+// Teacher sessions load nothing on their own (initStore is a no-op for them),
+// so this route pulls the faculty_state blob (timetables, mappings, teacher
+// records) and the student roster itself rather than depending on TeacherPortal.
+function SchoolAttendanceRoute({ session, onLogout }) {
+  const isTeacher = session?.user?.user_metadata?.role === 'teacher'
+  const loadRemoteData = useStore(s => s.loadRemoteData)
+  const loadStudents   = useStore(s => s.loadStudentsFromSupabase)
+  const [ready, setReady] = useState(!isTeacher)
+
+  useEffect(() => {
+    if (!isTeacher) return
+    let cancelled = false
+    async function load() {
+      const data = await loadFromSupabase()
+      if (cancelled) return
+      if (data) loadRemoteData(data)
+      // The blob's studentProfiles is a cache; the students table is current.
+      // Roster accuracy matters here — a stale roster means a real student
+      // can't be marked absent.
+      await loadStudents()
+      if (!cancelled) setReady(true)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [isTeacher])
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-[14px] font-semibold text-ink-2">Loading your lectures…</div>
+      </div>
+    )
+  }
+
+  return (
+    <ModeContext.Provider value={isTeacher ? 'teacher' : 'admin'}>
+      <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />
+    </ModeContext.Provider>
+  )
+}
+
 // ── Online Admin Portal ────────────────────────────────────────
 // Vercel + Supabase auth session, no teacher role metadata. Same layout as dev admin mode.
-function OnlineAdminPortal({ onLogout }) {
+function OnlineAdminPortal({ session, onLogout }) {
   const activePage = useStore(s => s.activePage)
 
   const pages = {
+    schoolAttendance: <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
     quizzes:    <QuizzesPage />,
@@ -179,10 +245,11 @@ function OnlineAdminPortal({ onLogout }) {
 // Loads read-only data from Supabase faculty_state on mount.
 // Syllabus/timetable/settings come from faculty_state JSONB;
 // exams come from normalised tables via loadExamsFromSupabase.
-function TeacherPortal({ onLogout }) {
+function TeacherPortal({ session, onLogout }) {
   const loadRemoteData          = useStore(s => s.loadRemoteData)
   const loadExamsFromSupabase   = useStore(s => s.loadExamsFromSupabase)
   const loadQuizzesFromSupabase = useStore(s => s.loadQuizzesFromSupabase)
+  const setActivePage           = useStore(s => s.setActivePage)
   const activePage              = useStore(s => s.activePage)
   const [loaded, setLoaded]     = useState(false)
 
@@ -192,12 +259,16 @@ function TeacherPortal({ onLogout }) {
       if (data) loadRemoteData(data)
       await loadExamsFromSupabase()
       await loadQuizzesFromSupabase()
+      // Filing today's periods is the job a teacher opens this for — land there,
+      // not on the Dashboard. Set once on mount so later navigation sticks.
+      setActivePage('schoolAttendance')
       setLoaded(true)
     }
     loadAll()
   }, [])
 
   const pages = {
+    schoolAttendance: <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
     quizzes:    <QuizzesPage />,

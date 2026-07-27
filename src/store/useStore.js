@@ -13,6 +13,7 @@ import { createSyllabusSlice } from './slices/syllabusSlice'
 import { createTimetableSlice } from './slices/timetableSlice'
 import { createAttendanceSlice } from './slices/attendanceSlice'
 import { createLectureAbsenceSlice } from './slices/lectureAbsenceSlice'
+import { createSubmissionSlice }     from './slices/submissionSlice'
 import { createCheckpointSlice }     from './slices/checkpointSlice'
 import { createLeavesSlice }         from './slices/leavesSlice'
 import { createHomeworkSlice }       from './slices/homeworkSlice'
@@ -267,6 +268,7 @@ const useStore = create((set, get) => ({
   ...createTimetableSlice(set, get),
   ...createAttendanceSlice(set, get),
   ...createLectureAbsenceSlice(set, get),
+  ...createSubmissionSlice(set, get),
   ...createCheckpointSlice(set, get),
   ...createLeavesSlice(set, get),
   ...createHomeworkSlice(set, get),

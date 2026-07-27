@@ -16,14 +16,14 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Activity logs | `student_attendance`, `student_logins` | 2402 + 193 |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
-| Event logs | `lecture_absences`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 2 + 876 + 0 |
+| Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
 | Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 
-20 tables. All RLS-enabled except `student_logins` — see warning below. `teacher_feedback` is the only role-restricted policy (superadmin); `teacher_calendar_blocks` has no public policy (service-role only).
+21 tables. All RLS-enabled except `student_logins` — see warning below. **Two** role-restricted policies: `teacher_feedback` (superadmin-only, read+write) and `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -130,7 +130,7 @@ Boarder attendance across hostel roll + mess meals. **Exception-capture model**,
 |---|---|---|---|
 | `id` | uuid PK | `gen_random_uuid()` | |
 | `lws_id` | text | — | FK → `students(lws_id)` |
-| `date` | text | — | `DD-MM-YYYY` (matches `student_attendance` / `lecture_absences`) |
+| `date` | text | — | `YYYY-MM-DD` (matches `student_attendance` / `lecture_absences` — verified against live rows 2026-07-27; this said `DD-MM-YYYY` in error) |
 | `checkpoint` | text | — | `hostel_am` / `breakfast` / `lunch` / `dinner` / `hostel_pm` |
 | `status` | text | `'absent'` | `absent` / `sick` / `outpass` (`leave` lives in `leaves`) |
 | `note` | text | nullable | |
@@ -267,6 +267,26 @@ Indexes: `(lws_id, generated_at DESC)`, `(student_name, generated_at DESC)`.
 | **UNIQUE** | `(lws_id, date, slot_id)` | | Was `(…, subject)` until 2026-05-21 — same-subject double periods collapsed |
 
 Indexes: `(date)`, `(lws_id, date)`, `(slot_id)`. RLS ✓ authenticated (`faculty_rw`). Replace-set per period via `setLectureAbsenteesForPeriod(date, slotId, subject, lwsIds, { startTime?, endTime? })` (delete-by-`(date,slot_id)` then insert). **Impromptu lectures** (not in the timetable) use a minted `adhoc_*` `slot_id` + the optional time columns; they reconstruct from these rows since there's no timetable to re-derive from.
+
+### `lecture_submissions` — one row per period that was actually FILED (2026-07-27)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `date` | text NOT NULL | — | `YYYY-MM-DD`, matches `lecture_absences` |
+| `slot_id` | text NOT NULL | — | Timetable slot, or `adhoc_*` |
+| `batch_name` | text NOT NULL | — | Part of the identity: slot ids are per-timetable, so two batches can share one |
+| `subject` | text | nullable | Display convenience |
+| `teacher_id` | text | nullable | `timetableTeachers[].id` — JSONB-owned, so no FK |
+| `absent_count` | integer NOT NULL | `0` | Denormalised for the board; `lecture_absences` stays authoritative |
+| `submitted_by` | text | nullable | Auth session email |
+| `submitted_at` | timestamptz NOT NULL | `now()` | Written explicitly by the slice — the default never re-applies on the UPDATE half of an upsert |
+| `source` | text NOT NULL | `'teacher'` | `teacher` (`/school-attendance`) or `admin` (Lecture log tab) |
+| **UNIQUE** | `(date, slot_id, batch_name)` | | Upsert key — re-editing a period updates, never stacks |
+
+Indexes: `(date)`, `(teacher_id)`. RLS ✓ authenticated (`faculty_rw`) — teachers must be able to write this.
+
+**Why it exists:** `lecture_absences` is an exception log, so zero rows means BOTH "filed, nobody absent" AND "never filed". Centralised capture made that harmless (the office knew what it had done); teacher-filed capture does not. A row here means "this period was accounted for" — `filed` is read from this table alone, never from an absentee count. Slice: `submissionSlice.js`; pure pairing + board aggregation in `src/lib/teacherDay.js` (`withFilingStatus`, `buildFilingBoard`). See [`FLOWS.md`](./FLOWS.md) → "School attendance".
 
 ### `homework_pending` — one row per (student, day, subject, chapter, type) flagged
 
@@ -460,11 +480,11 @@ Indexes: `(teacher_id, date)`, `(lws_id)`. RLS ✓ authenticated (`faculty_rw`).
 
 | Table | RLS | Policy |
 |---|---|---|
-| `faculty_state` | ✓ | Authenticated only |
+| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** `(auth.jwt() -> 'user_metadata' ->> 'role') = 'teacher'`. Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
-| `lecture_absences`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) |
+| `lecture_absences`, `lecture_submissions`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) — teachers write `lecture_absences` + `lecture_submissions` from `/school-attendance` |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The only role-restricted policy. |
 | **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |

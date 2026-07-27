@@ -7,6 +7,11 @@ const mockStore = {
   timetableMappings: [],
   setLectureAbsenteesForPeriod: vi.fn(),
   getLectureAbsencesForDate: vi.fn(),
+  // FilingBoard (rendered at the top of the tab) reads these; omitting them
+  // throws at effect time and takes the whole suite down.
+  timetableTeachers: [],
+  submitLecture: vi.fn(),
+  getSubmissionsForDate: vi.fn(),
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
   lectureMissSendHistory: {},
@@ -59,6 +64,8 @@ beforeEach(() => {
   mockStore.timetableMappings = MAPPINGS
   mockStore.lectureMissSendHistory = {}
   mockStore.getLectureAbsencesForDate.mockResolvedValue([])
+  mockStore.getSubmissionsForDate.mockResolvedValue([])
+  mockStore.submitLecture.mockResolvedValue(true)
   mockStore.setLectureAbsenteesForPeriod.mockResolvedValue(true)
   mockStore.getActiveLeaves.mockResolvedValue([])   // no leaves by default (non-hostel)
   mockStore.endLeave.mockResolvedValue(true)

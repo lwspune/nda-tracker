@@ -4,6 +4,11 @@ import { APP_NAME, APP_SUB } from '../../config'
 import { useMode } from '../../context/ModeContext'
 
 const NAV = [
+  // Teachers land here (see TeacherPortal); the /school-attendance link is the
+  // other way in. Hidden from admins — an admin's email doesn't resolve to a
+  // teacher record, so the page would be empty for them. Their view of the same
+  // data is the filing board on Attendance → Lecture log.
+  { id: 'schoolAttendance', icon: '✍', label: 'My Lectures', teacherOnly: true },
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'exams',     icon: '📝', label: 'Exams' },
   { id: 'quizzes',   icon: '❓', label: 'Daily Quiz' },
@@ -38,7 +43,9 @@ export default function Sidebar({ onLogout }) {
     .length
 
   const visibleNav = NAV.filter(n =>
-    !(mode !== 'admin' && n.adminOnly) && !(n.superadminOnly && !isSuperadmin)
+    !(mode !== 'admin' && n.adminOnly) &&
+    !(n.superadminOnly && !isSuperadmin) &&
+    !(n.teacherOnly && mode !== 'teacher')
   )
 
   function navigate(id) {

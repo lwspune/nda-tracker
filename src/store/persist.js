@@ -178,6 +178,11 @@ async function doSave(data) {
   if (staleLock) return                    // already lost the race — never clobber
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return
+  // Teacher sessions never write the blob. RLS is the real boundary (faculty_state
+  // write policies exclude role='teacher'), but stopping here matters for UX: an
+  // RLS-blocked UPDATE matches zero rows, which the version guard below would
+  // read as a lost race and show a teacher the "your data is out of date" banner.
+  if (session.user?.user_metadata?.role === 'teacher') return
   // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
   const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
 

@@ -90,9 +90,25 @@ Two related signals beyond daily P/A, both surfacing on the Attendance page (`sr
 Expansion model is `expanded: { month, kind } | null` at the component level — single-open across the whole component. Clicking a chip in any month opens it and auto-collapses any other open chip (in the same month OR a different month). Months that have only `L` rows still render a ring at 0%, same applies for months with only lecture/exam misses.
 
 **UI guardrails:**
-- Tab strip on Attendance: `Class metrics` (existing content + `LateMarkingWidget` at top, admin-only) / `Lecture log` (new). `LectureLogTab` is shown to admin only; teachers see only Class metrics.
+- Tab strip on Attendance: `Class metrics` (existing content + `LateMarkingWidget` at top, admin-only) / `Lecture log` (new). `LectureLogTab` is shown to admin only; teachers see only Class metrics **on this page** — their capture surface is `/school-attendance` (below).
 - "Send Morning Late Notifications" disabled until at least one L row exists for the day; "Send Lecture-Miss Notifications" disabled until at least one lecture absence is logged for the (date, batch) pair.
 - After send, a fixed-bottom `Alert` shows `sent` / `skipped` counts (or the error). Dismissable.
+
+### School attendance — teacher-filed capture (`/school-attendance`, 2026-07-27)
+
+Distributes lecture-attendance capture from the office to the teachers who actually took the period. "School" distinguishes it from the hostel & mess attendance surface.
+
+**The link.** One URL for everyone — `nda-tracker.vercel.app/school-attendance`. No token, no per-teacher variant: `vercel.json`'s SPA rewrite already serves `index.html` for any non-`api` path, `src/lib/routing.js` `isSchoolAttendancePath` gives it meaning (stripping `BASE_URL` for the gh-pages build), and what renders depends on whoever is signed in on that device. Signed out → the normal login page, then back here (the path is not rewritten away). Sessions persist (`persistSession` default), so it's a sign-in-once-per-device link that teachers keep on their home screen (`public/manifest.webmanifest`, `start_url: "."`).
+
+**Who sees what.** Session email → `timetableTeachers[].email` → `teacher.id` → `timetableMappings[].teacherId` → today's grid cells, across every batch, ordered by clock time (`getTeacherLecturesForDate`). The email join has no FK behind it, so the match is case/whitespace-forgiving and **falls closed**: no teacher record → empty day + "not linked to a teacher record" (never the whole school's timetable). Teachers also land here by default in the portal (`TeacherPortal` sets `activePage='schoolAttendance'`) and can return via the teacher-only **My Lectures** nav item.
+
+**Filing a period.** One card per lecture → `MarkAbsenteesModal` (the same present/absent toggle, on-leave locking and "returned?" action the admin Lecture log uses) → two writes in order: `setLectureAbsenteesForPeriod` (exception rows), then `submitLecture` (the filing row) — and the second only if the first succeeded. Roster comes from `buildOfflineRoster(studentProfiles, [batch])`, which drops Block/Quit/Inactive so they can't appear as phantom absentees.
+
+**Filed vs silent — the point of the whole thing.** `lecture_absences` is an exception log, so no rows means both "everyone turned up" and "nobody filed". `lecture_submissions` (one row per `date, slot_id, batch_name`) carries the difference, and `filed` is read from that row alone. Cards show **Filed** / **Not filed**; the page footer states plainly that an empty period still needs filing.
+
+**Admin side.** `FilingBoard` at the top of Attendance → Lecture log: `filed/total` for the date (all batches, or the selected one), collapsed to a chase-list of `teacher · subject · batch` for outstanding periods, expandable to a full table. Periods whose mapping has **no** teacher are kept here (invisible on the teacher page, since nobody owns them) — an unowned period is the gap worth seeing. The admin's own marking in `LectureLogTab` writes a filing too (`source:'admin'`), so centrally-handled periods leave the outstanding list.
+
+**Boundaries.** Capture only — every parent-facing send stays admin-side (`send-late-notifications` / `send-homework-pending` / `send-exam-absence` / `send-attendance-alerts` all 403 `role='teacher'`), which also keeps send-history writes off teacher clients. Teachers cannot write `faculty_state` (DB policy + an early return in `persist.js`). Scope: timetabled periods only, attendance only (homework is Phase 2), late marking still front-desk, daily P/A still from the XLS import.
 
 ### Homework / Notes incomplete-work flow (Attendance page, 2026-06-04)
 

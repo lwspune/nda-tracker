@@ -3,6 +3,7 @@ import useStore from '../../store/useStore'
 import { getTodaysLectures } from '../../lib/timetable'
 import { resolveOnLeave } from '../../lib/analytics/chain'
 import MarkAbsenteesModal from './MarkAbsenteesModal'
+import FilingBoard from './FilingBoard'
 
 function todayIso() {
   const d = new Date()
@@ -28,6 +29,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const timetables         = useStore(s => s.timetables)
   const mappings           = useStore(s => s.timetableMappings)
   const setForPeriod       = useStore(s => s.setLectureAbsenteesForPeriod)
+  const submitLecture      = useStore(s => s.submitLecture)
   const getAbsencesForDate = useStore(s => s.getLectureAbsencesForDate)
   const getActiveLeaves    = useStore(s => s.getActiveLeaves)
   const endLeave           = useStore(s => s.endLeave)
@@ -56,6 +58,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
   const [leaveRowByLwsId, setLeaveRowByLwsId] = useState({}) // lwsId → { id } for "mark returned"
   const [leaveRefresh, setLeaveRefresh] = useState(0)        // bump to reload leaves
+  const [filingRefresh, setFilingRefresh] = useState(0)      // bump to reload the filing board
 
   // Available batches: union of all timetable batch names
   const availableBatches = useMemo(() => {
@@ -194,6 +197,18 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       : await setForPeriod(date, modalSlot.slotId, modalSlot.subject, lwsIds)
     if (ok) {
       setAbsencesBySlot(prev => ({ ...prev, [modalSlot.slotId]: lwsIds }))
+      // Record the filing here too, so a period the office marked centrally
+      // doesn't sit on the outstanding list waiting for a teacher who already
+      // has nothing to do. `source` keeps the two paths distinguishable.
+      await submitLecture({
+        date,
+        slotId: modalSlot.slotId,
+        batchName,
+        subject: modalSlot.subject,
+        absentCount: lwsIds.length,
+        source: 'admin',
+      })
+      setFilingRefresh(n => n + 1)
     }
   }
 
@@ -241,6 +256,9 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
 
   return (
     <div>
+      {/* Who has / hasn't filed — teachers now capture their own periods */}
+      <FilingBoard date={date} batchName={batchName || null} refreshKey={filingRefresh} />
+
       {/* Pickers */}
       <div className="flex flex-wrap gap-3 items-end mb-5">
         <label className="flex flex-col gap-1">
