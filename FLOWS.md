@@ -110,6 +110,22 @@ Distributes lecture-attendance capture from the office to the teachers who actua
 
 **Boundaries.** Capture only — every parent-facing send stays admin-side (`send-late-notifications` / `send-homework-pending` / `send-exam-absence` / `send-attendance-alerts` all 403 `role='teacher'`), which also keeps send-history writes off teacher clients. Teachers cannot write `faculty_state` (DB policy + an early return in `persist.js`). Scope: timetabled periods only, attendance only (homework is Phase 2), late marking still front-desk, daily P/A still from the XLS import.
 
+### Hostel & mess — staff-filed capture (`/hostel-mess-attendance`, 2026-07-27)
+
+The warden/mess counterpart of school attendance. Centralised capture had failed: 10 `checkpoint_absences` rows on a single day — all written by a `reconciliation:mess-register` script, none by the UI — and `checkpoint_confirmations` never written at all. Five checkpoints × ~200 boarders × every day is not something an office types second-hand.
+
+**Access.** The `hostelAccess` flag on the person's `timetableTeachers[]` record, toggled in Settings → Teachers (a 🏠 badge marks who has it). Deliberately **not** a new auth role — every permission gate in the codebase is a deny-list on `role === 'teacher'`, so a new role would inherit admin defaults; see [`GUARDRAILS.md`](./GUARDRAILS.md). Falls closed on unknown emails. A warden who teaches nothing simply has a teacher record with no mappings.
+
+**Capture.** Pick the checkpoint (Morning Roll / Breakfast / Lunch / Dinner / Night Roll), tap only the boarders who aren't there — tapping cycles absent → sick → out-pass → present. Everyone else is present by default. Save writes the whole exception set for that (date, checkpoint) via `setCheckpointExceptions`; an empty set clears the checkpoint. **Roll** checkpoints additionally ask for a physical headcount and reconcile it against `roster − away` (`confirmRoll`); a mismatch is persisted as `reconciled=false`, an open incident. Meals are exception-only.
+
+**On leave.** Locked, shown as "On leave", and filtered out of the exception set before saving — a leave explains every checkpoint in its window. Same rule as the lecture flow.
+
+**Roster.** `buildBoarderRoster` (`src/lib/hostelRoster.js`), shared with the admin Hostel tab so the two lists can't disagree. `HOSTEL_BRANCHES = ['APJ']` bounds the cohort — `residential` cannot, being true for all but one student across both branches.
+
+**Dates are DD-MM-YYYY** here, unlike everywhere else in the app. This page never reads `student_attendance`, so it needs no conversion; the admin board and the alert endpoint do, and now convert (see the date-format invariant in [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)).
+
+**Still admin-side:** the chain/anomaly board, the warden WhatsApp alert, and leave management.
+
 ### Homework / Notes incomplete-work flow (Attendance page, 2026-06-04)
 
 A third Attendance tab (**Homework / Notes**, admin-only) lets faculty flag students with incomplete homework/notes per subject + chapter and alert parents. Structurally a near-clone of the lecture-miss flow, keyed by (subject, chapter, type) instead of (slot_id) and with a resolution stamp the absence flows don't have.

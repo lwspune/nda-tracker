@@ -701,10 +701,6 @@ The in-app marks grid shipped this session (commit `95ae7be`, pushed to `main` �
 
 **How to apply:** in `applyPaste`, compare `values.length` against `roster.length` and surface a mismatch **before** applying — either a confirm ("Pasted 20 values for 18 students — the list may not match this roster") or a non-blocking `Alert` after the fill stating how many were used and how many dropped. Keep the short-paste case silent (it's the intended top-up). `parseMarksPaste` already returns the full parsed array, so no change to the pure helper — this is a UI guard only. Add a modal test for the long-paste warning.
 
----
-
-## 2026-07-27
-
 ### Verify the `/school-attendance` teacher flow in a real browser (Definition-of-Done gap)
 
 Phase 1 shipped with TDD coverage (1967 green), baseline-clean lint and the migration applied to production Supabase — but **not click-verified**. Everything that matters here needs a live session and live data, which unit tests fixture away.
@@ -734,3 +730,43 @@ Deliberately out of Phase 1 scope, in rough priority order:
 **Why:** a misleading name on a shared helper invites the next person to write a second copy rather than reuse this one, which is how the duplication rule gets violated in good faith.
 
 **How to apply:** rename to `buildBatchRoster` in a module named for the concept, keeping `buildOfflineRoster` as a thin re-export if anything external depends on it. Touches shipped code (`OfflineExamModal` + its tests), so it needs a 360 + explicit go-ahead — logged here rather than done silently. Low urgency; bundle it with the next change in that area.
+
+### Teacher mobile bottom nav is now nine items
+
+Adding the teacher-only **My Lectures** entry took the teacher-mode nav from 8 items to 9. The desktop sidebar is fine; the mobile bottom bar (`Sidebar.jsx`, `visibleNav.map`) lays every item out in one flex row, so at 9 the labels get very tight on a small phone — which is exactly the device teachers will use.
+
+**Why:** the crowding predates this change (8 was already a lot) but the attendance rollout is what puts teachers on phones daily, so it stops being cosmetic. A mis-tap on a cramped bar during a lecture changeover is the realistic failure.
+
+**How to apply:** options, cheapest first — (a) cap the mobile bottom bar at the 4–5 most-used items per mode and move the rest into the existing drawer (the drawer already renders the full `visibleNav`); (b) make the bottom bar horizontally scrollable; (c) shorten labels in teacher mode. (a) is the conventional pattern and needs no new component. Worth checking on a real handset before deciding — it may be tolerable.
+
+### `App.jsx` still lacks the intentional-pattern lint disable
+
+CLAUDE.md's lint section notes that `App.jsx` and `StudentView.jsx` carry the same deliberate `react-hooks/set-state-in-effect` pattern as the files that have an inline disable comment, "add it if you touch those lines". `App.jsx` was edited this session, but not on the offending line (the auth listener at ~L42), so the disable was deliberately not added — it stays one of the 9 baseline lint errors.
+
+**Why:** the baseline error count is the signal used to tell "my change is clean" from "my change broke something". Every un-annotated intentional error dilutes it, and the number is checked by hand each session.
+
+**How to apply:** either add the `// eslint-disable-next-line react-hooks/set-state-in-effect` comment at the four intentional sites (`App.jsx` auth listener, `StudentView.jsx` ×4, `MissedExams.jsx`, `quizTaking.jsx`) so `npm run lint` reaches zero errors, or decide the pattern is fine and disable the rule project-wide in `eslint.config.js` with a comment saying why. Either beats a permanent non-zero baseline; the first is more honest, the second is one line.
+
+### Memory index entries run well past the 150-character guideline
+
+12 of the 47 pointers in `MEMORY.md` exceed 160 characters (longest 335). Left unchanged this run: the long text is doing real work — recall matches against these descriptions, so truncating them would trade index tidiness for worse retrieval.
+
+**Why:** it is a genuine judgement call, not an oversight, and it should be made deliberately rather than by a doc-maintenance pass silently shortening them.
+
+**How to apply:** either relax the guideline (and say so in the skill's expectations), or trim only the entries whose length comes from *restating* the memory body rather than from distinct recall hooks — `project_whatsapp_block_gate` (302) and `project_open_ended_leave` (335) are the two clearest candidates. The store is also 350 KB total with `project_completed_archive.md` alone at 115 KB; folding its pre-2026-06 rows into a summary block (the file already did this once for the pre-Vercel era) would halve it.
+
+### Meal checkpoints have no filed-vs-silent record
+
+Roll checkpoints get `checkpoint_confirmations` (headcount + `reconciled`), so "the warden did the night roll" is recorded. Meals have nothing: an unmarked breakfast and a breakfast where everyone showed up are both zero `checkpoint_absences` rows. Now that mess staff file their own meals, that ambiguity is live — the same gap `lecture_submissions` was created to close for lectures.
+
+**Why:** it is the failure mode that hides itself. An unfiled meal reads as a clean one, so nobody is chased and the gap never surfaces. The hostel subsystem already models the concept (`checkpoint_confirmations`), it just doesn't cover meals.
+
+**How to apply:** the table's `expected_count` / `confirmed_present` / `reconciled` are all `NOT NULL`, so extending it to meals needs either a migration making them nullable (a meal has no headcount) or a "filed" row with sentinel counts — the former is cleaner. Then add a filed/outstanding strip to the admin Hostel tab mirroring `FilingBoard`, and drop the `ROLL_CHECKPOINTS` guard in `confirmRoll` accordingly. Deferred because it needs a schema change and was outside the requested scope.
+
+### `residential` is wrong for all 126 LWS Pune students
+
+Every LWS Pune student is flagged `residential = true`, but LWS Pune has no boarders (confirmed 2026-07-27). Harmless today because `HOSTEL_BRANCHES = ['APJ']` bounds the hostel cohort, so the flag is never the deciding filter — 325 of 326 students are flagged residential, meaning the column carries no signal at all.
+
+**Why:** it is a loaded gun rather than a live bug. Anyone who later relaxes the branch filter — reasonably assuming `residential` is what identifies boarders — pulls the entire LWS Pune roster into the hostel marking board and the warden alert.
+
+**How to apply:** either set `residential = false` for the 126 LWS Pune rows (a one-line UPDATE, but it is real student data so it needs an explicit go-ahead), or drop the column from the boarder predicate entirely and let branch be the single source of scope. The second is arguably more honest given the column has never been curated. `buildBoarderRoster` and the alert endpoint's `.eq('residential', true)` would both need to agree either way.

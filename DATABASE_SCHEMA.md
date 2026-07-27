@@ -130,7 +130,7 @@ Boarder attendance across hostel roll + mess meals. **Exception-capture model**,
 |---|---|---|---|
 | `id` | uuid PK | `gen_random_uuid()` | |
 | `lws_id` | text | — | FK → `students(lws_id)` |
-| `date` | text | — | `YYYY-MM-DD` (matches `student_attendance` / `lecture_absences` — verified against live rows 2026-07-27; this said `DD-MM-YYYY` in error) |
+| `date` | text | — | **`DD-MM-YYYY`** — the hostel subsystem's format, written by `HostelTab` / `HostelAttendancePage` / `send-attendance-alerts`. Deliberately **unlike** `student_attendance` and `lecture_absences`, which are `YYYY-MM-DD`. See the date-format invariant below. |
 | `checkpoint` | text | — | `hostel_am` / `breakfast` / `lunch` / `dinner` / `hostel_pm` |
 | `status` | text | `'absent'` | `absent` / `sick` / `outpass` (`leave` lives in `leaves`) |
 | `note` | text | nullable | |
@@ -139,6 +139,8 @@ Boarder attendance across hostel roll + mess meals. **Exception-capture model**,
 | **UNIQUE** | `(lws_id, date, checkpoint)` | | delete-then-insert per (date, checkpoint) card |
 
 Index: `(date)`, `(lws_id)`. The `class` checkpoint in the chain view is **derived** from `student_attendance`, never stored here.
+
+> **⚠ Date-format invariant (fixed 2026-07-27).** The hostel subsystem stores **`DD-MM-YYYY`** (`checkpoint_absences`, `checkpoint_confirmations`, both UIs, the alert endpoint). Every other dated table stores **`YYYY-MM-DD`**. So any hostel code path that reads `student_attendance` **must convert** (`dmyToIso`) — `HostelTab.loadDay` and `send-attendance-alerts`'s attendance query both do. They previously did not, so the query matched nothing and the chain's derived `class` checkpoint silently fell back to its default (`present`) for **every boarder on every date**, in both the board and the warden alert. Regression tests: `HostelTab.test.jsx` "date format per table" and `send-hostel-alert.test.js` "date format per table". A handful of legacy rows written by a `reconciliation:mess-register` script are stored ISO and are therefore invisible to the UI — 10 rows from one breakfast, left as-is.
 
 ### `leaves` — leave / out-pass (the honesty mechanism)
 
