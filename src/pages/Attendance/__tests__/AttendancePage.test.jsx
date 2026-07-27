@@ -28,6 +28,9 @@ const mockStore = {
   timetableMappings: [],
   setLectureAbsenteesForPeriod: vi.fn().mockResolvedValue(true),
   getLectureAbsencesForDate: vi.fn().mockResolvedValue([]),
+  // Leave-awareness deps — needed now that a test actually opens the tab
+  getActiveLeaves: vi.fn().mockResolvedValue([]),
+  endLeave: vi.fn().mockResolvedValue(true),
   // FilingBoard, via the Lecture log tab
   timetableTeachers: [],
   submitLecture: vi.fn().mockResolvedValue(true),
@@ -106,5 +109,57 @@ describe('AttendancePage — student row navigation', () => {
     await screen.findByRole('button', { name: 'Arjun Sharma' })
     expect(screen.queryByRole('button', { name: 'LWS-999' })).not.toBeInTheDocument()
     expect(screen.getByText('LWS-999')).toBeInTheDocument()
+  })
+})
+
+// ── Tab state survives switching ─────────────────────────────────
+// Tabs used to be rendered with a conditional, so switching UNMOUNTED the tab
+// and destroyed its local state. On the Hostel tab that silently discarded
+// unsaved marks; on Lecture log it reset the date/batch selection. Tabs now
+// stay mounted once visited and are hidden with the `hidden` attribute.
+describe('AttendancePage — tab state is preserved across switches', () => {
+  beforeEach(() => {
+    mockStore.studentProfiles = {}
+    mockAttendanceRecords([])
+  })
+
+  function panel(name) {
+    return document.querySelector(`[data-testid="tabpanel-${name}"]`)
+  }
+
+  it('does not mount a tab until it is first opened', async () => {
+    render(<AttendancePage />)
+    expect(panel('class-metrics')).toBeInTheDocument()
+    expect(panel('lecture-log')).not.toBeInTheDocument()
+  })
+
+  it('keeps the tab mounted (hidden) after switching away, preserving its state', async () => {
+    render(<AttendancePage />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Lecture log' }))
+    const lecture = panel('lecture-log')
+    expect(lecture).toBeInTheDocument()
+    expect(lecture.hasAttribute('hidden')).toBe(false)
+
+    // Change the tab's own date — this is the state that used to vanish.
+    const dateInput = lecture.querySelector('input[type="date"]')
+    fireEvent.change(dateInput, { target: { value: '2026-05-21' } })
+    expect(dateInput.value).toBe('2026-05-21')
+
+    // Leave and come back.
+    fireEvent.click(screen.getByRole('tab', { name: 'Class metrics' }))
+    expect(panel('lecture-log')).toBeInTheDocument()          // still mounted
+    expect(panel('lecture-log').hasAttribute('hidden')).toBe(true)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Lecture log' }))
+    expect(panel('lecture-log').querySelector('input[type="date"]').value).toBe('2026-05-21')
+  })
+
+  it('hides the inactive panel via the hidden attribute, not by unmounting', async () => {
+    render(<AttendancePage />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Lecture log' }))
+
+    expect(panel('class-metrics').hasAttribute('hidden')).toBe(true)
+    expect(panel('lecture-log').hasAttribute('hidden')).toBe(false)
   })
 })

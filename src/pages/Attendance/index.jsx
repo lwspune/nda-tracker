@@ -103,6 +103,16 @@ export default function AttendancePage() {
   const [importing,       setImporting]       = useState(false)
   const [importResult,    setImportResult]    = useState(null)
   const [activeTab,       setActiveTab]       = useState('class-metrics')
+  // Tabs are mounted on first visit and then kept mounted, hidden rather than
+  // unmounted. Unmounting destroyed the tab's local state: on Hostel & Mess
+  // that silently discarded unsaved marks, on Lecture log / Homework it reset
+  // the date + batch selection. Lazy-on-first-visit (rather than mounting all
+  // four up front) keeps the page-load queries to the tabs actually opened.
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['class-metrics']))
+  function openTab(id) {
+    setActiveTab(id)
+    setVisitedTabs(prev => (prev.has(id) ? prev : new Set(prev).add(id)))
+  }
   const fileInputRef = useRef(null)
 
   const today = useMemo(todayIso, [])
@@ -386,7 +396,7 @@ export default function AttendancePage() {
           type="button"
           role="tab"
           aria-selected={activeTab === 'class-metrics'}
-          onClick={() => setActiveTab('class-metrics')}
+          onClick={() => openTab('class-metrics')}
           className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
             ${activeTab === 'class-metrics' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
         >
@@ -397,7 +407,7 @@ export default function AttendancePage() {
             type="button"
             role="tab"
             aria-selected={activeTab === 'lecture-log'}
-            onClick={() => setActiveTab('lecture-log')}
+            onClick={() => openTab('lecture-log')}
             className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
               ${activeTab === 'lecture-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
           >
@@ -409,7 +419,7 @@ export default function AttendancePage() {
             type="button"
             role="tab"
             aria-selected={activeTab === 'homework-log'}
-            onClick={() => setActiveTab('homework-log')}
+            onClick={() => openTab('homework-log')}
             className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
               ${activeTab === 'homework-log' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
           >
@@ -421,7 +431,7 @@ export default function AttendancePage() {
             type="button"
             role="tab"
             aria-selected={activeTab === 'hostel'}
-            onClick={() => setActiveTab('hostel')}
+            onClick={() => openTab('hostel')}
             className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
               ${activeTab === 'hostel' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
           >
@@ -430,13 +440,23 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {activeTab === 'lecture-log' && mode === 'admin' ? (
-        <LectureLogTab onSend={handleSendLectureMiss} />
-      ) : activeTab === 'homework-log' && mode === 'admin' ? (
-        <HomeworkLogTab onSend={handleSendHomework} />
-      ) : activeTab === 'hostel' && mode === 'admin' ? (
-        <HostelTab />
-      ) : (
+      {mode === 'admin' && visitedTabs.has('lecture-log') && (
+        <div role="tabpanel" data-testid="tabpanel-lecture-log" hidden={activeTab !== 'lecture-log'}>
+          <LectureLogTab onSend={handleSendLectureMiss} />
+        </div>
+      )}
+      {mode === 'admin' && visitedTabs.has('homework-log') && (
+        <div role="tabpanel" data-testid="tabpanel-homework-log" hidden={activeTab !== 'homework-log'}>
+          <HomeworkLogTab onSend={handleSendHomework} />
+        </div>
+      )}
+      {mode === 'admin' && visitedTabs.has('hostel') && (
+        <div role="tabpanel" data-testid="tabpanel-hostel" hidden={activeTab !== 'hostel'}>
+          <HostelTab />
+        </div>
+      )}
+
+      <div role="tabpanel" data-testid="tabpanel-class-metrics" hidden={activeTab !== 'class-metrics'}>
         <>
           {mode === 'admin' && (
             <LateMarkingWidget date={today} onSend={handleSendLate} />
@@ -584,7 +604,7 @@ export default function AttendancePage() {
           )
       }
         </>
-      )}
+      </div>
 
       {/* Send-result alert */}
       {sendResult && (
