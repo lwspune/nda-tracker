@@ -55,6 +55,16 @@ function istTodayDmy() {
   return `${String(ist.getUTCDate()).padStart(2, '0')}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${ist.getUTCFullYear()}`
 }
 
+// The hostel subsystem speaks DD-MM-YYYY (checkpoint_absences,
+// checkpoint_confirmations, the UI picker). `student_attendance` — like every
+// non-hostel table — stores YYYY-MM-DD, so it MUST be queried in ISO. Passing
+// the DMY string matched nothing, which made the chain's derived `class`
+// checkpoint fall back to its default (present) for every boarder, every day.
+function dmyToIso(dmy) {
+  const [d, m, y] = String(dmy).split('-')
+  return `${y}-${m}-${d}`
+}
+
 // Local-IST day bounds for a DD-MM-YYYY date (for leave-overlap arithmetic).
 function dayBounds(dmy) {
   const [d, m, y] = dmy.split('-')
@@ -252,7 +262,8 @@ async function handleHostelAlert(req, res) {
     .eq('branch', 'APJ').eq('account_status', 'Active').eq('residential', true)
   if (rErr) { res.status(500).json({ ok: false, error: 'Failed to load roster: ' + rErr.message }); return }
 
-  const { data: attendanceRows, error: aErr } = await svc.from('student_attendance').select('lws_id, status').eq('date', day)
+  // ISO here — student_attendance does not use the hostel DMY format.
+  const { data: attendanceRows, error: aErr } = await svc.from('student_attendance').select('lws_id, status').eq('date', dmyToIso(day))
   if (aErr) { res.status(500).json({ ok: false, error: 'Failed to load attendance: ' + aErr.message }); return }
 
   const { data: checkpointRows, error: cErr } = await svc.from('checkpoint_absences').select('lws_id, checkpoint, status').eq('date', day)

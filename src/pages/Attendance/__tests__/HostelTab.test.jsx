@@ -253,3 +253,24 @@ describe('HostelTab — chain view', () => {
     expect(await screen.findByText(/Warden alerted/i)).toBeInTheDocument()
   })
 })
+
+// The board works in DD-MM-YYYY, but student_attendance stores YYYY-MM-DD.
+// Passing the DMY string matched nothing, so the chain's derived `class`
+// checkpoint fell back to its default (present) for every boarder, every day.
+describe('HostelTab — date format per table', () => {
+  it('reads student_attendance in ISO while the checkpoint tables stay DD-MM-YYYY', async () => {
+    render(<HostelTab />)
+
+    await waitFor(() => expect(mockStore.fetchDailyAttendance).toHaveBeenCalled())
+
+    const attendanceArg = mockStore.fetchDailyAttendance.mock.calls[0][0]
+    expect(attendanceArg).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+    const checkpointArg = mockStore.getCheckpointExceptionsForDate.mock.calls[0][0]
+    expect(checkpointArg).toMatch(/^\d{2}-\d{2}-\d{4}$/)
+
+    // Same calendar day, expressed both ways.
+    const [d, m, y] = checkpointArg.split('-')
+    expect(attendanceArg).toBe(`${y}-${m}-${d}`)
+  })
+})

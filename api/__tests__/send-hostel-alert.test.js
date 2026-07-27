@@ -150,3 +150,44 @@ describe('send-hostel-alert — send', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 })
+
+// ── Date-format boundary ─────────────────────────────────────────
+// The hostel subsystem works in DD-MM-YYYY (checkpoint_absences,
+// checkpoint_confirmations, the UI date picker). `student_attendance` stores
+// YYYY-MM-DD, like every non-hostel table. Querying it with the DMY string
+// matched nothing, so the chain's `class` checkpoint silently resolved to the
+// default (present) for EVERY boarder on EVERY date — the alert could never
+// flag a class-skipper. Convert at that one boundary; leave the rest DMY.
+describe('send-attendance-alerts (hostel) — date format per table', () => {
+  function mockDbCapturing({ role = null } = {}) {
+    const eqCalls = {}   // table → { column: value }
+    const resultFor = t =>
+      t === 'faculty_state' ? { data: { data: { hostelAlertMobiles: [] } }, error: null }
+      : { data: [], error: null }
+    createClient.mockImplementation(() => ({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', user_metadata: role ? { role } : {} } } }) },
+      from: t => {
+        const result = resultFor(t)
+        const b = {
+          select: () => b,
+          eq: (col, val) => { (eqCalls[t] ||= {})[col] = val; return b },
+          lte: () => b, gte: () => b, or: () => b,
+          single: () => Promise.resolve(result),
+          then: r => r(result),
+        }
+        return b
+      },
+    }))
+    return eqCalls
+  }
+
+  it('queries student_attendance in ISO while checkpoint_absences stays DD-MM-YYYY', async () => {
+    setEnv({ template: true })
+    const eqCalls = mockDbCapturing()
+
+    await call({ date: '13-07-2026', dryRun: true })
+
+    expect(eqCalls.student_attendance?.date).toBe('2026-07-13')
+    expect(eqCalls.checkpoint_absences?.date).toBe('13-07-2026')
+  })
+})

@@ -5,16 +5,12 @@ import { EmptyState, Spinner, Alert } from '../../components/ui'
 import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
+import { buildBoarderRoster, HOSTEL_BRANCHES } from '../../lib/hostelRoster'
 import { downloadHostelLeaveReportPdf } from '../../lib/hostelLeaveReportPdf'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
 // scoped to branch='APJ'. Phase 1 — see FLOWS.md "Hostel & Mess".
-
-// Branches that have a hostel. Today just APJ (the boarder scope); adding a
-// second here makes the branch filter appear automatically. Could move to
-// config if hostel branches ever become faculty-managed.
-const HOSTEL_BRANCHES = ['APJ']
 
 // Exception status cycle on tap: present → absent → sick → outpass → present.
 const STATUS_CYCLE = { undefined: 'absent', absent: 'sick', sick: 'outpass', outpass: undefined }
@@ -111,17 +107,10 @@ export default function HostelTab() {
   // residential branch is onboarded. Day-scholars (residential === false) are
   // excluded — matches the warden-alert endpoint's `.eq('residential', true)`
   // filter so the board and the alert agree on who is a boarder.
-  const roster = useMemo(() => {
-    const out = []
-    for (const [key, p] of Object.entries(studentProfiles)) {
-      if (!p || p.name !== key) continue                 // skip variant-keyed entries
-      if (!HOSTEL_BRANCHES.includes(p.branch)) continue
-      if (p.accountStatus && p.accountStatus !== 'Active') continue
-      if (p.residential === false) continue              // day-scholar → not a boarder
-      out.push({ lwsId: p.lwsId, name: p.name, branch: p.branch, gender: p.gender, batches: p.batches || [], mobile: p.mobile || '', parentMobiles: p.parentMobiles || [] })
-    }
-    return out.sort((a, b) => a.name.localeCompare(b.name))
-  }, [studentProfiles])
+  const roster = useMemo(
+    () => buildBoarderRoster(studentProfiles, HOSTEL_BRANCHES),
+    [studentProfiles],
+  )
 
   // Filter options derived from the roster.
   const branchOptions = useMemo(() => [...new Set(roster.map(r => r.branch))].sort(), [roster])
@@ -148,7 +137,11 @@ export default function HostelTab() {
     try {
       const [cpRows, att, confs, leaves] = await Promise.all([
         getCheckpointExceptionsForDate(date),
-        fetchDailyAttendance(date),
+        // ISO — student_attendance stores YYYY-MM-DD like every non-hostel
+        // table, so the DMY `date` must be converted or the lookup silently
+        // matches nothing and every boarder's `class` checkpoint falls back to
+        // the default (present). The checkpoint tables stay DMY.
+        fetchDailyAttendance(dmyToIso(date)),
         getConfirmationsForDate(date),
         (async () => {
           const { startMs, endMs } = dayBoundsMs(date)
