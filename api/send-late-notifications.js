@@ -80,6 +80,10 @@ export default async function handler(req, res) {
   const anonClient = createClient(supabaseUrl, supabaseAnon)
   const { data: { user } } = await anonClient.auth.getUser(jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Teachers hold real sessions and capture attendance at /school-attendance,
+  // so a valid session no longer implies admin. Parent-facing sends stay with
+  // the office (mirrors api/send-attendance-alerts.js).
+  if (user.user_metadata?.role === 'teacher') { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
   const { date, redirectTo, students } = req.body || {}
   if (!date || !Array.isArray(students)) {

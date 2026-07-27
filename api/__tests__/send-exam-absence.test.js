@@ -57,7 +57,26 @@ function mockWabridge(ok = true) {
   }))
 }
 
+// Teachers hold real sessions now (/school-attendance); parent-facing sends
+// stay with the office.
+function setAuthTeacher() {
+  createClient.mockImplementation(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'teacher-uid', user_metadata: { role: 'teacher' } } },
+      }),
+    },
+  }))
+}
+
 describe('send-exam-absence', () => {
+  it('returns 403 for a teacher session', async () => {
+    setEnv(); setAuthTeacher()
+    const { res } = await call({ examName: 'Mock #5', students: [{ name: 'A', mobile: '9000000000' }] })
+    expect(res.statusCode).toBe(403)
+    expect(res.body.ok).toBe(false)
+  })
+
   it('returns 405 for non-POST', async () => {
     const { res } = await call({}, { method: 'GET' })
     expect(res.statusCode).toBe(405)

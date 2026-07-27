@@ -50,7 +50,25 @@ function mockWabridge(ok = true) {
   }))
 }
 
+// Teachers capture homework defaulters; the office sends to parents.
+function setAuthTeacher() {
+  createClient.mockImplementation(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'teacher-uid', user_metadata: { role: 'teacher' } } },
+      }),
+    },
+  }))
+}
+
 describe('send-homework-pending', () => {
+  it('returns 403 for a teacher session', async () => {
+    setEnv(); setAuthTeacher()
+    const { res } = await call({ date: '2026-06-04', students: [{ name: 'A', mobile: '9000000000', items: [] }] })
+    expect(res.statusCode).toBe(403)
+    expect(res.body.ok).toBe(false)
+  })
+
   it('returns 500 when WABRIDGE_HOMEWORK_TEMPLATE_ID missing', async () => {
     setAuthOk()
     const { res } = await call({ date: '2026-06-04', students: [] })

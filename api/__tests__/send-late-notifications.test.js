@@ -57,7 +57,27 @@ function mockWabridge(ok = true) {
   }))
 }
 
+// Teachers hold real Supabase sessions and now have write UI at
+// /school-attendance — so "authenticated" alone stops being a proxy for
+// "admin". They capture; the office sends.
+function setAuthTeacher() {
+  createClient.mockImplementation(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'teacher-uid', user_metadata: { role: 'teacher' } } },
+      }),
+    },
+  }))
+}
+
 describe('send-late-notifications', () => {
+  it('returns 403 for a teacher session', async () => {
+    setEnv(); setAuthTeacher()
+    const { res } = await call({ date: '2026-05-21', students: [{ name: 'A', mobile: '9000000000' }] })
+    expect(res.statusCode).toBe(403)
+    expect(res.body.ok).toBe(false)
+  })
+
   it('returns 405 for non-POST', async () => {
     const { res } = await call({}, { method: 'GET' })
     expect(res.statusCode).toBe(405)
