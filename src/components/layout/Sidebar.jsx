@@ -9,6 +9,8 @@ const NAV = [
   // teacher record, so the page would be empty for them. Their view of the same
   // data is the filing board on Attendance → Lecture log.
   { id: 'schoolAttendance', icon: '✍', label: 'My Lectures', teacherOnly: true },
+  // Only for staff flagged with hostelAccess in Settings → Teachers.
+  { id: 'hostelAttendance', icon: '🏠', label: 'Hostel & Mess', hostelOnly: true },
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'exams',     icon: '📝', label: 'Exams' },
   { id: 'quizzes',   icon: '❓', label: 'Daily Quiz' },
@@ -26,7 +28,7 @@ const NAV = [
 
 // Returns true if exams exist that post-date the last deploy run.
 
-export default function Sidebar({ onLogout }) {
+export default function Sidebar({ onLogout, hostelAccess = false }) {
   const activePage    = useStore(s => s.activePage)
   const setActivePage = useStore(s => s.setActivePage)
   const exams         = useStore(s => s.exams)
@@ -45,7 +47,8 @@ export default function Sidebar({ onLogout }) {
   const visibleNav = NAV.filter(n =>
     !(mode !== 'admin' && n.adminOnly) &&
     !(n.superadminOnly && !isSuperadmin) &&
-    !(n.teacherOnly && mode !== 'teacher')
+    !(n.teacherOnly && mode !== 'teacher') &&
+    !(n.hostelOnly && !hostelAccess)
   )
 
   function navigate(id) {

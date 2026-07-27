@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard } from '../teacherDay'
+import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard, hasHostelAccess } from '../teacherDay'
 
 // 2026-07-27 is a Monday; 2026-07-26 is a Sunday.
 const MONDAY = '2026-07-27'
@@ -221,5 +221,44 @@ describe('buildFilingBoard', () => {
       .toEqual({ rows: [], filed: 0, outstanding: 0 })
     expect(buildFilingBoard({ ...BOARD_ARGS, submissions: [], timetables: [] }))
       .toEqual({ rows: [], filed: 0, outstanding: 0 })
+  })
+})
+
+// Hostel/mess capture is opened to specific staff by flagging their teacher
+// record in Settings, rather than by minting a new auth role. Reusing
+// role='teacher' matters: every permission gate in the codebase is written as
+// "is this a teacher?", so a new role would inherit ADMIN defaults everywhere.
+describe('hasHostelAccess', () => {
+  const STAFF = [
+    { id: 't1', name: 'Akash Rathod Sir', email: 'akash@lwspune.com', hostelAccess: true },
+    { id: 't2', name: 'Vilas Shinde Sir', email: 'vilas@lwspune.com' },                 // flag absent
+    { id: 't3', name: 'Warden Sir',       email: 'warden@lwspune.com', hostelAccess: false },
+    { id: 't4', name: 'No Email Sir',     hostelAccess: true },                          // no email
+  ]
+
+  it('grants access only when the matching record is flagged', () => {
+    expect(hasHostelAccess(STAFF, 'akash@lwspune.com')).toBe(true)
+    expect(hasHostelAccess(STAFF, 'vilas@lwspune.com')).toBe(false)
+    expect(hasHostelAccess(STAFF, 'warden@lwspune.com')).toBe(false)
+  })
+
+  it('matches case-insensitively, like the lecture-scoping join', () => {
+    expect(hasHostelAccess(STAFF, 'AKASH@LWSPUNE.COM')).toBe(true)
+    expect(hasHostelAccess(STAFF, '  akash@lwspune.com  ')).toBe(true)
+  })
+
+  // Falls closed on every "we can't identify you" case — a blank lookup must
+  // never match the flagged record that happens to have no email.
+  it('falls closed for unknown, blank and missing emails', () => {
+    expect(hasHostelAccess(STAFF, 'stranger@lwspune.com')).toBe(false)
+    expect(hasHostelAccess(STAFF, '')).toBe(false)
+    expect(hasHostelAccess(STAFF, null)).toBe(false)
+    expect(hasHostelAccess(STAFF, undefined)).toBe(false)
+    expect(hasHostelAccess([], 'akash@lwspune.com')).toBe(false)
+    expect(hasHostelAccess(null, 'akash@lwspune.com')).toBe(false)
+  })
+
+  it('only accepts a real boolean true, not a truthy string', () => {
+    expect(hasHostelAccess([{ id: 'x', email: 'a@b.c', hostelAccess: 'no' }], 'a@b.c')).toBe(false)
   })
 })

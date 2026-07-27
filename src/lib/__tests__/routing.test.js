@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSchoolAttendancePath } from '../routing'
+import { isSchoolAttendancePath, isHostelAttendancePath } from '../routing'
 
 // vercel.json rewrites every non-api path to index.html, so the app boots on
 // /school-attendance; this helper is what gives the URL meaning. BASE_URL is
@@ -26,5 +26,20 @@ describe('isSchoolAttendancePath', () => {
     expect(isSchoolAttendancePath('/school-attendance')).toBe(true)
     expect(isSchoolAttendancePath(undefined)).toBe(false)
     expect(isSchoolAttendancePath('')).toBe(false)
+  })
+})
+
+describe('isHostelAttendancePath', () => {
+  it('matches on both deploy bases, with and without a trailing slash', () => {
+    expect(isHostelAttendancePath('/hostel-mess-attendance', '/')).toBe(true)
+    expect(isHostelAttendancePath('/hostel-mess-attendance/', '/')).toBe(true)
+    expect(isHostelAttendancePath('/nda-tracker/hostel-mess-attendance', '/nda-tracker/')).toBe(true)
+  })
+
+  it('does not collide with the school-attendance route or lookalikes', () => {
+    expect(isHostelAttendancePath('/school-attendance', '/')).toBe(false)
+    expect(isHostelAttendancePath('/hostel-mess', '/')).toBe(false)
+    expect(isHostelAttendancePath('/', '/')).toBe(false)
+    expect(isSchoolAttendancePath('/hostel-mess-attendance', '/')).toBe(false)
   })
 })

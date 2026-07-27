@@ -22,6 +22,26 @@ export function findTeacherByEmail(teachers, email) {
   return null
 }
 
+// Whether the signed-in staff member may capture hostel/mess attendance.
+//
+// Access is a flag on the TEACHER RECORD, not a new auth role. That is
+// deliberate: every permission gate in this codebase is written as a deny-list
+// on role='teacher' (App.jsx routing, the send endpoints, api/teacher-account's
+// admin gate, persist.js, the faculty_state RLS policies), so minting a new
+// role would silently inherit ADMIN defaults at all of them. Reusing
+// role='teacher' keeps every one of those restrictions correct for free.
+//
+// This is a VISIBILITY gate, not a database boundary — capture-table RLS is
+// `authenticated`, the same posture as teacher quiz authoring (GUARDRAILS).
+// Faculty cannot self-grant: `faculty_state` is teacher-readable but its write
+// policies exclude role='teacher'.
+//
+// Falls closed on every unidentifiable case, and requires a real boolean so a
+// stray truthy string in the JSONB can't grant access.
+export function hasHostelAccess(teachers, email) {
+  return findTeacherByEmail(teachers, email)?.hostelAccess === true
+}
+
 // Every period `teacherId` teaches on `date`, across all batches, ordered by
 // clock time. Each entry: { batchName, slotId, subject, label, startTime,
 // endTime, mappingId, teacherId }.

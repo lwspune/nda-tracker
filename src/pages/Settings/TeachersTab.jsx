@@ -44,6 +44,7 @@ export default function TeachersTab() {
   const [editingName,   setEditingName]   = useState('')
   const [editingEmail,  setEditingEmail]  = useState('')
   const [editingMobile, setEditingMobile] = useState('')
+  const [editingHostelAccess, setEditingHostelAccess] = useState(false)
 
   // Login-management state
   const [authEmails,   setAuthEmails]   = useState(new Set()) // lowercase emails with login accounts
@@ -110,10 +111,11 @@ export default function TeachersTab() {
     setEditingName(t.name)
     setEditingEmail(t.email ?? '')
     setEditingMobile(t.mobile ?? '')
+    setEditingHostelAccess(t.hostelAccess === true)
   }
 
   function handleSaveEdit(id) {
-    updateTimetableTeacher(id, { name: editingName, email: editingEmail, mobile: editingMobile })
+    updateTimetableTeacher(id, { name: editingName, email: editingEmail, mobile: editingMobile, hostelAccess: editingHostelAccess })
     setEditingId(null)
   }
 
@@ -283,6 +285,20 @@ export default function TeachersTab() {
                             if (e.key === 'Escape') setEditingId(null)
                           }}
                         />
+                        {/* Opens the /hostel-mess-attendance capture surface for
+                            this person. A flag on the teacher record, NOT a new
+                            auth role — every permission gate in the codebase is
+                            a deny-list on role='teacher', so a new role would
+                            inherit admin defaults. See lib/teacherDay.js. */}
+                        <label className="flex items-center gap-2 text-[12px] text-ink-2 py-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4"
+                            checked={editingHostelAccess}
+                            onChange={e => setEditingHostelAccess(e.target.checked)}
+                          />
+                          Hostel &amp; mess attendance access
+                        </label>
                         <div className="flex gap-2">
                           <button className="text-[11px] px-2 py-1 rounded bg-accent text-white" onClick={() => handleSaveEdit(t.id)}>✓ Save</button>
                           <button className="text-[11px] px-2 py-1 rounded border border-border text-ink-3" onClick={() => setEditingId(null)}>✕ Cancel</button>
@@ -297,6 +313,11 @@ export default function TeachersTab() {
                           {hasLogin && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
                               🔐 has login
+                            </span>
+                          )}
+                          {t.hostelAccess === true && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                              🏠 hostel &amp; mess
                             </span>
                           )}
                         </div>

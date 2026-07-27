@@ -26,7 +26,9 @@ import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
 import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
 import SchoolAttendancePage from './pages/SchoolAttendance'
-import { isSchoolAttendancePath } from './lib/routing'
+import HostelAttendancePage from './pages/HostelAttendance'
+import { isSchoolAttendancePath, isHostelAttendancePath } from './lib/routing'
+import { hasHostelAccess } from './lib/teacherDay'
 export default function App() {
   const activePage = useStore(s => s.activePage)
   const hydrated   = useStore(s => s.hydrated)
@@ -90,7 +92,20 @@ export default function App() {
     // (the path isn't rewritten away).
     if (supabaseSession && isSchoolAttendancePath(window.location.pathname, import.meta.env.BASE_URL)) {
       return (
-        <SchoolAttendanceRoute
+        <StaffCaptureRoute
+          surface="school"
+          session={supabaseSession}
+          onLogout={() => supabase.auth.signOut()}
+        />
+      )
+    }
+
+    // /hostel-mess-attendance — warden + mess staff. Access is the hostelAccess
+    // flag on the teacher record (Settings → Teachers), checked inside the page.
+    if (supabaseSession && isHostelAttendancePath(window.location.pathname, import.meta.env.BASE_URL)) {
+      return (
+        <StaffCaptureRoute
+          surface="hostel"
           session={supabaseSession}
           onLogout={() => supabase.auth.signOut()}
         />
@@ -157,15 +172,17 @@ export default function App() {
   )
 }
 
-// ── /school-attendance (standalone) ────────────────────────────
-// Chrome-free, mobile-first: the teacher opens the link, sees their own periods
-// for today, files them, done. Rendered for any staff session — a teacher on
-// their phone or an admin checking the same surface.
+// ── Standalone staff capture surfaces ──────────────────────────
+// Chrome-free and mobile-first: open the link, capture, done.
+//   surface="school" → /school-attendance      (teachers, own lectures)
+//   surface="hostel" → /hostel-mess-attendance (warden + mess staff)
+// Both are rendered for any staff session; each page decides for itself what
+// the signed-in person may see (own timetabled periods / the hostelAccess flag).
 //
 // Teacher sessions load nothing on their own (initStore is a no-op for them),
 // so this route pulls the faculty_state blob (timetables, mappings, teacher
 // records) and the student roster itself rather than depending on TeacherPortal.
-function SchoolAttendanceRoute({ session, onLogout }) {
+function StaffCaptureRoute({ surface, session, onLogout }) {
   const isTeacher = session?.user?.user_metadata?.role === 'teacher'
   const loadRemoteData = useStore(s => s.loadRemoteData)
   const loadStudents   = useStore(s => s.loadStudentsFromSupabase)
@@ -191,14 +208,15 @@ function SchoolAttendanceRoute({ session, onLogout }) {
   if (!ready) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="text-[14px] font-semibold text-ink-2">Loading your lectures…</div>
+        <div className="text-[14px] font-semibold text-ink-2">Loading…</div>
       </div>
     )
   }
 
+  const Page = surface === 'hostel' ? HostelAttendancePage : SchoolAttendancePage
   return (
     <ModeContext.Provider value={isTeacher ? 'teacher' : 'admin'}>
-      <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />
+      <Page email={session?.user?.email} onLogout={onLogout} />
     </ModeContext.Provider>
   )
 }
@@ -251,7 +269,10 @@ function TeacherPortal({ session, onLogout }) {
   const loadQuizzesFromSupabase = useStore(s => s.loadQuizzesFromSupabase)
   const setActivePage           = useStore(s => s.setActivePage)
   const activePage              = useStore(s => s.activePage)
+  const teachers                = useStore(s => s.timetableTeachers)
   const [loaded, setLoaded]     = useState(false)
+  // Nav entry only for staff the office has flagged in Settings → Teachers.
+  const hostelAccess = hasHostelAccess(teachers, session?.user?.email)
 
   useEffect(() => {
     async function loadAll() {
@@ -269,6 +290,7 @@ function TeacherPortal({ session, onLogout }) {
 
   const pages = {
     schoolAttendance: <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />,
+    hostelAttendance: <HostelAttendancePage email={session?.user?.email} onLogout={onLogout} />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
     quizzes:    <QuizzesPage />,
@@ -290,7 +312,7 @@ function TeacherPortal({ session, onLogout }) {
   return (
     <ModeContext.Provider value="teacher">
       <div className="flex min-h-screen bg-bg">
-        <Sidebar onLogout={onLogout} />
+        <Sidebar onLogout={onLogout} hostelAccess={hostelAccess} />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}

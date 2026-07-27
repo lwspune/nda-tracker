@@ -19,7 +19,10 @@ export const createTimetableSlice = (set, get) => ({
     return id
   },
 
-  // patch: { name?, email?, mobile? }
+  // patch: { name?, email?, mobile?, hostelAccess? }
+  // NOTE: this is an explicit allow-list — a field not named here is silently
+  // dropped (same footgun as persist.js saveToStorage). Add new teacher-record
+  // fields here or they will never persist.
   updateTimetableTeacher(id, patch) {
     const update = {}
     if (patch.name !== undefined) {
@@ -29,6 +32,8 @@ export const createTimetableSlice = (set, get) => ({
     }
     if (patch.email !== undefined) update.email = patch.email.trim()
     if (patch.mobile !== undefined) update.mobile = patch.mobile.trim()
+    // Coerced to a real boolean — hasHostelAccess only honours `=== true`.
+    if (patch.hostelAccess !== undefined) update.hostelAccess = patch.hostelAccess === true
     if (!Object.keys(update).length) return
     set(s => ({
       timetableTeachers: s.timetableTeachers.map(t =>

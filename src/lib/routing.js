@@ -14,3 +14,14 @@ export function isSchoolAttendancePath(pathname, baseUrl = '/') {
   const path = String(pathname || '/').replace(baseUrl, '/')
   return path === SCHOOL_ATTENDANCE_PATH || path === `${SCHOOL_ATTENDANCE_PATH}/`
 }
+
+// The hostel & mess capture surface. Deliberately a sibling of
+// SCHOOL_ATTENDANCE_PATH rather than a sub-path: "school" (lectures, all
+// branches) and "hostel & mess" (APJ boarders) are different jobs done by
+// different people, and neither should be reachable by shortening the other.
+export const HOSTEL_ATTENDANCE_PATH = '/hostel-mess-attendance'
+
+export function isHostelAttendancePath(pathname, baseUrl = '/') {
+  const path = String(pathname || '/').replace(baseUrl, '/')
+  return path === HOSTEL_ATTENDANCE_PATH || path === `${HOSTEL_ATTENDANCE_PATH}/`
+}
