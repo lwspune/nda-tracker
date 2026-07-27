@@ -186,12 +186,15 @@ export async function parseOfflineResults(file) {
   return { students }
 }
 
-// Header + one example row for the downloadable offline-marks template.
-export function buildOfflineTemplateRows() {
-  return [
-    ['Name', 'Marks'],
-    ['Student Full Name', 0],
-  ]
+// Rows for the downloadable offline-marks template. Given the selected batches'
+// roster, the Name column is pre-filled and only Marks is left to type — the app
+// already knows who is in the batch, and pre-filled canonical names avoid the
+// spelling variants hand-typed rosters introduce. Falls back to the header + one
+// example row when no roster is available (no batch selected yet).
+export function buildOfflineTemplateRows(rosterNames) {
+  const header = ['Name', 'Marks']
+  if (!rosterNames?.length) return [header, ['Student Full Name', 0]]
+  return [header, ...rosterNames.map(n => [n, ''])]
 }
 
 // ============================================================

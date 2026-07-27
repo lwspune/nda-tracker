@@ -71,9 +71,27 @@ describe('parseOfflineResults', () => {
 })
 
 describe('buildOfflineTemplateRows', () => {
-  it('returns a header row + one example row', () => {
+  it('returns a header row + one example row when no roster is given', () => {
     const rows = buildOfflineTemplateRows()
     expect(rows[0]).toEqual(['Name', 'Marks'])
     expect(rows.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('pre-fills the Name column from the roster, leaving Marks blank to type into', () => {
+    const rows = buildOfflineTemplateRows(['Alice', 'Bob'])
+    expect(rows).toEqual([['Name', 'Marks'], ['Alice', ''], ['Bob', '']])
+  })
+
+  it('falls back to the example row for an empty roster', () => {
+    expect(buildOfflineTemplateRows([])).toEqual(buildOfflineTemplateRows())
+  })
+
+  it('round-trips: a pre-filled template filled in parses back to the same names', async () => {
+    const rows = buildOfflineTemplateRows(['Alice', 'Bob'])
+    rows[1][1] = 72
+    rows[2][1] = 55
+    const { students } = await parseOfflineResults(fileFromAoa(rows))
+    expect(students.map(s => s.name)).toEqual(['Alice', 'Bob'])
+    expect(students.map(s => s.totalMarks)).toEqual([72, 55])
   })
 })
