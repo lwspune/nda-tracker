@@ -673,3 +673,64 @@ The NDA Program's Physics/Chemistry/Biology chapters were rebuilt to PYQ Vault's
 **Why:** the golden-path check is the project's definition of done and it is the one step still open. It also double-checks that the clobber has not recurred — if the chapters show the old names again, a stale tab is still flushing and the version guard above stops being optional.
 
 **How to apply:** on `nda-tracker.vercel.app` → **Syllabus** → batch `LWS_NDA_2Y_(25-27)_B` → **NDA Program**, expand each of Physics / Chemistry / Biology. Confirm (a) counts read 14 / 12 / 9; (b) order is descending by the bracketed % (Physics starts `Light and Optics (21.6%)`, Chemistry `Carbon and Its Compounds (17.2%)`, Biology `Human Physiology (27.4%)`); (c) the carried-over `Done` ticks are present — Physics should show Done on Kinematics, Laws of Motion, Work/Energy/Power, Gravitation, Fluid Mechanics, Heat and Thermodynamics, Sound. Also spot-check `APJ_NDA_12th_(26-27)` (Chemistry: Metals and Non-Metals, Acids/Bases/Salts, Atomic Structure all Done). If any old chapter name appears, re-query Supabase before assuming a render bug.
+
+---
+
+## 2026-07-27
+
+### ~~Browser golden-path verify the offline-exam marks grid~~ — **DONE 2026-07-27**
+
+Verified in-browser by the user on `nda-tracker.vercel.app` — the derived roster, marks entry, and save path work end-to-end against live `studentProfiles`. This closes the last open Definition-of-Done item for commit `95ae7be`. Original entry kept below for the record.
+
+The in-app marks grid shipped this session (commit `95ae7be`, pushed to `main` → already deployed) with TDD coverage (+37 tests, 1924 green), clean lint, and a passing `vite build` — but **not click-verified**. The session had no browser tooling, and the save path needs a live Supabase **admin session** (only exists on Vercel). Same manual-verify gap logged for every prior feature; note the *file-upload* offline path was verified back on 2026-06-29, but the grid is a new path to the same `addExam`.
+
+**Why:** the seams unit tests can't reach are exactly the ones that matter here — `buildOfflineRoster` reading **live** `studentProfiles` (the tests use hand-built fixtures, so a real `batches[]`/`accountStatus` shape mismatch would be invisible), the `addExam` → Supabase round-trip with `questions: []` + `max_marks`, and whether the derived roster actually matches who sat the paper. If the roster comes back empty or wrong for a real batch, the whole feature is unusable and nothing in CI would say so.
+
+**How to apply:**
+- On `nda-tracker.vercel.app` (admin): Exams → **+ Offline marks** → fill name + max marks → tick a real batch → **confirm the roster loads with the expected students** (count matches the batch; no blocked/quit students; no duplicate rows for students with name variants).
+- Type marks for 2–3 students, leave one blank, Save. Confirm: the exam card shows an "Offline" badge with the right %-of-max; the blank student is **absent** from the results, not a zero; the exam appears in the Dashboard trend and that student's Exam History.
+- Test **📋 Paste a column**: paste `72`, blank line, `55` and confirm it fills rows 1 and 3 in roster order, leaving row 2 empty.
+- Switch to **📄 Upload file** → **Download template** and confirm the Name column arrives pre-filled with the selected batch's roster.
+- Edge: with no batch ticked, confirm the grid shows "Select a batch above to load its students" and Save stays disabled.
+
+### Paste-a-column silently drops values past the end of the roster
+
+`applyPaste` in [src/components/upload/OfflineExamModal.jsx](src/components/upload/OfflineExamModal.jsx) walks the roster and skips any index `>= values.length`, so a paste **longer** than the roster silently discards the extras (paste 20 marks onto an 18-student roster → 2 vanish, no warning). A short paste is fine by design (it tops up without wiping typed marks), but the long case is real: it usually means the pasted list is from a different or stale roster, i.e. **every** row may be misaligned, not just the tail.
+
+**Why:** silent truncation on a marks-entry path is the bad kind of quiet — a misaligned paste assigns the wrong marks to the wrong students and looks completely normal on screen. Faculty would have to eyeball all 18 rows to catch it. Low likelihood, high cost, cheap to fix.
+
+**How to apply:** in `applyPaste`, compare `values.length` against `roster.length` and surface a mismatch **before** applying — either a confirm ("Pasted 20 values for 18 students — the list may not match this roster") or a non-blocking `Alert` after the fill stating how many were used and how many dropped. Keep the short-paste case silent (it's the intended top-up). `parseMarksPaste` already returns the full parsed array, so no change to the pure helper — this is a UI guard only. Add a modal test for the long-paste warning.
+
+---
+
+## 2026-07-27
+
+### Verify the `/school-attendance` teacher flow in a real browser (Definition-of-Done gap)
+
+Phase 1 shipped with TDD coverage (1967 green), baseline-clean lint and the migration applied to production Supabase — but **not click-verified**. Everything that matters here needs a live session and live data, which unit tests fixture away.
+
+**Why:** the seams the tests can't reach are exactly the risky ones. `findTeacherByEmail` joins the **auth email** to `timetableTeachers[].email` with no FK behind it — if the live teacher rows have blank or differently-spelled emails, every teacher sees "not linked to a teacher record" and the feature is dead on arrival. Likewise the `mapping.teacherId` coverage: if live mappings mostly have no teacher assigned, teachers will see an empty day while the admin board shows everything as "unassigned". Both are data-shape questions, invisible in CI.
+
+**How to apply:**
+- Query first (cheap, do this before touching a phone): how many `timetableTeachers` have a non-blank `email`, and what share of `timetableMappings` have a non-null `teacherId`. If either is thin, fix the data before rollout — the feature is only as good as that join.
+- Sign in as a real teacher account on a phone → `nda-tracker.vercel.app/school-attendance`. Confirm: their own periods only, right batches, ordered by time; the identity line names them.
+- File one period with absentees and one with **nobody** absent. Confirm both flip to **Filed**, and that the all-present one is what proves `lecture_submissions` is doing its job.
+- As admin: Attendance → Lecture log → confirm `FilingBoard` shows the same two as filed and names who is outstanding.
+- Confirm a teacher session does **not** trip the "your data is out of date · Reload" banner while navigating the portal (the `persist.js` early return).
+- Add to home screen; confirm the icon label reads "NDA Tracker" and the icon reopens the page.
+
+### Phase 2 + 3 of teacher-filed attendance
+
+Deliberately out of Phase 1 scope, in rough priority order:
+- **Homework / notes on the same lecture cards** — `setHomeworkDefaultersForItem` already exists; the card needs a chapter picker sourced from the batch's syllabus.
+- **Outstanding-filing nudge** — a WhatsApp to teachers who haven't filed by end of day. Recipients are staff, so no blocked-contact gate applies; folds into `send-attendance-alerts` as another `kind` (do **not** add an api file — 12-function ceiling).
+- **Impromptu lectures** — teachers currently can't file an extra class they took; the `adhoc_*` slot machinery already exists in `LectureLogTab` and would port over.
+- **Late marking** stays front-desk unless there's a reason to move it; it's a day-level concept, not a per-period one.
+
+### Backfill ledger — `buildOfflineRoster` is now misnamed
+
+[src/lib/offlineRoster.js](src/lib/offlineRoster.js) `buildOfflineRoster(studentProfiles, batchNames)` is a generic "current members of these batches, minus blocked/quit" helper. It was written for the offline-exam marks grid, and `SchoolAttendancePage` now reuses it (correctly — duplicating it would be worse). The name now under-describes it.
+
+**Why:** a misleading name on a shared helper invites the next person to write a second copy rather than reuse this one, which is how the duplication rule gets violated in good faith.
+
+**How to apply:** rename to `buildBatchRoster` in a module named for the concept, keeping `buildOfflineRoster` as a thin re-export if anything external depends on it. Touches shipped code (`OfflineExamModal` + its tests), so it needs a 360 + explicit go-ahead — logged here rather than done silently. Low urgency; bundle it with the next change in that area.
