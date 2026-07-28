@@ -17,7 +17,12 @@
 // rows, the modal reads the camelCase store objects — so each maps at its own
 // edge and the arithmetic stays here.
 
-import { examMaxMarks } from './analyticsHelpers'
+// Extension is REQUIRED: this module is reachable from api/send-whatsapp.js,
+// which runs under Node's ESM loader on Vercel. Bundler resolution (Vite,
+// Vitest) accepts the bare specifier; Node does not, and the function then
+// dies at module load with ERR_MODULE_NOT_FOUND before the handler runs.
+// Guarded by api/__tests__/importGraph.test.js.
+import { examMaxMarks } from './analyticsHelpers.js'
 
 /**
  * Per-exam scoring context. Compute once per exam, reuse for every row.
