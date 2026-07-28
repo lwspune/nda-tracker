@@ -770,3 +770,21 @@ Every LWS Pune student is flagged `residential = true`, but LWS Pune has no boar
 **Why:** it is a loaded gun rather than a live bug. Anyone who later relaxes the branch filter — reasonably assuming `residential` is what identifies boarders — pulls the entire LWS Pune roster into the hostel marking board and the warden alert.
 
 **How to apply:** either set `residential = false` for the 126 LWS Pune rows (a one-line UPDATE, but it is real student data so it needs an explicit go-ahead), or drop the column from the boarder predicate entirely and let branch be the single source of scope. The second is arguably more honest given the column has never been curated. `buildBoarderRoster` and the alert endpoint's `.eq('residential', true)` would both need to agree either way.
+
+## 2026-07-28
+
+### Backfill ledger — converge the 9 hand-rolled modal shells onto `ModalShell`
+
+`ModalShell` gained a `footer` slot and dialog semantics (role/aria/Escape/focus) this session, and its 5 consumers with a single action row were migrated. But **nine other modals never used `ModalShell` at all** — they each hand-roll the same `fixed inset-0` backdrop + panel + header + `overflow-y-auto flex-1` body + `flex-shrink-0` footer: `ExamAbsencePreviewModal`, `HomeworkPreviewModal`, `LateNotificationPreviewModal`, `LectureMissPreviewModal`, `ImportFeedbackModal`, `WhatsAppPreviewModal`, `WhatsAppResultsModal`, `ManageBatchBranchModal`, `AssignProgramsModal`.
+
+**Why:** they already get the footer layout right — that's why they were hand-rolled, and it's why the bug never showed up there. But they now *lack* what `ModalShell` gained: none has `role="dialog"`, `aria-modal`, Escape-to-close, or focus restore. So the accessibility gap that was uniform across the app is now uneven, which is harder to reason about than uniformly missing.
+
+**How to apply:** opportunistically, one at a time, only when already editing the file — not as a sweep. Each is a working, shipped surface with its own tests; a big-bang migration is churn against no reported problem, and the shells differ in padding and header content. If the a11y gap needs closing sooner than attrition allows, the cheaper move is to extract the Escape + focus effects into a `useDialogBehaviour(onClose)` hook and drop one line into each hand-rolled modal, leaving the markup alone.
+
+### `ModalShell` has no focus trap
+
+Focus now moves into the dialog on open and returns to the opener on close, but Tab can still walk out of the panel into the page behind the backdrop.
+
+**Why:** it is the remaining half of the keyboard story. Getting focus in without keeping it there is better than nothing but still lets a keyboard user land on controls they cannot see, under a `backdrop-filter` blur.
+
+**How to apply:** a small `useFocusTrap(ref)` — collect focusable descendants, wrap Tab/Shift+Tab at the ends. Roughly 25 lines, no dependency. Deliberately not done in the same change as the footer/semantics work to keep that diff reviewable; the tests for it belong alongside the existing `ModalShell.test.jsx` dialog-semantics block.
