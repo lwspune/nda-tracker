@@ -121,7 +121,7 @@ describe('ExamHistoryTable — offline exams show — not zeros', () => {
   it('still shows the score and the percentage, which ARE meaningful', () => {
     render(<ExamHistoryTable scores={offlineScores} />)
     const cells = cellsOf('Sets')
-    expect(cells[2]).toBe('5')
+    expect(cells[2]).toBe('5 / 5')
     expect(cells[6]).toBe('100%')
   })
 
@@ -150,5 +150,50 @@ describe('ExamHistoryTable — offline exams show — not zeros', () => {
     expect(cells[3]).toContain('10')
     expect(cells[3]).toContain('(+40)')
     expect(cells[5]).toContain('(0)')
+  })
+})
+
+// The Score column mixes paper sizes — a student's history routinely holds
+// 30-question chapter tests (max 75) beside 120-question mocks (max 300). Read
+// without a denominator the column's vertical ordering disagrees with actual
+// performance: 114.19 (38% of 300) sits above 29.18 (39% of 75), and 70.85
+// (24%) above that same 29.18. The raw number is the only value on the row that
+// cannot be interpreted on its own (2026-07-28).
+describe('ExamHistoryTable — Score carries its denominator', () => {
+  function row({ name, score, max, pct, questions = [{ q: 1 }] }) {
+    return {
+      name, date: '2026-07-15', score, max, pct,
+      correct: 3, wrong: 3, na: 24,
+      exam: { id: name, name, date: '2026-07-15', marking: { correct: 2.5, wrong: -0.83 }, questions },
+      student: { totalMarks: score, correct: 3, incorrect: 3, notAttempted: 24, responses: {}, choices: {} },
+    }
+  }
+
+  const scoreCellOf = name =>
+    screen.getByText(name).closest('tr').querySelectorAll('td')[2].textContent.trim()
+
+  it('shows an MCQ score out of its derived paper max', () => {
+    render(<ExamHistoryTable scores={[row({ name: 'Statistics (A)', score: 5.01, max: 75, pct: 0.0668 })]} />)
+    expect(scoreCellOf('Statistics (A)')).toBe('5.01 / 75')
+  })
+
+  it('distinguishes two papers of different size in the same table', () => {
+    render(<ExamHistoryTable scores={[
+      row({ name: 'Matrics & Determinant (A)', score: 29.18,  max: 75,  pct: 0.389 }),
+      row({ name: 'LWS MATHS MOCK 2 (A)',      score: 114.19, max: 300, pct: 0.3806 }),
+    ]} />)
+    // The smaller raw number is the better performance — only the denominator says so.
+    expect(scoreCellOf('Matrics & Determinant (A)')).toBe('29.18 / 75')
+    expect(scoreCellOf('LWS MATHS MOCK 2 (A)')).toBe('114.19 / 300')
+  })
+
+  it('shows an offline score out of its explicit max', () => {
+    render(<ExamHistoryTable scores={[row({ name: 'Sets', score: 5, max: 5, pct: 1, questions: [] })]} />)
+    expect(scoreCellOf('Sets')).toBe('5 / 5')
+  })
+
+  it('omits the denominator when the max is not derivable', () => {
+    render(<ExamHistoryTable scores={[row({ name: 'Unknown', score: 12, max: 0, pct: 0 })]} />)
+    expect(scoreCellOf('Unknown')).toBe('12')
   })
 })

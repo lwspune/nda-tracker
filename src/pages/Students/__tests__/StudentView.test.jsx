@@ -470,6 +470,11 @@ function makeOfflineExam({ studentScore, maxMarks, examName, date }) {
 }
 
 describe('StudentView — Latest Score delta', () => {
+  // Scoped to the tile: the exam-history table now prints "N / max" too, so an
+  // unscoped getByText('/ 5') matches both. That collision is the point — the
+  // tile and the table state the same fact the same way.
+  const latestScoreTile = () => screen.getByText('Latest Score').closest('.stat-card')
+
   it('reports an improvement when the percentage rose, even though raw marks fell', () => {
     setExams([
       makeOfflineExam({ examName: 'Basics', studentScore: 5.5, maxMarks: 10, date: '2026-07-16' }),
@@ -477,7 +482,8 @@ describe('StudentView — Latest Score delta', () => {
     ])
     renderView()
     // 55% → 100% is +45 percentage points, NOT "▼ 0.5".
-    expect(screen.getByText(/▲ 45 pts from prev/)).toBeInTheDocument()
+    // Exactly one arrow: StatCard prepends it, the string must not repeat it.
+    expect(within(latestScoreTile()).getByText('▲ 45 pts from prev')).toBeInTheDocument()
     expect(screen.queryByText(/0\.5 from prev/)).not.toBeInTheDocument()
   })
 
@@ -487,7 +493,7 @@ describe('StudentView — Latest Score delta', () => {
       makeOfflineExam({ examName: 'Basics', studentScore: 5, maxMarks: 10, date: '2026-07-27' }),
     ])
     renderView()
-    expect(screen.getByText(/▼ 50 pts from prev/)).toBeInTheDocument()
+    expect(within(latestScoreTile()).getByText('▼ 50 pts from prev')).toBeInTheDocument()
   })
 
   it('shows the latest score out of its paper max', () => {
@@ -495,7 +501,7 @@ describe('StudentView — Latest Score delta', () => {
       makeOfflineExam({ examName: 'Sets', studentScore: 4, maxMarks: 5, date: '2026-07-27' }),
     ])
     renderView()
-    expect(screen.getByText('/ 5')).toBeInTheDocument()
+    expect(within(latestScoreTile()).getByText('/ 5')).toBeInTheDocument()
   })
 
   it('shows no delta for a single exam', () => {

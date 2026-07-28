@@ -245,7 +245,15 @@ export default function ExamHistoryTable({ scores }) {
                       ) : s.name}
                     </td>
                     <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{s.date}</td>
-                    <td className="py-2 pr-3 font-bold">{s.score}</td>
+                    {/* The denominator is load-bearing, not decoration: this column
+                        interleaves paper sizes (a 30-Q chapter test maxes at 75, a
+                        120-Q mock at 300), so read bare it ORDERS WRONG — 114.19
+                        (38%) sits above 29.18 (39%). It is the only value on the
+                        row that can't be interpreted alone. */}
+                    <td className="py-2 pr-3 font-bold whitespace-nowrap">
+                      {s.score}
+                      {s.max > 0 && <span className="font-normal text-ink-3"> / {s.max}</span>}
+                    </td>
                     {isOfflineRow(s) ? (
                       // Offline exam: no questions[], so the counts are structurally
                       // 0 AND the bracketed marks breakdown is 0 — "0 (0)" claims

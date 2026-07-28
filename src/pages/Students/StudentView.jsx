@@ -235,6 +235,8 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   // Percentage POINTS, never raw marks. Papers have different maxima, so a raw
   // difference can invert the sign: 5.5/10 → 5/5 is 55% → 100%, a 45-point gain,
   // but reads as "-0.5" in marks. Same %-of-max rule the Dashboard follows.
+  // The string passed to StatCard carries NO arrow — StatCard prepends one from
+  // deltaUp, and passing our own rendered "▼ ▼ 0.5 from prev".
   const delta  = prev && latest.max > 0 && prev.max > 0
     ? Math.round((latest.pct - prev.pct) * 100)
     : null
@@ -376,7 +378,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
             ? <>{latest.score}<span className="text-[13px] font-semibold text-ink-3"> / {latest.max}</span></>
             : latest.score}
           color={latest.pct >= 0.7 ? 'text-success' : latest.pct >= 0.45 ? 'text-warning' : 'text-danger'}
-          delta={delta !== null ? `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)} pts from prev` : null}
+          delta={delta !== null ? `${Math.abs(delta)} pts from prev` : null}
           deltaUp={delta >= 0}
         />
         <StatCard
