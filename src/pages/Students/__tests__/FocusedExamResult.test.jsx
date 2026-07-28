@@ -32,6 +32,22 @@ const EXAM = {
   }],
 }
 
+// Offline / hand-graded: no questions[], marks only, explicit paper ceiling.
+// correct/incorrect/notAttempted are structurally 0 on these rows — there are
+// no questions to be right, wrong or skipped about.
+const OFFLINE_EXAM = {
+  id:        'exam_offline',
+  name:      'Sets',
+  date:      '2026-07-27',
+  marking:   { correct: 1, wrong: 0 },
+  questions: [],
+  maxMarks:  5,
+  students: [{
+    name: 'Shivam Katke', totalMarks: 5, correct: 0, incorrect: 0, notAttempted: 0,
+    responses: {}, choices: {},
+  }],
+}
+
 const rowOf = qLabel => screen.getByText(qLabel).closest('tr')
 
 describe('FocusedExamResult', () => {
@@ -147,5 +163,54 @@ describe('FocusedExamResult', () => {
     }
     render(<FocusedExamResult examId="exam1" exams={[offline]} />)
     expect(screen.getByText(/per-question breakdown isn't available/i)).toBeInTheDocument()
+  })
+})
+
+// An offline exam carries its ceiling in maxMarks, not in questions[]. Deriving
+// the denominator inline as questions.length × marking.correct gives 0, so the
+// parent saw a bare "5" — no "/ 5", no % — beside three meaningless zero counts
+// (2026-07-28). The per-question notice was already right; the summary was not.
+describe('FocusedExamResult — offline exams', () => {
+  it('shows the score out of the explicit paper max', () => {
+    render(<FocusedExamResult examId="exam_offline" exams={[OFFLINE_EXAM]} />)
+    expect(screen.getByText('5')).toBeInTheDocument()
+    expect(screen.getByText('/ 5')).toBeInTheDocument()
+  })
+
+  it('shows a percentage badge derived from maxMarks', () => {
+    render(<FocusedExamResult examId="exam_offline" exams={[OFFLINE_EXAM]} />)
+    expect(screen.getByText('100%')).toBeInTheDocument()
+  })
+
+  it('computes the percentage from the marks actually scored', () => {
+    const partial = {
+      ...OFFLINE_EXAM,
+      students: [{ ...OFFLINE_EXAM.students[0], totalMarks: 4 }],
+    }
+    render(<FocusedExamResult examId="exam_offline" exams={[partial]} />)
+    expect(screen.getByText('80%')).toBeInTheDocument()
+  })
+
+  it('hides the correct / wrong / skipped counts (structurally meaningless)', () => {
+    render(<FocusedExamResult examId="exam_offline" exams={[OFFLINE_EXAM]} />)
+    expect(screen.queryByText(/correct/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/wrong/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/skipped/)).not.toBeInTheDocument()
+  })
+
+  it('hides the wrong-and-skipped toggle (there is nothing to filter)', () => {
+    render(<FocusedExamResult examId="exam_offline" exams={[OFFLINE_EXAM]} />)
+    expect(screen.queryByRole('button', { name: /show only wrong/i })).not.toBeInTheDocument()
+  })
+
+  it('still shows the per-question notice', () => {
+    render(<FocusedExamResult examId="exam_offline" exams={[OFFLINE_EXAM]} />)
+    expect(screen.getByText(/per-question breakdown isn't available/i)).toBeInTheDocument()
+  })
+
+  it('leaves the MCQ summary untouched (counts + toggle still render)', () => {
+    render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
+    expect(screen.getByText(/1 correct/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show only wrong/i })).toBeInTheDocument()
   })
 })

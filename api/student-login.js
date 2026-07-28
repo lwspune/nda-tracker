@@ -176,6 +176,12 @@ export default async function handler(req, res) {
         ...exam,
         marking:   exam.marking   || { correct: 4, wrong: -1 },
         questions: exam.questions || [],
+        // snake_case → camelCase, mirroring loadExamsFromSupabase. Every reader
+        // (examMaxMarks, StudentView, ExamHistoryTable, FocusedExamResult) looks
+        // for `maxMarks`; the raw row spread above only carries `max_marks`, so
+        // without this an OFFLINE exam has no derivable denominator anywhere in
+        // the student portal — the parent sees a bare mark with no total, no %.
+        maxMarks:  exam.max_marks ?? null,
         students: r ? [{
           name:          r.student_name,
           rollNo:        r.roll_no       || '',

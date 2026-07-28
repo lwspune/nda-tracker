@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card, Badge } from '../../components/ui'
 import QuestionCard from '../../components/ui/QuestionCard'
 import { getIssues } from './ExamHistoryTable'
+import { examMaxMarks } from '../../lib/analyticsHelpers'
 
 /**
  * FocusedExamResult — the "you clicked the result link" report.
@@ -34,8 +35,13 @@ export default function FocusedExamResult({ examId, exams }) {
   const student = exam.students?.[0]
   if (!student) return null
 
-  const max = (exam.questions?.length || 0) * (exam.marking?.correct || 0)
+  // examMaxMarks, never the inline questions×marking form — an offline exam has
+  // no questions[] and carries its ceiling in maxMarks, so the inline form
+  // returns 0 and the parent gets a mark with no total and no percentage.
+  const max = examMaxMarks(exam)
   const pct = max > 0 ? Math.round((student.totalMarks / max) * 100) : null
+  // Derived, never a stored flag — same rule as every other offline consumer.
+  const isOffline = !exam.questions?.length
   const pctVariant = pct === null ? 'yellow' : pct >= 70 ? 'green' : pct >= 45 ? 'yellow' : 'red'
 
   return (
@@ -57,22 +63,28 @@ export default function FocusedExamResult({ examId, exams }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
-        <div className="flex items-center gap-3 text-[12px] font-mono">
-          <span className="text-success">✅ {student.correct} correct</span>
-          <span className="text-danger">❌ {student.incorrect} wrong</span>
-          <span className="text-ink-3">⬜ {student.notAttempted} skipped</span>
+      {/* Offline exams have no questions, so correct/wrong/skipped are
+          structurally 0 and there is nothing for the toggle to filter. Showing
+          them read as a real "0 correct". The notice below already explains
+          why there's no breakdown — a second line here would just repeat it. */}
+      {!isOffline && (
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+          <div className="flex items-center gap-3 text-[12px] font-mono">
+            <span className="text-success">✅ {student.correct} correct</span>
+            <span className="text-danger">❌ {student.incorrect} wrong</span>
+            <span className="text-ink-3">⬜ {student.notAttempted} skipped</span>
+          </div>
+          <button
+            onClick={() => setShowAll(v => !v)}
+            className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-border
+                       bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
+                       hover:border-accent/30 transition-all min-h-[32px]
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {showAll ? 'Show only wrong & skipped' : 'Show all questions'}
+          </button>
         </div>
-        <button
-          onClick={() => setShowAll(v => !v)}
-          className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-border
-                     bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
-                     hover:border-accent/30 transition-all min-h-[32px]
-                     focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          {showAll ? 'Show only wrong & skipped' : 'Show all questions'}
-        </button>
-      </div>
+      )}
 
       {/* Simple per-question table — all questions by default, wrong/skipped when toggled */}
       <div className="-mx-4 -mb-4 mt-2">

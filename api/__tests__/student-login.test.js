@@ -257,6 +257,26 @@ describe('POST /api/student-login', () => {
     })
   })
 
+  // The payload is built by spreading the raw Supabase row, so `max_marks`
+  // arrives snake_case while every reader (examMaxMarks, StudentView,
+  // ExamHistoryTable, FocusedExamResult) looks for `maxMarks`. Without the
+  // mapping an OFFLINE exam has no derivable denominator in the student portal
+  // — the parent sees a bare "5" with no "/ 5" and no % (2026-07-28).
+  it('maps max_marks → maxMarks so offline exams have a denominator', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({
+      examRows: [{ ...MOCK_EXAM_ROW, questions: [], max_marks: '5' }],
+    }))
+    const res = await call({ mobile: '9876543210' })
+    const [exam] = res.json.mock.calls[0][0].exams
+    expect(exam.maxMarks).toBe('5')
+  })
+
+  it('sets maxMarks to null for an MCQ exam (derived from questions instead)', async () => {
+    const res = await call({ mobile: '9876543210' })
+    const [exam] = res.json.mock.calls[0][0].exams
+    expect(exam.maxMarks).toBeNull()
+  })
+
   it('returns empty exams array when student has no results', async () => {
     vi.mocked(createClient).mockReturnValue(makeMockClient({ resultRows: [] }))
     const res = await call({ mobile: '9876543210' })
