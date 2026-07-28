@@ -249,7 +249,7 @@ describe('SchoolAttendancePage — extra (impromptu) classes', () => {
 // the same argument that moved attendance filing off the office's desk.
 describe('SchoolAttendancePage — homework filing', () => {
   async function fileHomework({ chapter = 'Trigonometry', notes = false } = {}) {
-    fireEvent.click(await screen.findByRole('button', { name: /homework for Maths/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
     fireEvent.change(await screen.findByLabelText(/chapter or topic/i), { target: { value: chapter } })
     if (notes) fireEvent.click(screen.getByLabelText(/^notes$/i))
     fireEvent.click(screen.getByRole('button', { name: /who hasn't done it/i }))
@@ -269,7 +269,7 @@ describe('SchoolAttendancePage — homework filing', () => {
 
   it('records notes-only and homework+notes distinctly', async () => {
     const { unmount } = render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
-    fireEvent.click(await screen.findByRole('button', { name: /homework for Maths/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
     fireEvent.change(await screen.findByLabelText(/chapter or topic/i), { target: { value: 'Vectors' } })
     fireEvent.click(screen.getByLabelText(/^homework$/i))   // untick homework
     fireEvent.click(screen.getByLabelText(/^notes$/i))      // tick notes
@@ -285,7 +285,7 @@ describe('SchoolAttendancePage — homework filing', () => {
 
   it('cannot proceed without a chapter or a type', async () => {
     render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
-    fireEvent.click(await screen.findByRole('button', { name: /homework for Maths/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
     const next = screen.getByRole('button', { name: /who hasn't done it/i })
     expect(next).toBeDisabled()                                        // no chapter
 
@@ -312,6 +312,83 @@ describe('SchoolAttendancePage — homework filing', () => {
       { id: 'h2', lws_id: 'LWS-002', date: THURSDAY, subject: 'Maths', chapter: 'Trig', type: 'homework' },
     ])
     render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /homework for Maths/i })).toHaveTextContent('2'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /file homework/i })).toHaveTextContent('2'))
+  })
+})
+
+// Homework is keyed (date, subject, chapter, type) — no slot. Offering it per
+// period card claimed a granularity the data doesn't have and duplicated the
+// button for the many teachers with back-to-back periods.
+describe('SchoolAttendancePage — homework is per class, not per period', () => {
+  // Two Maths periods for one batch on the same Thursday.
+  const TWO_PERIOD_TT = [{
+    ...TIMETABLES[0],
+    grid: {
+      s1: { Thursday: { type: 'class', mappingId: 'm-maths' } },
+      s2: { Thursday: { type: 'class', mappingId: 'm-maths' } },
+    },
+  }]
+
+  it('shows exactly one Homework control however many periods the class took', async () => {
+    mockStore.timetables = TWO_PERIOD_TT
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+
+    // Two period cards …
+    expect(await screen.findAllByRole('button', { name: /mark attendance for maths/i })).toHaveLength(2)
+    // … but a single homework entry point.
+    expect(screen.getAllByRole('button', { name: /file homework/i })).toHaveLength(1)
+  })
+
+  it('skips the class picker when there is only one class today', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
+
+    expect(screen.queryByLabelText(/^class$/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/chapter or topic/i)).toBeInTheDocument()
+  })
+
+  it('offers a class picker when the teacher taught several, one entry per subject+batch', async () => {
+    mockStore.timetables = [
+      TWO_PERIOD_TT[0],                                        // 12th_A, Maths ×2
+      { ...TIMETABLES[0], id: 'tt2', batchName: '11th_B',
+        grid: { s1: { Thursday: { type: 'class', mappingId: 'm-maths' } } } },
+    ]
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
+
+    const options = [...(await screen.findByLabelText(/^class$/i)).querySelectorAll('option')]
+    expect(options).toHaveLength(2)                            // not 3, despite 3 periods
+    expect(options.map(o => o.value)).toEqual(['Maths|11th_B', 'Maths|12th_A'])
+  })
+
+  it('files against the picked class', async () => {
+    mockStore.timetables = [
+      TWO_PERIOD_TT[0],
+      { ...TIMETABLES[0], id: 'tt2', batchName: '11th_B',
+        grid: { s1: { Thursday: { type: 'class', mappingId: 'm-maths' } } } },
+    ]
+    mockStore.studentProfiles = {
+      ...PROFILES,
+      'Neha Iyer': { name: 'Neha Iyer', lwsId: 'LWS-003', batches: ['11th_B'] },
+    }
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    fireEvent.click(await screen.findByRole('button', { name: /file homework/i }))
+
+    fireEvent.change(await screen.findByLabelText(/^class$/i), { target: { value: 'Maths|11th_B' } })
+    fireEvent.change(screen.getByLabelText(/chapter or topic/i), { target: { value: 'Circles' } })
+    fireEvent.click(screen.getByRole('button', { name: /who hasn't done it/i }))
+
+    // Roster follows the picked batch, not the first one.
+    fireEvent.click(await screen.findByLabelText(/Neha Iyer/))
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(mockStore.setHomeworkDefaultersForItem).toHaveBeenCalledWith(
+      THURSDAY, 'Maths', 'Circles', 'homework', ['LWS-003'],
+    ))
+  })
+
+  it('disables the control on a day with no classes', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate="2026-05-24" />)  // Sunday
+    expect(await screen.findByRole('button', { name: /file homework/i })).toBeDisabled()
   })
 })

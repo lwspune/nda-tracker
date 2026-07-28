@@ -7,7 +7,7 @@ import { resolveOnLeave } from '../../lib/analytics/chain'
 import MarkAbsenteesModal from '../Attendance/MarkAbsenteesModal'
 import MarkDefaultersModal from '../Attendance/MarkDefaultersModal'
 import ModalShell from '../Timetable/ModalShell'
-import { deriveHomeworkType, homeworkTypeLabel } from '../../lib/homework'
+import { deriveHomeworkType, homeworkTypeLabel, getHomeworkTargets } from '../../lib/homework'
 
 // Impromptu (substitute / extra) lectures have no timetable slot, so we mint a
 // synthetic id. The `adhoc_` prefix distinguishes them from timetable slots
@@ -200,23 +200,35 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
       .map(r => r.lws_id)
   }, [homeworkRows, hwItem, hwRoster])
 
-  // How many open homework items this teacher has filed per period today.
-  const hwCountBySubjectBatch = useMemo(() => {
+  // The distinct classes homework can be set for today. Homework is keyed
+  // (date, subject, chapter, type) with NO slot, so three periods of one
+  // subject+batch are ONE target — offering it per period card claimed a
+  // granularity the data doesn't have, and duplicated the button 2-3× for the
+  // teachers who have back-to-back periods (most of them).
+  const homeworkTargets = useMemo(() => getHomeworkTargets(lectures), [lectures])
+
+  // Open homework items per target, so the picker can show where work is
+  // already pending and the button can carry a total.
+  const hwCountByTarget = useMemo(() => {
     const counts = {}
     const rosterCache = {}
+    for (const t of homeworkTargets) {
+      rosterCache[t.key] = new Set(buildOfflineRoster(studentProfiles, [t.batchName]).map(s => s.lwsId))
+    }
     for (const r of homeworkRows) {
-      for (const lec of lectures) {
-        if (lec.subject !== r.subject) continue
-        const key = `${lec.subject}|${lec.batchName}`
-        if (!rosterCache[key]) {
-          rosterCache[key] = new Set(buildOfflineRoster(studentProfiles, [lec.batchName]).map(s => s.lwsId))
-        }
-        if (!rosterCache[key].has(r.lws_id)) continue
-        counts[key] = (counts[key] ?? 0) + 1
+      for (const t of homeworkTargets) {
+        if (t.subject !== r.subject) continue
+        if (!rosterCache[t.key].has(r.lws_id)) continue
+        counts[t.key] = (counts[t.key] ?? 0) + 1
       }
     }
     return counts
-  }, [homeworkRows, lectures, studentProfiles])
+  }, [homeworkRows, homeworkTargets, studentProfiles])
+
+  const hwTotal = useMemo(
+    () => Object.values(hwCountByTarget).reduce((a, b) => a + b, 0),
+    [hwCountByTarget],
+  )
 
   async function handleMarkReturned(lwsId) {
     const row = leaveRowByLwsId[lwsId]
@@ -261,8 +273,8 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
   function openHomeworkDefaulters() {
     const chapter = (hwForm?.chapter || '').trim()
     const type = deriveHomeworkType(hwForm?.hw, hwForm?.notes)
-    if (!chapter || !type) return
-    setHwItem({ subject: hwForm.subject, batchName: hwForm.batchName, chapter, type })
+    if (!chapter || !type || !hwForm?.target) return
+    setHwItem({ subject: hwForm.target.subject, batchName: hwForm.target.batchName, chapter, type })
     setHwForm(null)
   }
 
@@ -351,17 +363,33 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
                 <> · <span className="font-semibold text-ink-2">{filedCount}/{lecturesWithStatus.length}</span> filed</>
               )}
             </div>
-            {/* Available even with nothing timetabled — a Sunday revision class
-                is exactly the case nothing else in the system can record. */}
-            <button
-              type="button"
-              onClick={() => setAdhocForm({ batchName: teacherBatches[0] ?? '', subject: '', start: '', end: '' })}
-              disabled={teacherBatches.length === 0}
-              className="btn text-[12px] min-h-[44px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Add an extra class"
-            >
-              + Extra class
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Page-level, not per card: homework is one item per
+                  (subject, batch) for the day, however many periods it took. */}
+              <button
+                type="button"
+                onClick={() => setHwForm({
+                  target: homeworkTargets[0] ?? null, chapter: '', hw: true, notes: false,
+                })}
+                disabled={homeworkTargets.length === 0}
+                className="btn text-[12px] min-h-[44px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="File homework"
+              >
+                Homework
+                {hwTotal > 0 && <span className="ml-1.5 text-red-400 font-mono">{hwTotal}</span>}
+              </button>
+              {/* Available even with nothing timetabled — a Sunday revision class
+                  is exactly the case nothing else in the system can record. */}
+              <button
+                type="button"
+                onClick={() => setAdhocForm({ batchName: teacherBatches[0] ?? '', subject: '', start: '', end: '' })}
+                disabled={teacherBatches.length === 0}
+                className="btn text-[12px] min-h-[44px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Add an extra class"
+              >
+                + Extra class
+              </button>
+            </div>
           </div>
 
           {lecturesWithStatus.length === 0 && (
@@ -412,31 +440,14 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
                       ? <>{lec.absentCount} absent{lec.submittedAt ? ` · ${fmtTime(lec.submittedAt)}` : ''}</>
                       : 'Not recorded yet'}
                   </span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setHwForm({
-                        subject: lec.subject, batchName: lec.batchName, chapter: '', hw: true, notes: false,
-                      })}
-                      className="btn text-[13px] min-h-[44px] px-3"
-                      aria-label={`Homework for ${lec.subject} ${lec.batchName}`}
-                    >
-                      Homework
-                      {hwCountBySubjectBatch[`${lec.subject}|${lec.batchName}`] > 0 && (
-                        <span className="ml-1.5 text-red-400 font-mono">
-                          {hwCountBySubjectBatch[`${lec.subject}|${lec.batchName}`]}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalLecture(lec)}
-                      className={`btn text-[13px] min-h-[44px] px-4 ${lec.filed ? '' : 'btn-primary'}`}
-                      aria-label={`Mark attendance for ${lec.subject} ${lec.batchName} ${lec.startTime}`}
-                    >
-                      {lec.filed ? 'Edit' : 'Mark attendance'}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalLecture(lec)}
+                    className={`btn text-[13px] min-h-[44px] px-4 shrink-0 ${lec.filed ? '' : 'btn-primary'}`}
+                    aria-label={`Mark attendance for ${lec.subject} ${lec.batchName} ${lec.startTime}`}
+                  >
+                    {lec.filed ? 'Edit' : 'Mark attendance'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -463,7 +474,7 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
 
       {hwForm && (
         <ModalShell
-          title={`Homework — ${hwForm.subject} · ${hwForm.batchName}`}
+          title="Homework / notes"
           onClose={() => setHwForm(null)}
           footer={
             <div className="flex justify-end gap-2">
@@ -475,12 +486,40 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
               <button
                 type="button"
                 onClick={openHomeworkDefaulters}
-                disabled={!hwForm.chapter.trim() || !deriveHomeworkType(hwForm.hw, hwForm.notes)}
+                disabled={!hwForm.target || !hwForm.chapter.trim() || !deriveHomeworkType(hwForm.hw, hwForm.notes)}
                 className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
               >Next — who hasn't done it</button>
             </div>
           }
         >
+          {/* One entry per (subject, batch) taught today, however many periods
+              that took. Auto-selected when there's only one. */}
+          {homeworkTargets.length > 1 ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">Class</span>
+              <select
+                value={hwForm.target?.key ?? ''}
+                onChange={e => setHwForm(f => ({
+                  ...f, target: homeworkTargets.find(t => t.key === e.target.value) ?? null,
+                }))}
+                aria-label="Class"
+                className="form-input text-[13px] min-h-[44px] px-3"
+              >
+                {homeworkTargets.map(t => (
+                  <option key={t.key} value={t.key}>
+                    {t.subject} · {t.batchName}
+                    {hwCountByTarget[t.key] > 0 ? ` — ${hwCountByTarget[t.key]} pending` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="text-[13px] text-ink-2">
+              <span className="font-semibold">{hwForm.target?.subject}</span>
+              <span className="text-ink-3"> · {hwForm.target?.batchName}</span>
+            </div>
+          )}
+
           <label className="flex flex-col gap-1">
             <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">Chapter / topic</span>
             <input

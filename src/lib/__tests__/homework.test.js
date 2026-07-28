@@ -1,7 +1,44 @@
 import { describe, it, expect } from 'vitest'
 import {
   homeworkTypeLabel, formatHomeworkItem, homeworkItemKey, homeworkNotifyKey, deriveHomeworkType,
+  getHomeworkTargets,
 } from '../homework'
+
+// Homework has no slot dimension, so several periods of one subject+batch on a
+// day are ONE item. Live timetable data has this everywhere — Akash Rathod Sir
+// teaches Eng/GS to LWS_NDA_6M three times on a Monday.
+describe('getHomeworkTargets', () => {
+  it('collapses repeated periods of the same subject + batch into one target', () => {
+    const targets = getHomeworkTargets([
+      { subject: 'Eng/GS', batchName: '6M', slotId: 's1' },
+      { subject: 'Eng/GS', batchName: '6M', slotId: 's2' },
+      { subject: 'Eng/GS', batchName: '6M', slotId: 's3' },
+    ])
+    expect(targets).toEqual([{ key: 'Eng/GS|6M', subject: 'Eng/GS', batchName: '6M' }])
+  })
+
+  it('keeps the same subject taught to different batches apart', () => {
+    const targets = getHomeworkTargets([
+      { subject: 'Maths', batchName: '12th' },
+      { subject: 'Maths', batchName: '11th' },
+    ])
+    expect(targets.map(t => t.batchName)).toEqual(['11th', '12th'])   // batch-sorted
+  })
+
+  it('keeps different subjects for one batch apart', () => {
+    const targets = getHomeworkTargets([
+      { subject: 'Physics', batchName: '12th' },
+      { subject: 'Maths', batchName: '12th' },
+    ])
+    expect(targets.map(t => t.subject)).toEqual(['Maths', 'Physics'])
+  })
+
+  it('skips lectures missing a subject or batch, and tolerates no input', () => {
+    // An unassigned mapping yields a null subject; it is not a homework target.
+    expect(getHomeworkTargets([{ subject: null, batchName: '12th' }, { subject: 'Maths' }])).toEqual([])
+    expect(getHomeworkTargets(null)).toEqual([])
+  })
+})
 
 describe('deriveHomeworkType', () => {
   it('maps the two checkboxes onto the CHECK-constrained type column', () => {
