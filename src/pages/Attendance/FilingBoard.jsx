@@ -32,8 +32,6 @@ export default function FilingBoard({ date, batchName = null, refreshKey = 0 }) 
 
   if (rows.length === 0) return null
 
-  const pending = rows.filter(r => !r.filed)
-
   return (
     <div className="card px-5 py-4 mb-5">
       <div className="flex items-center gap-3 flex-wrap">
@@ -59,25 +57,10 @@ export default function FilingBoard({ date, batchName = null, refreshKey = 0 }) 
         </button>
       </div>
 
-      {/* Collapsed: name who to chase — that's the whole job. The batch name is
-          deliberately NOT here: it's the longest token on the chip and the
-          expanded table already has a Batch column. The start time replaces it
-          because that's what tells two same-subject periods apart. */}
-      {!expanded && outstanding > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {pending.map(r => (
-            <span
-              key={`${r.slotId}|${r.batchName}`}
-              className="text-[11px] px-2 py-1 rounded-full border border-yellow-400/30
-                         bg-yellow-400/10 text-yellow-400"
-            >
-              {r.teacherName ?? 'Unassigned'} · {r.subject}
-              {r.startTime && <span className="font-mono opacity-70"> · {r.startTime}</span>}
-            </span>
-          ))}
-        </div>
-      )}
-
+      {/* Collapsed = the counts line only. There is deliberately NO chip strip
+          here: with most of the day unfiled it ran to 40+ chips and buried the
+          page. The outstanding list lives behind "Show detail", where the table
+          gives teacher, subject, time and batch per period. */}
       {expanded && (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-[12px]">
