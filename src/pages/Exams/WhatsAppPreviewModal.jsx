@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
+import { examScoreBasis, resultScore } from '../../lib/whatsappResultScore'
 
 function useBranchOptions(studentProfiles) {
   return useMemo(() => {
@@ -10,14 +11,23 @@ function useBranchOptions(studentProfiles) {
 }
 
 function buildRows(exam, studentProfiles) {
+  // Same computation api/send-whatsapp.js uses for the template — see
+  // src/lib/whatsappResultScore.js. Deliberately not re-derived here: a second
+  // formula would agree today and drift later, and a preview that vouches for a
+  // number the parent never receives is worse than no preview.
+  const scoreBasis = examScoreBasis(exam)
   return exam.students.map(s => {
     const profile = studentProfiles[s.name] || {}
+    const { pct, scored, outOf } = resultScore(scoreBasis, s)
     return {
       name:          s.name,
       lwsId:         profile.lwsId || '',
       branch:        profile.branch || '',
       mobile:        profile.mobile || '',
       parentMobiles: (profile.parentMobiles || []).join(', '),
+      pct,
+      scored,
+      outOf,
     }
   })
 }
@@ -127,10 +137,10 @@ export default function WhatsAppPreviewModal({ exam, onClose, onConfirm, sending
               No failed or skipped students from the previous send.
             </div>
           ) : (
-            <table className="w-full min-w-[560px] text-[12px] border-collapse">
+            <table className="w-full min-w-[660px] text-[12px] border-collapse">
               <thead className="sticky top-0 bg-surface-2 z-10">
                 <tr>
-                  {['#', 'Name', 'Branch', 'Mobile', 'Parent Mobiles (comma-separated)'].map(h => (
+                  {['#', 'Name', 'Score (as sent)', 'Branch', 'Mobile', 'Parent Mobiles (comma-separated)'].map(h => (
                     <th key={h} className="text-left px-3 py-2 text-ink-3 font-semibold border-b border-border whitespace-nowrap">
                       {h}
                     </th>
@@ -145,6 +155,11 @@ export default function WhatsAppPreviewModal({ exam, onClose, onConfirm, sending
                   >
                     <td className="px-3 py-1.5 text-ink-3 w-8">{idx + 1}</td>
                     <td className="px-3 py-1.5 text-ink font-medium whitespace-nowrap">{row.name}</td>
+                    {/* Read-only: the exact Score / Correct Qs / Total Qs the parent will see. */}
+                    <td className="px-3 py-1.5 w-28 whitespace-nowrap">
+                      <span className="text-ink font-semibold tabular-nums">{row.pct}%</span>
+                      <span className="text-ink-3 ml-1.5 tabular-nums">{row.scored} / {row.outOf}</span>
+                    </td>
                     <td className="px-3 py-1.5 w-28">
                       <select
                         value={row.branch}
