@@ -232,7 +232,12 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
 
   const latest = scores[scores.length - 1]
   const prev   = scores.length >= 2 ? scores[scores.length - 2] : null
-  const delta  = prev ? latest.score - prev.score : null
+  // Percentage POINTS, never raw marks. Papers have different maxima, so a raw
+  // difference can invert the sign: 5.5/10 → 5/5 is 55% → 100%, a 45-point gain,
+  // but reads as "-0.5" in marks. Same %-of-max rule the Dashboard follows.
+  const delta  = prev && latest.max > 0 && prev.max > 0
+    ? Math.round((latest.pct - prev.pct) * 100)
+    : null
 
   // Offline exams carry no per-question data → chapter analytics are empty.
   // Flag when EVERY in-scope exam is offline so the blank section reads as
@@ -367,9 +372,11 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           label="Latest Score"
-          value={latest.score}
+          value={latest.max > 0
+            ? <>{latest.score}<span className="text-[13px] font-semibold text-ink-3"> / {latest.max}</span></>
+            : latest.score}
           color={latest.pct >= 0.7 ? 'text-success' : latest.pct >= 0.45 ? 'text-warning' : 'text-danger'}
-          delta={delta !== null ? `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(1)} from prev` : null}
+          delta={delta !== null ? `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)} pts from prev` : null}
           deltaUp={delta >= 0}
         />
         <StatCard

@@ -81,3 +81,74 @@ describe('ExamHistoryTable — click an exam to see the parent-facing report', (
     expect(screen.getByText(/Your Result/i)).toBeInTheDocument()
   })
 })
+
+// An offline exam has no questions[], so correct/wrong/skipped are structurally
+// 0 AND the bracketed marks breakdown is 0 — the cell rendered "0 (0)", which
+// claims both "nothing right" and "contributed no marks" for a paper the
+// student actually scored on. This table is NOT superadmin-gated: it renders in
+// the student portal, so parents saw it (2026-07-28).
+describe('ExamHistoryTable — offline exams show — not zeros', () => {
+  const offlineScores = [{
+    name: 'Sets', date: '2026-07-27', score: 5, max: 5, pct: 1,
+    correct: 0, wrong: 0, na: 0,
+    exam: {
+      id: 'exam_offline', name: 'Sets', date: '2026-07-27',
+      marking: { correct: 1, wrong: 0 },
+      questions: [],
+      maxMarks: 5,
+    },
+    student: {
+      totalMarks: 5, correct: 0, incorrect: 0, notAttempted: 0,
+      responses: {}, choices: {},
+    },
+  }]
+
+  const cellsOf = name =>
+    [...screen.getByText(name).closest('tr').querySelectorAll('td')].map(td => td.textContent.trim())
+
+  it('renders — in the correct / wrong / skipped columns', () => {
+    render(<ExamHistoryTable scores={offlineScores} />)
+    const cells = cellsOf('Sets')
+    // [exam, date, score, ✅, ❌, ⬜, %, actions]
+    expect(cells.slice(3, 6)).toEqual(['—', '—', '—'])
+  })
+
+  it('drops the bracketed marks breakdown entirely (not just the leading count)', () => {
+    render(<ExamHistoryTable scores={offlineScores} />)
+    expect(cellsOf('Sets').join(' ')).not.toContain('(0)')
+  })
+
+  it('still shows the score and the percentage, which ARE meaningful', () => {
+    render(<ExamHistoryTable scores={offlineScores} />)
+    const cells = cellsOf('Sets')
+    expect(cells[2]).toBe('5')
+    expect(cells[6]).toBe('100%')
+  })
+
+  it('labels the dashes for screen readers', () => {
+    render(<ExamHistoryTable scores={offlineScores} />)
+    const dashes = screen.getAllByTitle(/marks-only exam/i)
+    expect(dashes).toHaveLength(3)
+  })
+
+  it('leaves an MCQ exam untouched (counts + bracketed marks still render)', () => {
+    const mcqScores = [{
+      name: 'Mock Test 1', date: '2026-05-01', score: 40, max: 100, pct: 0.4,
+      correct: 10, wrong: 5, na: 5,
+      exam: {
+        id: 'exam1', name: 'Mock Test 1', date: '2026-05-01',
+        marking: { correct: 4, wrong: -1 },
+        questions: [{ q: 1 }, { q: 2 }],
+      },
+      student: {
+        totalMarks: 40, correct: 10, incorrect: 5, notAttempted: 5,
+        responses: { 1: 1, 2: -1 }, choices: { 1: 'A', 2: 'B' },
+      },
+    }]
+    render(<ExamHistoryTable scores={mcqScores} />)
+    const cells = cellsOf('Mock Test 1')
+    expect(cells[3]).toContain('10')
+    expect(cells[3]).toContain('(+40)')
+    expect(cells[5]).toContain('(0)')
+  })
+})

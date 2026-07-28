@@ -57,6 +57,20 @@ const STATUS = {
   wrong:   { label: '❌ Wrong',   badge: 'bg-red-50 text-danger border-red-200',        panel: 'bg-red-50/40 border-red-100' },
   skipped: { label: '⬜ Skipped', badge: 'bg-surface-2 text-ink-3 border-border',        panel: 'bg-surface-2/60 border-border' },
 }
+
+// Offline-ness is derived from the exam, never a stored flag — same rule as
+// every other offline consumer. A row with no `exam` (legacy shape) is treated
+// as MCQ so nothing that used to render numbers silently becomes a dash.
+const isOfflineRow = s => Boolean(s.exam) && !s.exam.questions?.length
+
+// A bare "—" is meaningless to a screen reader, so it carries its reason.
+function NotApplicableCell() {
+  return (
+    <td className="py-2 pr-3 text-ink-3 font-mono">
+      <span title="Marks-only exam — no per-question data">—</span>
+    </td>
+  )
+}
 function statusOf(result) {
   return result === 1 ? STATUS.correct : result === -1 ? STATUS.wrong : STATUS.skipped
 }
@@ -232,22 +246,36 @@ export default function ExamHistoryTable({ scores }) {
                     </td>
                     <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{s.date}</td>
                     <td className="py-2 pr-3 font-bold">{s.score}</td>
-                    <td className="py-2 pr-3 text-success font-mono">
-                      {s.correct}
-                      {s.exam?.marking && (
-                        <span className="text-ink-3"> ({fmtMarks(s.correct * s.exam.marking.correct)})</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 text-danger font-mono">
-                      {s.wrong}
-                      {s.exam?.marking && (
-                        <span className="text-ink-3"> ({fmtMarks(s.wrong * s.exam.marking.wrong)})</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 text-ink-3 font-mono">
-                      {s.na}
-                      {s.exam?.marking && <span className="text-ink-3"> (0)</span>}
-                    </td>
+                    {isOfflineRow(s) ? (
+                      // Offline exam: no questions[], so the counts are structurally
+                      // 0 AND the bracketed marks breakdown is 0 — "0 (0)" claims
+                      // both "nothing right" and "contributed no marks" for a paper
+                      // the student did score on. Score and % stay; they're real.
+                      <>
+                        <NotApplicableCell />
+                        <NotApplicableCell />
+                        <NotApplicableCell />
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 pr-3 text-success font-mono">
+                          {s.correct}
+                          {s.exam?.marking && (
+                            <span className="text-ink-3"> ({fmtMarks(s.correct * s.exam.marking.correct)})</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-danger font-mono">
+                          {s.wrong}
+                          {s.exam?.marking && (
+                            <span className="text-ink-3"> ({fmtMarks(s.wrong * s.exam.marking.wrong)})</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-ink-3 font-mono">
+                          {s.na}
+                          {s.exam?.marking && <span className="text-ink-3"> (0)</span>}
+                        </td>
+                      </>
+                    )}
                     <td className="py-2 pr-3">
                       <Badge variant={s.pct >= 0.7 ? 'green' : s.pct >= 0.45 ? 'yellow' : 'red'}>
                         {(s.pct * 100).toFixed(0)}%

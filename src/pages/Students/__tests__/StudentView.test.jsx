@@ -443,3 +443,66 @@ describe('StudentView — state resets when name prop changes', () => {
     expect(getSubjectSelect()).toHaveValue('Maths')
   })
 })
+
+// ── Latest Score tile — %-of-max, not raw marks ───────────────────────────────
+// The delta compared raw totalMarks across papers with different maxima, so a
+// student who went 5.5/10 (55%) → 5/5 (100%) was shown "▼ 0.5 from prev" in red.
+// A raw-marks comparison across paper sizes doesn't just add noise, it inverts
+// the sign. Same rule the Dashboard already follows (GUARDRAILS: %-of-max only).
+
+function makeOfflineExam({ studentScore, maxMarks, examName, date }) {
+  _id++
+  return {
+    id: `exam-${_id}`,
+    name: examName,
+    date,
+    subject: 'Maths',
+    batch: null,
+    marking: { correct: 1, wrong: 0 },
+    questions: [],
+    maxMarks,
+    students: [{
+      name: 'Alice', totalMarks: studentScore,
+      correct: 0, incorrect: 0, notAttempted: 0, responses: {},
+    }],
+    createdAt: new Date().toISOString(),
+  }
+}
+
+describe('StudentView — Latest Score delta', () => {
+  it('reports an improvement when the percentage rose, even though raw marks fell', () => {
+    setExams([
+      makeOfflineExam({ examName: 'Basics', studentScore: 5.5, maxMarks: 10, date: '2026-07-16' }),
+      makeOfflineExam({ examName: 'Sets',   studentScore: 5,   maxMarks: 5,  date: '2026-07-27' }),
+    ])
+    renderView()
+    // 55% → 100% is +45 percentage points, NOT "▼ 0.5".
+    expect(screen.getByText(/▲ 45 pts from prev/)).toBeInTheDocument()
+    expect(screen.queryByText(/0\.5 from prev/)).not.toBeInTheDocument()
+  })
+
+  it('reports a decline in percentage points when the percentage fell', () => {
+    setExams([
+      makeOfflineExam({ examName: 'Sets',   studentScore: 5, maxMarks: 5,  date: '2026-07-16' }),
+      makeOfflineExam({ examName: 'Basics', studentScore: 5, maxMarks: 10, date: '2026-07-27' }),
+    ])
+    renderView()
+    expect(screen.getByText(/▼ 50 pts from prev/)).toBeInTheDocument()
+  })
+
+  it('shows the latest score out of its paper max', () => {
+    setExams([
+      makeOfflineExam({ examName: 'Sets', studentScore: 4, maxMarks: 5, date: '2026-07-27' }),
+    ])
+    renderView()
+    expect(screen.getByText('/ 5')).toBeInTheDocument()
+  })
+
+  it('shows no delta for a single exam', () => {
+    setExams([
+      makeOfflineExam({ examName: 'Sets', studentScore: 4, maxMarks: 5, date: '2026-07-27' }),
+    ])
+    renderView()
+    expect(screen.queryByText(/from prev/)).not.toBeInTheDocument()
+  })
+})
