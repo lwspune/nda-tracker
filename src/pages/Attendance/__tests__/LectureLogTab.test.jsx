@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
@@ -284,7 +284,9 @@ describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt Session', start_time: '3:00 PM', end_time: '4:00 PM' },
     ])
     await ready()
-    expect(await screen.findByText('Doubt Session')).toBeInTheDocument()
+    // The subject now appears twice — once on the reconstructed card, once as a
+    // chip in the "Absent today" roster — so assert on the card's own markers.
+    expect(await screen.findAllByText('Doubt Session')).not.toHaveLength(0)
     expect(screen.getByText('3:00 PM – 4:00 PM')).toBeInTheDocument()
     expect(await screen.findByText(/1 absent/i)).toBeInTheDocument()
   })
@@ -304,7 +306,7 @@ describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
     ])
     const onSend = vi.fn()
     render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={onSend} />)
-    await screen.findByText('Doubt')
+    await screen.findAllByText('Doubt') // card + absent-roster chip
     fireEvent.click(screen.getByRole('button', { name: /send lecture-miss notifications/i }))
     expect(onSend).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -322,10 +324,63 @@ describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
       { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt', start_time: null, end_time: null },
     ])
     await ready()
-    await screen.findByText('Doubt')
+    await screen.findAllByText('Doubt') // card + absent-roster chip
     fireEvent.click(screen.getByRole('button', { name: /remove .*doubt/i }))
     await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalledWith(THURSDAY, 'adhoc_abc', 'Doubt', []))
-    await waitFor(() => expect(screen.queryByText('Doubt')).not.toBeInTheDocument())
+    // The card is gone. (The roster chip is asserted separately — here the
+    // mocked fetch keeps replaying the deleted row, so it can't disappear.)
+    await waitFor(() => expect(screen.queryByRole('button', { name: /remove .*doubt/i })).not.toBeInTheDocument())
+  })
+})
+
+describe('LectureLogTab — absent-today roster', () => {
+  async function ready(batch = 'LWS_NDA_2Y_(25-27)_A') {
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch={batch} onSend={vi.fn()} />)
+    await waitFor(() => expect(mockStore.getLectureAbsencesForDate).toHaveBeenCalled())
+  }
+
+  it('lists each absent student with the periods they missed', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's2', subject: 'Physics' },
+    ])
+    await ready()
+    const roster = within(await screen.findByTestId('absent-roster'))
+    expect(roster.getByText('Arjun Sharma')).toBeInTheDocument()
+    expect(roster.getByText('Maths')).toBeInTheDocument()
+    expect(roster.getByText('Physics')).toBeInTheDocument()
+    expect(screen.getByText(/1 student\b/)).toBeInTheDocument()
+  })
+
+  it('marks who has already been notified vs still pending', async () => {
+    mockStore.lectureMissSendHistory = {
+      [`${THURSDAY}|LWS_NDA_2Y_(25-27)_A`]: { sentAt: 1, sent: 1, notifiedLwsIds: ['LWS-001'] },
+    }
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+      { lws_id: 'LWS-002', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    await ready()
+    const rows = within(await screen.findByTestId('absent-roster')).getAllByRole('row')
+    expect(within(rows[1]).getByText(/sent/i)).toBeInTheDocument()     // Arjun Sharma — notified
+    expect(within(rows[2]).getByText(/pending/i)).toBeInTheDocument()  // Ravi Kumar — not yet
+  })
+
+  it('falls back to every batch (with a Batch column) when no batch is picked', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    render(<LectureLogTab initialDate={THURSDAY} />)
+    const roster = within(await screen.findByTestId('absent-roster'))
+    expect(screen.getByText(/absent today/i)).toBeInTheDocument()
+    expect(roster.getByRole('columnheader', { name: /batch/i })).toBeInTheDocument()
+    expect(roster.getByText('LWS_NDA_2Y_(25-27)_A')).toBeInTheDocument()
+  })
+
+  it('renders nothing when nobody was marked absent', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([])
+    await ready()
+    expect(screen.queryByTestId('absent-roster')).not.toBeInTheDocument()
   })
 })
 

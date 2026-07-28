@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { getTodaysLectures } from '../../lib/timetable'
 import { resolveOnLeave } from '../../lib/analytics/chain'
+import { buildAbsentRoster, buildSlotTimeIndex } from '../../lib/absentRoster'
 import MarkAbsenteesModal from './MarkAbsenteesModal'
 import FilingBoard from './FilingBoard'
 
@@ -59,6 +60,11 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const [leaveRowByLwsId, setLeaveRowByLwsId] = useState({}) // lwsId → { id } for "mark returned"
   const [leaveRefresh, setLeaveRefresh] = useState(0)        // bump to reload leaves
   const [filingRefresh, setFilingRefresh] = useState(0)      // bump to reload the filing board
+  // Every lecture_absences row for the date, UNFILTERED by batch. The bottom
+  // "Absent today" roster follows the batch picker, so with no batch chosen it
+  // has to be able to read the whole day — which the batch-scoped grouping in
+  // `absencesBySlot` (below) deliberately cannot.
+  const [dayAbsenceRows, setDayAbsenceRows] = useState([])
 
   // Available batches: union of all timetable batch names
   const availableBatches = useMemo(() => {
@@ -150,6 +156,21 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     return () => { cancelled = true }
   }, [date, batchName, getAbsencesForDate, batchIdSet])
 
+  // The day's absences for the roster below. Kept as its OWN fetch rather than
+  // folded into the effect above: that one also rebuilds the ad-hoc cards from
+  // persisted rows, so re-running it after every save would wipe an impromptu
+  // card that was saved with nobody absent.
+  useEffect(() => {
+    if (!date) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDayAbsenceRows([])
+      return
+    }
+    let cancelled = false
+    getAbsencesForDate(date).then(rows => { if (!cancelled) setDayAbsenceRows(rows ?? []) })
+    return () => { cancelled = true }
+  }, [date, getAbsencesForDate, filingRefresh])
+
   // Load the day's active leaves (hostel scope). Empty for non-hostel branches.
   // `date` is YYYY-MM-DD; build IST day bounds for the overlap test.
   useEffect(() => {
@@ -231,6 +252,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
       delete next[lec.slotId]
       return next
     })
+    setFilingRefresh(n => n + 1) // its rows are gone — drop them from the roster too
   }
 
   // Per-student missed-subject list with time info, derived by looking up the
@@ -253,6 +275,34 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   }, [absencesBySlot, lecturesBySlotId])
 
   const totalAbsences = Object.values(absencesBySlot).reduce((acc, ids) => acc + ids.length, 0)
+
+  // ── Absent-today roster (bottom of the tab) ────────────────────────────────
+  // Timetabled rows persist no time (they re-derive it), so the roster needs a
+  // slot → time index spanning every timetable, not just the selected batch's.
+  const slotTimes = useMemo(() => buildSlotTimeIndex(timetables), [timetables])
+
+  // Who's already been messaged. Send history is keyed `${date}|${batchName}`,
+  // so an all-batches view has to union every batch sent on this date.
+  const notifiedLwsIds = useMemo(() => {
+    if (batchName) return new Set(lectureMissSendHistory?.[`${date}|${batchName}`]?.notifiedLwsIds || [])
+    const ids = new Set()
+    for (const [key, record] of Object.entries(lectureMissSendHistory || {})) {
+      if (!key.startsWith(`${date}|`)) continue
+      for (const id of record?.notifiedLwsIds || []) ids.add(id)
+    }
+    return ids
+  }, [lectureMissSendHistory, date, batchName])
+
+  const absentRoster = useMemo(
+    () => buildAbsentRoster({
+      rows: dayAbsenceRows,
+      studentProfiles,
+      slotTimes,
+      batchName: batchName || null,
+      notifiedLwsIds,
+    }),
+    [dayAbsenceRows, studentProfiles, slotTimes, batchName, notifiedLwsIds],
+  )
 
   return (
     <div>
@@ -487,6 +537,66 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Who was actually marked absent. The period cards above only ever show
+          a COUNT — the names live inside the mark modal, one period at a time —
+          so this is the only place the day reads as a list of students.
+          Follows the batch picker: all batches until one is chosen. */}
+      {absentRoster.length > 0 && (
+        <div className="card px-5 py-4 mt-6" data-testid="absent-roster">
+          <div className="flex items-center gap-3 flex-wrap mb-3">
+            <span className="text-[12px] font-mono uppercase tracking-widest text-ink-3">
+              Absent today {batchName ? `· ${batchName}` : '· all batches'}
+            </span>
+            <span className="text-[15px] font-extrabold text-ink">
+              {absentRoster.length} student{absentRoster.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-border text-[10px] font-mono uppercase tracking-widest text-ink-3">
+                  <th className="text-left py-2 pr-3">Student</th>
+                  {!batchName && <th className="text-left py-2 pr-3">Batch</th>}
+                  <th className="text-left py-2 pr-3">Periods missed</th>
+                  <th className="text-left py-2">Notified</th>
+                </tr>
+              </thead>
+              <tbody>
+                {absentRoster.map(s => (
+                  <tr key={s.lwsId} className="border-b border-border align-top">
+                    <td className="py-2 pr-3 text-ink font-semibold whitespace-nowrap">{s.name}</td>
+                    {!batchName && (
+                      <td className="py-2 pr-3 text-ink-3">
+                        {s.batches.length ? s.batches.join(', ') : <span className="italic">unassigned</span>}
+                      </td>
+                    )}
+                    <td className="py-2 pr-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {s.periods.map((p, i) => (
+                          <span
+                            key={`${s.lwsId}|${i}`}
+                            className="text-[11px] px-2 py-1 rounded-full border border-red-400/30
+                                       bg-red-400/10 text-red-400"
+                          >
+                            {p.subject ?? 'Lecture'}
+                            {p.startTime && <span className="font-mono opacity-70"> {p.startTime}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-2 whitespace-nowrap">
+                      {s.notified
+                        ? <span className="text-success font-semibold">✓ Sent</span>
+                        : <span className="text-yellow-400 font-semibold">Pending</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       <MarkAbsenteesModal
