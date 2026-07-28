@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import useStore from '../../store/useStore'
 import { supabase } from '../../lib/supabase'
-import { EmptyState, Spinner, Alert } from '../../components/ui'
+import { EmptyState, Spinner, Alert, CopyLinkBar } from '../../components/ui'
+import { buildCaptureUrl, HOSTEL_ATTENDANCE_PATH } from '../../lib/routing'
 import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
@@ -400,6 +401,15 @@ export default function HostelTab() {
 
   return (
     <div>
+      {/* The link to hand the warden / mess staff. Access itself is the
+          hostelAccess flag on their teacher record (Settings → Teachers) —
+          this only makes the URL copyable instead of memorised. */}
+      <CopyLinkBar
+        label="Warden / mess staff link"
+        url={buildCaptureUrl(HOSTEL_ATTENDANCE_PATH, window.location.origin, import.meta.env.BASE_URL)}
+        hint="Needs 'Hostel & mess attendance access' on their teacher record (Settings → Teachers)."
+      />
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input

@@ -116,6 +116,7 @@ export function Alert({ type = 'info', children }) {
 
 // ── Drop Zone ────────────────────────────────────────────────
 export { default as DropZone } from './DropZone'
+export { default as CopyLinkBar } from './CopyLinkBar'
 
 // ── Page Header ──────────────────────────────────────────────
 export function PageHeader({ title, sub, actions }) {

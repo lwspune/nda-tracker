@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { isSchoolAttendancePath, isHostelAttendancePath } from '../routing'
+import {
+  isSchoolAttendancePath, isHostelAttendancePath, buildCaptureUrl,
+  SCHOOL_ATTENDANCE_PATH, HOSTEL_ATTENDANCE_PATH,
+} from '../routing'
 
 // vercel.json rewrites every non-api path to index.html, so the app boots on
 // /school-attendance; this helper is what gives the URL meaning. BASE_URL is
@@ -41,5 +44,39 @@ describe('isHostelAttendancePath', () => {
     expect(isHostelAttendancePath('/hostel-mess', '/')).toBe(false)
     expect(isHostelAttendancePath('/', '/')).toBe(false)
     expect(isSchoolAttendancePath('/hostel-mess-attendance', '/')).toBe(false)
+  })
+})
+
+// The link faculty hand to a teacher. The base prefix is the whole reason this
+// isn't a string template at the call site: on the GitHub Pages build a link
+// built without it 404s, and it would do so silently.
+describe('buildCaptureUrl', () => {
+  it('joins origin + path on the Vercel base', () => {
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, 'https://nda-tracker.vercel.app', '/'))
+      .toBe('https://nda-tracker.vercel.app/school-attendance')
+    expect(buildCaptureUrl(HOSTEL_ATTENDANCE_PATH, 'https://nda-tracker.vercel.app', '/'))
+      .toBe('https://nda-tracker.vercel.app/hostel-mess-attendance')
+  })
+
+  it('keeps the GitHub Pages base prefix', () => {
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, 'https://lwspune.github.io', '/nda-tracker/'))
+      .toBe('https://lwspune.github.io/nda-tracker/school-attendance')
+  })
+
+  it('never emits a doubled slash, whatever the base looks like', () => {
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, 'https://x.dev/', '/'))
+      .toBe('https://x.dev/school-attendance')
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, 'https://x.dev', '/nda-tracker'))
+      .toBe('https://x.dev/nda-tracker/school-attendance')
+  })
+
+  it('round-trips through the matcher — the link it builds is one the app recognises', () => {
+    const url = buildCaptureUrl(HOSTEL_ATTENDANCE_PATH, 'https://lwspune.github.io', '/nda-tracker/')
+    expect(isHostelAttendancePath(new URL(url).pathname, '/nda-tracker/')).toBe(true)
+  })
+
+  it('tolerates a missing origin/base rather than emitting "undefined"', () => {
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, '', '')).toBe('/school-attendance')
+    expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH)).toBe('/school-attendance')
   })
 })

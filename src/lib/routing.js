@@ -25,3 +25,14 @@ export function isHostelAttendancePath(pathname, baseUrl = '/') {
   const path = String(pathname || '/').replace(baseUrl, '/')
   return path === HOSTEL_ATTENDANCE_PATH || path === `${HOSTEL_ATTENDANCE_PATH}/`
 }
+
+// The absolute link faculty hand to a teacher / the warden.
+//
+// The base prefix is the whole reason this isn't a template string at the call
+// site: on the GitHub Pages build (`/nda-tracker/`) a link assembled without it
+// 404s, and it does so silently — the person you sent it to just sees nothing.
+// Origin is derived from the caller, so copying from prod yields the prod link.
+export function buildCaptureUrl(path, origin = '', baseUrl = '/') {
+  const base = String(baseUrl ?? '').replace(/\/+$/, '')  // '/nda-tracker/' → '/nda-tracker', '/' → ''
+  return `${String(origin ?? '').replace(/\/+$/, '')}${base}${path}`
+}

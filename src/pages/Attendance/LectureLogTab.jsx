@@ -3,6 +3,8 @@ import useStore from '../../store/useStore'
 import { getTodaysLectures } from '../../lib/timetable'
 import { resolveOnLeave } from '../../lib/analytics/chain'
 import { buildAbsentRoster, buildSlotTimeIndex } from '../../lib/absentRoster'
+import { buildCaptureUrl, SCHOOL_ATTENDANCE_PATH } from '../../lib/routing'
+import { CopyLinkBar } from '../../components/ui'
 import MarkAbsenteesModal from './MarkAbsenteesModal'
 import FilingBoard from './FilingBoard'
 
@@ -308,6 +310,14 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
     <div>
       {/* Who has / hasn't filed — teachers now capture their own periods */}
       <FilingBoard date={date} batchName={batchName || null} refreshKey={filingRefresh} />
+
+      {/* The link to hand a teacher who hasn't filed. Sits right under the
+          board because that IS the chase action. */}
+      <CopyLinkBar
+        label="Teacher link"
+        url={buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, window.location.origin, import.meta.env.BASE_URL)}
+        hint="Teachers sign in here to file attendance for their own periods."
+      />
 
       {/* Pickers */}
       <div className="flex flex-wrap gap-3 items-end mb-5">
