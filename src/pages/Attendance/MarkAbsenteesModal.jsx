@@ -96,7 +96,19 @@ export default function MarkAbsenteesModal({
     : 'Tap the students who were ABSENT.'
 
   return (
-    <ModalShell title={`Mark attendance — ${subject} · ${fmtDate(date)}`} onClose={onClose} wide>
+    <ModalShell
+      title={`Mark attendance — ${subject} · ${fmtDate(date)}`}
+      onClose={onClose}
+      wide
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn text-[13px] min-h-[44px] px-4">Cancel</button>
+          <button type="button" onClick={handleSave} className="btn btn-primary text-[13px] min-h-[44px] px-4">
+            Save ({derivedAbsent.length} absent)
+          </button>
+        </div>
+      }
+    >
       {/* Mode toggle */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <div className="inline-flex rounded-lg border border-border overflow-hidden">
@@ -130,10 +142,13 @@ export default function MarkAbsenteesModal({
         aria-label="Search students in this batch"
       />
 
+      {/* The list has no height cap / scroll of its own — the modal body is the
+          single scroll container. A nested one made Save both hidden and hard
+          to reach, since the inner list swallowed the scroll gesture. */}
       {visible.length === 0 ? (
         <div className="text-[12px] text-ink-3 italic py-6 text-center">No matching students.</div>
       ) : (
-        <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-1">
           {visible.map(s => {
             const locked = onLeave.has(s.lwsId)
             return (
@@ -168,12 +183,6 @@ export default function MarkAbsenteesModal({
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-3 border-t border-border">
-        <button type="button" onClick={onClose} className="btn text-[13px] min-h-[44px] px-4">Cancel</button>
-        <button type="button" onClick={handleSave} className="btn btn-primary text-[13px] min-h-[44px] px-4">
-          Save ({derivedAbsent.length} absent)
-        </button>
-      </div>
     </ModalShell>
   )
 }

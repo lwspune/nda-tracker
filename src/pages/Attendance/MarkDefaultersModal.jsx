@@ -53,6 +53,16 @@ export default function MarkDefaultersModal({
       title={`Mark pending — ${subject}${chapter ? ` · ${chapter}` : ''}`}
       onClose={onClose}
       wide
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn text-[13px] min-h-[44px] px-4">
+            Cancel
+          </button>
+          <button type="button" onClick={handleSave} className="btn btn-primary text-[13px] min-h-[44px] px-4">
+            Save
+          </button>
+        </div>
+      }
     >
       <input
         type="text"
@@ -63,12 +73,13 @@ export default function MarkDefaultersModal({
         aria-label="Search students in this batch"
       />
 
+      {/* The modal body is the single scroll container — see MarkAbsenteesModal. */}
       {visible.length === 0 ? (
         <div className="text-[12px] text-ink-3 italic py-6 text-center">
           No matching students.
         </div>
       ) : (
-        <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-1">
           {visible.map(s => (
             <label
               key={s.lwsId}
@@ -87,14 +98,6 @@ export default function MarkDefaultersModal({
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-3 border-t border-border">
-        <button type="button" onClick={onClose} className="btn text-[13px] min-h-[44px] px-4">
-          Cancel
-        </button>
-        <button type="button" onClick={handleSave} className="btn btn-primary text-[13px] min-h-[44px] px-4">
-          Save
-        </button>
-      </div>
     </ModalShell>
   )
 }

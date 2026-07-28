@@ -80,7 +80,28 @@ export default function AddTimetableModal({ timetable, onClose }) {
   const noBatches  = batchOptions.length === 0
 
   return (
-    <ModalShell title={isEdit ? 'Edit Timetable' : 'New Timetable'} onClose={onClose}>
+    <ModalShell
+      title={isEdit ? 'Edit Timetable' : 'New Timetable'}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-between items-center">
+          {isEdit ? (
+            <button
+              className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
+              onClick={handleDelete}
+            >Delete timetable</button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>Cancel</button>
+            <button
+              className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
+              onClick={handleSave}
+              disabled={!canSave || duplicateTimetable}
+            >{isEdit ? 'Save' : 'Create'}</button>
+          </div>
+        </div>
+      }
+    >
       <div className="space-y-4">
         {/* Branch */}
         <div>
@@ -143,23 +164,6 @@ export default function AddTimetableModal({ timetable, onClose }) {
           </p>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-between items-center pt-2 border-t border-border">
-          {isEdit ? (
-            <button
-              className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
-              onClick={handleDelete}
-            >Delete timetable</button>
-          ) : <div />}
-          <div className="flex gap-2">
-            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>Cancel</button>
-            <button
-              className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
-              onClick={handleSave}
-              disabled={!canSave || duplicateTimetable}
-            >{isEdit ? 'Save' : 'Create'}</button>
-          </div>
-        </div>
       </div>
     </ModalShell>
   )

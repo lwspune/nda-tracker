@@ -57,7 +57,33 @@ export default function AddSlotModal({ timetableId, slot, onClose }) {
   }
 
   return (
-    <ModalShell title={isEdit ? 'Edit Time Slot' : 'Add Time Slot'} onClose={onClose}>
+    <ModalShell
+      title={isEdit ? 'Edit Time Slot' : 'Add Time Slot'}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-between items-center">
+          {isEdit ? (
+            <button
+              className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
+              onClick={() => {
+                if (window.confirm('Delete this time slot? All assignments in this row will be lost.')) {
+                  deleteTimetableSlot(timetableId, slot.id)
+                  onClose()
+                }
+              }}
+            >Delete slot</button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>Cancel</button>
+            <button
+              className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
+              onClick={handleSave}
+              disabled={!canSave}
+            >{isEdit ? 'Save' : 'Add'}</button>
+          </div>
+        </div>
+      }
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -91,27 +117,6 @@ export default function AddSlotModal({ timetableId, slot, onClose }) {
           </p>
         )}
 
-        <div className="flex justify-between items-center pt-2 border-t border-border">
-          {isEdit ? (
-            <button
-              className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
-              onClick={() => {
-                if (window.confirm('Delete this time slot? All assignments in this row will be lost.')) {
-                  deleteTimetableSlot(timetableId, slot.id)
-                  onClose()
-                }
-              }}
-            >Delete slot</button>
-          ) : <div />}
-          <div className="flex gap-2">
-            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>Cancel</button>
-            <button
-              className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
-              onClick={handleSave}
-              disabled={!canSave}
-            >{isEdit ? 'Save' : 'Add'}</button>
-          </div>
-        </div>
       </div>
     </ModalShell>
   )

@@ -64,7 +64,32 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
     : `Edit Cell — ${day}`
 
   return (
-    <ModalShell title={title} onClose={onClose}>
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-between items-center">
+          {currentCell ? (
+            <button
+              className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
+              onClick={handleClear}
+            >Clear cell</button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
+              onClick={handleSave}
+              disabled={!isSpan && mode === 'class' && !selectedMappingId}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      }
+    >
       {/* Mode selector — only for non-span cells */}
       {!isSpan && (
         <div className="flex gap-2 mb-1">
@@ -127,27 +152,6 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex justify-between items-center pt-2 border-t border-border">
-        {currentCell ? (
-          <button
-            className="text-[12px] text-red-500 hover:text-red-700 font-semibold"
-            onClick={handleClear}
-          >Clear cell</button>
-        ) : <div />}
-        <div className="flex gap-2">
-          <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary text-[12px] px-3 py-1.5 disabled:opacity-40"
-            onClick={handleSave}
-            disabled={!isSpan && mode === 'class' && !selectedMappingId}
-          >
-            Save
-          </button>
-        </div>
-      </div>
     </ModalShell>
   )
 }
