@@ -788,3 +788,22 @@ Focus now moves into the dialog on open and returns to the opener on close, but 
 **Why:** it is the remaining half of the keyboard story. Getting focus in without keeping it there is better than nothing but still lets a keyboard user land on controls they cannot see, under a `backdrop-filter` blur.
 
 **How to apply:** a small `useFocusTrap(ref)` — collect focusable descendants, wrap Tab/Shift+Tab at the ends. Roughly 25 lines, no dependency. Deliberately not done in the same change as the footer/semantics work to keep that diff reviewable; the tests for it belong alongside the existing `ModalShell.test.jsx` dialog-semantics block.
+
+### Backfill ledger — two helpers now duplicated between admin and staff surfaces
+
+Building the staff-parity work extracted two pure helpers that the admin surfaces still have local copies of:
+
+- `buildOpenLeaveList` + `STALE_LEAVE_DAYS` (`src/lib/hostelLeave.js`) — `HostelTab` still computes `onLeaveList` / `staleCount` inline (~L349) with its own `STALE_LEAVE_DAYS` const.
+- `deriveHomeworkType` (`src/lib/homework.js`) — `HomeworkLogTab` still has a local `deriveType` (L19).
+
+**Why:** both are the "shared helper so they can't drift" pattern GUARDRAILS already mandates for `buildBoarderRoster`. Two implementations of the stale threshold is exactly how the admin board and the warden page end up disagreeing about who needs chasing.
+
+**How to apply:** mechanical — import the lib version, delete the local copy, keep the existing tests. Not done in the same change because it edits shipped, working surfaces that were not part of the request; it wants its own small diff. Both are pure and covered by tests on the lib side already.
+
+### Meal filings are recorded but not yet chased end-to-end
+
+`markCheckpointFiled` + the Hostel tab's filing board close the "was this meal filed?" gap, but there is no equivalent of the lecture-miss chase loop: nothing alerts anyone that dinner went unfiled, and the warden alert (`kind:'hostel'`) still only reports unexplained boarders from the chain.
+
+**Why:** a filing record nobody looks at is only half the fix. Lectures have `FilingBoard` *plus* an admin who works the outstanding list; meals now have the board but no prompt.
+
+**How to apply:** cheapest is to fold an "unfiled checkpoints" line into the existing `send-attendance-alerts` `kind:'hostel'` payload (no new endpoint — the Vercel 12-function cap is at its ceiling). Needs a decision on timing: an alert at 09:00 for an unfiled breakfast is useful, one at 23:00 for an unfiled dinner is too late to fix anything.

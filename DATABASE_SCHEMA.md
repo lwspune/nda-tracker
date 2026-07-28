@@ -157,19 +157,22 @@ Index: `(date)`, `(lws_id)`. The `class` checkpoint in the chain view is **deriv
 
 An active leave overlapping a day explains **every** checkpoint that day (day-granular; `resolveOnLeave` does the overlap test). An **open-ended** leave (`to_ts NULL`) covers every day at/after `from_ts` until closed. **Load-bearing:** both leave readers — `leavesSlice.getActiveLeaves` and `api/send-attendance-alerts.js` — must query `.or('to_ts.is.null,to_ts.gte.<dayStart>')` and map `to_ts null → toMs null` for `resolveOnLeave`; a plain `.gte('to_ts', …)` silently drops open leaves and flags their boarders as unexplained. Close a leave with `leavesSlice.endLeave(id, toTs)` (stamps `to_ts` — the boarder returned); the Hostel tab's **On Leave** panel surfaces open leaves with a days-out counter and flags any out ≥3 days as stale. Index: `(lws_id)`, `(from_ts, to_ts)`.
 
-### `checkpoint_confirmations` — roll reconciliation gate
+### `checkpoint_confirmations` — roll reconciliation gate + meal filing record
 
 | Column | Type | Default | Notes |
 |---|---|---|---|
 | `id` | uuid PK | `gen_random_uuid()` | |
 | `date` | text | — | `DD-MM-YYYY` |
-| `checkpoint` | text | — | roll only: `hostel_am` / `hostel_pm` |
+| `checkpoint` | text | — | any of the five: `hostel_am` / `breakfast` / `lunch` / `dinner` / `hostel_pm` |
 | `branch` | text | `'APJ'` | |
-| `expected_count` / `exception_count` / `confirmed_present` | int | — | reconciliation tallies |
-| `reconciled` | boolean | `false` | `confirmed_present == expected − exceptions`; **false = open incident** |
-| `confirmed_by` | text | nullable | admin email |
+| `kind` | text | `'roll'` | **(2026-07-28)** `roll` = headcount reconciliation (counts required) · `meal` = filed-vs-silent record only (counts NULL). CHECK-constrained. |
+| `expected_count` / `exception_count` / `confirmed_present` | int | nullable | reconciliation tallies — **NOT NULL for `kind='roll'`**, NULL for meals |
+| `reconciled` | boolean | nullable | `confirmed_present == expected − exceptions`; **false = open incident**. NOT NULL for rolls, NULL for meals |
+| `confirmed_by` | text | nullable | admin / staff email |
 | `confirmed_at` | timestamptz | `now()` | |
-| **UNIQUE** | `(date, checkpoint, branch)` | | one confirmation per roll per day |
+| **UNIQUE** | `(date, checkpoint, branch)` | | one confirmation per checkpoint per day (upsert key) |
+
+**Why `kind` rather than plain-nullable counts (2026-07-28):** meals had no filed-vs-silent record at all — an unmarked breakfast and a breakfast where everyone turned up were both zero `checkpoint_absences` rows, the same ambiguity `lecture_submissions` closed for lectures. A meal has no headcount, so the count columns had to become nullable; dropping `NOT NULL` outright would also have let a **roll** be written with no reconciliation, silently defeating the gate. `kind` carries the difference and `checkpoint_confirmations_roll_counts_check` keeps rolls strict. Writers: `confirmRoll` (rolls, `kind='roll'`) and `markCheckpointFiled` (meals, `kind='meal'` — **rejects roll checkpoints by design**).
 
 Also on `students`: **`residential boolean NOT NULL default true`** — the boarder/day-scholar split. Day-scholars are `false`; both the Hostel & Mess board (`HostelTab` roster) and the warden-alert endpoint exclude them (`residential === false` / `.eq('residential', true)`), so they never appear as boarders. New students default to boarder. RLS: all three tables carry `faculty_rw` (`FOR ALL TO authenticated USING(true) WITH CHECK(true)`), matching the sibling attendance tables.
 
