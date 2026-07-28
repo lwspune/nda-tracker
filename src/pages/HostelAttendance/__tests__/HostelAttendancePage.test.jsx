@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
@@ -11,6 +11,7 @@ const mockStore = {
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
   addLeave: vi.fn(),
+  markCheckpointFiled: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -43,6 +44,7 @@ beforeEach(() => {
   mockStore.confirmRoll.mockResolvedValue(true)
   mockStore.endLeave.mockResolvedValue(true)
   mockStore.addLeave.mockResolvedValue(true)
+  mockStore.markCheckpointFiled.mockResolvedValue(true)
 })
 
 // The IST day bounds for DMY, spelled out so the expectations below are
@@ -255,5 +257,87 @@ describe('HostelAttendancePage — leave lifecycle', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/i }))
     await waitFor(() => expect(screen.queryByLabelText(/reason/i)).not.toBeInTheDocument())
     expect(mockStore.addLeave).not.toHaveBeenCalled()
+  })
+})
+
+// The warden can now open leaves, so they need the review that stops an
+// open-ended one silently masking a boarder forever. Giving one person the
+// open/close power and another the stale review is how that guard gets missed.
+describe('HostelAttendancePage — open-leave review', () => {
+  it('lists who is out, how long, and flags the stale ones', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'l1', lws_id: 'APJ-1', from_ts: '2026-07-09T00:00:00+05:30', to_ts: null }, // 4 days
+      { id: 'l2', lws_id: 'APJ-2', from_ts: '2026-07-12T00:00:00+05:30', to_ts: null }, // 1 day
+    ])
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+
+    const panel = within(await screen.findByTestId('open-leave-review'))
+    expect(panel.getByText(/Aarav Nair/)).toBeInTheDocument()
+    expect(panel.getByText(/4 days/)).toBeInTheDocument()
+    expect(panel.getByText(/1 day\b/)).toBeInTheDocument()
+    expect(screen.getByText(/1 out 3\+ days/i)).toBeInTheDocument()
+  })
+
+  it('closes a leave from the review panel too', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue([
+      { id: 'l1', lws_id: 'APJ-1', from_ts: '2026-07-09T00:00:00+05:30', to_ts: null },
+    ])
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    const panel = within(await screen.findByTestId('open-leave-review'))
+
+    // Distinct accessible name from the roster row's "returned?" so the two
+    // controls stay individually addressable.
+    fireEvent.click(panel.getByRole('button', { name: /Close leave for Aarav Nair/i }))
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('l1', PREV_DAY_END_UTC))
+  })
+
+  it('renders nothing when nobody is on leave', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+    expect(screen.queryByTestId('open-leave-review')).not.toBeInTheDocument()
+  })
+})
+
+// An unmarked breakfast and a breakfast where everyone turned up are both zero
+// checkpoint_absences rows. The confirmation row is the only thing separating
+// them — the same gap lecture_submissions closed for lectures.
+describe('HostelAttendancePage — meal filed-vs-silent record', () => {
+  it('records a meal as filed even when nobody was missing', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
+    await waitFor(() => expect(mockStore.markCheckpointFiled).toHaveBeenCalledWith(DMY, 'breakfast'))
+  })
+
+  it('does not record a filing if the exception write failed', async () => {
+    // Same ordering rule as submitLecture: a filing over a failed write would
+    // claim the checkpoint was accounted for when nothing was saved.
+    mockStore.setCheckpointExceptions.mockResolvedValue(false)
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+
+    fireEvent.click(screen.getByRole('button', { name: /^save/i }))
+    await waitFor(() => expect(mockStore.setCheckpointExceptions).toHaveBeenCalled())
+    expect(mockStore.markCheckpointFiled).not.toHaveBeenCalled()
+  })
+
+  it('leaves rolls to confirmRoll — their filing carries a headcount', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /night roll/i }))
+
+    fireEvent.click(await screen.findByRole('button', { name: /^save/i }))
+    await waitFor(() => expect(mockStore.setCheckpointExceptions).toHaveBeenCalled())
+    expect(mockStore.markCheckpointFiled).not.toHaveBeenCalled()
+  })
+
+  it('ticks the checkpoints already on record', async () => {
+    mockStore.getConfirmationsForDate.mockResolvedValue([
+      { date: DMY, checkpoint: 'breakfast', kind: 'meal' },
+    ])
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    expect(await screen.findByRole('button', { name: /breakfast \(done\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /lunch \(not filed yet\)/i })).toBeInTheDocument()
   })
 })

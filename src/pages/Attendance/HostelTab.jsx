@@ -324,6 +324,24 @@ export default function HostelTab() {
     return !c || !c.reconciled
   })
 
+  // Filed-vs-silent across all five checkpoints. Zero exception rows means both
+  // "filed, nobody missing" and "nobody filed" — the confirmation row is what
+  // separates them, so the office can chase the second case.
+  const checkpointFiling = useMemo(
+    () => CAPTURE_CHECKPOINTS.map(cp => {
+      const c = confirmations.find(x => x.checkpoint === cp)
+      return {
+        checkpoint: cp,
+        filed: Boolean(c),
+        by: c?.confirmed_by ?? null,
+        // A roll that was counted but didn't reconcile is filed AND an incident.
+        unreconciled: Boolean(c) && ROLL_CHECKPOINTS.includes(cp) && c.reconciled === false,
+      }
+    }),
+    [confirmations],
+  )
+  const outstandingCheckpoints = checkpointFiling.filter(c => !c.filed).length
+
   // ── On-leave list (persist-until-return management) ─────────
   const nameByLwsId = useMemo(() => {
     const m = new Map()
@@ -409,6 +427,39 @@ export default function HostelTab() {
         url={buildCaptureUrl(HOSTEL_ATTENDANCE_PATH, window.location.origin, import.meta.env.BASE_URL)}
         hint="Needs 'Hostel & mess attendance access' on their teacher record (Settings → Teachers)."
       />
+
+      {/* Filed-vs-silent across the day's five checkpoints — the hostel
+          counterpart of the Lecture log's FilingBoard. */}
+      <div className="card px-4 py-3 mb-4" data-testid="checkpoint-filing-board">
+        <div className="flex items-center gap-3 flex-wrap mb-2">
+          <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3">Filed today</span>
+          <span className="text-[13px] font-extrabold text-ink">
+            {CAPTURE_CHECKPOINTS.length - outstandingCheckpoints}/{CAPTURE_CHECKPOINTS.length}
+          </span>
+          {outstandingCheckpoints > 0 ? (
+            <span className="text-[11px] font-semibold text-yellow-400">
+              {outstandingCheckpoints} not filed yet
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-success">✓ All checkpoints accounted for</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {checkpointFiling.map(c => (
+            <span
+              key={c.checkpoint}
+              title={c.by || undefined}
+              className={`text-[11px] px-2 py-1 rounded-full border ${
+                c.unreconciled ? 'border-red-400/30 bg-red-400/10 text-red-400'
+                  : c.filed ? 'border-success/30 bg-success/10 text-success'
+                  : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-400'}`}
+            >
+              {CHECKPOINT_LABEL[c.checkpoint]}
+              {c.unreconciled ? ' · unreconciled' : c.filed ? ' ✓' : ' · not filed'}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">

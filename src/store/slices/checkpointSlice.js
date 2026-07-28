@@ -89,6 +89,7 @@ export const createCheckpointSlice = (_set, _get) => ({
     const reconciled = confirmedPresent === expectedCount - exceptionCount
     const row = {
       date, checkpoint, branch,
+      kind: 'roll',
       expected_count: expectedCount,
       exception_count: exceptionCount,
       confirmed_present: confirmedPresent,
@@ -105,15 +106,43 @@ export const createCheckpointSlice = (_set, _get) => ({
     return true
   },
 
-  // Roll confirmations for a date — the anomaly board reads these to show which
-  // rolls are unreconciled / not yet done.
+  // Record that a MEAL checkpoint was filed. A meal has no headcount to
+  // reconcile, so this carries no counts — its whole job is to distinguish
+  // "the mess staff filed and nobody was missing" from "nobody filed".
+  // Without it an unmarked meal reads as a clean one, which is exactly the
+  // failure lecture_submissions was created to close for lectures.
+  async markCheckpointFiled(date, checkpoint, { branch = 'APJ' } = {}) {
+    if (!date || !CAPTURE_CHECKPOINTS.includes(checkpoint)) return false
+    // Rolls carry a reconciliation gate — they must go through confirmRoll, or
+    // a filing row would satisfy the board while the headcount never happened.
+    if (ROLL_CHECKPOINTS.includes(checkpoint)) return false
+    const session = await getSession()
+    if (!session) return false
+    const { error } = await supabase
+      .from('checkpoint_confirmations')
+      .upsert({
+        date, checkpoint, branch,
+        kind: 'meal',
+        confirmed_by: session.user?.email ?? null,
+        confirmed_at: new Date().toISOString(),
+      }, { onConflict: 'date,checkpoint,branch' })
+    if (error) {
+      console.error('[checkpoint] markCheckpointFiled failed:', error)
+      return false
+    }
+    return true
+  },
+
+  // Confirmations for a date — rolls (with their reconciliation) and meal
+  // filings alike. The anomaly board reads these to show which checkpoints are
+  // unreconciled or not yet done at all.
   async getConfirmationsForDate(date) {
     if (!date) return []
     const session = await getSession()
     if (!session) return []
     const { data, error } = await supabase
       .from('checkpoint_confirmations')
-      .select('date, checkpoint, branch, expected_count, exception_count, confirmed_present, reconciled, confirmed_by, confirmed_at')
+      .select('date, checkpoint, branch, kind, expected_count, exception_count, confirmed_present, reconciled, confirmed_by, confirmed_at')
       .eq('date', date)
     if (error) {
       console.error('[checkpoint] getConfirmationsForDate failed:', error)

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { hasHostelAccess, findTeacherByEmail } from '../../lib/teacherDay'
 import { buildBoarderRoster } from '../../lib/hostelRoster'
 import { resolveOnLeave, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
+import { buildOpenLeaveList, STALE_LEAVE_DAYS } from '../../lib/hostelLeave'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 import ModalShell from '../Timetable/ModalShell'
@@ -56,6 +57,8 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
   const setExceptions   = useStore(s => s.setCheckpointExceptions)
   const getExceptions   = useStore(s => s.getCheckpointExceptionsForDate)
   const confirmRoll     = useStore(s => s.confirmRoll)
+  const markCheckpointFiled = useStore(s => s.markCheckpointFiled)
+  const getConfirmations    = useStore(s => s.getConfirmationsForDate)
   const getActiveLeaves = useStore(s => s.getActiveLeaves)
   const addLeave        = useStore(s => s.addLeave)
   const endLeave        = useStore(s => s.endLeave)
@@ -65,7 +68,10 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
   const [edits, setEdits]           = useState({})     // lwsId → status (present omitted)
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
   const [leaveRowByLwsId, setLeaveRowByLwsId] = useState({})  // lwsId → { id } for "returned?"
+  const [leaveRows, setLeaveRows]   = useState([])     // raw rows, for the open-leave review
   const [leaveRefresh, setLeaveRefresh] = useState(0)         // bump to reload leaves
+  const [filingRefresh, setFilingRefresh] = useState(0)       // bump to reload filings
+  const [confirmations, setConfirmations] = useState([])      // which checkpoints are on record
   const [leaveForm, setLeaveForm]   = useState(null)   // null = closed; else { lwsId, name, reason }
   const [headcount, setHeadcount]   = useState('')
   const [saving, setSaving]         = useState(false)
@@ -89,6 +95,16 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
     return () => { cancelled = true }
   }, [allowed, date, checkpoint, getExceptions])
 
+  // Which checkpoints are already on record for the day. Silence is ambiguous
+  // without this: no exception rows means both "filed, nobody missing" and
+  // "nobody filed".
+  useEffect(() => {
+    if (!allowed || !date) return
+    let cancelled = false
+    getConfirmations(date).then(rows => { if (!cancelled) setConfirmations(rows ?? []) })
+    return () => { cancelled = true }
+  }, [allowed, date, getConfirmations, filingRefresh])
+
   // A leave EXPLAINS every checkpoint in its window — the boarder is shown,
   // locked, and never written as an exception row (confirmed 2026-07-27).
   useEffect(() => {
@@ -110,6 +126,7 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
       for (const r of rows ?? []) if (ids.has(r.lws_id) && !byId[r.lws_id]) byId[r.lws_id] = { id: r.id }
       setOnLeaveIds(ids)
       setLeaveRowByLwsId(byId)
+      setLeaveRows((rows ?? []).filter(r => ids.has(r.lws_id)))
     })
     return () => { cancelled = true }
   }, [allowed, date, getActiveLeaves, leaveRefresh])
@@ -122,6 +139,22 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
   )
   const awayCount = exceptions.filter(e => AWAY_STATUSES.has(e.status)).length
   const expectedInDorm = roster.length - awayCount
+
+  // Who is out, how long, and which ones need chasing.
+  const openLeaveList = useMemo(
+    () => buildOpenLeaveList({
+      rows: leaveRows,
+      nameByLwsId: new Map(roster.map(r => [r.lwsId, r.name])),
+      dayStartMs: Date.parse(dayBoundsIso(date).startIso),
+    }),
+    [leaveRows, roster, date],
+  )
+  const staleCount = openLeaveList.filter(l => l.stale).length
+
+  const filedCheckpoints = useMemo(
+    () => new Set((confirmations ?? []).map(c => c.checkpoint)),
+    [confirmations],
+  )
 
   function cycle(lwsId) {
     if (onLeaveIds.has(lwsId)) return
@@ -177,10 +210,16 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
     setSaving(true)
     setBanner(null)
     const ok = await setExceptions(date, checkpoint, exceptions)
+    // Exceptions first, filing second, and only if the first succeeded — a
+    // filing written over a failed exception write would claim the checkpoint
+    // was accounted for when its exceptions were never saved (same ordering
+    // rule as submitLecture). Rolls record their filing via confirmRoll.
+    if (ok && !isRoll) await markCheckpointFiled(date, checkpoint)
     setSaving(false)
     setBanner(ok
       ? { type: 'ok', msg: `Saved ${CHECKPOINT_LABEL[checkpoint]} — ${exceptions.length} exception${exceptions.length !== 1 ? 's' : ''}.` }
       : { type: 'err', msg: 'Save failed — check your connection and try again.' })
+    if (ok) setFilingRefresh(n => n + 1)
   }
 
   async function handleConfirmRoll() {
@@ -195,6 +234,7 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
     })
     setSaving(false)
     if (!ok) { setBanner({ type: 'err', msg: 'Could not record the roll.' }); return }
+    setFilingRefresh(n => n + 1)
     setBanner(present === expectedInDorm
       ? { type: 'ok',  msg: `${CHECKPOINT_LABEL[checkpoint]} reconciled ✓ (${present} in dorm).` }
       : { type: 'err', msg: `⚠ Headcount ${present} ≠ expected ${expectedInDorm}. Logged as an OPEN incident — tell the warden.` })
@@ -251,22 +291,28 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
         </label>
       </div>
 
-      {/* Checkpoint picker */}
+      {/* Checkpoint picker. The tick is the filed-vs-silent record — without it
+          an unmarked meal looks exactly like one where everybody turned up. */}
       <div className="flex flex-wrap gap-1.5 mb-4">
-        {CAPTURE_CHECKPOINTS.map(cp => (
-          <button
-            key={cp}
-            type="button"
-            onClick={() => setCheckpoint(cp)}
-            aria-pressed={checkpoint === cp}
-            className={`text-[12px] px-3 py-2 rounded-full border min-h-[44px] ${
-              checkpoint === cp
-                ? 'border-accent text-accent bg-accent-soft/40 font-semibold'
-                : 'border-border text-ink-3 hover:text-ink'}`}
-          >
-            {CHECKPOINT_LABEL[cp]}
-          </button>
-        ))}
+        {CAPTURE_CHECKPOINTS.map(cp => {
+          const done = filedCheckpoints.has(cp)
+          return (
+            <button
+              key={cp}
+              type="button"
+              onClick={() => setCheckpoint(cp)}
+              aria-pressed={checkpoint === cp}
+              aria-label={`${CHECKPOINT_LABEL[cp]}${done ? ' (done)' : ' (not filed yet)'}`}
+              className={`text-[12px] px-3 py-2 rounded-full border min-h-[44px] ${
+                checkpoint === cp
+                  ? 'border-accent text-accent bg-accent-soft/40 font-semibold'
+                  : 'border-border text-ink-3 hover:text-ink'}`}
+            >
+              {done && <span className="text-success mr-1" aria-hidden="true">✓</span>}
+              {CHECKPOINT_LABEL[cp]}
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex items-center gap-3 mb-3 flex-wrap text-[12px]">
@@ -276,6 +322,43 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
           <span className="card px-3 py-1.5">On leave <b className="text-purple-400">{onLeaveIds.size}</b></span>
         )}
       </div>
+
+      {/* Open-leave review. A leave with no end date explains every checkpoint
+          until someone closes it, so whoever can OPEN one has to see the ones
+          nobody has closed — otherwise a boarder is silently excused forever. */}
+      {openLeaveList.length > 0 && (
+        <div className="card px-4 py-3 mb-3" data-testid="open-leave-review">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-ink-3">On leave</span>
+            <span className="text-[13px] font-extrabold text-ink">{openLeaveList.length}</span>
+            {staleCount > 0 && (
+              <span className="text-[11px] font-semibold text-red-400">
+                {staleCount} out {STALE_LEAVE_DAYS}+ days — check if they're back
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-border">
+            {openLeaveList.map(l => (
+              <div key={l.id} className="flex items-center gap-2 py-1.5">
+                <span className={`text-[13px] flex-1 min-w-0 truncate ${l.stale ? 'text-red-400 font-semibold' : 'text-ink-2'}`}>
+                  {l.name}
+                </span>
+                <span className="text-[11px] font-mono text-ink-3 shrink-0">
+                  {l.daysOut} day{l.daysOut !== 1 ? 's' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleMarkReturned(l.lwsId, l.name)}
+                  aria-label={`Close leave for ${l.name} — back after ${l.daysOut} days`}
+                  className="text-[11px] font-semibold underline text-ink-3 hover:text-accent
+                             min-h-[44px] px-2 rounded shrink-0
+                             focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >back?</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="text-[11px] text-ink-3 mb-3">
         Everyone counts as present — tap only the boarders who aren't there. Tap again to change
