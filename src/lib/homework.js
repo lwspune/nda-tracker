@@ -19,6 +19,17 @@ export function homeworkItemKey(subject, chapter, type) {
   return `${subject}|||${chapter}|||${type}`
 }
 
+// The two checkboxes ("homework" / "notes") collapse to the single `type`
+// column, which is CHECK-constrained to homework | notes | both. Returns null
+// when neither is ticked — there is no item to file, and the caller must treat
+// that as "not ready to save" rather than defaulting to homework.
+export function deriveHomeworkType(hw, notes) {
+  if (hw && notes) return 'both'
+  if (notes) return 'notes'
+  if (hw) return 'homework'
+  return null
+}
+
 // Per-(student, item) key used to track which homework notifications have already
 // been sent — homework is item-level (one message per student per item), so the
 // "pending" set is computed at this granularity, not per student.
