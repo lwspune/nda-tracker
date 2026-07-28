@@ -10,6 +10,7 @@ const mockStore = {
   getConfirmationsForDate: vi.fn(),
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
+  addLeave: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -40,7 +41,14 @@ beforeEach(() => {
   mockStore.getActiveLeaves.mockResolvedValue([])
   mockStore.setCheckpointExceptions.mockResolvedValue(true)
   mockStore.confirmRoll.mockResolvedValue(true)
+  mockStore.endLeave.mockResolvedValue(true)
+  mockStore.addLeave.mockResolvedValue(true)
 })
+
+// The IST day bounds for DMY, spelled out so the expectations below are
+// obviously right rather than mirroring the implementation's arithmetic.
+const DAY_START_ISO = '2026-07-13T00:00:00+05:30'
+const PREV_DAY_END_UTC = '2026-07-12T18:29:59.999Z'   // DAY_START_ISO minus 1ms
 
 describe('HostelAttendancePage — access gate', () => {
   it('shows the marking list to flagged staff', async () => {
@@ -156,5 +164,96 @@ describe('HostelAttendancePage — roll reconciliation', () => {
     expect(date).toBe(DMY)
     expect(checkpoint).toBe('hostel_pm')
     expect(counts).toMatchObject({ expectedCount: 2, exceptionCount: 1, confirmedPresent: 1 })
+  })
+})
+
+// The warden physically sees a boarder leave and return, but until now could
+// only READ leaves here — opening or closing one meant phoning the office,
+// which is the centralisation failure this page exists to remove. RLS on
+// `leaves` is `authenticated`, so this was always a UI gap, never a DB one.
+describe('HostelAttendancePage — leave lifecycle', () => {
+  const OPEN_LEAVE = [{ id: 'leave-1', lws_id: 'APJ-1', from_ts: '2026-07-10T00:00:00+05:30', to_ts: null }]
+
+  it('offers "returned?" on an on-leave boarder and closes the leave at the end of the previous day', async () => {
+    // End of the PREVIOUS day, so the selected date itself unlocks for marking —
+    // the boarder was seen today. Same semantics as HostelTab / MarkAbsenteesModal.
+    mockStore.getActiveLeaves.mockResolvedValue(OPEN_LEAVE)
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+
+    const returned = await screen.findByRole('button', { name: /Aarav Nair returned/i })
+    fireEvent.click(returned)
+    await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('leave-1', PREV_DAY_END_UTC))
+  })
+
+  it('reloads leaves after a return so the row unlocks', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue(OPEN_LEAVE)
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByRole('button', { name: /Aarav Nair returned/i })
+    const before = mockStore.getActiveLeaves.mock.calls.length
+
+    fireEvent.click(screen.getByRole('button', { name: /Aarav Nair returned/i }))
+    await waitFor(() => expect(mockStore.getActiveLeaves.mock.calls.length).toBeGreaterThan(before))
+  })
+
+  it('puts a boarder on an OPEN-ENDED leave from the selected day', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+
+    fireEvent.click(screen.getByRole('button', { name: /Put Aarav Nair on leave/i }))
+    fireEvent.change(await screen.findByLabelText(/reason/i), { target: { value: 'Sister wedding' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Put on leave$/i }))
+
+    await waitFor(() => expect(mockStore.addLeave).toHaveBeenCalledWith({
+      lwsId: 'APJ-1',
+      fromTs: DAY_START_ISO,
+      toTs: '2099-12-31T23:59:59+05:30',   // the open-ended sentinel, not NULL
+      reason: 'Sister wedding',
+    }))
+  })
+
+  it('treats a blank reason as null rather than an empty string', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+
+    fireEvent.click(screen.getByRole('button', { name: /Put Aarav Nair on leave/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Put on leave$/i }))
+
+    await waitFor(() => expect(mockStore.addLeave).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: null })
+    ))
+  })
+
+  it('does not offer the leave action to someone already on leave', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue(OPEN_LEAVE)
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByRole('button', { name: /Aarav Nair returned/i })
+
+    expect(screen.queryByRole('button', { name: /Put Aarav Nair on leave/i })).not.toBeInTheDocument()
+    // Bhavya is not on leave, so she still gets it.
+    expect(screen.getByRole('button', { name: /Put Bhavya Rao on leave/i })).toBeInTheDocument()
+  })
+
+  it('never writes an on-leave boarder as an exception — a leave explains every checkpoint', async () => {
+    mockStore.getActiveLeaves.mockResolvedValue(OPEN_LEAVE)
+    mockStore.getCheckpointExceptionsForDate.mockResolvedValue([
+      { lws_id: 'APJ-1', checkpoint: 'breakfast', status: 'absent' },
+    ])
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByRole('button', { name: /Aarav Nair returned/i })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Save/i }))
+    await waitFor(() => expect(mockStore.setCheckpointExceptions).toHaveBeenCalled())
+    const [, , exceptions] = mockStore.setCheckpointExceptions.mock.calls[0]
+    expect(exceptions.find(e => e.lwsId === 'APJ-1')).toBeUndefined()
+  })
+
+  it('can be cancelled without writing anything', async () => {
+    render(<HostelAttendancePage email="warden@lwspune.com" initialDate={DMY} />)
+    await screen.findByText('Aarav Nair')
+
+    fireEvent.click(screen.getByRole('button', { name: /Put Aarav Nair on leave/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/i }))
+    await waitFor(() => expect(screen.queryByLabelText(/reason/i)).not.toBeInTheDocument())
+    expect(mockStore.addLeave).not.toHaveBeenCalled()
   })
 })

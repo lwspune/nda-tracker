@@ -5,6 +5,8 @@ import { hasHostelAccess, findTeacherByEmail } from '../../lib/teacherDay'
 import { buildBoarderRoster } from '../../lib/hostelRoster'
 import { resolveOnLeave, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
+import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
+import ModalShell from '../Timetable/ModalShell'
 
 // /hostel-mess-attendance — the warden's and mess staff's own capture surface.
 //
@@ -55,11 +57,16 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
   const getExceptions   = useStore(s => s.getCheckpointExceptionsForDate)
   const confirmRoll     = useStore(s => s.confirmRoll)
   const getActiveLeaves = useStore(s => s.getActiveLeaves)
+  const addLeave        = useStore(s => s.addLeave)
+  const endLeave        = useStore(s => s.endLeave)
 
   const [date, setDate]             = useState(initialDate ?? todayDmy())
   const [checkpoint, setCheckpoint] = useState('breakfast')
   const [edits, setEdits]           = useState({})     // lwsId → status (present omitted)
   const [onLeaveIds, setOnLeaveIds] = useState(() => new Set())
+  const [leaveRowByLwsId, setLeaveRowByLwsId] = useState({})  // lwsId → { id } for "returned?"
+  const [leaveRefresh, setLeaveRefresh] = useState(0)         // bump to reload leaves
+  const [leaveForm, setLeaveForm]   = useState(null)   // null = closed; else { lwsId, name, reason }
   const [headcount, setHeadcount]   = useState('')
   const [saving, setSaving]         = useState(false)
   const [banner, setBanner]         = useState(null)
@@ -90,17 +97,22 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
     const { startIso, endIso } = dayBoundsIso(date)
     getActiveLeaves(startIso, endIso).then(rows => {
       if (cancelled) return
-      setOnLeaveIds(resolveOnLeave(
+      const ids = resolveOnLeave(
         (rows ?? []).map(r => ({
           lwsId: r.lws_id,
           fromMs: Date.parse(r.from_ts),
           toMs: r.to_ts == null ? null : Date.parse(r.to_ts),
         })),
         Date.parse(startIso), Date.parse(endIso),
-      ))
+      )
+      // Keep each on-leave boarder's row id so "returned?" can close THAT leave.
+      const byId = {}
+      for (const r of rows ?? []) if (ids.has(r.lws_id) && !byId[r.lws_id]) byId[r.lws_id] = { id: r.id }
+      setOnLeaveIds(ids)
+      setLeaveRowByLwsId(byId)
     })
     return () => { cancelled = true }
-  }, [allowed, date, getActiveLeaves])
+  }, [allowed, date, getActiveLeaves, leaveRefresh])
 
   const exceptions = useMemo(
     () => Object.entries(edits)
@@ -120,6 +132,45 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
       else next[lwsId] = status
       return next
     })
+  }
+
+  // The warden is the person who physically sees a boarder go and come back, so
+  // the leave lifecycle belongs here and not only in the office's board. `leaves`
+  // RLS is `authenticated`, so this needed no policy change — it was a UI gap.
+  //
+  // Revoking a leave outright (deleteLeave) is deliberately NOT offered: that
+  // erases the record rather than recording a return, and it's office judgement.
+
+  // The boarder is back. Stamp to_ts to the END of the PREVIOUS day so the
+  // selected date itself is no longer a leave day and unlocks for marking.
+  async function handleMarkReturned(lwsId, name) {
+    const row = leaveRowByLwsId[lwsId]
+    if (!row?.id) return
+    const { startIso } = dayBoundsIso(date)
+    const ok = await endLeave(row.id, new Date(Date.parse(startIso) - 1).toISOString())
+    setBanner(ok
+      ? { type: 'ok', msg: `${name} marked returned — markable from ${date}.` }
+      : { type: 'err', msg: 'Could not close the leave — check your connection.' })
+    if (ok) setLeaveRefresh(n => n + 1)
+  }
+
+  // Open-ended by default (the 2099 sentinel, never NULL — see leavesSlice).
+  // No end-date picker on purpose: "out until they're back" is the model that
+  // works, and a date typed in a hurry silently stops explaining checkpoints.
+  async function handlePutOnLeave() {
+    if (!leaveForm?.lwsId) return
+    setSaving(true)
+    const ok = await addLeave({
+      lwsId: leaveForm.lwsId,
+      fromTs: dayBoundsIso(date).startIso,
+      toTs: OPEN_LEAVE_TO_TS,
+      reason: leaveForm.reason.trim() || null,
+    })
+    setSaving(false)
+    setBanner(ok
+      ? { type: 'ok', msg: `${leaveForm.name} on leave from ${date} — tap "returned?" when back.` }
+      : { type: 'err', msg: 'Could not record the leave — check your connection.' })
+    if (ok) { setLeaveForm(null); setLeaveRefresh(n => n + 1) }
   }
 
   async function handleSave() {
@@ -243,20 +294,40 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
               <div key={s.lwsId} className="flex items-center gap-3 px-1 py-1.5 border-b border-border">
                 <span className="text-[14px] text-ink flex-1 min-w-0 truncate">{s.name}</span>
                 {locked ? (
-                  <button
-                    type="button"
-                    disabled
-                    aria-label={`Mark ${s.name} (on leave)`}
-                    className="text-[11px] font-semibold px-3 py-2 rounded-lg border min-h-[44px]
-                               text-purple-400 bg-purple-400/10 border-purple-400/30 opacity-80"
-                  >On leave</button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleMarkReturned(s.lwsId, s.name)}
+                      aria-label={`${s.name} returned — close leave`}
+                      className="text-[11px] font-semibold underline text-ink-3 hover:text-accent
+                                 min-h-[44px] px-2 rounded shrink-0
+                                 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >returned?</button>
+                    <button
+                      type="button"
+                      disabled
+                      aria-label={`Mark ${s.name} (on leave)`}
+                      className="text-[11px] font-semibold px-3 py-2 rounded-lg border min-h-[44px]
+                                 text-purple-400 bg-purple-400/10 border-purple-400/30 opacity-80"
+                    >On leave</button>
+                  </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => cycle(s.lwsId)}
-                    aria-label={`Mark ${s.name}`}
-                    className={`text-[11px] font-semibold px-3 py-2 rounded-lg border min-h-[44px] ${meta.cls}`}
-                  >{meta.label}</button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setLeaveForm({ lwsId: s.lwsId, name: s.name, reason: '' })}
+                      aria-label={`Put ${s.name} on leave`}
+                      className="text-[11px] font-semibold text-ink-3 hover:text-purple-400
+                                 min-h-[44px] px-2 rounded shrink-0
+                                 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >leave</button>
+                    <button
+                      type="button"
+                      onClick={() => cycle(s.lwsId)}
+                      aria-label={`Mark ${s.name}`}
+                      className={`text-[11px] font-semibold px-3 py-2 rounded-lg border min-h-[44px] ${meta.cls}`}
+                    >{meta.label}</button>
+                  </>
                 )}
               </div>
             )
@@ -307,6 +378,44 @@ export default function HostelAttendancePage({ email, initialDate, onLogout }) {
           </div>
         )}
       </div>
+
+      {leaveForm && (
+        <ModalShell
+          title={`Put ${leaveForm.name} on leave`}
+          onClose={() => setLeaveForm(null)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLeaveForm(null)}
+                className="btn text-[13px] min-h-[44px] px-4"
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={handlePutOnLeave}
+                disabled={saving}
+                className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40"
+              >Put on leave</button>
+            </div>
+          }
+        >
+          <p className="text-[13px] text-ink-2">
+            From <b>{date}</b>, open-ended — {leaveForm.name} stays on leave, explaining every
+            checkpoint, until you tap <b>returned?</b> on their row.
+          </p>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-ink-3">Reason (optional)</span>
+            <input
+              type="text"
+              value={leaveForm.reason}
+              onChange={e => setLeaveForm(f => ({ ...f, reason: e.target.value }))}
+              placeholder="e.g. home visit, medical"
+              aria-label="Reason (optional)"
+              className="form-input text-[13px] min-h-[44px] px-3"
+            />
+          </label>
+        </ModalShell>
+      )}
     </div>
   )
 }
