@@ -59,7 +59,10 @@ export default function FilingBoard({ date, batchName = null, refreshKey = 0 }) 
         </button>
       </div>
 
-      {/* Collapsed: name who to chase — that's the whole job */}
+      {/* Collapsed: name who to chase — that's the whole job. The batch name is
+          deliberately NOT here: it's the longest token on the chip and the
+          expanded table already has a Batch column. The start time replaces it
+          because that's what tells two same-subject periods apart. */}
       {!expanded && outstanding > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-3">
           {pending.map(r => (
@@ -68,7 +71,8 @@ export default function FilingBoard({ date, batchName = null, refreshKey = 0 }) 
               className="text-[11px] px-2 py-1 rounded-full border border-yellow-400/30
                          bg-yellow-400/10 text-yellow-400"
             >
-              {r.teacherName ?? 'Unassigned'} · {r.subject} · {r.batchName}
+              {r.teacherName ?? 'Unassigned'} · {r.subject}
+              {r.startTime && <span className="font-mono opacity-70"> · {r.startTime}</span>}
             </span>
           ))}
         </div>
