@@ -718,9 +718,9 @@ Phase 1 shipped with TDD coverage (1967 green), baseline-clean lint and the migr
 ### Phase 2 + 3 of teacher-filed attendance
 
 Deliberately out of Phase 1 scope, in rough priority order:
-- **Homework / notes on the same lecture cards** — `setHomeworkDefaultersForItem` already exists; the card needs a chapter picker sourced from the batch's syllabus.
-- **Outstanding-filing nudge** — a WhatsApp to teachers who haven't filed by end of day. Recipients are staff, so no blocked-contact gate applies; folds into `send-attendance-alerts` as another `kind` (do **not** add an api file — 12-function ceiling).
-- **Impromptu lectures** — teachers currently can't file an extra class they took; the `adhoc_*` slot machinery already exists in `LectureLogTab` and would port over.
+- ~~**Homework / notes on the same lecture cards**~~ — **DONE 2026-07-28** (`96f2832`). Two-step: name the item (chapter free-text + homework/notes) → tick defaulters via `MarkDefaultersModal`. Chapter is free text, not a syllabus-sourced picker — a syllabus picker is still worth doing and is carried forward below.
+- **Outstanding-filing nudge** — still open. A WhatsApp to teachers who haven't filed by end of day. Recipients are staff, so no blocked-contact gate applies; folds into `send-attendance-alerts` as another `kind` (do **not** add an api file — 12-function ceiling). Now also wanted for unfiled *meals* — see the 2026-07-28 entry.
+- ~~**Impromptu lectures**~~ — **DONE 2026-07-28** (`96f2832`). Ports the `adhoc_*` machinery; batch comes from the new `getTeacherBatches` (falls closed, day-independent), and cards rebuild from `lecture_submissions` filtered on `teacher_id` rather than the absence log.
 - **Late marking** stays front-desk unless there's a reason to move it; it's a day-level concept, not a per-period one.
 
 ### Backfill ledger — `buildOfflineRoster` is now misnamed
@@ -755,7 +755,9 @@ CLAUDE.md's lint section notes that `App.jsx` and `StudentView.jsx` carry the sa
 
 **How to apply:** either relax the guideline (and say so in the skill's expectations), or trim only the entries whose length comes from *restating* the memory body rather than from distinct recall hooks — `project_whatsapp_block_gate` (302) and `project_open_ended_leave` (335) are the two clearest candidates. The store is also 350 KB total with `project_completed_archive.md` alone at 115 KB; folding its pre-2026-06 rows into a summary block (the file already did this once for the pre-Vercel era) would halve it.
 
-### Meal checkpoints have no filed-vs-silent record
+### ~~Meal checkpoints have no filed-vs-silent record~~ — **DONE 2026-07-28**
+
+Shipped in `4cedaa8`. `checkpoint_confirmations` gained a `kind` discriminator (`roll` | `meal`) with the count columns made nullable and a CHECK keeping rolls strict — deliberately **not** the plain "drop NOT NULL" suggested below, which would also have let a roll be written with no reconciliation. `markCheckpointFiled` writes meal rows and refuses roll checkpoints; the `ROLL_CHECKPOINTS` guard in `confirmRoll` therefore stayed. Admin filing board added atop the Hostel tab. (Original entry retained below for the reasoning trail.)
 
 Roll checkpoints get `checkpoint_confirmations` (headcount + `reconciled`), so "the warden did the night roll" is recorded. Meals have nothing: an unmarked breakfast and a breakfast where everyone showed up are both zero `checkpoint_absences` rows. Now that mess staff file their own meals, that ambiguity is live — the same gap `lecture_submissions` was created to close for lectures.
 
@@ -807,3 +809,19 @@ Building the staff-parity work extracted two pure helpers that the admin surface
 **Why:** a filing record nobody looks at is only half the fix. Lectures have `FilingBoard` *plus* an admin who works the outstanding list; meals now have the board but no prompt.
 
 **How to apply:** cheapest is to fold an "unfiled checkpoints" line into the existing `send-attendance-alerts` `kind:'hostel'` payload (no new endpoint — the Vercel 12-function cap is at its ceiling). Needs a decision on timing: an alert at 09:00 for an unfiled breakfast is useful, one at 23:00 for an unfiled dinner is too late to fix anything.
+
+### Browser golden-path verify the 2026-07-28 staff-parity work
+
+Four capture flows shipped without a manual browser pass: teacher extra-class filing and homework filing on `/school-attendance`, and the leave lifecycle + meal filing on `/hostel-mess-attendance`. All are covered by tests and a serialized full suite (2073/2073), but the project's Definition of Done requires the golden path clicked through in a real browser, and these are phone-first surfaces used by staff mid-shift.
+
+**Why:** the failure modes left are the ones tests cannot see — a mis-tap target on a phone, a modal footer that still needs scrolling on a short viewport, a copied link that pastes wrong into WhatsApp. This subsystem exists because capture wasn't happening; friction here is the whole risk.
+
+**How to apply:** on a real handset — (1) `/school-attendance` → **+ Extra class** → file → reload → the card must come back from the submission row; (2) same page → **Homework** → chapter + tick → the count badge appears; (3) `/hostel-mess-attendance` → save Breakfast with nobody missing → pill gets a ✓ and admin's Hostel tab reads 1/5 filed; (4) put a boarder on leave → the open-leave panel lists them → **back?** unlocks the row. Carries forward the still-open `/school-attendance` Phase-1 verification entry from 2026-07-27.
+
+### A syllabus-sourced chapter picker for teacher homework filing
+
+Teacher homework filing takes the chapter as **free text**. The admin `HomeworkLogTab` does too, so this is not a regression — but hand-typed chapter names are the same class of problem as hand-typed student names, and `homework_pending` groups items by exact `(subject, chapter, type)`.
+
+**Why:** two teachers typing "Trigonometry" and "Trig" create two items for the same work, which fragments the defaulter set and the parent messages built from it. There is no dedup or variant-linking on `homework_pending` the way there is for student names.
+
+**How to apply:** the batch's assigned syllabus program already knows its chapters (`batchProgramAssignments` → `syllabusPrograms`), so offer a datalist/select of those with free text as the fallback for genuinely off-syllabus work. Worth doing on both surfaces at once so they can't diverge. Remember to strip the `(x%)` weightage suffix that NDA Program Physics/Chemistry/Biology chapter names carry.
