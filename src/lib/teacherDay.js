@@ -73,6 +73,36 @@ export function getTeacherLecturesForDate({ teacherId, timetables, mappings, dat
   )
 }
 
+// Every batch `teacherId` teaches, across the whole timetable — the candidate
+// list when they file an IMPROMPTU (substitute / extra) class, which has no
+// timetable slot to derive a batch from.
+//
+// Deliberately day-independent, unlike getTeacherLecturesForDate: an extra
+// class on Saturday is usually for a batch they normally have midweek. Falls
+// CLOSED on a blank teacherId for the same reason as the day view — an
+// unmatched session must never be offered the whole school.
+export function getTeacherBatches({ teacherId, timetables, mappings }) {
+  if (!teacherId) return []
+
+  const ownMappingIds = new Set(
+    (mappings ?? []).filter(m => m?.teacherId === teacherId).map(m => m.id)
+  )
+  if (ownMappingIds.size === 0) return []
+
+  const batches = new Set()
+  for (const timetable of timetables ?? []) {
+    const grid = timetable?.grid ?? {}
+    for (const row of Object.values(grid)) {
+      if (!row || row.__span) continue
+      for (const cell of Object.values(row)) {
+        if (cell?.type !== 'class' || !ownMappingIds.has(cell.mappingId)) continue
+        batches.add(timetable.batchName)
+      }
+    }
+  }
+  return [...batches].sort((a, b) => String(a).localeCompare(String(b)))
+}
+
 // The admin counterpart of getTeacherLecturesForDate: every timetabled period
 // for `date` (optionally one batch), each tagged with its teacher and whether
 // it has been filed. This is how the office chases outstanding periods.

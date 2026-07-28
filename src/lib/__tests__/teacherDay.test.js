@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard, hasHostelAccess } from '../teacherDay'
+import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard, hasHostelAccess, getTeacherBatches } from '../teacherDay'
 
 // 2026-07-27 is a Monday; 2026-07-26 is a Sunday.
 const MONDAY = '2026-07-27'
@@ -260,5 +260,61 @@ describe('hasHostelAccess', () => {
 
   it('only accepts a real boolean true, not a truthy string', () => {
     expect(hasHostelAccess([{ id: 'x', email: 'a@b.c', hostelAccess: 'no' }], 'a@b.c')).toBe(false)
+  })
+})
+
+// An impromptu / substitute class has no timetable slot, so the teacher has to
+// say WHICH batch it was for. The honest candidate set is the batches they
+// already teach — not every batch in the school.
+describe('getTeacherBatches', () => {
+  const TIMETABLES = [
+    { batchName: 'B-12th', timeSlots: [], grid: {} },
+    { batchName: 'A-11th', timeSlots: [], grid: {} },
+    { batchName: 'C-6M',   timeSlots: [], grid: {} },
+  ]
+  const MAPPINGS = [
+    { id: 'm1', subject: 'Maths',   teacherId: 't1' },
+    { id: 'm2', subject: 'Physics', teacherId: 't2' },
+  ]
+
+  it('returns every batch the teacher has a lecture in, sorted, deduped', () => {
+    const timetables = [
+      { batchName: 'B-12th', timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }], grid: { s1: { Thursday: { type: 'class', mappingId: 'm1' } } } },
+      { batchName: 'A-11th', timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }, { id: 's2', startTime: '10:00 AM', endTime: '11:00 AM' }], grid: { s1: { Thursday: { type: 'class', mappingId: 'm1' } }, s2: { Thursday: { type: 'class', mappingId: 'm1' } } } },
+      { batchName: 'C-6M',   timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }], grid: { s1: { Thursday: { type: 'class', mappingId: 'm2' } } } },
+    ]
+    expect(getTeacherBatches({ teacherId: 't1', timetables, mappings: MAPPINGS }))
+      .toEqual(['A-11th', 'B-12th'])   // deduped despite two A-11th periods; C-6M is t2's
+  })
+
+  it('falls closed on a blank teacherId — never the whole school', () => {
+    expect(getTeacherBatches({ teacherId: null, timetables: TIMETABLES, mappings: MAPPINGS })).toEqual([])
+    expect(getTeacherBatches({ teacherId: '', timetables: TIMETABLES, mappings: MAPPINGS })).toEqual([])
+  })
+
+  it('returns [] when the teacher owns no mappings, and tolerates missing input', () => {
+    expect(getTeacherBatches({ teacherId: 't9', timetables: TIMETABLES, mappings: MAPPINGS })).toEqual([])
+    expect(getTeacherBatches({ teacherId: 't1' })).toEqual([])
+  })
+
+  it('is day-independent — a batch taught only on Monday still counts', () => {
+    // Unlike getTeacherLecturesForDate this scans the whole grid, because an
+    // extra class on Saturday can be for a batch the teacher normally has on
+    // Monday.
+    const timetables = [{
+      batchName: 'A-11th',
+      timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }],
+      grid: { s1: { Monday: { type: 'class', mappingId: 'm1' } } },
+    }]
+    expect(getTeacherBatches({ teacherId: 't1', timetables, mappings: MAPPINGS })).toEqual(['A-11th'])
+  })
+
+  it('ignores break cells and spans', () => {
+    const timetables = [{
+      batchName: 'A-11th',
+      timeSlots: [{ id: 's1' }, { id: 's2' }],
+      grid: { s1: { Monday: { type: 'break', label: 'Lunch' } }, s2: { __span: true } },
+    }]
+    expect(getTeacherBatches({ teacherId: 't1', timetables, mappings: MAPPINGS })).toEqual([])
   })
 })
