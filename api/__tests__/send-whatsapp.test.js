@@ -7,16 +7,32 @@ vi.mock('fs', () => ({ readFileSync: vi.fn(() => { throw new Error('no .env.loca
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+// MCQ exam: 30 questions × 1 mark. Score comes from the per-question counters.
 const MOCK_EXAM_ROW = {
-  id:      'exam1',
-  name:    'NDA Test 1',
-  date:    '2025-06-01',
-  subject: 'Maths',
+  id:        'exam1',
+  name:      'NDA Test 1',
+  date:      '2025-06-01',
+  subject:   'Maths',
+  questions: Array.from({ length: 30 }, (_, i) => ({ q: i + 1 })),
+  marking:   { correct: 1, wrong: 0 },
+  max_marks: null,
+}
+
+// Offline / hand-graded exam: no questions[], explicit max_marks. The per-question
+// counters are all 0 on these rows — the marks live in total_marks.
+const MOCK_OFFLINE_EXAM_ROW = {
+  id:        'exam_offline',
+  name:      'Sets',
+  date:      '2026-07-27',
+  subject:   'Maths',
+  questions: [],
+  marking:   { correct: 1, wrong: 0 },
+  max_marks: '5',
 }
 
 const MOCK_RESULT_ROWS = [
-  { student_name: 'Arjun Sharma', correct: 20, incorrect: 5, not_attempted: 5 },
-  { student_name: 'Ravi Kumar',   correct: 15, incorrect: 8, not_attempted: 7 },
+  { student_name: 'Arjun Sharma', correct: 20, incorrect: 5, not_attempted: 5, total_marks: '20' },
+  { student_name: 'Ravi Kumar',   correct: 15, incorrect: 8, not_attempted: 7, total_marks: '15' },
 ]
 
 const MOCK_STUDENTS = [
@@ -40,17 +56,18 @@ function makeQueryClient({
   examsError  = null,
   resultsError = null,
 } = {}) {
+  // Hoisted so a test can assert which columns the results query asked for.
+  const resultsSelect = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ data: resultRows, error: resultsError }),
+  })
   return {
+    resultsSelect,
     from: vi.fn(table => {
       if (table === 'exams') {
         return { select: vi.fn().mockResolvedValue({ data: allExams, error: examsError }) }
       }
       if (table === 'exam_results') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ data: resultRows, error: resultsError }),
-          }),
-        }
+        return { select: resultsSelect }
       }
       // students
       return { select: vi.fn().mockResolvedValue({ data: students, error: null }) }
@@ -386,5 +403,67 @@ describe('POST /api/send-whatsapp', () => {
     expect(body.monitor).toBe(1)
     expect(destsFromFetch()).toContain('919021869427')
     expect(body.lines.some(l => l.includes('SKIP monitor 123'))).toBe(true)
+  })
+
+  // ── Score for offline / hand-graded exams ──────────────────────────────────
+  // An offline exam has no questions[], so correct/incorrect/not_attempted are
+  // all 0 and the marks live in total_marks. Deriving the score from the
+  // counters produced "0%, 0 correct, 0 total" for every student on such an
+  // exam. Offline exams must score off total_marks / max_marks instead.
+
+  // vars = [name, exam, date, '<p>%', <correct>, <total>, url]
+  const scoreVarsFor = name =>
+    global.fetch.mock.calls
+      .map(c => JSON.parse(c[1].body).variables)
+      .filter(v => v[0] === name)
+      .map(v => ({ pct: v[3], correct: v[4], total: v[5] }))
+
+  it('selects total_marks from exam_results', async () => {
+    const queryClient = makeQueryClient()
+    setupMocks({ queryClient })
+    await call({ examName: 'NDA Test 1' })
+    expect(queryClient.resultsSelect).toHaveBeenCalledWith(expect.stringContaining('total_marks'))
+  })
+
+  it('scores an offline exam from total_marks / max_marks', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        allExams:   [MOCK_OFFLINE_EXAM_ROW],
+        resultRows: [{ student_name: 'Satyam Pune', correct: 0, incorrect: 0, not_attempted: 0, total_marks: '4' }],
+        students:   [{ canonical_name: 'Satyam Pune', mobile: '9373573740', parent_mobiles: [], name_variants: [] }],
+      }),
+    })
+    await call({ examName: 'Sets' })
+    expect(scoreVarsFor('Satyam Pune')).toEqual([{ pct: '80%', correct: '4', total: '5' }])
+  })
+
+  it('shows 0% for a genuine zero on an offline exam (not a missing-counter zero)', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        allExams:   [MOCK_OFFLINE_EXAM_ROW],
+        resultRows: [{ student_name: 'Satyam Pune', correct: 0, incorrect: 0, not_attempted: 0, total_marks: '0' }],
+        students:   [{ canonical_name: 'Satyam Pune', mobile: '9373573740', parent_mobiles: [], name_variants: [] }],
+      }),
+    })
+    await call({ examName: 'Sets' })
+    expect(scoreVarsFor('Satyam Pune')).toEqual([{ pct: '0%', correct: '0', total: '5' }])
+  })
+
+  it('does not emit NaN when an offline exam has no usable max_marks', async () => {
+    setupMocks({
+      queryClient: makeQueryClient({
+        allExams:   [{ ...MOCK_OFFLINE_EXAM_ROW, max_marks: null }],
+        resultRows: [{ student_name: 'Satyam Pune', correct: 0, incorrect: 0, not_attempted: 0, total_marks: '4' }],
+        students:   [{ canonical_name: 'Satyam Pune', mobile: '9373573740', parent_mobiles: [], name_variants: [] }],
+      }),
+    })
+    await call({ examName: 'Sets' })
+    expect(scoreVarsFor('Satyam Pune')).toEqual([{ pct: '0%', correct: '4', total: '0' }])
+  })
+
+  it('still scores an MCQ exam from the per-question counters', async () => {
+    await call({ examName: 'NDA Test 1' })
+    expect(scoreVarsFor('Arjun Sharma')).toEqual([{ pct: '67%', correct: '20', total: '30' }])
+    expect(scoreVarsFor('Ravi Kumar')).toEqual([{ pct: '50%', correct: '15', total: '30' }])
   })
 })

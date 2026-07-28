@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { isBlockedStatus } from '../src/lib/accountStatus.js'
+import { examScoreBasis, resultScore } from '../src/lib/whatsappResultScore.js'
 
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
 const TRACKER_BASE = 'https://nda-tracker.vercel.app/'
@@ -130,7 +131,7 @@ export default async function handler(req, res) {
 
   const { data: resultRows, error: resultsErr } = await supabase
     .from('exam_results')
-    .select('student_name, correct, incorrect, not_attempted')
+    .select('student_name, correct, incorrect, not_attempted, total_marks')
     .eq('exam_id', exam.id)
 
   if (resultsErr) {
@@ -168,6 +169,7 @@ export default async function handler(req, res) {
     correct:      r.correct,
     incorrect:    r.incorrect,
     notAttempted: r.not_attempted,
+    totalMarks:   Number(r.total_marks) || 0,
   }))
 
   if (students?.length) {
@@ -187,6 +189,16 @@ export default async function handler(req, res) {
   const redirectNorm = redirectTo ? normMobile(redirectTo) : null
   const examDate = fmtDate(exam.date || '')
 
+  // Scoring is shared with WhatsAppPreviewModal so the preview shows exactly
+  // what goes out — see src/lib/whatsappResultScore.js for why offline exams
+  // need their own branch. The exam row is raw snake_case from Supabase, hence
+  // the max_marks → maxMarks mapping at this edge.
+  const scoreBasis = examScoreBasis({
+    maxMarks:  exam.max_marks,
+    questions: exam.questions,
+    marking:   exam.marking,
+  })
+
   // Builds the 7 template variables for one result row. The deep-link pre-fills
   // the student's own mobile (one-tap login to the right child, no sibling
   // picker) + the exam id so the portal lands on this exam's result. The message
@@ -196,13 +208,10 @@ export default async function handler(req, res) {
   function makeParamsForRow(row) {
     const nm  = (row.name || '').trim()
     const dn  = canonicalMap[nm.toLowerCase()] || nm
-    const c   = row.correct      || 0
-    const w   = row.incorrect    || 0
-    const a   = row.notAttempted || 0
-    const t   = c + w + a
-    const p   = t ? Math.round(c / t * 100) : 0
+    // Offline: scored / outOf are MARKS. MCQ: they are question counts.
+    const { pct, scored, outOf } = resultScore(scoreBasis, row)
     const url = buildTrackerUrl(mobileMap[nm.toLowerCase()] || '', exam.id)
-    return [dn, exam.name, examDate, `${p}%`, String(c), String(t), url]
+    return [dn, exam.name, examDate, `${pct}%`, String(scored), String(outOf), url]
   }
 
   for (const row of results) {
