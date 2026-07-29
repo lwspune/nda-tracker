@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert } from '../ui'
 import { getValidChapters } from '../../lib/validateTags'
 import { SUBJECTS } from '../../lib/ndaFreq'
+import useStore from '../../store/useStore'
 
 // Per-question subjects for GAT combined exams — everything except GAT itself
 const QUESTION_SUBJECTS = SUBJECTS.filter(s => s !== 'GAT')
@@ -12,16 +13,20 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
   const isGAT = subject === 'GAT'
 
   // Chapter list for this subject — empty means no validation / free entry (non-GAT only)
-  const validChapters = getValidChapters(subject || 'Maths')
+  const ndaFreqBySubject = useStore(s => s.ndaFreqBySubject)
+  const validChapters = getValidChapters(subject || 'Maths', ndaFreqBySubject)
   const hasChapterList = validChapters.length > 0
 
   // Build working tags list
-  const [workingTags, setWorkingTags] = useState(() => buildTags(tags, totalQs, subject, answerKeys))
+  const [workingTags, setWorkingTags] = useState(
+    () => buildTags(tags, totalQs, subject, answerKeys, ndaFreqBySubject))
   const [filter, setFilter] = useState('all') // 'all' | 'untagged'
 
   useEffect(() => {
-    setWorkingTags(buildTags(tags, totalQs, subject, answerKeys))
-  }, [tags, totalQs, subject, answerKeys])
+    // Deliberate re-seed: the working rows are derived from the upload's inputs
+    // and must reset when any of them change.
+    setWorkingTags(buildTags(tags, totalQs, subject, answerKeys, ndaFreqBySubject))
+  }, [tags, totalQs, subject, answerKeys, ndaFreqBySubject])
 
   function updateTag(i, field, value) {
     setWorkingTags(prev => {
@@ -47,7 +52,7 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
   function isUntaggedRow(t) {
     if (isGAT) {
       if (!t.subject) return true
-      const rowChapters = getValidChapters(t.subject)
+      const rowChapters = getValidChapters(t.subject, ndaFreqBySubject)
       return !t.chapter || (rowChapters.length > 0 && !rowChapters.includes(t.chapter))
     }
     return !t.chapter || (hasChapterList && !validChapters.includes(t.chapter))
@@ -116,7 +121,7 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
           const isUntagged = isUntaggedRow(tag)
 
           // For GAT: chapter list scoped to this row's subject
-          const rowChapters = isGAT ? getValidChapters(tag.subject || '') : validChapters
+          const rowChapters = isGAT ? getValidChapters(tag.subject || '', ndaFreqBySubject) : validChapters
           const rowHasChapterList = rowChapters.length > 0
 
           return (
@@ -198,10 +203,10 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
 // Build working tags — merges tags file data with defaults for missing questions.
 // Results-Excel `answerKeys` (when provided) takes precedence: it overrides any
 // existing tag.answer and pre-fills the default answer for untagged questions.
-function buildTags(tags, totalQs, subject, answerKeys) {
+function buildTags(tags, totalQs, subject, answerKeys, ndaFreqBySubject) {
   const isGAT = subject === 'GAT'
   // For GAT: no default chapter (user must assign subject first); for others use first chapter
-  const subjectChapters = isGAT ? [] : getValidChapters(subject || 'Maths')
+  const subjectChapters = isGAT ? [] : getValidChapters(subject || 'Maths', ndaFreqBySubject)
   const ch = isGAT ? '' : (subjectChapters[0] || subject || 'General')
 
   const tagMap = {}

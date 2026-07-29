@@ -22,8 +22,9 @@ export default function ReuploadTagsModal({ exam, onClose }) {
   // ── Step 2 state ─────────────────────────────────────────────
   const [workingTags, setWorkingTags] = useState(null)
 
+  const ndaFreqBySubject = useStore(s => s.ndaFreqBySubject)
   const subject        = exam.subject || 'Maths'
-  const validChapters  = getValidChapters(subject)
+  const validChapters  = getValidChapters(subject, ndaFreqBySubject)
   const hasChapterList = validChapters.length > 0
   // Chapter-name mismatches are warnings, not blockers (see Step1Upload) — proceed allowed.
   const hasChapterWarnings = tagIssues.length > 0
@@ -41,7 +42,7 @@ export default function ReuploadTagsModal({ exam, onClose }) {
     setLoading(true)
     try {
       const tags = await parseTagsFile(file)
-      const { issues } = validateTags(tags, subject)
+      const { issues } = validateTags(tags, subject, ndaFreqBySubject)
       setParsedTags(tags)
       setFixedTags([...tags])
       setTagIssues(issues)

@@ -2,8 +2,21 @@ import { NDA_FREQ_BY_SUBJECT } from './ndaFreq'
 
 // Returns the valid chapter list for a given subject.
 // Returns [] for subjects with no freq data — callers treat this as "skip validation".
-export function getValidChapters(subject) {
-  return (NDA_FREQ_BY_SUBJECT[subject] || []).map(r => r.chapter)
+//
+// `ndaFreqBySubject` is the faculty-configured table (store field, persisted to
+// faculty_state). It WINS over the hardcoded seed, which is empty for every
+// subject except Maths — so without it, validation silently skipped every GAT
+// subject even after faculty filled its weightage in. Pass it wherever it's
+// available; omitting it degrades to the old seed-only behaviour.
+//
+// Deliberately does NOT fall back to Maths the way getFreqForSubject does.
+// That fallback is right for SCORING (a projected score needs some weightage)
+// and wrong here — it would validate Physics tags against Maths chapters and
+// flag every single one.
+export function getValidChapters(subject, ndaFreqBySubject) {
+  const configured = ndaFreqBySubject?.[subject]
+  const rows = configured?.length ? configured : (NDA_FREQ_BY_SUBJECT[subject] || [])
+  return rows.map(r => r.chapter).filter(Boolean)
 }
 
 // Backward-compat export — Maths chapter list, used in legacy call sites
@@ -15,13 +28,13 @@ export const VALID_CHAPTERS = getValidChapters('Maths')
 // When a subject has no chapter list configured (empty []), that tag is accepted —
 // the teacher tags freely and can configure freq later.
 // Returns { valid: bool, issues: [{q, chapter, suggestion, type}] }
-export function validateTags(tags, defaultSubject = 'Maths') {
+export function validateTags(tags, defaultSubject = 'Maths', ndaFreqBySubject) {
   const issues = []
 
   tags.forEach(tag => {
     // Per-tag subject takes priority; fall back to the exam-level default
     const subject = tag.subject || defaultSubject
-    const validChapters = getValidChapters(subject)
+    const validChapters = getValidChapters(subject, ndaFreqBySubject)
 
     // No freq data for this subject — skip validation for this tag
     if (validChapters.length === 0) return
@@ -84,8 +97,8 @@ function bigrams(str) {
 }
 
 // Normalise a chapter name to exact case from the subject's chapter list
-export function normaliseChapter(name, subject = 'Maths') {
-  const validChapters = getValidChapters(subject)
+export function normaliseChapter(name, subject = 'Maths', ndaFreqBySubject) {
+  const validChapters = getValidChapters(subject, ndaFreqBySubject)
   return validChapters.find(c => c.toLowerCase() === name?.toLowerCase()) || name
 }
 

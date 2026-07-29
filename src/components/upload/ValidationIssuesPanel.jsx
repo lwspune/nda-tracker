@@ -1,4 +1,5 @@
 import { getValidChapters } from '../../lib/validateTags'
+import useStore from '../../store/useStore'
 
 // Props:
 //   tagIssues   — array of { q, chapter, suggestion, type }
@@ -6,6 +7,8 @@ import { getValidChapters } from '../../lib/validateTags'
 //   onAccept    — (q, suggestion) => void
 //   onAcceptAll — () => void
 export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept, onAcceptAll }) {
+  const ndaFreqBySubject = useStore(s => s.ndaFreqBySubject)
+  const subjectChapters  = getValidChapters(tagsSubject, ndaFreqBySubject)
   const allSuggestable = tagIssues.length > 0 && tagIssues.every(i => i.suggestion)
 
   return (
@@ -68,10 +71,10 @@ export default function ValidationIssuesPanel({ tagIssues, tagsSubject, onAccept
       </div>
 
       {/* Footer hint — only shown when the subject has a known chapter list */}
-      {getValidChapters(tagsSubject).length > 0 && (
+      {subjectChapters.length > 0 && (
         <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100">
           <span className="text-[10.5px] text-amber-700/80">
-            Valid chapters for <strong>{tagsSubject}</strong>: {getValidChapters(tagsSubject).join(' · ')}
+            Valid chapters for <strong>{tagsSubject}</strong>: {subjectChapters.join(' · ')}
           </span>
         </div>
       )}

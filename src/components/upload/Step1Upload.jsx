@@ -10,6 +10,7 @@ import useStore from '../../store/useStore'
 
 export default function Step1Upload({ onNext, onCancel }) {
   const studentProfiles = useStore(s => s.studentProfiles)
+  const ndaFreqBySubject = useStore(s => s.ndaFreqBySubject)
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState(null)
   const [xlsxFile, setXlsxFile]       = useState(null)
@@ -90,7 +91,7 @@ export default function Step1Upload({ onNext, onCancel }) {
       // fall back to detected subject or Maths. Non-Maths subjects with no freq
       // data skip validation automatically.
       const fallback = detected === 'GAT' ? 'GAT' : (detected || 'Maths')
-      const { issues } = validateTags(tags, fallback)
+      const { issues } = validateTags(tags, fallback, ndaFreqBySubject)
       setParsedTags(tags)
       setFixedTags([...tags])
       setTagIssues(issues)
@@ -191,7 +192,7 @@ export default function Step1Upload({ onNext, onCancel }) {
       // Re-validate with the resolved subject so the warning panel reflects the final
       // subject — but chapter mismatches are warnings, not blockers, so don't return.
       if (tags) {
-        const { issues } = validateTags(tags, finalSubject)
+        const { issues } = validateTags(tags, finalSubject, ndaFreqBySubject)
         setTagIssues(issues)
         setTagsSubject(finalSubject)
       }
