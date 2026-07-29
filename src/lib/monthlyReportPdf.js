@@ -103,7 +103,7 @@ async function drawExamTable(doc, y, report, autoTable) {
   }
 
   const rows = report.examTable.map(row => [
-    row.writtenQuiz ? `${row.examName} (Written Quiz)` : row.examName,
+    `${row.examName} (${row.format === 'mcq' ? 'MCQ' : 'Written'})`,
     prettyDate(row.date),
     row.attended ? String(row.marks ?? '') : 'ABSENT',
     row.attended ? (row.percentage != null ? `${row.percentage}%` : '') : 'ABSENT',

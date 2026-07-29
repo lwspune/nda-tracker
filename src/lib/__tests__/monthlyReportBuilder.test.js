@@ -522,43 +522,53 @@ describe('getMonthlyReportCohort', () => {
   })
 })
 
-// Parent-facing tag: a teacher's pen-and-paper class test must not read like a
-// full mock in the monthly report. "Written" also keeps it distinct from the
-// in-app Daily Quiz, which is a separate feature entirely.
-describe('buildMonthlyReport — Written Quiz tagging', () => {
+// Every exam here is conducted offline; the real split is whether per-question
+// data exists. Evalbee machine-grades a paper MCQ sheet (questions[] populated);
+// a written paper is hand-graded and only its total is recorded. So format is
+// DERIVED, never stored — and it is independent of who created the exam.
+describe('buildMonthlyReport — exam format tagging', () => {
   const PROFILE = { name: 'Aarav Nair', lwsId: 'LWS-1', regDate: '2026-01-01', batches: ['12th'] }
   const base = { from: '2026-07-01', to: '2026-07-31', profile: PROFILE, attendanceRows: [], examAbsences: [] }
+  const student = { name: 'Aarav Nair', totalMarks: 16 }
 
-  it('flags a teacher-created exam and leaves an admin one untagged', () => {
+  it('derives written from the absence of per-question data', () => {
     const exams = [
-      { id: 'e1', name: 'Trig test', date: '2026-07-10', subject: 'Maths', source: 'teacher',
-        questions: [], maxMarks: 20, students: [{ name: 'Aarav Nair', totalMarks: 16 }] },
-      { id: 'e2', name: 'Mock 3', date: '2026-07-20', subject: 'Maths', source: 'admin',
-        questions: [], maxMarks: 300, students: [{ name: 'Aarav Nair', totalMarks: 200 }] },
+      { id: 'e1', name: 'Integration', date: '2026-07-10', subject: 'Maths',
+        questions: [], maxMarks: 30, students: [student] },
+    ]
+    expect(buildMonthlyReport({ ...base, exams }).examTable[0].format).toBe('written')
+  })
+
+  it('derives MCQ from populated questions', () => {
+    const exams = [
+      { id: 'e2', name: 'NDA Mock 3', date: '2026-07-20', subject: 'Maths',
+        questions: [{ q: 1 }, { q: 2 }], marking: { correct: 4, wrong: -1 }, students: [student] },
+    ]
+    expect(buildMonthlyReport({ ...base, exams }).examTable[0].format).toBe('mcq')
+  })
+
+  it('ignores who created the exam — an admin written test is still written', () => {
+    // The tag describes the paper, not the author. Tagging on source left the
+    // admin-entered Integration/Vector/English papers untagged while an
+    // identical teacher-entered one was tagged.
+    const exams = [
+      { id: 'e3', name: 'Admin written', date: '2026-07-10', subject: 'Maths', source: 'admin',
+        questions: [], maxMarks: 20, students: [student] },
+      { id: 'e4', name: 'Teacher written', date: '2026-07-11', subject: 'Maths', source: 'teacher',
+        questions: [], maxMarks: 20, students: [student] },
     ]
     const rows = buildMonthlyReport({ ...base, exams }).examTable
-    expect(rows.find(r => r.examName === 'Trig test').writtenQuiz).toBe(true)
-    expect(rows.find(r => r.examName === 'Mock 3').writtenQuiz).toBe(false)
+    expect(rows.map(r => r.format)).toEqual(['written', 'written'])
   })
 
-  it('treats a legacy exam with no source as admin', () => {
-    // Every row predating 2026-07-28 has source defaulted to 'admin' in the DB,
-    // but an in-memory exam built before the column existed may have none.
+  it('tags an ABSENT row too', () => {
     const exams = [
-      { id: 'e3', name: 'Old mock', date: '2026-07-10', subject: 'Maths',
-        questions: [], maxMarks: 100, students: [{ name: 'Aarav Nair', totalMarks: 55 }] },
-    ]
-    expect(buildMonthlyReport({ ...base, exams }).examTable[0].writtenQuiz).toBe(false)
-  })
-
-  it('tags an ABSENT row for a written quiz too', () => {
-    const exams = [
-      { id: 'e4', name: 'Trig test', date: '2026-07-10', subject: 'Maths', source: 'teacher',
+      { id: 'e5', name: 'Trig test', date: '2026-07-10', subject: 'Maths',
         questions: [], maxMarks: 20, students: [] },
     ]
     const rows = buildMonthlyReport({
-      ...base, exams, examAbsences: [{ exam_id: 'e4', lws_id: 'LWS-1' }],
+      ...base, exams, examAbsences: [{ exam_id: 'e5', lws_id: 'LWS-1' }],
     }).examTable
-    expect(rows[0]).toMatchObject({ attended: false, writtenQuiz: true })
+    expect(rows[0]).toMatchObject({ attended: false, format: 'written' })
   })
 })

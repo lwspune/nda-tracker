@@ -11,6 +11,27 @@ export function examMaxMarks(exam) {
   return (exam?.questions?.length || 0) * (exam?.marking?.correct || 0)
 }
 
+// MCQ or written — DERIVED, never stored.
+//
+// Every exam here is conducted offline; Evalbee doesn't make one "online", it
+// machine-grades a paper MCQ sheet and produces per-question data. A written
+// paper is graded by hand, so only a total can be recorded. That presence or
+// absence of `questions[]` IS the format, which is why there is no `format`
+// column and must not become one.
+//
+// Independent of `source` (who created it): an admin-entered written test is
+// exactly as written as a teacher-entered one. Tagging on `source` left the
+// admin-entered Integration / Vector / English papers untagged — fixed 2026-07-28.
+export function examFormat(exam) {
+  return exam?.questions?.length ? 'mcq' : 'written'
+}
+
+// Parent-facing label for the format. Used in the monthly report exam table and
+// the admin Exams page badge; keep the two rendering the same words.
+export function examFormatLabel(exam) {
+  return examFormat(exam) === 'mcq' ? 'MCQ' : 'Written'
+}
+
 export function stdDev(arr) {
   if (arr.length < 2) return 0
   const mean = arr.reduce((a, b) => a + b, 0) / arr.length

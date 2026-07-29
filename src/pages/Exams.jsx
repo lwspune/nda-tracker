@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
-import { getBatchOptions, getExamsForBatch, examMaxMarks } from '../lib/analytics'
+import { getBatchOptions, getExamsForBatch, examMaxMarks, examFormatLabel } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
@@ -311,12 +311,12 @@ export default function ExamsPage() {
                   <div className="flex-1 min-w-0 xl:min-w-[240px]">
                     <div className="font-bold text-[14px] text-ink truncate flex items-center gap-2">
                       {exam.name}
-                      {!exam.questions.length && (
-                        <span className="text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-ink-3 border border-border rounded-full px-2 py-0.5">Offline</span>
-                      )}
-                      {exam.source === 'teacher' && (
-                        <span className="text-[9px] font-bold uppercase tracking-wide bg-accent-soft/40 text-accent border border-accent/30 rounded-full px-2 py-0.5">Written Quiz</span>
-                      )}
+                      {/* Was labelled "Offline", which every exam here is —
+                          Evalbee grades a paper MCQ sheet. The real split is
+                          per-question data vs a hand-graded total. */}
+                      <span className="text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-ink-3 border border-border rounded-full px-2 py-0.5">
+                        {examFormatLabel(exam)}
+                      </span>
                     </div>
                     <div className="flex items-center flex-wrap gap-3 mt-1 text-[11px] font-mono text-ink-3">
                       <span>{exam.date}</span>

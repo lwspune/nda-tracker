@@ -8,7 +8,7 @@
 // range (1st → last day) still renders as "Jun 2026" (see rangeLabel) so the
 // default previous-month report is visually unchanged.
 
-import { examMaxMarks } from './analyticsHelpers'
+import { examMaxMarks, examFormat } from './analyticsHelpers'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -105,10 +105,9 @@ export function buildMonthlyReport({
         marks: entry.totalMarks,
         percentage: max > 0 ? Math.round((entry.totalMarks / max) * 100) : null,
         attended: true,
-        // A teacher-conducted pen-and-paper class test. Tagged so a parent
-        // doesn't read it as a full mock. "Written" is load-bearing — this app
-        // also has an in-app Daily Quiz, which is a different thing entirely.
-        writtenQuiz: exam.source === 'teacher',
+        // MCQ or written, derived from whether per-question data exists — see
+        // examFormat. Independent of who created the exam.
+        format: examFormat(exam),
       })
     }
   }
@@ -127,7 +126,7 @@ export function buildMonthlyReport({
       marks: null,
       percentage: null,
       attended: false,
-      writtenQuiz: exam.source === 'teacher',
+      format: examFormat(exam),
     })
   }
   tableRows.sort((a, b) => a.date.localeCompare(b.date))
