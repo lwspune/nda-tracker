@@ -267,6 +267,8 @@ CHAPTER_RENAMES = {
     # `Integration` is Indefinite by default; the definite ones are exceptions
     # in CHAPTER_SUBTOPIC_RENAMES below.
     'Integration':                             'Indefinite Integration',
+    # English — `and` vs `&`; the configured table carries `Idioms & Phrases`.
+    'Idioms and Phrases':                      'Idioms & Phrases',
 }
 
 

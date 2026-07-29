@@ -633,14 +633,48 @@ def test_canonical_maths_chapter_list_is_parseable():
     assert 'Height & Distance' in canon
 
 
+# Targets that live ONLY in the faculty-configured table
+# (faculty_state.data.ndaFreqBySubject), not in the ndaFreq.js seed — the seed
+# is empty for every subject except Maths. A test cannot query Supabase, so
+# this is a deliberate snapshot: each entry records the subject and pct it was
+# verified at. Adding one must be a conscious act, not an accident.
+NON_SEED_CHAPTER_TARGETS = {
+    'Idioms & Phrases',    # English, pct 3.2 — verified against prod 2026-07-29
+}
+
+
+def _allowed_chapter_targets():
+    return _canonical_maths_chapters() | NON_SEED_CHAPTER_TARGETS
+
+
 def test_chapter_rename_targets_are_in_the_weightage_table():
-    canon = _canonical_maths_chapters()
+    allowed = _allowed_chapter_targets()
     for old, new in CHAPTER_RENAMES.items():
-        assert new in canon, (
-            f'{old!r} -> {new!r}: the target is not in NDA_FREQ_BY_SUBJECT.Maths, '
-            f'so every renamed question would score 0 in computeProjectedScore. '
-            f'(Widen this check if a non-Maths chapter rename is ever added.)'
+        assert new in allowed, (
+            f'{old!r} -> {new!r}: the target is in neither NDA_FREQ_BY_SUBJECT.Maths '
+            f'nor NON_SEED_CHAPTER_TARGETS, so every renamed question would score 0 '
+            f'in computeProjectedScore. If this is a configured non-Maths chapter, '
+            f'verify it against prod and add it to NON_SEED_CHAPTER_TARGETS.'
         )
+
+
+def test_english_idioms_ampersand_variant():
+    """`Idioms and Phrases` (56 Q) vs the configured `Idioms & Phrases` (233 Q)."""
+    q = make_cq("Idioms and Phrases", "any subtopic", subject="English")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Idioms & Phrases"
+
+
+@pytest.mark.parametrize("kept", [
+    # The 'English' placeholder chapter holds five different sections under one
+    # (chapter, subtopic) pair, so neither map can split it. Per-question work.
+    "English",
+])
+def test_english_placeholder_chapter_is_not_renamed(kept):
+    q = make_cq(kept, "General", subject="English")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == kept
+    assert kept not in CHAPTER_RENAMES
 
 
 # ── Chapter conformance: (chapter, subtopic) precedence (2026-07-29) ───────
