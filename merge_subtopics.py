@@ -130,6 +130,52 @@ SUBTOPIC_RENAMES = {
     'High powers via cube roots periodicity':  'Cube Roots of Unity',
     'Sum of powers of cube roots':             'Cube Roots of Unity',
     'Sum of products of cube roots':           'Cube Roots of Unity',
+
+    # ── Cleanup Tier 1 (2026-07-29) ───────────────────────────────────────
+    # Mechanical only: casing, `&`-vs-`and`, plural/suffix, exact synonym.
+    # Concept merges (Tier 2) and judgment calls (Tier 3) are NOT here.
+    # English
+    'Sentence Rearrangement':                  'Sentence Rearrangement (PQRS)',
+    'Factual Detail Recall':                   'Factual Detail Retrieval',
+    'Mixed Error Detection':                   'Error Detection',
+    'Yes/No Question Reporting':               'Question Reporting',
+    'Determiners & Pronouns':                  'Determiners and Pronouns',
+    'Articles and Determiners':                'Grammar - Articles and Determiners',
+    'Change & Transition Idioms':              'Change & Transformation Idioms',
+    # Maths
+    'Binary to decimal conversion':            'Binary to Decimal Conversion',
+    'Roots of Unity':                          'Cube Roots of Unity',
+    'Logarithmic Differentiation of Products': 'Logarithmic Differentiation',
+    'Properties of Determinants with AP':      'Properties of Determinants',
+    'Arrangements with restricted repetitions': 'Arrangements with Restrictions',
+    'Conditional probability with dice':       'Conditional Probability',
+    'Sum of GP':                               'Sum of Geometric Progression',
+    'nth term of GP':                          'Geometric Progression - nth Term',
+    'Arithmetic mean of AP':                   'Arithmetic Mean',
+    'Period of trigonometric functions':       'Periodicity of Trigonometric Functions',
+    # Chemistry
+    'Isotopes and average atomic mass':        'Isotopes and Average Atomic Mass',
+    'Electronic configuration and shells':     'Electronic Configuration',
+    "Rutherford's nuclear model":              "Rutherford's Nuclear Model",
+    "Rutherford's nuclear model limitations":  "Rutherford's Nuclear Model",
+    'Physical vs chemical changes':            'Physical vs Chemical Changes',
+    'Physical vs chemical processes':          'Physical vs Chemical Changes',
+    'Oxidation and reduction':                 'Oxidation and Reduction',
+    'Oxidation and reduction concepts':        'Oxidation and Reduction',
+    'Oxidation reactions':                     'Oxidation and Reduction',
+    'Empirical Formula Mass':                  'Empirical Formula',
+    'Formula Mass Calculation':                'Molar Mass Calculations',
+    'Noble gases':                             'Noble Gases',
+    'Separation of liquid mixtures':           'Separation of Mixtures',
+    'Separation of mixtures':                  'Separation of Mixtures',
+    # Physics
+    'Electrostatic Potential':                 'Electric Potential',
+    'Distance and Displacement':               'Distance vs Displacement',
+    'Torque from Change in Angular Momentum – Ring':
+        'Torque from Change in Angular Momentum',
+    # Geography
+    'Seismic Waves & Earth Structure':         "Seismic Waves & Earth's Interior",
+    "Seismic Waves & Earth's Core":            "Seismic Waves & Earth's Interior",
 }
 
 

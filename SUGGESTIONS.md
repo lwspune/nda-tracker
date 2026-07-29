@@ -915,3 +915,24 @@ The written insights panel is descriptive only — every mark, median, spread, b
 **Why:** `studentReportPdf.js` is *entirely* a per-question chapter/subtopic breakdown built from `responses`. Strip that from a written exam and the page is name, marks, percentage — one line, one page per student. Printing that per student is worse than not offering it.
 
 **How to apply:** it only becomes worth a page with the student's **history** on it (this mark against their recent exams, class average, rank) — which is the comparison work above wearing a different hat. Do that first, then reuse it here; don't build a thin written page in the meantime.
+
+### Subtopic cleanup Tiers 2 and 3 are unapplied
+
+Tier 1 (mechanical: casing, `&`-vs-`and`, plural/suffix, exact synonym) shipped 2026-07-29 — 58 questions, 2,665 → 2,641 distinct `(subject, chapter, subtopic)` triples. The remaining ~70 groups from `/subtopic-analyse` were deliberately left.
+
+**Why:** they cross concept boundaries, so each needs a judgment call rather than a string rule, and bundling them behind the safe merges would have hidden the risky ones inside a large diff.
+
+**How to apply:** re-run `/subtopic-analyse` first — it reads Supabase live, so it will already reflect Tier 1. Then, per tier:
+- **Tier 2 — concept merges, low individual risk.** Question Tags → `Simple Present` (7 one-Q buckets), `Classical Probability` (split by Cards/Coins/Dice), `Cloud Types & Characteristics` (6 cloud types, 12 Q — the best non-Maths consolidation), `Conservation of Angular Momentum` (split by Earth/Gymnast/Human Body), `Phrasal Verbs` (split by keyword), `Common Chemicals` (one bucket per chemical). All share one shape: **split by prop or scenario rather than by concept**, leaving ~45 Q in buckets of 1–3.
+- **Tier 3 — needs a call per item.** `Polar Form` + `Exponential Form`, `First`/`Second Ionization Enthalpy`, `Velocity-Time Graph Area` + `Slope`, `Absolute Value Equations` + `Inequalities`, `Determinant Equations` + `Solving Determinant Equation` (neither name is the canonical — a new one must be chosen).
+- **Not renames — do not fold into either tier.** `Geometric Progressions` (32 Q) is a catch-all that likely already contains the sum questions; it needs re-tagging at the question level. `Inverse Trigonometric Identities` in the *Differentiation* chapter is a wrong chapter tag.
+
+Add entries to **both** `merge_subtopics.py` and `migrate_subtopics_supabase.js` (the drift test enforces this), with a test case per pair and a KEEP case per near-miss, then `node migrate_subtopics_supabase.js --dry-run` before applying.
+
+### Prevent question-text-as-subtopic-name at the tagging stage
+
+Several subtopics are a single question's text — `f(π/2) for f(x)=sin[π²]x+cos[−π²]x`, `Sum of inverse cosines equals 3pi`, `AP — sum condition and sum of 10 terms`. Each is permanently a 1-question bucket that can never aggregate.
+
+**Why:** renaming them after the fact is unbounded cleanup — the Tags upload will keep minting new ones. Sequence & Series alone now carries three competing naming schemes (`Sum of AP`, `Arithmetic Progression - Sum of Terms`, `AP — sum condition…`).
+
+**How to apply:** validate at upload in `src/lib/validateTags.js`, as a **non-blocking warning** in the Step 1 preview (same posture as `KeyMismatchPanel` — surface it, let the uploader decide; never silently rewrite). Cheap signals that catch the real cases: length over ~60 chars, contains `=` or a digit-heavy run, or matches the question text for that row. A per-chapter naming convention (`<AP|GP|HP> - <nth Term | Sum of n Terms | Mean>`) would prevent the scheme drift, but the warning is the smaller first step.

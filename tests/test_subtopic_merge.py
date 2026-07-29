@@ -5,6 +5,7 @@ Run: pytest tests/test_subtopic_merge.py -v
 
 import sys
 import os
+import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
@@ -14,6 +15,9 @@ from merge_subtopics import (
     apply_renames,
     apply_chapter_renames,
 )
+
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+JS_SCRIPT = os.path.join(REPO_ROOT, 'migrate_subtopics_supabase.js')
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -301,6 +305,120 @@ def test_maths_cleanup_2026_07_14_distinct_preserved(kept):
     q = make_q(kept)
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
     assert q["subtopic"] == kept
+
+
+# ── Subtopic cleanup Tier 1 (2026-07-29) ──────────────────────────────────
+# Mechanical merges only: casing, `&`-vs-`and`, plural/suffix, exact synonym.
+# No concept boundary is crossed — see DECISIONS.md.
+
+@pytest.mark.parametrize("old,new", [
+    # English
+    ("Sentence Rearrangement",                  "Sentence Rearrangement (PQRS)"),
+    ("Factual Detail Recall",                   "Factual Detail Retrieval"),
+    ("Mixed Error Detection",                   "Error Detection"),
+    ("Yes/No Question Reporting",               "Question Reporting"),
+    ("Determiners & Pronouns",                  "Determiners and Pronouns"),
+    ("Articles and Determiners",                "Grammar - Articles and Determiners"),
+    ("Change & Transition Idioms",              "Change & Transformation Idioms"),
+    # Maths
+    ("Binary to decimal conversion",            "Binary to Decimal Conversion"),
+    ("Roots of Unity",                          "Cube Roots of Unity"),
+    ("Logarithmic Differentiation of Products", "Logarithmic Differentiation"),
+    ("Properties of Determinants with AP",      "Properties of Determinants"),
+    ("Arrangements with restricted repetitions", "Arrangements with Restrictions"),
+    ("Conditional probability with dice",       "Conditional Probability"),
+    ("Sum of GP",                               "Sum of Geometric Progression"),
+    ("nth term of GP",                          "Geometric Progression - nth Term"),
+    ("Arithmetic mean of AP",                   "Arithmetic Mean"),
+    ("Period of trigonometric functions",       "Periodicity of Trigonometric Functions"),
+    # Chemistry
+    ("Isotopes and average atomic mass",        "Isotopes and Average Atomic Mass"),
+    ("Electronic configuration and shells",     "Electronic Configuration"),
+    ("Rutherford's nuclear model",              "Rutherford's Nuclear Model"),
+    ("Rutherford's nuclear model limitations",  "Rutherford's Nuclear Model"),
+    ("Physical vs chemical changes",            "Physical vs Chemical Changes"),
+    ("Physical vs chemical processes",          "Physical vs Chemical Changes"),
+    ("Oxidation and reduction",                 "Oxidation and Reduction"),
+    ("Oxidation and reduction concepts",        "Oxidation and Reduction"),
+    ("Oxidation reactions",                     "Oxidation and Reduction"),
+    ("Empirical Formula Mass",                  "Empirical Formula"),
+    ("Formula Mass Calculation",                "Molar Mass Calculations"),
+    ("Noble gases",                             "Noble Gases"),
+    ("Separation of liquid mixtures",           "Separation of Mixtures"),
+    ("Separation of mixtures",                  "Separation of Mixtures"),
+    # Physics
+    ("Electrostatic Potential",                 "Electric Potential"),
+    ("Distance and Displacement",               "Distance vs Displacement"),
+    ("Torque from Change in Angular Momentum – Ring",
+     "Torque from Change in Angular Momentum"),
+    # Geography
+    ("Seismic Waves & Earth Structure",         "Seismic Waves & Earth's Interior"),
+    ("Seismic Waves & Earth's Core",            "Seismic Waves & Earth's Interior"),
+])
+def test_cleanup_tier1_2026_07_29(old, new):
+    q = make_q(old)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == new
+
+
+@pytest.mark.parametrize("kept", [
+    # Prior deliberate KEEP decisions — a similarity heuristic must not undo them.
+    "Derivative of Nested Absolute Value Functions",
+    "Perpendicular line through trig-point",
+    # Distinct concepts the ≥0.82 heuristic flags as near-duplicates.
+    "Molarity",
+    "Molality",
+    "Electric Potential Energy",
+    "Inferential Comprehension",
+    "Literal Comprehension",
+    "Basic Concepts of Latitude",
+    "Basic Concepts of Longitude",
+    # Deferred: needs re-tagging, not renaming (32-Q catch-all bucket).
+    "Geometric Progressions",
+])
+def test_cleanup_tier1_distinct_subtopics_preserved(kept):
+    q = make_q(kept)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == kept
+
+
+# ── Python / JS rename-map drift guard ─────────────────────────────────────
+# The maps are duplicated in merge_subtopics.py (dev disk) and
+# migrate_subtopics_supabase.js (prod). They must not drift — a miss means
+# prod and dev disagree on a subtopic name, silently splitting analytics.
+
+_JS_PAIR = re.compile(
+    r"""(?P<kq>['"])(?P<key>(?:\\.|(?!(?P=kq))[^\\])*)(?P=kq)\s*:\s*"""
+    r"""(?P<vq>['"])(?P<val>(?:\\.|(?!(?P=vq))[^\\])*)(?P=vq)""",
+    re.S,
+)
+
+
+def _parse_js_map(name):
+    """Extract a top-level `const <name> = { … }` string map from the JS script."""
+    with open(JS_SCRIPT, encoding='utf-8') as f:
+        src = f.read()
+    start = src.index(f'const {name} = {{')
+    end = src.index('\n}', start)
+    body = re.sub(r'//[^\n]*', '', src[start:end])   # strip line comments
+    return {m.group('key'): m.group('val') for m in _JS_PAIR.finditer(body)}
+
+
+def test_js_subtopic_map_matches_python():
+    js_map = _parse_js_map('SUBTOPIC_RENAMES')
+    assert js_map, 'failed to parse SUBTOPIC_RENAMES out of the JS script'
+    assert js_map == SUBTOPIC_RENAMES, (
+        'SUBTOPIC_RENAMES has drifted between merge_subtopics.py and '
+        'migrate_subtopics_supabase.js\n'
+        f'  only in .py: {sorted(set(SUBTOPIC_RENAMES) - set(js_map))}\n'
+        f'  only in .js: {sorted(set(js_map) - set(SUBTOPIC_RENAMES))}\n'
+        f'  differing targets: '
+        f'{sorted(k for k in set(js_map) & set(SUBTOPIC_RENAMES) if js_map[k] != SUBTOPIC_RENAMES[k])}'
+    )
+
+
+def test_js_chapter_map_matches_python():
+    assert _parse_js_map('CHAPTER_RENAMES') == CHAPTER_RENAMES
 
 
 # ── Chapter renames ────────────────────────────────────────────────────────
