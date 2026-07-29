@@ -42,6 +42,33 @@ export const createSubmissionSlice = (_set, _get) => ({
     return true
   },
 
+  // Un-file one period. Only ever used to delete an EXTRA (ad-hoc) class —
+  // a timetabled period can be re-filed but never un-happen.
+  //
+  // Deleting the absentees alone is not enough: the teacher page rebuilds
+  // ad-hoc cards FROM this table, so an orphaned filing row resurrects a class
+  // that was explicitly deleted. Callers clear lecture_absences first and only
+  // reach here if that succeeded — a filing outliving its absentees would claim
+  // the period is accounted for when the data behind it is gone.
+  //
+  // Every part of the key is required. Batch is not decoration: two batches can
+  // legitimately share a slot id, so a delete missing it would widen to another
+  // batch's filing for the same period.
+  async deleteLectureSubmission(date, slotId, batchName) {
+    if (!date || !slotId || !batchName) return false
+    const session = await getSession()
+    if (!session) return false
+
+    const { error } = await supabase.from(TABLE)
+      .delete()
+      .eq('date', date)
+      .eq('slot_id', slotId)
+      .eq('batch_name', batchName)
+
+    if (error) { console.error('[submissions] deleteLectureSubmission failed:', error); return false }
+    return true
+  },
+
   // All filings for one date (across batches). Callers pair these with the
   // day's lectures via withFilingStatus (src/lib/teacherDay.js).
   async getSubmissionsForDate(date) {

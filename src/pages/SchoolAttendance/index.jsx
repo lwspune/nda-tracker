@@ -58,6 +58,7 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
   const endLeave            = useStore(s => s.endLeave)
   const setHomeworkDefaulters = useStore(s => s.setHomeworkDefaultersForItem)
   const getHomeworkForDate  = useStore(s => s.getHomeworkForDate)
+  const deleteSubmission    = useStore(s => s.deleteLectureSubmission)
 
   const [date, setDate] = useState(initialDate ?? todayIso())
   const [absencesBySlot, setAbsencesBySlot] = useState({})   // `${slotId}|${batch}` → [lwsId]
@@ -69,6 +70,14 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
   const [refresh, setRefresh] = useState(0)
   // Impromptu cards created in this session but not yet saved. Once saved they
   // arrive back as lecture_submissions rows and are reconstructed from those.
+  //
+  // Each carries the DATE it was created for. Without that stamp the list is
+  // date-blind: a card added on Thursday followed the teacher to every other
+  // date they opened, badged NOT FILED, sitting in the filed counter's
+  // denominator and one tap away from filing a class that never happened
+  // (the saved-card dedup below is date-scoped, so it couldn't retire it).
+  // Stamping rather than clearing on date change means tapping the date field
+  // to check tomorrow doesn't bin a half-filled-in card either.
   const [pendingAdhoc, setPendingAdhoc] = useState([])
   const [adhocForm, setAdhocForm] = useState(null)   // null = closed
   // Homework filing is two steps: name the item (chapter + what was set), then
@@ -118,8 +127,12 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
 
   const lectures = useMemo(() => {
     const savedIds = new Set(savedAdhoc.map(a => a.slotId))
-    return [...timetabled, ...savedAdhoc, ...pendingAdhoc.filter(a => !savedIds.has(a.slotId))]
-  }, [timetabled, savedAdhoc, pendingAdhoc])
+    return [
+      ...timetabled,
+      ...savedAdhoc,
+      ...pendingAdhoc.filter(a => a.date === date && !savedIds.has(a.slotId)),
+    ]
+  }, [timetabled, savedAdhoc, pendingAdhoc, date])
 
   const lecturesWithStatus = useMemo(
     () => withFilingStatus(lectures, submissions),
@@ -297,6 +310,7 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
     const batchName = adhocForm?.batchName || ''
     if (!subject || !batchName) return
     setPendingAdhoc(prev => [...prev, {
+      date,                       // the day it was held on — see pendingAdhoc
       slotId: mintAdhocId(),
       batchName,
       subject,
@@ -305,6 +319,45 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
       endTime:   (adhocForm.end || '').trim() || null,
     }])
     setAdhocForm(null)
+  }
+
+  // Added by mistake, wrong batch, class ended up not happening. Nothing else
+  // in the system knows an extra class exists — the admin filing board is
+  // timetable-derived — so the teacher who created it is the only person who
+  // can take it back. Never offered on timetabled periods: those aren't the
+  // teacher's to delete from here.
+  async function handleRemoveAdhoc(lec) {
+    if (!lec?.adhoc) return
+
+    // Nothing was written, so there's nothing to undo and nothing to warn about.
+    if (!lec.filed) {
+      setPendingAdhoc(prev => prev.filter(a => a.slotId !== lec.slotId))
+      return
+    }
+
+    if (!window.confirm(
+      `Delete the extra class "${lec.subject}" for ${lec.batchName}? ` +
+      'Its attendance record goes with it. This cannot be undone.'
+    )) return
+
+    setSaving(true)
+    try {
+      // Absentees first, filing second, and only if the first succeeded — the
+      // same ordering as handleSave. A filing row outliving its absentees would
+      // claim the period is accounted for when the data behind it is gone.
+      const ok = await setForPeriod(date, lec.slotId, lec.subject, [])
+      if (!ok) return
+      await deleteSubmission(date, lec.slotId, lec.batchName)
+      setPendingAdhoc(prev => prev.filter(a => a.slotId !== lec.slotId))
+      setAbsencesBySlot(prev => {
+        const next = { ...prev }
+        delete next[lec.slotId]
+        return next
+      })
+      setRefresh(n => n + 1)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const filedCount = lecturesWithStatus.filter(l => l.filed).length
@@ -421,17 +474,33 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
                         : lec.adhoc ? 'Extra class' : `${lec.startTime ?? ''} – ${lec.endTime ?? ''}`}
                     </div>
                   </div>
-                  {lec.filed ? (
-                    <span className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-success
-                                     border border-success/30 bg-success/10 rounded-full px-2 py-1">
-                      Filed
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-yellow-400
-                                     border border-yellow-400/30 bg-yellow-400/10 rounded-full px-2 py-1">
-                      Not filed
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {lec.filed ? (
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-success
+                                       border border-success/30 bg-success/10 rounded-full px-2 py-1">
+                        Filed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-yellow-400
+                                       border border-yellow-400/30 bg-yellow-400/10 rounded-full px-2 py-1">
+                        Not filed
+                      </span>
+                    )}
+                    {/* Extra classes only — a timetabled period can be re-filed
+                        but never un-happen. */}
+                    {lec.adhoc && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAdhoc(lec)}
+                        className="text-ink-3 hover:text-red-400 text-[18px] leading-none w-11 h-11
+                                   flex items-center justify-center rounded focus:outline-none
+                                   focus-visible:ring-2 focus-visible:ring-accent/40"
+                        aria-label={`Remove extra class ${lec.subject} ${lec.batchName}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3">

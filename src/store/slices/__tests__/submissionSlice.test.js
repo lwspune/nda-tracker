@@ -19,6 +19,7 @@ function makeQueryBuilder({ data = [], error = null, upsertError = null } = {}) 
   builder.gte    = vi.fn(() => builder)
   builder.order  = vi.fn(() => builder)
   builder.upsert = vi.fn(() => Promise.resolve({ error: upsertError }))
+  builder.delete = vi.fn(() => builder)
   builder.then   = (onFulfilled, onRejected) =>
     Promise.resolve({ data, error }).then(onFulfilled, onRejected)
   return builder
@@ -137,6 +138,53 @@ describe('submitLecture', () => {
     const { slice } = makeStore()
 
     expect(await slice.submitLecture(ARGS)).toBe(false)
+  })
+})
+
+// Deleting an extra class has to remove the FILING, not just its absentees.
+// The teacher page rebuilds ad-hoc cards from lecture_submissions, so a filing
+// left behind resurrects a class that was explicitly deleted.
+describe('deleteLectureSubmission', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('deletes the one row keyed by (date, slot_id, batch_name)', async () => {
+    const { builder } = mockSupabase()
+    const { slice } = makeStore()
+
+    expect(await slice.deleteLectureSubmission('2026-07-27', 'adhoc_x1', '12th')).toBe(true)
+    expect(supabase.from).toHaveBeenCalledWith('lecture_submissions')
+    expect(builder.delete).toHaveBeenCalledOnce()
+    expect(builder.eq).toHaveBeenCalledWith('date', '2026-07-27')
+    expect(builder.eq).toHaveBeenCalledWith('slot_id', 'adhoc_x1')
+    expect(builder.eq).toHaveBeenCalledWith('batch_name', '12th')
+  })
+
+  // Batch is part of the key, not decoration: two batches can legitimately
+  // share a slot id, so a delete missing it would wipe another batch's filing
+  // for the same period. Refuse rather than run a wider delete than intended.
+  it('refuses to run without every part of the key', async () => {
+    const { builder } = mockSupabase()
+    const { slice } = makeStore()
+
+    expect(await slice.deleteLectureSubmission(null, 'adhoc_x1', '12th')).toBe(false)
+    expect(await slice.deleteLectureSubmission('2026-07-27', '', '12th')).toBe(false)
+    expect(await slice.deleteLectureSubmission('2026-07-27', 'adhoc_x1', undefined)).toBe(false)
+    expect(builder.delete).not.toHaveBeenCalled()
+  })
+
+  it('returns false without a session and never touches the table', async () => {
+    const { builder } = mockSupabase({ sessionActive: false })
+    const { slice } = makeStore()
+
+    expect(await slice.deleteLectureSubmission('2026-07-27', 'adhoc_x1', '12th')).toBe(false)
+    expect(builder.delete).not.toHaveBeenCalled()
+  })
+
+  it('returns false when the delete errors', async () => {
+    mockSupabase({ error: { message: 'boom' } })
+    const { slice } = makeStore()
+
+    expect(await slice.deleteLectureSubmission('2026-07-27', 'adhoc_x1', '12th')).toBe(false)
   })
 })
 

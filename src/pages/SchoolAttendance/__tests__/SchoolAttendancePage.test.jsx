@@ -10,6 +10,7 @@ const mockStore = {
   getLectureAbsencesForDate: vi.fn(),
   submitLecture: vi.fn(),
   getSubmissionsForDate: vi.fn(),
+  deleteLectureSubmission: vi.fn(),
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
   setHomeworkDefaultersForItem: vi.fn(),
@@ -67,6 +68,7 @@ beforeEach(() => {
   mockStore.submitLecture.mockResolvedValue(true)
   mockStore.getHomeworkForDate.mockResolvedValue([])
   mockStore.setHomeworkDefaultersForItem.mockResolvedValue(true)
+  mockStore.deleteLectureSubmission.mockResolvedValue(true)
 })
 
 describe('SchoolAttendancePage — scoping', () => {
@@ -242,6 +244,129 @@ describe('SchoolAttendancePage — extra (impromptu) classes', () => {
     mockStore.timetableMappings = [{ id: 'm-x', subject: 'Maths', teacherId: 'nobody' }]
     render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
     expect(await screen.findByRole('button', { name: /add an extra class/i })).toBeDisabled()
+  })
+
+  // An extra class belongs to the day it was held on. Unsaved cards used to be
+  // plain component state with no date on them, so one added on Thursday
+  // followed the teacher to every other date they opened — badged NOT FILED,
+  // inflating the filed counter, and one tap away from filing a class that
+  // never happened.
+  it('does not follow the teacher to another date', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await addExtra({ subject: 'Doubt session' })
+    expect(await screen.findByText('Doubt session')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-05-22' } })  // Friday
+    await waitFor(() => expect(screen.queryByText('Doubt session')).not.toBeInTheDocument())
+  })
+
+  // …but it is still there when they come back, so tapping the date field to
+  // check tomorrow doesn't bin a card they'd half-filled in.
+  it('is still there on its own date after looking at another one', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await addExtra({ subject: 'Doubt session' })
+    await screen.findByText('Doubt session')
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-05-22' } })
+    await waitFor(() => expect(screen.queryByText('Doubt session')).not.toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: THURSDAY } })
+    expect(await screen.findByText('Doubt session')).toBeInTheDocument()
+  })
+
+  // The counter is what the teacher trusts to know they're done for the day.
+  // A carried-over card sits in its denominator as permanently outstanding.
+  it('leaves it out of the filed counter on another date', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await addExtra({ subject: 'Doubt session' })
+    expect(await screen.findByText('0/2')).toBeInTheDocument()      // Maths + the extra
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-05-22' } })
+    expect(await screen.findByText(/nothing timetabled/i)).toBeInTheDocument()
+    expect(screen.queryByText('0/1')).not.toBeInTheDocument()
+  })
+})
+
+// Added by mistake, wrong batch, class ended up not happening — nothing else
+// in the system knows an extra class exists, so the teacher who created it is
+// the only person who can take it back.
+describe('SchoolAttendancePage — deleting an extra class', () => {
+  async function addExtra({ subject = 'Doubt session' } = {}) {
+    fireEvent.click(await screen.findByRole('button', { name: /add an extra class/i }))
+    fireEvent.change(await screen.findByLabelText(/^subject$/i), { target: { value: subject } })
+    fireEvent.click(screen.getByRole('button', { name: /^add class$/i }))
+  }
+
+  const FILED_EXTRA = [
+    { slot_id: 'adhoc_x1', batch_name: '12th_A', subject: 'Sunday revision', teacher_id: 't1', absent_count: 1, source: 'teacher' },
+  ]
+
+  // The timetable is not the teacher's to edit from here.
+  it('is offered on extra classes only, never on timetabled periods', async () => {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await screen.findByText('Maths')
+    expect(screen.queryByRole('button', { name: /remove extra class/i })).not.toBeInTheDocument()
+
+    await addExtra()
+    expect(await screen.findByRole('button', { name: /remove extra class/i })).toBeInTheDocument()
+  })
+
+  it('drops an unfiled card without a prompt or a write', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await addExtra()
+
+    fireEvent.click(await screen.findByRole('button', { name: /remove extra class/i }))
+
+    await waitFor(() => expect(screen.queryByText('Doubt session')).not.toBeInTheDocument())
+    expect(confirmSpy).not.toHaveBeenCalled()                        // nothing was written to undo
+    expect(mockStore.setLectureAbsenteesForPeriod).not.toHaveBeenCalled()
+    expect(mockStore.deleteLectureSubmission).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  // Both writes, in that order. A filing outliving its absentees would claim
+  // the period is accounted for when the data behind it is gone; absentees
+  // outliving their filing would leave students marked absent from a class
+  // the system no longer knows about.
+  it('clears the absentees and then the filing row', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockStore.getSubmissionsForDate.mockResolvedValue(FILED_EXTRA)
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /remove extra class/i }))
+
+    await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod)
+      .toHaveBeenCalledWith(THURSDAY, 'adhoc_x1', 'Sunday revision', []))
+    await waitFor(() => expect(mockStore.deleteLectureSubmission)
+      .toHaveBeenCalledWith(THURSDAY, 'adhoc_x1', '12th_A'))
+    vi.mocked(window.confirm).mockRestore()
+  })
+
+  it('asks first, and does nothing if the teacher backs out', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mockStore.getSubmissionsForDate.mockResolvedValue(FILED_EXTRA)
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /remove extra class/i }))
+
+    expect(window.confirm).toHaveBeenCalled()
+    expect(mockStore.setLectureAbsenteesForPeriod).not.toHaveBeenCalled()
+    expect(mockStore.deleteLectureSubmission).not.toHaveBeenCalled()
+    expect(screen.getByText('Sunday revision')).toBeInTheDocument()
+    vi.mocked(window.confirm).mockRestore()
+  })
+
+  it('keeps the filing row if clearing the absentees failed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockStore.setLectureAbsenteesForPeriod.mockResolvedValue(false)
+    mockStore.getSubmissionsForDate.mockResolvedValue(FILED_EXTRA)
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /remove extra class/i }))
+
+    await waitFor(() => expect(mockStore.setLectureAbsenteesForPeriod).toHaveBeenCalled())
+    expect(mockStore.deleteLectureSubmission).not.toHaveBeenCalled()
+    vi.mocked(window.confirm).mockRestore()
   })
 })
 
