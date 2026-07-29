@@ -49,7 +49,17 @@ vi.mock('../../components/upload/ReuploadResultsModal', () => ({
   ),
 }))
 
+// Serves both entry points: "+ Offline marks" (no exam) and "Edit marks" (an exam)
+vi.mock('../../components/upload/OfflineExamModal', () => ({
+  default: ({ exam, onClose }) => (
+    <div data-testid="offline-exam-modal" data-exam-id={exam?.id ?? ''}>
+      <button onClick={onClose}>close-offline-modal</button>
+    </div>
+  ),
+}))
+
 import ExamsPage from '../Exams'
+import { useMode } from '../../context/ModeContext'
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +83,19 @@ function makeExam(overrides = {}) {
   }
 }
 
+// A written exam — hand-graded, so only a total per student and no questions[].
+// `examFormat` derives "written" from exactly that, never from `source`.
+function makeWrittenExam(overrides = {}) {
+  return makeExam({
+    questions: [],
+    maxMarks: 20,
+    students: [
+      { name: 'Alice', totalMarks: 15, correct: 0, incorrect: 0, notAttempted: 0, responses: {} },
+    ],
+    ...overrides,
+  })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setExams(exams) { mockStore.exams = exams }
@@ -88,6 +111,7 @@ beforeEach(() => {
   _id = 0
   mockStore.exams = []
   vi.clearAllMocks()
+  useMode.mockReturnValue('admin')
 })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -341,6 +365,111 @@ describe('Exams page — re-upload buttons (faculty mode)', () => {
     await user.click(tagButtons[1]) // click second exam's button
     expect(screen.getByTestId('reupload-tags-modal'))
       .toHaveAttribute('data-exam-id', exam2.id)
+  })
+})
+
+// ── Written exams — the re-upload buttons don't apply ────────────────────────
+//
+// Both re-upload paths are MCQ-only by construction: ReuploadResultsModal parses
+// an Evalbee sheet (which a hand-graded paper has no equivalent of) and
+// ReuploadTagsModal merges tags over exam.questions, which is [] for a written
+// exam — so it can only ever write back nothing. Written exams get the marks
+// grid instead.
+
+describe('Exams page — written exams offer Edit marks, not re-upload', () => {
+  it('hides Update Results on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /update results/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Update Tags on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /update tags/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Edit marks on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.getByRole('button', { name: /edit marks/i })).toBeInTheDocument()
+  })
+
+  it('does not show Edit marks on an MCQ exam', () => {
+    setExams([makeExam({ name: 'Mock 1' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /edit marks/i })).not.toBeInTheDocument()
+  })
+
+  it('still offers Delete on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.getByRole('button', { name: /delete exam/i })).toBeInTheDocument()
+  })
+
+  it('opens the marks grid for that exam when Edit marks is clicked', async () => {
+    const user = userEvent.setup()
+    const exam = makeWrittenExam({ name: 'Sets' })
+    setExams([exam])
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /edit marks/i }))
+    expect(screen.getByTestId('offline-exam-modal')).toHaveAttribute('data-exam-id', exam.id)
+  })
+
+  it('closes the marks grid when its onClose is called', async () => {
+    const user = userEvent.setup()
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /edit marks/i }))
+    await user.click(screen.getByRole('button', { name: /close-offline-modal/i }))
+    expect(screen.queryByTestId('offline-exam-modal')).not.toBeInTheDocument()
+  })
+
+  it('opens the marks grid with no exam from "+ Offline marks"', async () => {
+    const user = userEvent.setup()
+    setExams([makeExam()])
+    renderExams()
+    await user.click(screen.getByRole('button', { name: /offline marks/i }))
+    expect(screen.getByTestId('offline-exam-modal')).toHaveAttribute('data-exam-id', '')
+  })
+
+  it('offers Insights on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.getByRole('button', { name: /insights/i })).toBeInTheDocument()
+  })
+
+  it('hides Integrity on a written exam — it needs per-question responses', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /integrity/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Insights when a written exam has no results yet', () => {
+    setExams([makeWrittenExam({ name: 'Sets', students: [] })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /insights/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the class PDF on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.getByRole('button', { name: /pdf/i })).toBeInTheDocument()
+  })
+
+  // The per-student report is entirely a per-question chapter breakdown; a
+  // written paper would print a one-line page per student.
+  it('hides the per-student Reports PDF on a written exam', () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /reports/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Edit marks outside admin mode', () => {
+    useMode.mockReturnValue('teacher')
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /edit marks/i })).not.toBeInTheDocument()
   })
 })
 

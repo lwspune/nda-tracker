@@ -1,7 +1,7 @@
 // ── Exam-level insight functions ──────────────────────────────
 // All functions operate directly on a single exam object.
 // `names` param (optional Set<string>) scopes counts to a subset of students.
-import { examMaxMarks } from '../analyticsHelpers'
+import { examMaxMarks, stdDev } from '../analyticsHelpers'
 
 /**
  * Top N students by score in a single exam.
@@ -84,6 +84,71 @@ export function getExamSkippedQuestions(exam, names = null, n = 5) {
  * @param {number} topPct  fraction of students to include (default 0.25)
  * @returns {{ toppers: Array<student>, names: Set<string>, count: number, cutoffScore: number }}
  */
+/**
+ * Whole-class shape of a single exam's marks.
+ *
+ * Written papers carry no per-question data, so the only thing that can be said
+ * about one beyond min/avg/max is how the marks are spread. Median matters more
+ * than mean here: class tests are small, and one runaway score drags the mean to
+ * a value nobody sat.
+ *
+ * Bands reuse the thresholds `scoreColor` already applies everywhere else
+ * (>=70% / >=45% / below), so a band carries the same meaning as the colours on
+ * the rest of the page rather than inventing a second grading vocabulary.
+ *
+ * @returns {{count, maxMarks, min, max, mean, median, spread,
+ *            meanPct, medianPct, bands: {strong, fair, weak}|null}}
+ *          Marks-based fields are null for an empty class; percentage fields and
+ *          bands are null when the paper ceiling is unusable (see examMaxMarks).
+ */
+export function getExamScoreSummary(exam) {
+  const maxMarks = examMaxMarks(exam)
+  const scores = (exam?.students ?? [])
+    .map(s => Number(s?.totalMarks))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+
+  const count = scores.length
+  const scorable = maxMarks > 0
+  const pct = v => (scorable && v !== null ? v / maxMarks : null)
+
+  if (count === 0) {
+    return {
+      count: 0, maxMarks, min: null, max: null, mean: null, median: null, spread: 0,
+      meanPct: null, medianPct: null,
+      bands: scorable ? { strong: 0, fair: 0, weak: 0 } : null,
+    }
+  }
+
+  const mean = scores.reduce((a, b) => a + b, 0) / count
+  const mid  = Math.floor(count / 2)
+  const median = count % 2 ? scores[mid] : (scores[mid - 1] + scores[mid]) / 2
+
+  let bands = null
+  if (scorable) {
+    bands = { strong: 0, fair: 0, weak: 0 }
+    for (const v of scores) {
+      const p = v / maxMarks
+      if (p >= 0.7) bands.strong++
+      else if (p >= 0.45) bands.fair++
+      else bands.weak++
+    }
+  }
+
+  return {
+    count,
+    maxMarks,
+    min: scores[0],
+    max: scores[count - 1],
+    mean,
+    median,
+    spread: stdDev(scores),
+    meanPct: pct(mean),
+    medianPct: pct(median),
+    bands,
+  }
+}
+
 export function getExamToppers(exam, topPct = 0.25) {
   const sorted = [...exam.students].sort((a, b) => b.totalMarks - a.totalMarks)
   const count  = Math.max(1, Math.ceil(sorted.length * topPct))

@@ -1,7 +1,7 @@
 import {
   getExamTopStudents, getExamBottomStudents,
   getExamWrongQuestions, getExamSkippedQuestions,
-  getExamToppers, examMaxMarks,
+  getExamToppers, getExamScoreSummary, examMaxMarks, examFormat,
 } from './analytics'
 
 // ── LaTeX → plain ASCII (jsPDF Helvetica is WinAnsi-encoded;
@@ -152,12 +152,18 @@ function drawHeader(doc, exam) {
   doc.setFont('helvetica', 'normal')
   doc.text(meta, W - 14, 20, { align: 'right' })
 
-  // Marking scheme badge
-  const scheme = `+${exam.marking.correct} / ${exam.marking.wrong}`
   doc.setFontSize(7.5)
-  doc.text(`Marking: ${scheme}`, W - 14, 10, { align: 'right' })
+  doc.text(examPdfSchemeLabel(exam), W - 14, 10, { align: 'right' })
 
   return 34  // y after header
+}
+
+// Header badge. An MCQ paper is described by its marking scheme; a written
+// paper's `marking` is inert (maxMarks drives %-of-max), so printing "+1 / 0"
+// would state a scheme that was never applied.
+export function examPdfSchemeLabel(exam) {
+  if (examFormat(exam) === 'written') return `Written · Max ${examMaxMarks(exam)}`
+  return `Marking: +${exam.marking.correct} / ${exam.marking.wrong}`
 }
 
 // ── Section label ─────────────────────────────────────────────
@@ -172,8 +178,9 @@ function sectionLabel(doc, y, label) {
 }
 
 // ── Stat boxes row ────────────────────────────────────────────
-function drawStatBoxes(doc, y, exam) {
-  const W       = doc.internal.pageSize.getWidth()
+// The class-overview tiles. A written paper has no question count to report, so
+// that tile carries the paper ceiling instead — the number %-of-max is against.
+export function buildStatBoxes(exam) {
   const scores  = exam.students.map(s => s.totalMarks)
   const maxM    = examMaxMarks(exam)
   const avg     = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
@@ -181,13 +188,22 @@ function drawStatBoxes(doc, y, exam) {
   const max     = scores.length ? Math.max(...scores) : 0
   const pct     = v => maxM > 0 ? v / maxM * 100 : 0
 
-  const boxes = [
-    { label: 'Students',  value: exam.students.length,         sub: '',                   color: C.accent  },
-    { label: 'Questions', value: exam.questions.length,        sub: `Max ${maxM} marks`,  color: C.ink2    },
+  const second = examFormat(exam) === 'written'
+    ? { label: 'Max Marks', value: maxM,                  sub: 'total marks only', color: C.ink2 }
+    : { label: 'Questions', value: exam.questions.length, sub: `Max ${maxM} marks`, color: C.ink2 }
+
+  return [
+    { label: 'Students',  value: exam.students.length, sub: '', color: C.accent },
+    second,
     { label: 'Min Score', value: `${min}`,  sub: fmtPct(pct(min)), color: pctColor(pct(min)) },
     { label: 'Avg Score', value: `${Math.round(avg)}`, sub: fmtPct(pct(avg)), color: pctColor(pct(avg)) },
     { label: 'Max Score', value: `${max}`,  sub: fmtPct(pct(max)), color: pctColor(pct(max)) },
   ]
+}
+
+function drawStatBoxes(doc, y, exam) {
+  const W     = doc.internal.pageSize.getWidth()
+  const boxes = buildStatBoxes(exam)
 
   const bw = (W - 28 - (boxes.length - 1) * 4) / boxes.length
   const bh = 20
@@ -217,6 +233,27 @@ function drawStatBoxes(doc, y, exam) {
   })
 
   return y + bh + 8
+}
+
+// The full class list, ranked. Written exams carry no per-question counts, so
+// those columns are dropped rather than filled with zeros — a 0 in a "Wrong"
+// column reads as a real count of zero wrong answers, not as "not applicable".
+export function buildAllStudentsTable(exam) {
+  const maxM = examMaxMarks(exam)
+  const written = examFormat(exam) === 'written'
+  const sorted = [...(exam.students ?? [])].sort((a, b) => b.totalMarks - a.totalMarks)
+
+  const head = written
+    ? [['Rank', 'Student Name', 'Marks', '%']]
+    : [['Rank', 'Student Name', 'Score', '%', 'Correct', 'Wrong', 'Skipped']]
+
+  const body = sorted.map((s, i) => {
+    const pct = maxM > 0 ? s.totalMarks / maxM * 100 : 0
+    const base = [i + 1, s.name, s.totalMarks, fmtPct(pct)]
+    return written ? base : [...base, s.correct ?? '—', s.incorrect ?? '—', s.notAttempted ?? '—']
+  })
+
+  return { head, body }
 }
 
 // ── Students table (top or bottom) ───────────────────────────
@@ -465,16 +502,17 @@ export async function downloadExamPdf(exam) {
   y = sectionLabel(doc, y, 'Class Overview')
   y = drawStatBoxes(doc, y, exam)
 
-  // Score distribution note
+  // Score distribution note. Median comes from the shared summary the insights
+  // panel uses, so the same word can't show two different numbers on the two
+  // surfaces (they disagreed on even-sized classes).
   if (exam.students.length > 0) {
-    const scores = exam.students.map(s => s.totalMarks).sort((a, b) => a - b)
-    const median = scores[Math.floor(scores.length / 2)]
-    const above50 = scores.filter(s => maxM > 0 && s / maxM >= 0.5).length
+    const { median, count } = getExamScoreSummary(exam)
+    const above50 = exam.students.filter(s => maxM > 0 && s.totalMarks / maxM >= 0.5).length
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...C.ink2)
     doc.text(
-      `Median: ${median} · Students above 50%: ${above50} of ${scores.length}`,
+      `Median: ${median} · Students above 50%: ${above50} of ${count}`,
       14, y
     )
     y += 8
@@ -526,8 +564,12 @@ export async function downloadExamPdf(exam) {
   y = Math.max(leftY, rightY) + 8
 
   // ── Wrong & Skipped questions ─────────────────────────────
-  const wrong   = getExamWrongQuestions(exam, null, 5)
-  const skipped = getExamSkippedQuestions(exam, null, 5)
+  // Written papers record a total and nothing else, so every per-question
+  // section below is empty by construction — skipped rather than printed as
+  // empty headings.
+  const written = examFormat(exam) === 'written'
+  const wrong   = written ? [] : getExamWrongQuestions(exam, null, 5)
+  const skipped = written ? [] : getExamSkippedQuestions(exam, null, 5)
 
   if (wrong.length) {
     y = ensureSpace(doc, y, 50)
@@ -546,8 +588,8 @@ export async function downloadExamPdf(exam) {
   // ── Toppers section (questions only, no list) ─────────────
   const { names, count, cutoffScore } = getExamToppers(exam, 0.25)
   const cutoffPct = maxM > 0 ? Math.round(cutoffScore / maxM * 100) : 0
-  const tWrong    = getExamWrongQuestions(exam, names, 5)
-  const tSkipped  = getExamSkippedQuestions(exam, names, 5)
+  const tWrong    = written ? [] : getExamWrongQuestions(exam, names, 5)
+  const tSkipped  = written ? [] : getExamSkippedQuestions(exam, names, 5)
 
   if (tWrong.length || tSkipped.length) {
     y = ensureSpace(doc, y, 55)
@@ -570,23 +612,12 @@ export async function downloadExamPdf(exam) {
     y = drawHeader(doc, exam)
     y = sectionLabel(doc, y, `All Students — ${exam.students.length} total`)
 
-    const allSorted = [...exam.students].sort((a, b) => b.totalMarks - a.totalMarks)
+    const { head, body } = buildAllStudentsTable(exam)
     autoTable(doc, {
       startY: y,
       margin: { left: 14, right: 14 },
-      head: [['Rank', 'Student Name', 'Score', '%', 'Correct', 'Wrong', 'Skipped']],
-      body: allSorted.map((s, i) => {
-        const pct = maxM > 0 ? s.totalMarks / maxM * 100 : 0
-        return [
-          i + 1,
-          s.name,
-          s.totalMarks,
-          fmtPct(pct),
-          s.correct ?? '—',
-          s.incorrect ?? '—',
-          s.notAttempted ?? '—',
-        ]
-      }),
+      head,
+      body,
       styles:     { fontSize: 7.5, cellPadding: 2, textColor: C.ink },
       headStyles: { fillColor: C.accent, textColor: C.white, fontStyle: 'bold', fontSize: 8 },
       alternateRowStyles: { fillColor: C.surface2 },

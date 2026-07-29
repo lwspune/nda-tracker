@@ -4,7 +4,8 @@ import QuestionCard from '../../components/ui/QuestionCard'
 import {
   getExamTopStudents, getExamBottomStudents,
   getExamWrongQuestions, getExamSkippedQuestions,
-  getExamToppers, examMaxMarks,
+  getExamToppers, getExamScoreSummary, getExamAbsentees,
+  examMaxMarks, examFormat, scoreColor,
 } from '../../lib/analytics'
 
 // ── Shared sub-components ─────────────────────────────────────
@@ -269,10 +270,155 @@ function ToppersTab({ exam }) {
   )
 }
 
+// ── Written exams ─────────────────────────────────────────────
+//
+// A hand-graded paper records one number per student and nothing else, so the
+// three-tab view collapses: two of its tabs read `responses`, which is empty.
+// What IS knowable — every mark, the shape of the class, and who didn't sit it —
+// gets shown at once instead of behind tabs.
+
+function Stat({ label, value, sub, testId, colorClass = 'text-ink' }) {
+  return (
+    <div className="px-3 py-2 rounded-xl border border-border bg-surface min-w-[92px]">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-ink-3">{label}</div>
+      <div className={`text-[18px] font-extrabold font-mono leading-tight ${colorClass}`} data-testid={testId}>
+        {value}
+      </div>
+      {sub && <div className="text-[10px] text-ink-3 font-mono">{sub}</div>}
+    </div>
+  )
+}
+
+// Marks can be fractional (0.5 steps) — trim a trailing .0 so a whole mark reads
+// as "13", not "13.0", while a genuine half-mark still shows.
+function fmtMark(v) {
+  if (v === null || v === undefined) return '—'
+  return Number.isInteger(v) ? String(v) : String(Number(v.toFixed(2)))
+}
+
+function WrittenView({ exam, studentProfiles }) {
+  const summary = useMemo(() => getExamScoreSummary(exam), [exam])
+  const maxMarks = summary.maxMarks
+
+  const ranked = useMemo(
+    () => [...(exam.students ?? [])].sort((a, b) => b.totalMarks - a.totalMarks),
+    [exam]
+  )
+
+  // Rostered students with no result. Derived from current batch membership the
+  // same way the absence alert derives it, so the panel and the send preview
+  // can't disagree about who was missing.
+  const absentees = useMemo(
+    () => getExamAbsentees(exam, studentProfiles),
+    [exam, studentProfiles]
+  )
+
+  const pctOf = v => (maxMarks > 0 ? v / maxMarks : null)
+  const fmtPct = p => (p === null ? '—' : `${Math.round(p * 100)}%`)
+
+  return (
+    <div className="space-y-5">
+      {/* Class shape */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-widest text-ink-3 mb-2">
+          Class Shape
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Stat label="Median" value={fmtMark(summary.median)} sub={fmtPct(summary.medianPct)}
+                testId="written-median"
+                colorClass={summary.medianPct === null ? 'text-ink' : scoreColor(summary.medianPct)} />
+          <Stat label="Mean" value={fmtMark(summary.mean)} sub={fmtPct(summary.meanPct)}
+                testId="written-mean" />
+          <Stat label="Spread" value={fmtMark(summary.spread)} sub="std dev" testId="written-spread" />
+          {summary.bands && (
+            <>
+              <Stat label="≥ 70%" value={summary.bands.strong} testId="band-strong" colorClass="text-success" />
+              <Stat label="45–70%" value={summary.bands.fair}  testId="band-fair"   colorClass="text-warning" />
+              <Stat label="< 45%"  value={summary.bands.weak}  testId="band-weak"   colorClass="text-danger" />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Every mark. A written class test is small enough that top-5/bottom-5
+          would hide most of the room. */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-widest text-ink-3 mb-2">
+          All Students — {ranked.length}
+        </div>
+        {ranked.length === 0 ? (
+          <p className="text-[12px] text-ink-3 py-2">No marks recorded for this exam.</p>
+        ) : (
+          <div className="border border-border rounded-xl overflow-hidden bg-surface">
+            <table aria-label="All students" className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-surface-2 text-ink-3 text-[10px] uppercase tracking-wide">
+                  <th scope="col" className="text-left font-bold px-3 py-2 w-10">#</th>
+                  <th scope="col" className="text-left font-bold px-3 py-2">Student</th>
+                  <th scope="col" className="text-right font-bold px-3 py-2">Marks</th>
+                  <th scope="col" className="text-right font-bold px-3 py-2 w-16">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((s, i) => {
+                  const p = pctOf(s.totalMarks)
+                  return (
+                    <tr key={s.name} className="border-t border-border">
+                      <td className="px-3 py-1.5 font-mono text-ink-3">{i + 1}</td>
+                      <td className="px-3 py-1.5 text-ink truncate">{s.name}</td>
+                      <td className="px-3 py-1.5 text-right font-mono font-bold text-ink">
+                        {fmtMark(s.totalMarks)} / {maxMarks > 0 ? fmtMark(maxMarks) : '—'}
+                      </td>
+                      <td className={`px-3 py-1.5 text-right font-mono font-bold ${p === null ? 'text-ink-3' : scoreColor(p)}`}>
+                        {fmtPct(p)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Who wasn't there — reachable only inside the send preview until now. */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-widest text-ink-3 mb-2">
+          Did Not Appear
+        </div>
+        <div data-testid="written-absentees" className="text-[12px] text-ink-2">
+          {absentees.length === 0 ? (
+            <span className="text-ink-3">Everyone on the batch roster has a mark.</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {absentees.map(p => (
+                <span key={p.lwsId || p.name}
+                      className="text-[11px] font-mono bg-surface border border-border
+                                 text-ink-2 px-2 py-0.5 rounded-full">
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main panel ────────────────────────────────────────────────
 
-export default function ExamInsightsPanel({ exam }) {
+export default function ExamInsightsPanel({ exam, studentProfiles }) {
   const [tab, setTab] = useState('students')
+
+  // Format is derived from questions[], never stored — see analyticsHelpers.
+  if (examFormat(exam) === 'written') {
+    return (
+      <div className="border-t border-border bg-surface-2/60 px-4 md:px-6 py-4">
+        <WrittenView exam={exam} studentProfiles={studentProfiles} />
+      </div>
+    )
+  }
 
   return (
     <div className="border-t border-border bg-surface-2/60 px-4 md:px-6 py-4">

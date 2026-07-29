@@ -25,7 +25,7 @@ const PROFILES = {
   Carol: { lwsId: 'L3', name: 'Carol', batches: ['B2'], branch: 'LWS Pune', accountStatus: 'Active' },
 }
 
-function renderModal(overrides = {}) {
+function renderModal(overrides = {}, props = {}) {
   mockStoreState = {
     addExam, replaceExam,
     exams: [],
@@ -34,8 +34,29 @@ function renderModal(overrides = {}) {
     ...overrides,
   }
   const onClose = vi.fn()
-  render(<OfflineExamModal onClose={onClose} />)
+  render(<OfflineExamModal onClose={onClose} {...props} />)
   return { onClose }
+}
+
+// An existing written exam, as stored: totals only, no questions[].
+function makeWrittenExam(overrides = {}) {
+  return {
+    id: 'wq_1',
+    name: 'Sets',
+    date: '2026-07-27',
+    subject: 'Maths',
+    batch: 'B1',
+    branch: 'LWS Pune',
+    marking: { correct: 1, wrong: 0 },
+    questions: [],
+    maxMarks: 5,
+    source: 'teacher',
+    createdBy: 'teacher@lws.test',
+    students: [
+      { name: 'Alice', rollNo: '', totalMarks: 4, correct: 0, incorrect: 0, notAttempted: 0, responses: {} },
+    ],
+    ...overrides,
+  }
 }
 
 // Fill the always-visible exam meta so only the marks decide save-ability.
@@ -47,7 +68,7 @@ async function fillMeta(user, { name = 'Algebra Class Test', max = '100' } = {})
 
 const grid = () => screen.getByRole('table', { name: /marks/i })
 const markInput = (name) => screen.getByLabelText(`Marks for ${name}`)
-const saveBtn = () => screen.getByRole('button', { name: /save exam|replace exam/i })
+const saveBtn = () => screen.getByRole('button', { name: /save exam|replace exam|save changes/i })
 
 beforeEach(() => { vi.clearAllMocks() })
 
@@ -177,6 +198,111 @@ describe('OfflineExamModal — paste a column', () => {
 
     expect(markInput('Alice')).toHaveValue(null)
     expect(markInput('Bob')).toHaveValue(55)
+  })
+})
+
+// ── Edit mode ────────────────────────────────────────────────────────────────
+//
+// Written exams have no Evalbee sheet to re-upload, so the grid IS their
+// correction path. Before this, fixing one typo'd mark meant deleting the exam
+// and re-entering the whole class.
+
+describe('OfflineExamModal — editing an existing exam', () => {
+  it('seeds the exam meta from the exam being edited', () => {
+    renderModal({}, { exam: makeWrittenExam() })
+    expect(screen.getByLabelText(/exam name/i)).toHaveValue('Sets')
+    expect(screen.getByLabelText(/date/i)).toHaveValue('2026-07-27')
+    expect(screen.getByLabelText(/max marks/i)).toHaveValue(5)
+    expect(screen.getByLabelText(/subject/i)).toHaveValue('Maths')
+    expect(screen.getByLabelText(/branch/i)).toHaveValue('LWS Pune')
+    expect(screen.getByLabelText('B1')).toBeChecked()
+  })
+
+  it('pre-fills the grid with the marks already recorded', () => {
+    renderModal({}, { exam: makeWrittenExam() })
+    expect(markInput('Alice')).toHaveValue(4)
+    expect(markInput('Bob')).toHaveValue(null)   // no result stored = did not appear
+  })
+
+  it('replaces the same exam rather than adding a new one', async () => {
+    const user = userEvent.setup()
+    renderModal({}, { exam: makeWrittenExam() })
+    await user.clear(markInput('Alice'))
+    await user.type(markInput('Alice'), '5')
+    await user.click(saveBtn())
+
+    expect(addExam).not.toHaveBeenCalled()
+    expect(replaceExam).toHaveBeenCalledTimes(1)
+    const [id, saved] = replaceExam.mock.calls[0]
+    expect(id).toBe('wq_1')
+    expect(saved.id).toBe('wq_1')
+    expect(saved.students).toEqual([
+      expect.objectContaining({ name: 'Alice', totalMarks: 5 }),
+    ])
+  })
+
+  it('does not sync absences unless faculty opts in', async () => {
+    const user = userEvent.setup()
+    renderModal({}, { exam: makeWrittenExam() })
+    await user.click(saveBtn())
+    expect(replaceExam.mock.calls[0][2]).toEqual({ syncAbsences: false })
+  })
+
+  it('syncs absences when faculty ticks the box', async () => {
+    const user = userEvent.setup()
+    renderModal({}, { exam: makeWrittenExam() })
+    await user.click(screen.getByRole('checkbox', { name: /flag absentees/i }))
+    await user.click(saveBtn())
+    expect(replaceExam.mock.calls[0][2]).toEqual({ syncAbsences: true })
+  })
+
+  it('keeps source and createdBy so the Written Quiz badge and author survive', async () => {
+    const user = userEvent.setup()
+    renderModal({}, { exam: makeWrittenExam() })
+    await user.click(saveBtn())
+    const saved = replaceExam.mock.calls[0][1]
+    expect(saved.source).toBe('teacher')
+    expect(saved.createdBy).toBe('teacher@lws.test')
+  })
+
+  it('keeps a student who has since left the batch, with their mark', async () => {
+    const user = userEvent.setup()
+    // Carol sat the exam but is now in B2 only — deriving the roster from the
+    // batch alone would drop her row, and saving would erase her result.
+    const exam = makeWrittenExam({
+      students: [
+        { name: 'Alice', rollNo: '', totalMarks: 4, correct: 0, incorrect: 0, notAttempted: 0, responses: {} },
+        { name: 'Carol', rollNo: '', totalMarks: 3, correct: 0, incorrect: 0, notAttempted: 0, responses: {} },
+      ],
+    })
+    renderModal({}, { exam })
+
+    expect(within(grid()).getByText('Carol')).toBeInTheDocument()
+    expect(markInput('Carol')).toHaveValue(3)
+
+    await user.click(saveBtn())
+    const saved = replaceExam.mock.calls[0][1]
+    expect(saved.students.map(s => s.name).sort()).toEqual(['Alice', 'Carol'])
+    expect(saved.students.find(s => s.name === 'Carol').totalMarks).toBe(3)
+  })
+
+  it('does not warn that it will replace an exam when that exam is itself', () => {
+    const exam = makeWrittenExam()
+    renderModal({ exams: [exam] }, { exam })
+    expect(screen.queryByText(/already exists/i)).not.toBeInTheDocument()
+  })
+
+  it('still warns when a different exam shares the name and date', () => {
+    const exam = makeWrittenExam()
+    const clash = makeWrittenExam({ id: 'other', name: 'Sets', date: '2026-07-27' })
+    renderModal({ exams: [exam, clash] }, { exam })
+    expect(screen.getByText(/already exists/i)).toBeInTheDocument()
+  })
+
+  it('titles itself as an edit, not an add', () => {
+    renderModal({}, { exam: makeWrittenExam() })
+    expect(screen.getByRole('heading', { name: /edit marks/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /add offline exam/i })).not.toBeInTheDocument()
   })
 })
 

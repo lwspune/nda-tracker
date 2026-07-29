@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
-import { getBatchOptions, getExamsForBatch, examMaxMarks, examFormatLabel } from '../lib/analytics'
+import { getBatchOptions, getExamsForBatch, examMaxMarks, examFormat, examFormatLabel } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
@@ -51,6 +51,7 @@ export default function ExamsPage() {
   const [reuploadTagsExam, setReuploadTagsExam]       = useState(null)
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
   const [offlineModalOpen, setOfflineModalOpen]       = useState(false)
+  const [editMarksExam, setEditMarksExam]             = useState(null)
   const [expandedExamId, setExpandedExamId]           = useState(null)
   const [integrityExamId, setIntegrityExamId]         = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
@@ -303,6 +304,7 @@ export default function ExamsPage() {
 
             const isExpanded = expandedExamId === exam.id
             const isIntegrityOpen = integrityExamId === exam.id
+            const isMcq = examFormat(exam) === 'mcq'
 
             return (
               <Card key={exam.id} data-testid="exam-card" className="!p-0 overflow-hidden hover:border-accent/40 transition-colors">
@@ -369,8 +371,9 @@ export default function ExamsPage() {
                       </div>
                     )}
 
-                    {/* Insights toggle */}
-                    {exam.students.length > 0 && exam.questions.length > 0 && (
+                    {/* Insights toggle — written exams get a format-specific
+                        view inside the panel, so this is gated on results only. */}
+                    {exam.students.length > 0 && (
                       <button
                         onClick={() => toggleInsights(exam.id)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
@@ -400,8 +403,11 @@ export default function ExamsPage() {
                       </button>
                     )}
 
-                    {/* PDF download */}
-                    {exam.students.length > 0 && exam.questions.length > 0 && (
+                    {/* PDF download — the class report degrades to the
+                        question-free sections for a written paper. (The
+                        per-student Reports PDF below does not: it is entirely a
+                        per-question breakdown, so it stays MCQ-only.) */}
+                    {exam.students.length > 0 && (
                       <button
                         onClick={async () => {
                           setPdfGenerating(exam.id)
@@ -472,24 +478,43 @@ export default function ExamsPage() {
                             </button>
                           )
                         })()}
-                        <button
-                          onClick={() => setReuploadResultsExam(exam)}
-                          className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
-                          title="Re-upload results Excel"
-                        >
-                          📊 Update Results
-                        </button>
-                        <button
-                          onClick={() => setReuploadTagsExam(exam)}
-                          className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
-                          title="Re-upload tags Excel"
-                        >
-                          🏷️ Update Tags
-                        </button>
+                        {/* Both re-upload paths are MCQ-only by construction:
+                            the results modal parses an Evalbee sheet, which a
+                            hand-graded paper has no equivalent of, and the tags
+                            modal merges over exam.questions — [] for a written
+                            exam, so it could only ever write back nothing.
+                            Written exams correct their marks in the grid. */}
+                        {isMcq ? (
+                          <>
+                            <button
+                              onClick={() => setReuploadResultsExam(exam)}
+                              className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
+                              title="Re-upload results Excel"
+                            >
+                              📊 Update Results
+                            </button>
+                            <button
+                              onClick={() => setReuploadTagsExam(exam)}
+                              className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
+                              title="Re-upload tags Excel"
+                            >
+                              🏷️ Update Tags
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setEditMarksExam(exam)}
+                            className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
+                            title="Edit the marks for this exam"
+                          >
+                            ✏️ Edit marks
+                          </button>
+                        )}
                         <button
                           onClick={() => confirm(`Delete "${exam.name}"?`) && deleteExam(exam.id)}
                           className="text-ink-3 hover:text-danger text-[18px] transition-colors
                                      min-h-[44px] w-[44px] flex items-center justify-center"
+                          aria-label={`Delete exam ${exam.name}`}
                           title="Delete exam"
                         >
                           ×
@@ -500,7 +525,7 @@ export default function ExamsPage() {
                 </div>
 
                 {/* ── Insights panel ── */}
-                {isExpanded && <ExamInsightsPanel exam={exam} />}
+                {isExpanded && <ExamInsightsPanel exam={exam} studentProfiles={studentProfiles} />}
 
                 {/* ── Integrity panel ── */}
                 {isIntegrityOpen && <ExamIntegrityPanel exam={exam} />}
@@ -547,8 +572,13 @@ export default function ExamsPage() {
           onClose={() => setReuploadResultsExam(null)}
         />
       )}
-      {offlineModalOpen && (
-        <OfflineExamModal onClose={() => setOfflineModalOpen(false)} />
+      {/* One grid, two entry points: "+ Offline marks" creates, "Edit marks"
+          re-opens an existing exam pre-filled. */}
+      {(offlineModalOpen || editMarksExam) && (
+        <OfflineExamModal
+          exam={editMarksExam}
+          onClose={() => { setOfflineModalOpen(false); setEditMarksExam(null) }}
+        />
       )}
 
       {whatsappPreviewExam && (

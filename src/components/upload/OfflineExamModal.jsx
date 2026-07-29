@@ -15,7 +15,13 @@ import { Alert, Spinner, DropZone } from '../ui'
 // Two ways in, and the grid is the default: pick the batches and type the marks
 // straight into the roster the app already holds. The file upload stays for bulk
 // or legacy sheets. Both converge on the same student-row shape.
-export default function OfflineExamModal({ onClose }) {
+//
+// Passing `exam` opens the same grid on an existing exam, pre-filled. That is
+// also the ONLY correction path a written exam has: the re-upload modals both
+// need per-question data (an Evalbee sheet / a tags file merged over
+// exam.questions), which a hand-graded paper does not have. Before this, fixing
+// one typo'd mark meant deleting the exam and re-entering the whole class.
+export default function OfflineExamModal({ exam = null, onClose }) {
   const addExam          = useStore(s => s.addExam)
   const exams            = useStore(s => s.exams)
   const replaceExam      = useStore(s => s.replaceExam)
@@ -44,16 +50,47 @@ export default function OfflineExamModal({ onClose }) {
 
   const fileRef = useRef()
 
+  // Seed the fields from the exam being edited. Keyed on the exam id and done in
+  // render rather than an effect so a re-render can't clobber what's being typed.
+  const [seeded, setSeeded] = useState(null)
+  if (exam?.id && seeded !== exam.id) {
+    setSeeded(exam.id)
+    setName(exam.name ?? '')
+    setDate(exam.date ?? today)
+    setSubject(exam.subject || 'Maths')
+    setMaxMarks(exam.maxMarks != null ? String(exam.maxMarks) : '')
+    setBatch(exam.batch || '')
+    setBranch(exam.branch || '')
+    setSource('manual')
+    // A stored result is a mark that was entered; anyone absent has no row, so
+    // they seed blank — which is exactly what a blank means on this grid.
+    setMarks(Object.fromEntries(
+      (exam.students ?? [])
+        .filter(s => s?.name != null && s?.totalMarks != null)
+        .map(s => [s.name, String(s.totalMarks)])
+    ))
+  }
+
   const allBranches = [...new Set(
     Object.values(studentProfiles).map(p => p.branch).filter(Boolean)
   )].sort()
   const selectedBatches = new Set(getExamBatches({ batch }))
 
   // Current members of the selected batches — the grid's rows.
-  const roster = useMemo(
-    () => buildOfflineRoster(studentProfiles, getExamBatches({ batch })),
-    [studentProfiles, batch]
-  )
+  //
+  // When editing, anyone who already has a result but is no longer in those
+  // batches is appended: batch membership is current, the exam is historical, so
+  // deriving rows from the batch alone would drop a student who has since moved
+  // and saving would then erase their mark.
+  const roster = useMemo(() => {
+    const current = buildOfflineRoster(studentProfiles, getExamBatches({ batch }))
+    if (!exam) return current
+    const present = new Set(current.map(r => r.name))
+    const departed = (exam.students ?? [])
+      .filter(s => s?.name && !present.has(s.name))
+      .map(s => ({ lwsId: '', name: s.name }))
+    return [...current, ...departed]
+  }, [studentProfiles, batch, exam])
   const manualStudents = useMemo(() => buildOfflineStudentRows(roster, marks), [roster, marks])
 
   const students = source === 'manual' ? manualStudents : fileStudents
@@ -115,6 +152,10 @@ export default function OfflineExamModal({ onClose }) {
 
   function buildExam(id) {
     return {
+      // Spread first so fields this modal doesn't edit survive a round-trip —
+      // notably `source` and `createdBy`, which carry the Written Quiz badge and
+      // the "by <teacher>" attribution on the Exams page.
+      ...(exam ?? {}),
       id,
       name: name.trim(),
       date,
@@ -122,21 +163,24 @@ export default function OfflineExamModal({ onClose }) {
       batch: batch || null,
       branch: branch || null,
       marking: { correct: 1, wrong: 0 },  // inert for offline — maxMarks drives %-of-max
-      questions: [],
+      questions: [],                      // this grid only ever produces totals
       maxMarks: maxNum,
       students,
-      createdAt: new Date().toISOString(),
+      createdAt: exam?.createdAt ?? new Date().toISOString(),
     }
   }
 
+  // Editing never counts as a duplicate of itself.
   const duplicate = exams.find(e =>
+    e.id !== exam?.id &&
     e.name?.trim().toLowerCase() === name.trim().toLowerCase() && e.date === date
   )
 
   function handleSave() {
     if (!canSave) return
-    if (duplicate) {
-      replaceExam(duplicate.id, buildExam(duplicate.id), { syncAbsences: notifyAbsentees })
+    const target = exam ?? duplicate
+    if (target) {
+      replaceExam(target.id, buildExam(target.id), { syncAbsences: notifyAbsentees })
     } else {
       addExam(buildExam('exam_' + Date.now()), { syncAbsences: notifyAbsentees })
     }
@@ -154,12 +198,15 @@ export default function OfflineExamModal({ onClose }) {
     >
       <div className="bg-surface rounded-2xl shadow-lg w-[560px] max-w-[95vw] max-h-[90vh] overflow-y-auto flex flex-col">
         <div className="flex items-center justify-between px-7 pt-6 pb-1">
-          <h2 className="text-[18px] font-extrabold tracking-tight">Add Offline Exam</h2>
-          <button onClick={onClose} className="text-ink-3 hover:text-ink text-[20px] leading-none">×</button>
+          <h2 className="text-[18px] font-extrabold tracking-tight">
+            {exam ? 'Edit marks' : 'Add Offline Exam'}
+          </h2>
+          <button onClick={onClose} aria-label="Close" className="text-ink-3 hover:text-ink text-[20px] leading-none">×</button>
         </div>
         <p className="px-7 text-[12px] text-ink-3 mb-4">
-          Record a hand-graded paper — total marks only. Per-question analytics (chapters, audits)
-          aren't available for offline exams.
+          {exam
+            ? `Correct the marks for ${exam.name}. Saving replaces this exam's results — students left blank are recorded as not having appeared.`
+            : "Record a hand-graded paper — total marks only. Per-question analytics (chapters, audits) aren't available for offline exams."}
         </p>
 
         <div className="px-7 pb-7 flex flex-col gap-4">
@@ -351,7 +398,7 @@ export default function OfflineExamModal({ onClose }) {
             <button onClick={onClose} className="btn btn-secondary">Cancel</button>
             <button onClick={handleSave} disabled={!canSave}
                     className={`btn btn-primary ${!canSave ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              {duplicate ? '🔄 Replace Exam' : '💾 Save Exam'}
+              {exam ? '💾 Save changes' : duplicate ? '🔄 Replace Exam' : '💾 Save Exam'}
             </button>
           </div>
         </div>
