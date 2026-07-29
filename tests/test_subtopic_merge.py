@@ -12,6 +12,7 @@ import pytest
 from merge_subtopics import (
     SUBTOPIC_RENAMES,
     CHAPTER_RENAMES,
+    CHAPTER_SUBTOPIC_RENAMES,
     apply_renames,
     apply_chapter_renames,
 )
@@ -528,14 +529,32 @@ _JS_PAIR = re.compile(
 )
 
 
-def _parse_js_map(name):
-    """Extract a top-level `const <name> = { … }` string map from the JS script."""
+def _js_map_body(name):
+    """Return the comment-stripped body of a top-level `const <name> = { … }`."""
     with open(JS_SCRIPT, encoding='utf-8') as f:
         src = f.read()
     start = src.index(f'const {name} = {{')
     end = src.index('\n}', start)
-    body = re.sub(r'//[^\n]*', '', src[start:end])   # strip line comments
-    return {m.group('key'): m.group('val') for m in _JS_PAIR.finditer(body)}
+    return re.sub(r'//[^\n]*', '', src[start:end])   # strip line comments
+
+
+def _parse_js_map(name):
+    """Extract a top-level `const <name> = { … }` string map from the JS script."""
+    return {m.group('key'): m.group('val') for m in _JS_PAIR.finditer(_js_map_body(name))}
+
+
+# Outer keys of a nested map are plain chapter names — no quotes or backslashes
+# inside them — so this stays deliberately simpler than _JS_PAIR.
+_JS_OUTER = re.compile(r"'([^']*)'\s*:\s*\{([^{}]*)\}", re.S)
+
+
+def _parse_js_nested_map(name):
+    """Extract a top-level `const <name> = { k: { k: v } }` map from the JS script."""
+    body = _js_map_body(name)
+    return {
+        outer: {m.group('key'): m.group('val') for m in _JS_PAIR.finditer(inner)}
+        for outer, inner in _JS_OUTER.findall(body)
+    }
 
 
 def test_js_subtopic_map_matches_python():
@@ -622,6 +641,109 @@ def test_chapter_rename_targets_are_in_the_weightage_table():
             f'so every renamed question would score 0 in computeProjectedScore. '
             f'(Widen this check if a non-Maths chapter rename is ever added.)'
         )
+
+
+# ── Chapter conformance: (chapter, subtopic) precedence (2026-07-29) ───────
+# A chapter can need more than one target. `Integration` (25 Q) is really
+# `Indefinite Integration` except for 3 questions that are definite integrals —
+# one chapter name, two correct answers, which a chapter-keyed map cannot say.
+# CHAPTER_SUBTOPIC_RENAMES holds the exceptions; CHAPTER_RENAMES the default.
+
+def make_cq(chapter, subtopic=None, subject="Maths"):
+    return {"q": 1, "chapter": chapter, "subject": subject, "subtopic": subtopic}
+
+
+def test_subtopic_exception_wins_over_chapter_wide_rename():
+    q = make_cq("Integration", "Definite integral with greatest integer function")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Definite Integration"
+
+
+def test_chapter_wide_rename_applies_when_subtopic_is_not_an_exception():
+    q = make_cq("Integration", "Integration by Substitution")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Indefinite Integration"
+
+
+def test_chapter_wide_rename_applies_when_subtopic_is_missing():
+    q = make_cq("Integration", None)
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Indefinite Integration"
+
+
+def test_subtopic_map_does_not_touch_other_chapters():
+    q = make_cq("Differentiation", "Definite integral with greatest integer function")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Differentiation"
+
+
+def test_apply_chapter_renames_without_subtopic_map_is_backward_compatible():
+    q = make_cq("Integration", "Definite integral with greatest integer function")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
+    assert q["chapter"] == "Indefinite Integration"
+
+
+def test_chapter_subtopic_renames_counts_each_change_once():
+    exams = [make_exam([
+        make_cq("Integration", "Definite integral of log over symmetric interval"),
+        make_cq("Integration", "Integration by Substitution"),
+        make_cq("Vectors", "Anything"),
+    ])]
+    changed = apply_chapter_renames(exams, CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert changed == 2
+
+
+@pytest.mark.parametrize("old,new", [
+    ("Limits",           "Limits & Continuity"),
+    ("Straight Line",    "Lines"),
+    ("Area Under Curve", "Applications of Integration"),
+    ("Integration",      "Indefinite Integration"),
+])
+def test_maths_chapter_conformance_2026_07_29(old, new):
+    q = make_cq(old, "some subtopic")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == new
+
+
+@pytest.mark.parametrize("subtopic", [
+    "Definite integral of log over symmetric interval",
+    "Definite integral with greatest integer function",
+    "Definite integral with greatest integer function — second constant",
+])
+def test_integration_definite_exceptions(subtopic):
+    q = make_cq("Integration", subtopic)
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == "Definite Integration"
+
+
+@pytest.mark.parametrize("kept", [
+    # Class-10 foundation paper (APJ_NDA_11th, 2026-06-14). Correctly tagged —
+    # these chapters are real, they are just not NDA chapters. Renaming them
+    # into an NDA chapter would score foundation work at NDA weightage.
+    # Decision 2026-07-29: leave off-table, do not map.
+    "Real Numbers", "Polynomials", "Triangles", "Areas Related to Circles",
+    "Pair of Linear Equations", "Coordinate Geometry", "Arithmetic Progressions",
+    "Introduction to Trigonometry",
+])
+def test_foundation_paper_chapters_are_not_renamed(kept):
+    q = make_cq(kept, "any subtopic")
+    apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
+    assert q["chapter"] == kept
+    assert kept not in CHAPTER_RENAMES
+
+
+def test_chapter_subtopic_rename_targets_are_in_the_weightage_table():
+    canon = _canonical_maths_chapters()
+    for chapter, subs in CHAPTER_SUBTOPIC_RENAMES.items():
+        for subtopic, new in subs.items():
+            assert new in canon, (
+                f'({chapter!r}, {subtopic!r}) -> {new!r}: target is not in '
+                f'NDA_FREQ_BY_SUBJECT.Maths, so renamed questions would score 0.'
+            )
+
+
+def test_js_chapter_subtopic_map_matches_python():
+    assert _parse_js_nested_map('CHAPTER_SUBTOPIC_RENAMES') == CHAPTER_SUBTOPIC_RENAMES
 
 
 # ── Rename map completeness ────────────────────────────────────────────────

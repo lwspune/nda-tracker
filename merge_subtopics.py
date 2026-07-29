@@ -257,6 +257,33 @@ CHAPTER_RENAMES = {
     # `Heights and Distances`, which is off the table; it was never run until
     # the Tier 1 sweep, which then moved 2 questions out of scoring range.
     'Heights and Distances':                   'Height & Distance',
+
+    # ── Maths chapter conformance (2026-07-29) ────────────────────────────
+    # Chapters tagged under a name the NDA weightage table doesn't carry, so
+    # every question under them scored 0 in computeProjectedScore.
+    'Limits':                                  'Limits & Continuity',
+    'Straight Line':                           'Lines',
+    'Area Under Curve':                        'Applications of Integration',
+    # `Integration` is Indefinite by default; the definite ones are exceptions
+    # in CHAPTER_SUBTOPIC_RENAMES below.
+    'Integration':                             'Indefinite Integration',
+}
+
+
+# ── Chapter renames scoped by subtopic ─────────────────────────────────────
+# {chapter: {subtopic: new_chapter}}. Takes precedence over CHAPTER_RENAMES.
+#
+# One chapter name can need more than one target. `Integration` (25 Q) is
+# Indefinite Integration for 22 of them and Definite Integration for 3 — a
+# chapter-keyed map cannot say that, and picking either target alone would
+# misfile the rest into a chapter carrying real NDA weightage.
+
+CHAPTER_SUBTOPIC_RENAMES = {
+    'Integration': {
+        'Definite integral of log over symmetric interval':                'Definite Integration',
+        'Definite integral with greatest integer function':                'Definite Integration',
+        'Definite integral with greatest integer function — second constant': 'Definite Integration',
+    },
 }
 
 
@@ -274,14 +301,24 @@ def apply_renames(exams: list, rename_map: dict) -> int:
     return changed
 
 
-def apply_chapter_renames(exams: list, rename_map: dict) -> int:
-    """Rename chapters in-place. Returns count of questions changed."""
+def apply_chapter_renames(exams: list, rename_map: dict, subtopic_map: dict = None) -> int:
+    """Rename chapters in-place. Returns count of questions changed.
+
+    `subtopic_map` ({chapter: {subtopic: new_chapter}}) takes precedence over
+    `rename_map` — a chapter can need different targets per subtopic. Omitting
+    it keeps the original chapter-only behaviour.
+    """
+    subtopic_map = subtopic_map or {}
     changed = 0
     for exam in exams:
         for q in exam.get('questions', []):
             ch = q.get('chapter') or ''
-            if ch and ch in rename_map:
-                q['chapter'] = rename_map[ch]
+            if not ch:
+                continue
+            st = q.get('subtopic') or ''
+            new = subtopic_map.get(ch, {}).get(st) or rename_map.get(ch)
+            if new and new != ch:
+                q['chapter'] = new
                 changed += 1
     return changed
 
@@ -301,13 +338,13 @@ def main():
         import copy
         exams_copy = copy.deepcopy(exams)
         changed = apply_renames(exams_copy, SUBTOPIC_RENAMES)
-        ch_changed = apply_chapter_renames(exams_copy, CHAPTER_RENAMES)
+        ch_changed = apply_chapter_renames(exams_copy, CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
         print(f'[dry-run] Would rename {changed} question subtopic(s) '
               f'and {ch_changed} question chapter(s). No file written.')
         return
 
     changed = apply_renames(exams, SUBTOPIC_RENAMES)
-    ch_changed = apply_chapter_renames(exams, CHAPTER_RENAMES)
+    ch_changed = apply_chapter_renames(exams, CHAPTER_RENAMES, CHAPTER_SUBTOPIC_RENAMES)
 
     if changed == 0 and ch_changed == 0:
         print('No subtopics or chapters matched the rename maps — file unchanged.')

@@ -943,7 +943,7 @@ The validation leak is closed and `Height & Distance` is fixed (2026-07-29), but
 
 | Subject | Configured chapters | Unmatched Q | Diagnosis |
 |---|---|---|---|
-| Maths | 31 | 73 | **tags wrong** — scripted rename |
+| ~~Maths~~ | 31 | ~~73~~ → **29** | **DONE 2026-07-29** — 44 renamed; the 29 remaining are one class-11 foundation paper, deliberately left off-table (see GUARDRAILS.md) |
 | English | 31 | 106 | **tags wrong** — scripted rename |
 | Physics | 33 | 317 | mixed — triage needed |
 | Chemistry | 6 | 681 | **freq table incomplete** |

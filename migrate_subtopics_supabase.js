@@ -252,6 +252,31 @@ const CHAPTER_RENAMES = {
   // `Heights and Distances`, which is off the table; it was never run until
   // the Tier 1 sweep, which then moved 2 questions out of scoring range.
   'Heights and Distances': 'Height & Distance',
+
+  // ── Maths chapter conformance (2026-07-29) ─────────────────────────────
+  // Chapters tagged under a name the NDA weightage table doesn't carry, so
+  // every question under them scored 0 in computeProjectedScore.
+  'Limits':           'Limits & Continuity',
+  'Straight Line':    'Lines',
+  'Area Under Curve': 'Applications of Integration',
+  // `Integration` is Indefinite by default; the definite ones are exceptions
+  // in CHAPTER_SUBTOPIC_RENAMES below.
+  'Integration':      'Indefinite Integration',
+}
+
+// ── Chapter renames scoped by subtopic (sync with merge_subtopics.py) ──────
+// {chapter: {subtopic: newChapter}}. Takes precedence over CHAPTER_RENAMES.
+//
+// One chapter name can need more than one target. `Integration` (25 Q) is
+// Indefinite Integration for 22 of them and Definite Integration for 3 — a
+// chapter-keyed map cannot say that, and picking either target alone would
+// misfile the rest into a chapter carrying real NDA weightage.
+const CHAPTER_SUBTOPIC_RENAMES = {
+  'Integration': {
+    'Definite integral of log over symmetric interval':                    'Definite Integration',
+    'Definite integral with greatest integer function':                    'Definite Integration',
+    'Definite integral with greatest integer function — second constant':  'Definite Integration',
+  },
 }
 
 // Chapter and subtopic cleanup are separate workstreams that land at different
@@ -261,15 +286,24 @@ const CHAPTER_RENAMES = {
 function applyRenames(questions, { chaptersOnly = false, subtopicsOnly = false } = {}) {
   let changed = 0
   for (const q of questions) {
-    const st = q.subtopic
-    if (!chaptersOnly && st && SUBTOPIC_RENAMES[st]) {
-      q.subtopic = SUBTOPIC_RENAMES[st]
+    // Capture the subtopic BEFORE any subtopic rename — the chapter-scoped map
+    // is keyed on the names currently in the data. Reading q.subtopic after the
+    // rename below would silently miss any pair whose subtopic also moves.
+    const st0 = q.subtopic
+
+    if (!chaptersOnly && st0 && SUBTOPIC_RENAMES[st0]) {
+      q.subtopic = SUBTOPIC_RENAMES[st0]
       changed++
     }
+
     const ch = q.chapter
-    if (!subtopicsOnly && ch && CHAPTER_RENAMES[ch]) {
-      q.chapter = CHAPTER_RENAMES[ch]
-      changed++
+    if (!subtopicsOnly && ch) {
+      const scoped = st0 ? CHAPTER_SUBTOPIC_RENAMES[ch]?.[st0] : undefined
+      const next = scoped || CHAPTER_RENAMES[ch]
+      if (next && next !== ch) {
+        q.chapter = next
+        changed++
+      }
     }
   }
   return changed
