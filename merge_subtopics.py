@@ -178,13 +178,10 @@ SUBTOPIC_RENAMES = {
     "Seismic Waves & Earth's Core":            "Seismic Waves & Earth's Interior",
 
     # ── Cleanup Tier 2 (2026-07-29) ───────────────────────────────────────
-    # !! PREPARED, NOT YET APPLIED TO PROD as of 2026-07-29. See SUGGESTIONS.md.
-    # An unapplied entry sitting in this map is what caused the Height & Distance
-    # bug — the 2026-06-16 batch looked done and wasn't. Apply or delete; don't
-    # leave it here indefinitely. Run with --subtopics-only to apply just these.
-    # Concept merges: buckets split by prop / scenario / keyword rather than
-    # by concept. Same-chapter only — a subtopic appearing in two chapters
-    # with two different correct targets is NOT here (see the Tier 2 test).
+    # Applied to prod 2026-07-29 (69 questions / 10 exams, --subtopics-only).
+    # Concept merges: buckets split by prop / scenario / keyword rather than by
+    # concept. Same-chapter only — a subtopic appearing in two chapters with two
+    # different correct targets is NOT here (see the Tier 2 test).
     # English / Grammar — Question Tags tense + polarity families.
     "Question Tags – Be Verb (Simple Present)":      'Question Tags – Simple Present',
     'Question Tags – Simple Present (3rd Person)':   'Question Tags – Simple Present',

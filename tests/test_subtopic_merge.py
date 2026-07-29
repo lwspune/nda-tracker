@@ -383,7 +383,7 @@ def test_cleanup_tier1_distinct_subtopics_preserved(kept):
     assert q["subtopic"] == kept
 
 
-# ── Subtopic cleanup Tier 2 (2026-07-29) — PREPARED, NOT YET APPLIED ──────
+# ── Subtopic cleanup Tier 2 (2026-07-29) ──────────────────────────
 # Concept merges: buckets split by prop/scenario/keyword rather than by
 # concept. Each collapses 1–3 question buckets that cannot aggregate.
 # Scoped to same-chapter merges only — see the chapter-scope gap below.
