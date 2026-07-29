@@ -445,7 +445,9 @@ The "Week of" date feature (commit `b3118d9`) shipped with full unit/lint covera
 
 ## 2026-07-08
 
-### Verify the hostel golden path in the browser + finish the warden-alert rollout
+### ~~Verify the hostel golden path in the browser~~ — **DONE 2026-07-29** · finish the warden-alert rollout (STILL OPEN)
+
+> Browser pass confirmed by the owner 2026-07-29. **The warden-alert rollout below is still outstanding** — the endpoint stays fail-closed until `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` is set in Vercel and the variable order is confirmed with a live `redirectTo` test.
 
 The hostel & mess feature (Phases 1+2, commits `5821163`/`f9a5760`/`b5bcdc5`) shipped with full unit/lint coverage (chain aggregator, both slices, endpoint, HostelTab) and a **DB-contract smoke test** (sentinel insert/read/delete of all three tables), but the **end-to-end browser pass was not run** — the session was non-interactive and the board needs a live Supabase **admin session** (only exists on Vercel). The warden alert is also inert until its env is set. Same manual-verify gap noted for offline exams / monitoring / remediation / mentee-assignments / integrity / week-of-dates.
 
@@ -505,7 +507,7 @@ The lecture-miss alert now skips students on an active hostel leave (commit `84a
 
 **How to apply:** mirror the lecture fix — load the day's leaves with the null-safe query (`.lte('from_ts',endIso).or('to_ts.is.null,to_ts.gte.'+startIso)` via an authed user client), build an `onLeaveIds` Set, and skip any student whose `lwsId` is in it (report an `onLeaveSkipped` count; fail closed on a leaves-read error). Reuse `computeAbsentees`/`resolveOnLeave` semantics. Add a test per endpoint (on-leave suppressed; fail-closed). Note the late flow keys students differently — confirm it carries `lwsId` before matching.
 
-### Browser golden-path verify the leave lifecycle + present/absent lecture marking
+### ~~Browser golden-path verify the leave lifecycle + present/absent lecture marking~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
 
 This session shipped a lot of leave-aware UI (On Leave tab: Put on leave / Mark returned / stale flag; lecture `MarkAbsenteesModal` present/absent toggle + leave-lock; `LectureLogTab` "Also attending" pooled roster) — all **test-verified but not click-verified** (sessions are non-interactive; the board needs a live Supabase admin session that only exists on Vercel). Same manual-verify gap logged for every prior feature.
 
@@ -594,7 +596,7 @@ The answer-key cross-check shipped this session (`KeyMismatchPanel` + `findKeyMi
 - When built, after an upload where the user overrode ≥1 conflict to the Tags key, offer (or auto-open) the re-grade **preview** for that exam — corrected `questions[].answer` × captured `exam_results.choices` × `marking` makes it deterministic.
 - Keep it preview-gated/opt-in like the parent entry — overriding display ≠ auto-shifting grading authority Evalbee→app.
 
-### Browser golden-path verify the Monthly Reports date-range + branch + conduct-block PDF
+### ~~Browser golden-path verify the Monthly Reports date-range + branch + conduct-block PDF~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
 
 The Monthly Reports rework this session (custom From→To range + branch-narrows-batch, commit `4fecd00`; exception-only stacked conduct blocks in the PDF, commit `13b422c`) shipped **test-verified but not click-verified** — sessions are non-interactive, no browser driver is available, and the Generate→download flow needs a live Supabase **admin session** (only on Vercel). A sample PDF *was* rendered headlessly end-to-end (valid, all four conduct blocks), but the real UI seams weren't driven. Same manual-verify gap logged for every prior feature.
 
@@ -614,7 +616,7 @@ The Monthly Reports **preview card** (`src/pages/MonthlyReports/ReportRow.jsx`) 
 
 ## 2026-07-21
 
-### Ship + browser-verify the chapter-level Learn/Practice links on "Where to focus" (deploy PYQ Vault FIRST)
+### ~~Ship + browser-verify the chapter-level Learn/Practice links on "Where to focus" (deploy PYQ Vault FIRST)~~ — **DONE 2026-07-29** (browser pass confirmed by the owner on 2026-07-29, which implies both repos shipped — reopen if PYQ Vault is not actually deployed)
 
 This session fixed the student **"Where to focus"** card's Practice link (it fell through to the generic `/browse?kind=practice` bank because it sent bare subtopic *names* with no subject/chapter) and added a **Learn →** link, both now **chapter-level**. Two repos changed, both green + lint-clean via TDD, but **nothing is committed or deployed yet**. nda-tracker: `chapterLearnUrl`/`chapterPracticeUrl` in `src/lib/remediation.js`, `src/lib/focusAreas.js` emits `learnUrl`+`practiceUrl`, `FocusAreas.jsx` renders Learn (primary) + Practice. PYQ Vault (`Question_Bank`): `goLinks.ts` `BY_CHAPTER`/`getChapterByName`/`buildChapterLearnPath`, `/go/learn` chapter fallback, `/go/practice` NAME mode fires on `subject && chapter` alone. See [[reference_remediation_links]] point 3.
 
@@ -701,7 +703,7 @@ The in-app marks grid shipped this session (commit `95ae7be`, pushed to `main` �
 
 **How to apply:** in `applyPaste`, compare `values.length` against `roster.length` and surface a mismatch **before** applying — either a confirm ("Pasted 20 values for 18 students — the list may not match this roster") or a non-blocking `Alert` after the fill stating how many were used and how many dropped. Keep the short-paste case silent (it's the intended top-up). `parseMarksPaste` already returns the full parsed array, so no change to the pure helper — this is a UI guard only. Add a modal test for the long-paste warning.
 
-### Verify the `/school-attendance` teacher flow in a real browser (Definition-of-Done gap)
+### ~~Verify the `/school-attendance` teacher flow in a real browser (Definition-of-Done gap)~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
 
 Phase 1 shipped with TDD coverage (1967 green), baseline-clean lint and the migration applied to production Supabase — but **not click-verified**. Everything that matters here needs a live session and live data, which unit tests fixture away.
 
@@ -810,7 +812,7 @@ Building the staff-parity work extracted two pure helpers that the admin surface
 
 **How to apply:** cheapest is to fold an "unfiled checkpoints" line into the existing `send-attendance-alerts` `kind:'hostel'` payload (no new endpoint — the Vercel 12-function cap is at its ceiling). Needs a decision on timing: an alert at 09:00 for an unfiled breakfast is useful, one at 23:00 for an unfiled dinner is too late to fix anything.
 
-### Browser golden-path verify the 2026-07-28 staff-parity work
+### ~~Browser golden-path verify the 2026-07-28 staff-parity work~~ — **DONE 2026-07-29** (browser pass confirmed by the owner — covers the Written Quiz flow noted in the body)
 
 Four capture flows shipped without a manual browser pass: teacher extra-class filing and homework filing on `/school-attendance`, and the leave lifecycle + meal filing on `/hostel-mess-attendance`. All are covered by tests and a serialized full suite (2073/2073), but the project's Definition of Done requires the golden path clicked through in a real browser, and these are phone-first surfaces used by staff mid-shift.
 
@@ -852,7 +854,7 @@ The 13 Sets families were messaged "Score: 0%, Correct Qs: 0, Total Qs: 0" for a
 
 </details>
 
-### Browser golden-path verify the offline-exam WhatsApp score + the new preview column
+### ~~Browser golden-path verify the offline-exam WhatsApp score + the new preview column~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
 
 Both 2026-07-28 WhatsApp changes shipped without a manual browser pass: the offline scoring fix in `api/send-whatsapp.js` and the read-only "Score (as sent)" column in `WhatsAppPreviewModal`. Covered by tests (12 on the pure module, 7 on the modal including a parameterised binding assertion, 32 on the endpoint, full suite 2106/2106), but the project's Definition of Done requires the golden path clicked through, and there is no browser automation in the repo to do it from a session.
 
