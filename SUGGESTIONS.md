@@ -897,3 +897,21 @@ Every teacher logging a weekly class test could add a large number of small exam
 **Why:** it is a "watch it" item, not a bug — the extra signal per student may be exactly what you want. But if a parent's monthly report starts showing eight 10-mark class tests and one 300-mark mock in the same table, the mock stops standing out, and that table is one of the most-read parent-facing surfaces.
 
 **How to apply:** look again after a few weeks of real use. Options if it does become noisy, cheapest first — group the report's exam table by `writtenQuiz` with a subheading; add a `source` filter to the Exams page (the column exists now); or weight the trend series by `maxMarks` so a 10-mark quiz doesn't swing a line built from 300-mark mocks.
+
+## 2026-07-29
+
+### Written exams still can't be compared against a student's own history
+
+The written insights panel is descriptive only — every mark, median, spread, bands, absentees. The one genuinely analytical read a totals-only paper supports is comparative: *who scored below their own running average?* Deliberately not built.
+
+**Why:** on a max-5 class test one mark is 20 percentage points, so a percentage delta against a student's average over a 70-question mock is mostly granularity noise, not a signal. A "−20%" that is really "one mark" would send faculty chasing students who did nothing wrong — worse than showing nothing.
+
+**How to apply:** express it as **rank movement within the batch** rather than a percentage delta (rank is robust to a coarse mark scale), or gate the percentage form on a minimum `maxMarks`. Either way it needs its own pure fn (`src/lib/analytics/examInsights.js`, next to `getExamScoreSummary`) taking the student's other exams, and a decision about which exams count as comparable — all of them, same subject, or same format.
+
+### The per-student Reports PDF is still MCQ-only
+
+`📄 PDF` (the class report) now works for written exams; `📋 Reports` (one page per student) does not, and is hidden for them.
+
+**Why:** `studentReportPdf.js` is *entirely* a per-question chapter/subtopic breakdown built from `responses`. Strip that from a written exam and the page is name, marks, percentage — one line, one page per student. Printing that per student is worse than not offering it.
+
+**How to apply:** it only becomes worth a page with the student's **history** on it (this mark against their recent exams, class average, rank) — which is the comparison work above wearing a different hat. Do that first, then reuse it here; don't build a thin written page in the meantime.
