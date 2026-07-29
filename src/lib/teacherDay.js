@@ -82,25 +82,48 @@ export function getTeacherLecturesForDate({ teacherId, timetables, mappings, dat
 // CLOSED on a blank teacherId for the same reason as the day view — an
 // unmatched session must never be offered the whole school.
 export function getTeacherBatches({ teacherId, timetables, mappings }) {
+  const batches = new Set(
+    getTeacherSubjectBatches({ teacherId, timetables, mappings }).map(t => t.batchName)
+  )
+  return [...batches].sort((a, b) => String(a).localeCompare(String(b)))
+}
+
+// The same walk, keeping the SUBJECT as well: every (subject, batch) pair the
+// teacher teaches. This is the scope for anything they own per-class rather
+// than per-batch — a Written Quiz is for "my Maths, 12th_A", not for the batch
+// at large, and it is what stops a teacher creating an exam for a class or a
+// subject that isn't theirs.
+//
+// Day-independent for the same reason as above, and then some: marks for
+// Monday's quiz are often entered on Tuesday.
+//
+// Returns [{ key, subject, batchName }] sorted by batch then subject.
+export function getTeacherSubjectBatches({ teacherId, timetables, mappings }) {
   if (!teacherId) return []
 
-  const ownMappingIds = new Set(
-    (mappings ?? []).filter(m => m?.teacherId === teacherId).map(m => m.id)
+  const subjectByMappingId = new Map(
+    (mappings ?? []).filter(m => m?.teacherId === teacherId).map(m => [m.id, m.subject ?? null])
   )
-  if (ownMappingIds.size === 0) return []
+  if (subjectByMappingId.size === 0) return []
 
-  const batches = new Set()
+  const byKey = new Map()
   for (const timetable of timetables ?? []) {
     const grid = timetable?.grid ?? {}
     for (const row of Object.values(grid)) {
       if (!row || row.__span) continue
       for (const cell of Object.values(row)) {
-        if (cell?.type !== 'class' || !ownMappingIds.has(cell.mappingId)) continue
-        batches.add(timetable.batchName)
+        if (cell?.type !== 'class' || !subjectByMappingId.has(cell.mappingId)) continue
+        const subject = subjectByMappingId.get(cell.mappingId)
+        if (!subject || !timetable.batchName) continue
+        const key = `${subject}|${timetable.batchName}`
+        if (!byKey.has(key)) byKey.set(key, { key, subject, batchName: timetable.batchName })
       }
     }
   }
-  return [...batches].sort((a, b) => String(a).localeCompare(String(b)))
+  return [...byKey.values()].sort(
+    (a, b) => String(a.batchName).localeCompare(String(b.batchName))
+      || String(a.subject).localeCompare(String(b.subject))
+  )
 }
 
 // The admin counterpart of getTeacherLecturesForDate: every timetabled period

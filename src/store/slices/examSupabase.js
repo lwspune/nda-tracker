@@ -15,6 +15,11 @@ export function buildExamRow(exam) {
     // Explicit paper ceiling for offline exams (no questions[]); null for MCQ
     // exams whose max derives from questions.length × marking.correct.
     max_marks:  exam.maxMarks   ?? null,
+    // Who added it + from where. `source` drives the parent-facing "Written
+    // Quiz" tag; `created_by` is the office's review-after visibility now that
+    // teachers can create their own offline exams.
+    created_by: exam.createdBy  ?? null,
+    source:     exam.source     ?? 'admin',
     created_at: exam.createdAt  ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }

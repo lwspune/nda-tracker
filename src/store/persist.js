@@ -130,6 +130,8 @@ export async function loadExamsFromSupabase() {
     marking:   row.marking   ?? { correct: 4, wrong: -1 },
     questions: row.questions ?? [],
     maxMarks:  row.max_marks ?? null,
+    createdBy: row.created_by ?? null,
+    source:    row.source ?? 'admin',
     createdAt: row.created_at,
     students:  resultsByExam[row.id] ?? [],
   }))

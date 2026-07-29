@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard, hasHostelAccess, getTeacherBatches } from '../teacherDay'
+import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, buildFilingBoard, hasHostelAccess, getTeacherBatches, getTeacherSubjectBatches } from '../teacherDay'
 
 // 2026-07-27 is a Monday; 2026-07-26 is a Sunday.
 const MONDAY = '2026-07-27'
@@ -316,5 +316,45 @@ describe('getTeacherBatches', () => {
       grid: { s1: { Monday: { type: 'break', label: 'Lunch' } }, s2: { __span: true } },
     }]
     expect(getTeacherBatches({ teacherId: 't1', timetables, mappings: MAPPINGS })).toEqual([])
+  })
+})
+
+// A Written Quiz belongs to "my Maths, 12th_A" — not to the batch at large.
+// This pair list is what stops a teacher creating an exam for a subject or a
+// class that isn't theirs.
+describe('getTeacherSubjectBatches', () => {
+  const MAPPINGS = [
+    { id: 'm1', subject: 'Maths',   teacherId: 't1' },
+    { id: 'm2', subject: 'Physics', teacherId: 't1' },
+    { id: 'm3', subject: 'Maths',   teacherId: 't2' },
+  ]
+  const cell = id => ({ Monday: { type: 'class', mappingId: id } })
+
+  it('returns each (subject, batch) pair once, batch-sorted', () => {
+    const timetables = [
+      { batchName: 'B-12th', timeSlots: [{ id: 's1' }, { id: 's2' }],
+        grid: { s1: cell('m1'), s2: cell('m1') } },                       // dup Maths
+      { batchName: 'A-11th', timeSlots: [{ id: 's1' }, { id: 's2' }],
+        grid: { s1: cell('m1'), s2: cell('m2') } },                       // Maths + Physics
+      { batchName: 'C-6M', timeSlots: [{ id: 's1' }], grid: { s1: cell('m3') } },  // t2's
+    ]
+    expect(getTeacherSubjectBatches({ teacherId: 't1', timetables, mappings: MAPPINGS }).map(t => t.key))
+      .toEqual(['Maths|A-11th', 'Physics|A-11th', 'Maths|B-12th'])
+  })
+
+  it('falls closed on a blank teacherId and on no owned mappings', () => {
+    const timetables = [{ batchName: 'A', timeSlots: [{ id: 's1' }], grid: { s1: cell('m1') } }]
+    expect(getTeacherSubjectBatches({ teacherId: null, timetables, mappings: MAPPINGS })).toEqual([])
+    expect(getTeacherSubjectBatches({ teacherId: 't9', timetables, mappings: MAPPINGS })).toEqual([])
+    expect(getTeacherSubjectBatches({ teacherId: 't1' })).toEqual([])
+  })
+
+  it('skips mappings with no subject and cells that are breaks or spans', () => {
+    const mappings = [...MAPPINGS, { id: 'm4', subject: null, teacherId: 't1' }]
+    const timetables = [{
+      batchName: 'A', timeSlots: [{ id: 's1' }, { id: 's2' }, { id: 's3' }],
+      grid: { s1: cell('m4'), s2: { Monday: { type: 'break' } }, s3: { __span: true } },
+    }]
+    expect(getTeacherSubjectBatches({ teacherId: 't1', timetables, mappings })).toEqual([])
   })
 })
