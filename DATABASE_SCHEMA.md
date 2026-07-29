@@ -202,6 +202,8 @@ Also on `students`: **`residential boolean NOT NULL default true`** — the boar
 
 **Offline exams** (questions `[]` + `max_marks` set): total-marks-only records of hand-graded papers. `exam_results` rows carry `total_marks` with `correct/incorrect/not_attempted = 0` and `responses = {}`. They feed %-of-max trends / Toppers via `max_marks`, but per-question analytics (chapter stats, audits, hardest-Q) are intentionally empty — surfaced as an "Offline" notice in the UI, not as zeros.
 
+**`created_by` + `source` (2026-07-28).** `source` is `admin` (default) or `teacher`, CHECK-constrained; `created_by` is the auth session email. Added when teachers gained the ability to create their own offline **Written Quiz** exams from `/school-attendance`. `source='teacher'` drives the parent-facing "Written Quiz" tag (`buildMonthlyReport` sets `writtenQuiz` on the exam row → the PDF renders `Name (Written Quiz)`) and the badge + "by <teacher>" line on the admin Exams page — the office reviews **after**, rather than gating creation. All 116 pre-existing rows were admin-created, so the default needed no backfill. **Both columns must be carried by `buildExamRow` (write) AND the `loadExamsFromSupabase` mapping in `persist.js` (read)** — a column added to only one side silently never round-trips, the same footgun as the `saveToStorage` allow-list.
+
 ### `exam_results` — one row per student per exam
 
 | Column | Type | Default | Notes |

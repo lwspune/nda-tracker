@@ -816,6 +816,8 @@ Four capture flows shipped without a manual browser pass: teacher extra-class fi
 
 **Why:** the failure modes left are the ones tests cannot see — a mis-tap target on a phone, a modal footer that still needs scrolling on a short viewport, a copied link that pastes wrong into WhatsApp. This subsystem exists because capture wasn't happening; friction here is the whole risk.
 
+**Also covers (added 2026-07-28, later the same day):** the **Written Quiz** flow — create one, check Save stays disabled until every student is marked or ticked absent, save, then re-open it from the "Written Quizzes today" strip and confirm the marks pre-fill. Then confirm the admin Exams page shows the *Written Quiz* badge + "by <teacher>", and that a monthly report PDF for that student renders `Name (Written Quiz)`.
+
 **How to apply:** on a real handset — (1) `/school-attendance` → **+ Extra class** → file → reload → the card must come back from the submission row; (2) same page → **Homework** → chapter + tick → the count badge appears; (3) `/hostel-mess-attendance` → save Breakfast with nobody missing → pill gets a ✓ and admin's Hostel tab reads 1/5 filed; (4) put a boarder on leave → the open-leave panel lists them → **back?** unlocks the row. Carries forward the still-open `/school-attendance` Phase-1 verification entry from 2026-07-27.
 
 ### A syllabus-sourced chapter picker for teacher homework filing
@@ -825,3 +827,71 @@ Teacher homework filing takes the chapter as **free text**. The admin `HomeworkL
 **Why:** two teachers typing "Trigonometry" and "Trig" create two items for the same work, which fragments the defaulter set and the parent messages built from it. There is no dedup or variant-linking on `homework_pending` the way there is for student names.
 
 **How to apply:** the batch's assigned syllabus program already knows its chapters (`batchProgramAssignments` → `syllabusPrograms`), so offer a datalist/select of those with free text as the fallback for genuinely off-syllabus work. Worth doing on both surfaces at once so they can't diverge. Remember to strip the `(x%)` weightage suffix that NDA Program Physics/Chemistry/Biology chapter names carry.
+
+### Move the WhatsApp send record server-side (the record of the "Sets" blast was lost)
+
+The 28 Jul "Sets" results blast reached 13 students + parents — a recipient forwarded the message, and its deep-link carried `exam=exam_1785160409048`, which only `api/send-whatsapp.js` generates. `whatsappSendHistory` has no entry for it; the last recorded results send is 21 Jul. Diagnosis (full write-up in `memory/project_whatsapp_send_record_gap.md`): send histories are persisted store keys, so recording a send means a whole-blob `faculty_state` write, and `doSave` short-circuits on `if (staleLock) return` — once a tab loses the version race it silently drops **every** later save until reload. Blob writes at 10:31 and 17:25 that day both succeeded, so the guard was working; the 11:59 tab was stale. The version guard shipped 25 Jul (`33600df`) and this was the first results blast after it.
+
+**Why:** the guard turned a data-integrity failure into a **traceability failure on a non-reversible action** — you cannot un-send a WhatsApp. The Exams page now shows "Send" rather than "Sent N✓" for Sets, so someone re-blasts all 13 families believing it never went. Worse, `lateSendHistory.notifiedLwsIds` — the pending-aware gate that stops duplicate parent messages — rides the same blob, so this is a live duplicate-message risk on every stale tab, not a one-off.
+
+**How to apply:** have `api/send-whatsapp.js` write its own `whatsapp_send_log` row before returning — row-level writes are immune to the blob guard, it is the same dual-path pattern every normalised domain already uses, and it needs no new serverless function (the Vercel 12-function cap is at its ceiling). The client then reads that for the "Sent N✓" badge. Second, smaller half: stop `staleLock` swallowing saves silently — surface "sent, but the record could not be saved, reload before doing anything else" on the send modal's result screen. One check would confirm the diagnosis outright: did whoever ran the blast see the red "Your data is out of date · Reload" banner? Also unrecorded and possibly the same cause — "ENG &Geo - Interior & pos" (23 Jul) and "Math's : Sets" (25 Jul).
+
+### ~~Decide the "Sets" resend~~ — **DONE 2026-07-28** (the label question below is still open)
+
+Resent the same day: `POST /api/send-whatsapp 200` at 13:56 UTC, **17 messages, 0 skipped**, recorded under the re-uploaded exam `exam_1785246646088`. Marks behind it check out (Shivam 5 → 100%, Satyam 4 → 80%, Vihan 0 → 0% genuinely). Note the exam was deleted and re-uploaded first, so the original wrong message's deep-link points at a dead id and its focused card renders nothing — harmless, since every family got a fresh link.
+
+**The template-label half survives** and is the reason this entry stays readable rather than deleted: on an offline exam the corrected numbers are **marks** sitting under the approved template's fixed "Correct Qs" / "Total Qs" labels. For Sets that happens to read true (marking is `{correct:1, wrong:0}`, so 4 marks *is* 4 correct out of 5 questions), but for a paper marked out of 30 it will not. Either accept it as a documented quirk, or get a neutral template approved ("Marks: {{5}} / {{6}}") — ~3-day Meta lead time, a second template ID in Vercel env, and a branch in the endpoint choosing template by offline-ness. Param rules in `memory/feedback_whatsapp_template_param_rules.md`.
+
+<details><summary>Original entry</summary>
+
+The 13 Sets families were messaged "Score: 0%, Correct Qs: 0, Total Qs: 0" for a paper they scored 0–5 on. The scoring fix is deployed (`c5edadf`), so a resend now reads correctly (80% for a 4/5). The decision was never made. It is coupled to a second one: on an offline exam the corrected numbers are **marks** sitting under the approved template's fixed "Correct Qs" / "Total Qs" labels. For Sets that happens to read true (marking is `{correct:1, wrong:0}`, so 4 marks *is* 4 correct out of 5 questions), but for a paper marked out of 30 it will not.
+
+**Why:** these are the same families who already received a wrong message, so a second one wants to be right in both senses. And the label question only gets more expensive later — every offline exam sent between now and a template change inherits it.
+
+**How to apply:** resend is a normal blast (💬 Send on the exam, all students) once you decide it is wanted — but do it *after* confirming the deployed fix with a redirect-to-self test send, not before. For the labels, either accept marks-under-question-labels as a documented quirk, or get a neutral template approved ("Marks: {{5}} / {{6}}") — ~3-day Meta lead time, a second template ID in Vercel env, and a branch in the endpoint choosing template by offline-ness. Param rules in `memory/feedback_whatsapp_template_param_rules.md`.
+
+</details>
+
+### Browser golden-path verify the offline-exam WhatsApp score + the new preview column
+
+Both 2026-07-28 WhatsApp changes shipped without a manual browser pass: the offline scoring fix in `api/send-whatsapp.js` and the read-only "Score (as sent)" column in `WhatsAppPreviewModal`. Covered by tests (12 on the pure module, 7 on the modal including a parameterised binding assertion, 32 on the endpoint, full suite 2106/2106), but the project's Definition of Done requires the golden path clicked through, and there is no browser automation in the repo to do it from a session.
+
+**Why:** the remaining failure modes are the ones tests cannot see — the extra column crowding the parent-mobiles input at real widths (table min-width was bumped 560→660px on inspection alone), and, more importantly, whether the delivered WhatsApp body actually matches the previewed number. The whole point of the column is that it is trustworthy; nobody has yet seen it agree with a real message.
+
+**How to apply:** Exams → an **offline** exam (Sets, or Integration from 5 Jun which is in local dev data) → 💬 Send. Confirm the column reads `80% 4 / 5` for Satyam Pune rather than `0% 0 / 0`, and that the Branch / Mobile / Parent Mobiles fields are still comfortable. Then put your own number in "Test — redirect all to" and confirm the received message says 80%. Check one MCQ exam too, to confirm nothing regressed on the common path.
+
+**Narrowed 2026-07-28:** the *send* half is now confirmed in production, not just by tests — a real blast returned 200 with 17 messages against correct marks, and the student portal was opened on the resulting deep-link. What remains unverified is the **preview column's layout** at real widths and, strictly, that the previewed number matches the delivered message body for the same student (nobody has compared the two side by side). Also still unverified by anyone: the student-portal display changes that followed (`a5cb79b`, `f61dc9f`, `60a1796`) — the `—` cells, `5 / 5` score, and the `▲ N pts` delta.
+
+### `StatCard` prepends an arrow to captions that aren't deltas
+
+`StatCard` renders `{deltaUp ? '▲' : '▼'} {delta}` whenever `delta` is truthy, so any consumer passing a *caption* rather than a change gets a meaningless arrow. Two of the three callers do exactly that: **Attempt Quality** passes `'correct ÷ attempted'` with `deltaUp={null}` → renders "▼ correct ÷ attempted", and **Consistency** passes `σ = 22%` → "▼ σ = 22%", in red. Both are visible on the student page today.
+
+Found while fixing the Latest Score delta, which had the mirror-image bug: it passed its *own* arrow inside the string and StatCard added a second, so it rendered "▼ ▼ 0.5 from prev". That one is fixed (the string no longer carries an arrow); these two are not.
+
+**Why:** a red downward arrow beside "σ = 22%" reads as "consistency is falling", which the number does not say — it is a standard deviation, not a trend. It is the same defect class as the offline zeros: a glyph that means something specific rendered in a context where it means nothing.
+
+**How to apply:** make the arrow conditional on `deltaUp !== null` in `StatCard` and pass `deltaUp={null}` from the two caption callers (Attempt Quality already does; Consistency needs it). That is a change to a shared UI component with other consumers outside `StudentView` — check `Dashboard` and `Toppers` for `StatCard` usage first, and keep the `deltaUp={false}` (genuine decline) path rendering ▼ as it does now.
+
+### Audit the remaining surfaces that print raw marks across exams
+
+`ExamHistoryTable`, the focused result card and the Latest Score tile now all print `score / max`, because a bare mark can't be read when the column interleaves a 75-mark chapter test and a 300-mark mock. The same reasoning applies anywhere else raw `totalMarks` is shown across differently-sized papers — the Monthly Report PDF is the obvious candidate, and `examPdf` may be another. Not checked this session.
+
+**Why:** the failure isn't cosmetic. On one real student's page the raw column ordered three rows against actual performance — the best result (39%) sat below a number four times its size (38%). Anywhere that ordering is reproduced without a denominator carries the same inversion, and a PDF goes to a parent who cannot ask what the max was.
+
+**How to apply:** grep for consumers of `totalMarks` / `scores[].score` that render across multiple exams (`src/lib/monthlyReportBuilder.js`, `src/lib/examPdf.js`, `src/pages/Toppers/`). Both already import `examMaxMarks`, so the denominator is in reach; the question is only whether each rendering *shows* it. Where a per-exam list exists, print `score / max`; where an aggregate exists, confirm it's %-of-max and not a raw mean (GUARDRAILS already requires the latter).
+
+### Editing a saved Written Quiz can't recover who was marked absent
+
+An absent student is simply omitted from the exam's `students[]` — there is no stored "absent" fact. So re-opening a saved quiz cannot distinguish "was absent" from "was never entered", and the edit view starts everyone blank, making the teacher re-declare absences they already declared once.
+
+**Why:** it is friction on the correction path, which is exactly where friction hurts most — a teacher fixing one mistyped mark has to re-tick every absentee to get past the completeness gate. Left as-is because the two obvious fixes both have real costs, and quietly picking one would have been the wrong call inside a feature that was already contested.
+
+**How to apply:** either (a) write the absences to `exam_absences` — but that table drives the parent-facing "missed exam" WhatsApp flow, which this capture path deliberately cannot touch, so it would need a way to record an absence without arming a send; or (b) add a nullable `absent_lws_ids` (or a per-result `absent` flag) so absence is stored alongside the marks. (b) is smaller and keeps the send boundary intact. Decide before the flow gets heavy use, since the ambiguity is unrecoverable for quizzes saved in the meantime.
+
+### Watch whether Written Quiz volume changes what the Exams page and trends are for
+
+Every teacher logging a weekly class test could add a large number of small exams. They cannot move projected NDA score, priority chapters or Toppers (offline exams carry no question data), but they *do* land in the Exams page listing, the %-of-max trend series and the monthly-report exam table alongside full mocks.
+
+**Why:** it is a "watch it" item, not a bug — the extra signal per student may be exactly what you want. But if a parent's monthly report starts showing eight 10-mark class tests and one 300-mark mock in the same table, the mock stops standing out, and that table is one of the most-read parent-facing surfaces.
+
+**How to apply:** look again after a few weeks of real use. Options if it does become noisy, cheapest first — group the report's exam table by `writtenQuiz` with a subheading; add a `source` filter to the Exams page (the column exists now); or weight the trend series by `maxMarks` so a 10-mark quiz doesn't swing a line built from 300-mark mocks.
