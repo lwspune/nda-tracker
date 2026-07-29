@@ -944,7 +944,7 @@ The validation leak is closed and `Height & Distance` is fixed (2026-07-29), but
 | Subject | Configured chapters | Unmatched Q | Diagnosis |
 |---|---|---|---|
 | ~~Maths~~ | 31 | ~~73~~ → **29** | **DONE 2026-07-29** — 44 renamed; the 29 remaining are one class-11 foundation paper, deliberately left off-table (see GUARDRAILS.md) |
-| English | 31 | 106 | **tags wrong** — scripted rename |
+| ~~English~~ | 31 | ~~106~~ → **0** | **DONE 2026-07-29** — 56 via an `and`/`&` rename, 50 via a per-question re-tag (`migrate_gat_test4_tags.js`) |
 | Physics | 33 | 317 | mixed — triage needed |
 | Chemistry | 6 | 681 | **freq table incomplete** |
 | Geography | 7 | 506 | **freq table incomplete** |
@@ -962,3 +962,21 @@ The validation leak is closed and `Height & Distance` is fixed (2026-07-29), but
 - **Announce it.** Fixing this moves projected NDA scores **upward** for GAT subjects, because currently-invisible questions start counting. Parents see those numbers in monthly reports — it should land as a stated correction, not a silent shift.
 
 Use `node migrate_subtopics_supabase.js --chapters-only --dry-run` to preview; `--subtopics-only` is the mirror.
+
+### Two content bugs found while re-tagging NDA GAT : Test 4 (2026-07-29)
+
+Neither is a tagging problem, so neither was fixed by the re-tag.
+
+**Q48's question text is truncated.** It reads *"FILL IN THE BLANKS: John yesterday, and it was a pleasant surprise."* — the blank and its verb are missing. From the options (`by / off / beside / into`, key `into`) it was almost certainly *"I ran ____ John yesterday."* A student opening this question in the portal cannot answer it, and it has already been sat.
+
+**Why:** this is stored question text, not a tag, so no rename touches it. It needs an edit to `exams.questions[47].question` for `exam_1781529960467` — or a Tags re-upload carrying the correct text.
+
+**How to apply:** worth a sweep for siblings before fixing one — questions whose text is suspiciously short relative to their options, or that begin mid-sentence. If the pattern is common it belongs in `validateTags.js` as a non-blocking upload warning, next to the chapter check.
+
+### `Idioms & Phrases` subtopics are the worst bucket-scatter in the dataset
+
+299 questions across **60+ subtopics, most holding exactly two** — `Complacency`, `Elusiveness`, `Peace & Reconciliation`, `Burdensome Possession` — plus **four competing generic labels**: `Idiom Meaning` (63), `Common English Idioms` (25), `Meaning of Idioms` (5), `Idiomatic Expressions` (5).
+
+**Why:** it is the same split-by-theme-not-concept pattern Tier 2 fixed elsewhere, but an order of magnitude larger, and it is actively growing — each new idioms paper mints another dozen two-question themes. No aggregate over these buckets means anything.
+
+**How to apply:** two separable decisions. (1) The four generic labels are unambiguously one thing — collapse into `Idiom Meaning` (98 Q) as a Tier-1-style mechanical merge. (2) The ~55 semantic micro-buckets are a policy call: either fold them all into `Idiom Meaning` too (accepting that idiom questions are only ever tracked at chapter level, which is what the NDA paper actually tests), or keep them and accept they will never aggregate. Recommend (1) now and a decision on (2) before the next idioms upload. Note the 2026-07-29 re-tag deliberately used `Idiom Meaning` for its 10 rather than adding themes.
