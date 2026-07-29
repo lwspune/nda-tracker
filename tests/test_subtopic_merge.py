@@ -18,6 +18,7 @@ from merge_subtopics import (
 
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 JS_SCRIPT = os.path.join(REPO_ROOT, 'migrate_subtopics_supabase.js')
+NDA_FREQ_JS = os.path.join(REPO_ROOT, 'src', 'lib', 'ndaFreq.js')
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -382,6 +383,139 @@ def test_cleanup_tier1_distinct_subtopics_preserved(kept):
     assert q["subtopic"] == kept
 
 
+# ── Subtopic cleanup Tier 2 (2026-07-29) — PREPARED, NOT YET APPLIED ──────
+# Concept merges: buckets split by prop/scenario/keyword rather than by
+# concept. Each collapses 1–3 question buckets that cannot aggregate.
+# Scoped to same-chapter merges only — see the chapter-scope gap below.
+
+@pytest.mark.parametrize("old,new", [
+    # English / Grammar — Question Tags over-granularity.
+    # Only the tense/polarity families merge; distinct grammar rules
+    # (Let's, Needn't, Ought To, Seldom, Indefinite Pronouns) stay split.
+    ("Question Tags – Be Verb (Simple Present)",     "Question Tags – Simple Present"),
+    ("Question Tags – Simple Present (3rd Person)",  "Question Tags – Simple Present"),
+    ("Question Tags – Simple Present (Action Verb)", "Question Tags – Simple Present"),
+    ("Question Tags – Simple Present (Does)",        "Question Tags – Simple Present"),
+    ("Question Tags – Simple Present (Habitual)",    "Question Tags – Simple Present"),
+    ("Question Tags – Simple Present (Likes/Habits)", "Question Tags – Simple Present"),
+    ("Question Tags – Could/Past Simple",            "Question Tags – Past Simple"),
+    ("Question Tags – Past Simple (Be Verb)",        "Question Tags – Past Simple"),
+    ("Question Tags – Simple Past",                  "Question Tags – Past Simple"),
+    ("Question Tags – Modal Must",                   "Question Tags – Modal Verbs"),
+    ("Question Tags – Modal Should + Plural Subject", "Question Tags – Modal Verbs"),
+    ("Question Tags – Can (Ability/Possibility)",    "Question Tags – Can"),
+    ("Question Tags – Can (Affirmative)",            "Question Tags – Can"),
+    ("Question Tags – Negative + Does",              "Question Tags – Negative Clause"),
+    ("Question Tags – Negative + Won't",             "Question Tags – Negative Clause"),
+    ("Question Tags – Negative Main Clause",         "Question Tags – Negative Clause"),
+    # English / Phrasal Verbs — split by keyword gives no analytic signal.
+    ("Phrasal Verbs with 'Call'",                    "Phrasal Verbs"),
+    ("Phrasal Verbs with 'Carry'",                   "Phrasal Verbs"),
+    ("Phrasal Verbs with 'Come'",                    "Phrasal Verbs"),
+    ("Phrasal Verbs with 'Keep'",                    "Phrasal Verbs"),
+    ("Phrasal Verbs with 'Put'",                     "Phrasal Verbs"),
+    ("Phrasal Verbs with 'Run'",                     "Phrasal Verbs"),
+    # Maths / Probability — split by prop, not by concept.
+    ("Classical Probability — Cards",                "Classical Probability"),
+    ("Classical Probability — Coins",                "Classical Probability"),
+    ("Classical Probability — Dice",                 "Classical Probability"),
+    ("Classical probability with repeated letters",  "Classical Probability"),
+    # Physics / Rotational Dynamics — split by scenario.
+    ("Conservation of Angular Momentum – Collision on Disc",
+     "Conservation of Angular Momentum"),
+    ("Conservation of Angular Momentum – Condition", "Conservation of Angular Momentum"),
+    ("Conservation of Angular Momentum – Earth",     "Conservation of Angular Momentum"),
+    ("Conservation of Angular Momentum – Gymnast",   "Conservation of Angular Momentum"),
+    ("Conservation of Angular Momentum – Human Body", "Conservation of Angular Momentum"),
+    # Physics / Optics — split by sub-question.
+    ("Total Internal Reflection – Colour Filtering",  "Total Internal Reflection"),
+    ("Total Internal Reflection – Conditions",        "Total Internal Reflection"),
+    ("Total Internal Reflection – Critical Angle",    "Total Internal Reflection"),
+    ("Total Internal Reflection – Critical Angle from Wavelength",
+     "Total Internal Reflection"),
+    ("Total Internal Reflection – Prism Ray Path",    "Total Internal Reflection"),
+    ("Total Internal Reflection – Speed Relation",    "Total Internal Reflection"),
+    # Chemistry / Inorganic Chemistry — one bucket per chemical.
+    ("Common Chemicals — Baking Soda",               "Common Chemicals"),
+    ("Common Chemicals — Bleaching Powder",          "Common Chemicals"),
+    ("Common Chemicals — Limestone",                 "Common Chemicals"),
+    ("Common Chemicals — Soda Lime",                 "Common Chemicals"),
+    # Chemistry / Mole Concept — split by what is being counted.
+    ("Avogadro's Number and Atoms",                  "Avogadro's Number"),
+    ("Avogadro's Number and Molecules",              "Avogadro's Number"),
+    ("Avogadro's Number and Neutrons",               "Avogadro's Number"),
+    # Geography / Atmosphere — the `<X> Cloud Characteristics` family only.
+    # Formation / altitude / weather-association buckets are NOT touched.
+    ("Cirrus Cloud Characteristics",                 "Cloud Types and Characteristics"),
+    ("Cumulonimbus Cloud Characteristics",           "Cloud Types and Characteristics"),
+    ("Cumulus Cloud Characteristics",                "Cloud Types and Characteristics"),
+    ("Nimbostratus Cloud Characteristics",           "Cloud Types and Characteristics"),
+    ("Nimbus Cloud Characteristics",                 "Cloud Types and Characteristics"),
+    ("Stratus Cloud Characteristics",                "Cloud Types and Characteristics"),
+    ("Cloud Types",                                  "Cloud Types and Characteristics"),
+])
+def test_cleanup_tier2_2026_07_29(old, new):
+    q = make_q(old)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == new
+
+
+@pytest.mark.parametrize("kept", [
+    # Question Tags — distinct grammar rules, not scenario splits.
+    "Question Tags – Let's (Suggestions)",
+    "Question Tags – Needn't",
+    "Question Tags – Ought To",
+    "Question Tags – Seldom (Negative Adverb)",
+    "Question Tags – Indefinite Pronouns",
+    "Question Tags – Subject-Pronoun Agreement",
+    "Question Tags – Present Perfect",
+    "Question Tags – Future Tense",
+    # Atmosphere — distinct cloud concepts the `%Cloud%` sweep also matches.
+    "Cloud Formation Mechanism",
+    "Cloud Altitude",
+    "Cloud and Weather Association",
+    "Cloudburst",
+    "Thunderstorm Clouds",
+    "Monsoon Rainfall Clouds",
+    # Chapter-scoped: cannot be renamed by a subtopic-keyed map (see below).
+    "Vocabulary - Nouns",
+    "Vocabulary - Adjectives",
+    "Vocabulary - Verbs",
+    "Features of Constitution",
+])
+def test_cleanup_tier2_distinct_subtopics_preserved(kept):
+    q = make_q(kept)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == kept
+
+
+def test_rename_map_cannot_express_chapter_scoped_renames():
+    """Documents a real capability gap, so it isn't rediscovered as a bug.
+
+    `Vocabulary - Nouns` lives in BOTH the Antonyms chapter (where it should
+    become `Vocabulary - Antonyms`) and the Synonyms chapter (where it should
+    become `Vocabulary - Synonyms`). The map is keyed on subtopic alone, so
+    one key cannot resolve to two targets. Same for `Vocabulary - Adjectives`,
+    `Vocabulary - Verbs`, and `Features of Constitution`
+    (Constitutional Framework vs Preamble).
+
+    Applying either target globally would mislabel the other chapter's
+    questions — worse than leaving them split. These stay unmapped until
+    `apply_renames` can key on (chapter, subtopic).
+    """
+    chapter_scoped = [
+        "Vocabulary - Nouns",
+        "Vocabulary - Adjectives",
+        "Vocabulary - Verbs",
+        "Features of Constitution",
+    ]
+    for name in chapter_scoped:
+        assert name not in SUBTOPIC_RENAMES, (
+            f"{name!r} needs a chapter-scoped rename; a global entry would "
+            f"mislabel one of the two chapters it appears in"
+        )
+
+
 # ── Python / JS rename-map drift guard ─────────────────────────────────────
 # The maps are duplicated in merge_subtopics.py (dev disk) and
 # migrate_subtopics_supabase.js (prod). They must not drift — a miss means
@@ -423,17 +557,24 @@ def test_js_chapter_map_matches_python():
 
 # ── Chapter renames ────────────────────────────────────────────────────────
 
-def test_chapter_rename_height_and_distance():
-    q = {"q": 1, "chapter": "Height & Distance", "subject": "Maths"}
-    changed = apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
-    assert changed == 1
-    assert q["chapter"] == "Heights and Distances"
+def test_chapter_rename_heights_and_distances():
+    """Canonical is `Height & Distance` — the name NDA_FREQ_BY_SUBJECT carries.
 
-def test_chapter_rename_canonical_unchanged():
+    This mapping pointed the other way from 2026-06-16 until 2026-07-29. It was
+    never run against prod until the Tier 1 sweep, which then pushed 2 questions
+    onto a name `computeProjectedScore` cannot join — chapter names bind to the
+    weightage table by exact match, and a miss scores 0.
+    """
     q = {"q": 1, "chapter": "Heights and Distances", "subject": "Maths"}
     changed = apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
+    assert changed == 1
+    assert q["chapter"] == "Height & Distance"
+
+def test_chapter_rename_canonical_unchanged():
+    q = {"q": 1, "chapter": "Height & Distance", "subject": "Maths"}
+    changed = apply_chapter_renames([make_exam([q])], CHAPTER_RENAMES)
     assert changed == 0
-    assert q["chapter"] == "Heights and Distances"
+    assert q["chapter"] == "Height & Distance"
 
 def test_chapter_rename_unmatched_unchanged():
     q = {"q": 1, "chapter": "Differentiation", "subject": "Maths"}
@@ -441,15 +582,46 @@ def test_chapter_rename_unmatched_unchanged():
     assert q["chapter"] == "Differentiation"
 
 def test_chapter_rename_is_idempotent():
-    q = {"q": 1, "chapter": "Height & Distance", "subject": "Maths"}
+    q = {"q": 1, "chapter": "Heights and Distances", "subject": "Maths"}
     exams = [make_exam([q])]
     apply_chapter_renames(exams, CHAPTER_RENAMES)
     apply_chapter_renames(exams, CHAPTER_RENAMES)
-    assert q["chapter"] == "Heights and Distances"
+    assert q["chapter"] == "Height & Distance"
 
 def test_chapter_rename_empty_and_missing():
     assert apply_chapter_renames([], CHAPTER_RENAMES) == 0
     assert apply_chapter_renames([make_exam([{"q": 1}])], CHAPTER_RENAMES) == 0
+
+
+# ── Chapter renames must target a name the weightage table knows ───────
+# `computeProjectedScore` joins question chapters to NDA_FREQ_BY_SUBJECT by
+# exact (case-insensitive) string match and scores `projected: 0` on a miss.
+# A rename whose TARGET is off that list therefore makes analytics worse, not
+# better — silently, since nothing errors.
+
+def _canonical_maths_chapters():
+    """Chapter names from the Maths block of src/lib/ndaFreq.js."""
+    with open(NDA_FREQ_JS, encoding='utf-8') as f:
+        src = f.read()
+    start = src.index('Maths: [')
+    end = src.index('],', start)
+    return set(re.findall(r"chapter:\s*'([^']*)'", src[start:end]))
+
+
+def test_canonical_maths_chapter_list_is_parseable():
+    canon = _canonical_maths_chapters()
+    assert len(canon) > 25, f'parsed only {len(canon)} chapters from ndaFreq.js'
+    assert 'Height & Distance' in canon
+
+
+def test_chapter_rename_targets_are_in_the_weightage_table():
+    canon = _canonical_maths_chapters()
+    for old, new in CHAPTER_RENAMES.items():
+        assert new in canon, (
+            f'{old!r} -> {new!r}: the target is not in NDA_FREQ_BY_SUBJECT.Maths, '
+            f'so every renamed question would score 0 in computeProjectedScore. '
+            f'(Widen this check if a non-Maths chapter rename is ever added.)'
+        )
 
 
 # ── Rename map completeness ────────────────────────────────────────────────

@@ -936,3 +936,29 @@ Several subtopics are a single question's text — `f(π/2) for f(x)=sin[π²]x+
 **Why:** renaming them after the fact is unbounded cleanup — the Tags upload will keep minting new ones. Sequence & Series alone now carries three competing naming schemes (`Sum of AP`, `Arithmetic Progression - Sum of Terms`, `AP — sum condition…`).
 
 **How to apply:** validate at upload in `src/lib/validateTags.js`, as a **non-blocking warning** in the Step 1 preview (same posture as `KeyMismatchPanel` — surface it, let the uploader decide; never silently rewrite). Cheap signals that catch the real cases: length over ~60 chars, contains `=` or a digit-heavy run, or matches the question text for that row. A per-chapter naming convention (`<AP|GP|HP> - <nth Term | Sum of n Terms | Mean>`) would prevent the scheme drift, but the warning is the smaller first step.
+
+### Chapter-name conformance: Maths + English tags, then the incomplete freq tables
+
+The validation leak is closed and `Height & Distance` is fixed (2026-07-29), but **1,850 questions still sit on chapter names the weightage table doesn't carry**, so they contribute nothing to projected NDA score. This is *two* different jobs, and the per-subject numbers say which is which:
+
+| Subject | Configured chapters | Unmatched Q | Diagnosis |
+|---|---|---|---|
+| Maths | 31 | 73 | **tags wrong** — scripted rename |
+| English | 31 | 106 | **tags wrong** — scripted rename |
+| Physics | 33 | 317 | mixed — triage needed |
+| Chemistry | 6 | 681 | **freq table incomplete** |
+| Geography | 7 | 506 | **freq table incomplete** |
+| Biology | 3 | 87 | **freq table incomplete** |
+| Polity | 3 | 20 | **freq table incomplete** |
+| Others | 2 | 30 | **freq table incomplete** |
+| History | 4 | 30 | mixed |
+
+**Why the split matters:** renaming 681 Chemistry questions into the 6 chapters currently configured would be actively wrong — there the *table* is the incomplete thing, and completing it is a subject-matter judgement (which chapters exist, what each is worth), not something a script should guess.
+
+**How to apply:**
+- **Maths (73 Q)** — genuine conformance, canonical targets are looked up not guessed: `Integration` (25) → `Indefinite`/`Definite Integration` (needs per-question triage — the name doesn't say which), `Limits` (10) → `Limits & Continuity`, `Straight Line` (8) → `Lines`, `Area Under Curve` (1) → `Applications of Integration`. The CBSE-flavoured leftovers (`Polynomials`, `Real Numbers`, `Triangles`, `Coordinate Geometry`, `Pair of Linear Equations`, `Areas Related to Circles`, `Introduction to Trigonometry`, `Arithmetic Progressions`) have **no NDA equivalent** — decide whether to map them onto the nearest NDA chapter or add them to the freq table at pct 0. Do not silently fold them into a big chapter; that inflates its weightage-backed score.
+- **English (106 Q)** — only 2 unmatched names; check them against the configured 31 first, they may just be casing.
+- **Then the freq tables** — hand Chemistry/Geography/Biology/Polity/Others to faculty via Settings → NDA Weightage. Until those are filled, tag validation for those subjects still can't fire (the list is what switches it on), so the drift keeps accruing.
+- **Announce it.** Fixing this moves projected NDA scores **upward** for GAT subjects, because currently-invisible questions start counting. Parents see those numbers in monthly reports — it should land as a stated correction, not a silent shift.
+
+Use `node migrate_subtopics_supabase.js --chapters-only --dry-run` to preview; `--subtopics-only` is the mirror.

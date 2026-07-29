@@ -1,9 +1,11 @@
 // Apply subtopic renames to the Supabase exams.questions JSONB column.
 //
 // Usage:
-//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_subtopics_supabase.js [--dry-run]
+//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_subtopics_supabase.js [flags]
 //
-// --dry-run  Fetch + analyse but write nothing.
+// --dry-run         Fetch + analyse but write nothing.
+// --chapters-only   Apply CHAPTER_RENAMES only, ignore SUBTOPIC_RENAMES.
+// --subtopics-only  Apply SUBTOPIC_RENAMES only, ignore CHAPTER_RENAMES.
 //
 // Run AFTER merge_subtopics.py has updated data/faculty-data.json (local).
 // This script targets Supabase directly so prod data stays in sync.
@@ -13,6 +15,14 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = 'https://exjnzrrlzcrsoxfoojcq.supabase.co'
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 const DRY_RUN      = process.argv.includes('--dry-run')
+const SCOPE        = {
+  chaptersOnly:  process.argv.includes('--chapters-only'),
+  subtopicsOnly: process.argv.includes('--subtopics-only'),
+}
+if (SCOPE.chaptersOnly && SCOPE.subtopicsOnly) {
+  console.error('Error: --chapters-only and --subtopics-only are mutually exclusive.')
+  process.exit(1)
+}
 
 if (!SERVICE_KEY) {
   console.error('Error: SUPABASE_SERVICE_ROLE_KEY env var is required.')
@@ -164,24 +174,103 @@ const SUBTOPIC_RENAMES = {
   // Geography
   'Seismic Waves & Earth Structure':         "Seismic Waves & Earth's Interior",
   "Seismic Waves & Earth's Core":            "Seismic Waves & Earth's Interior",
+
+  // ── Cleanup Tier 2 (2026-07-29) ────────────────────────────────────────
+  // !! PREPARED, NOT YET APPLIED TO PROD as of 2026-07-29. See SUGGESTIONS.md.
+  // An unapplied entry sitting in this map is what caused the Height & Distance
+  // bug — the 2026-06-16 batch looked done and wasn't. Apply or delete; don't
+  // leave it here indefinitely. Run with --subtopics-only to apply just these.
+  // Concept merges: buckets split by prop / scenario / keyword rather than
+  // by concept. Same-chapter only — a subtopic appearing in two chapters
+  // with two different correct targets is NOT here (see the Tier 2 test).
+  // English / Grammar — Question Tags tense + polarity families.
+  "Question Tags – Be Verb (Simple Present)":      'Question Tags – Simple Present',
+  'Question Tags – Simple Present (3rd Person)':   'Question Tags – Simple Present',
+  'Question Tags – Simple Present (Action Verb)':  'Question Tags – Simple Present',
+  'Question Tags – Simple Present (Does)':         'Question Tags – Simple Present',
+  'Question Tags – Simple Present (Habitual)':     'Question Tags – Simple Present',
+  'Question Tags – Simple Present (Likes/Habits)': 'Question Tags – Simple Present',
+  'Question Tags – Could/Past Simple':             'Question Tags – Past Simple',
+  'Question Tags – Past Simple (Be Verb)':         'Question Tags – Past Simple',
+  'Question Tags – Simple Past':                   'Question Tags – Past Simple',
+  'Question Tags – Modal Must':                    'Question Tags – Modal Verbs',
+  'Question Tags – Modal Should + Plural Subject': 'Question Tags – Modal Verbs',
+  'Question Tags – Can (Ability/Possibility)':     'Question Tags – Can',
+  'Question Tags – Can (Affirmative)':             'Question Tags – Can',
+  'Question Tags – Negative + Does':               'Question Tags – Negative Clause',
+  "Question Tags – Negative + Won't":              'Question Tags – Negative Clause',
+  'Question Tags – Negative Main Clause':          'Question Tags – Negative Clause',
+  // English / Phrasal Verbs
+  "Phrasal Verbs with 'Call'":               'Phrasal Verbs',
+  "Phrasal Verbs with 'Carry'":              'Phrasal Verbs',
+  "Phrasal Verbs with 'Come'":               'Phrasal Verbs',
+  "Phrasal Verbs with 'Keep'":               'Phrasal Verbs',
+  "Phrasal Verbs with 'Put'":                'Phrasal Verbs',
+  "Phrasal Verbs with 'Run'":                'Phrasal Verbs',
+  // Maths / Probability
+  'Classical Probability — Cards':           'Classical Probability',
+  'Classical Probability — Coins':           'Classical Probability',
+  'Classical Probability — Dice':            'Classical Probability',
+  'Classical probability with repeated letters': 'Classical Probability',
+  // Physics / Rotational Dynamics
+  'Conservation of Angular Momentum – Collision on Disc':
+      'Conservation of Angular Momentum',
+  'Conservation of Angular Momentum – Condition':   'Conservation of Angular Momentum',
+  'Conservation of Angular Momentum – Earth':       'Conservation of Angular Momentum',
+  'Conservation of Angular Momentum – Gymnast':     'Conservation of Angular Momentum',
+  'Conservation of Angular Momentum – Human Body':  'Conservation of Angular Momentum',
+  // Physics / Optics
+  'Total Internal Reflection – Colour Filtering':   'Total Internal Reflection',
+  'Total Internal Reflection – Conditions':         'Total Internal Reflection',
+  'Total Internal Reflection – Critical Angle':     'Total Internal Reflection',
+  'Total Internal Reflection – Critical Angle from Wavelength':
+      'Total Internal Reflection',
+  'Total Internal Reflection – Prism Ray Path':     'Total Internal Reflection',
+  'Total Internal Reflection – Speed Relation':     'Total Internal Reflection',
+  // Chemistry / Inorganic Chemistry
+  'Common Chemicals — Baking Soda':          'Common Chemicals',
+  'Common Chemicals — Bleaching Powder':     'Common Chemicals',
+  'Common Chemicals — Limestone':            'Common Chemicals',
+  'Common Chemicals — Soda Lime':            'Common Chemicals',
+  // Chemistry / Mole Concept
+  "Avogadro's Number and Atoms":             "Avogadro's Number",
+  "Avogadro's Number and Molecules":         "Avogadro's Number",
+  "Avogadro's Number and Neutrons":          "Avogadro's Number",
+  // Geography / Atmosphere — the `<X> Cloud Characteristics` family only.
+  'Cirrus Cloud Characteristics':            'Cloud Types and Characteristics',
+  'Cumulonimbus Cloud Characteristics':      'Cloud Types and Characteristics',
+  'Cumulus Cloud Characteristics':           'Cloud Types and Characteristics',
+  'Nimbostratus Cloud Characteristics':      'Cloud Types and Characteristics',
+  'Nimbus Cloud Characteristics':            'Cloud Types and Characteristics',
+  'Stratus Cloud Characteristics':           'Cloud Types and Characteristics',
+  'Cloud Types':                             'Cloud Types and Characteristics',
 }
 
 // ── Chapter rename map (must stay in sync with merge_subtopics.py) ──────────
 const CHAPTER_RENAMES = {
-  // Maths — two spellings of the same chapter (2026-06-16)
-  'Height & Distance': 'Heights and Distances',
+  // Maths — two spellings of the same chapter. Direction REVERSED 2026-07-29:
+  // `Height & Distance` is the canonical name in NDA_FREQ_BY_SUBJECT, and
+  // computeProjectedScore joins question chapters to that table by exact
+  // string match — a miss scores 0. The original 2026-06-16 entry pointed at
+  // `Heights and Distances`, which is off the table; it was never run until
+  // the Tier 1 sweep, which then moved 2 questions out of scoring range.
+  'Heights and Distances': 'Height & Distance',
 }
 
-function applyRenames(questions) {
+// Chapter and subtopic cleanup are separate workstreams that land at different
+// times, so the map can legitimately hold prepared-but-unapproved subtopic
+// entries while a chapter fix needs to ship. Scope the run rather than
+// hand-editing the map before applying.
+function applyRenames(questions, { chaptersOnly = false, subtopicsOnly = false } = {}) {
   let changed = 0
   for (const q of questions) {
     const st = q.subtopic
-    if (st && SUBTOPIC_RENAMES[st]) {
+    if (!chaptersOnly && st && SUBTOPIC_RENAMES[st]) {
       q.subtopic = SUBTOPIC_RENAMES[st]
       changed++
     }
     const ch = q.chapter
-    if (ch && CHAPTER_RENAMES[ch]) {
+    if (!subtopicsOnly && ch && CHAPTER_RENAMES[ch]) {
       q.chapter = CHAPTER_RENAMES[ch]
       changed++
     }
@@ -212,6 +301,9 @@ async function main() {
     auth: { persistSession: false },
   })
 
+  const scopeLabel = SCOPE.chaptersOnly ? 'chapters only'
+    : SCOPE.subtopicsOnly ? 'subtopics only' : 'chapters + subtopics'
+  console.log(`Scope: ${scopeLabel}`)
   console.log('Fetching exams from Supabase…')
   const exams = await fetchAllExams(supabase)
   console.log(`  ${exams.length} exams fetched`)
@@ -221,7 +313,7 @@ async function main() {
 
   for (const exam of exams) {
     const questions = JSON.parse(JSON.stringify(exam.questions ?? []))
-    const changed = applyRenames(questions)
+    const changed = applyRenames(questions, SCOPE)
     if (changed > 0) {
       totalChanged += changed
       toUpdate.push({ id: exam.id, name: exam.name, questions, changed })
