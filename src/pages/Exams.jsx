@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
@@ -24,6 +24,18 @@ export default function ExamsPage() {
   const whatsappSendHistory        = useStore(s => s.whatsappSendHistory)
   const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
   const monitorMobiles             = useStore(s => s.monitorMobiles)
+  const timetableTeachers          = useStore(s => s.timetableTeachers)
+
+  // created_by stores the auth email (the only identity a session has); show
+  // the teacher's name where one matches, falling back to the email itself.
+  const examAuthorName = useMemo(() => {
+    const byEmail = new Map(
+      (timetableTeachers ?? [])
+        .filter(t => t?.email)
+        .map(t => [String(t.email).trim().toLowerCase(), t.name])
+    )
+    return email => byEmail.get(String(email ?? '').trim().toLowerCase()) || email
+  }, [timetableTeachers])
   const examAbsenceSendHistory     = useStore(s => s.examAbsenceSendHistory)
   const setExamAbsenceSendHistory  = useStore(s => s.setExamAbsenceSendHistory)
   const markExamAbsencesNotified   = useStore(s => s.markExamAbsencesNotified)
@@ -302,9 +314,20 @@ export default function ExamsPage() {
                       {!exam.questions.length && (
                         <span className="text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-ink-3 border border-border rounded-full px-2 py-0.5">Offline</span>
                       )}
+                      {exam.source === 'teacher' && (
+                        <span className="text-[9px] font-bold uppercase tracking-wide bg-accent-soft/40 text-accent border border-accent/30 rounded-full px-2 py-0.5">Written Quiz</span>
+                      )}
                     </div>
                     <div className="flex items-center flex-wrap gap-3 mt-1 text-[11px] font-mono text-ink-3">
                       <span>{exam.date}</span>
+                      {/* Review-after, not approve-before: teachers create their
+                          own Written Quizzes, so the office needs to see whose. */}
+                      {exam.createdBy && (
+                        <>
+                          <span>·</span>
+                          <span title={exam.createdBy}>by {examAuthorName(exam.createdBy)}</span>
+                        </>
+                      )}
                       <span>·</span>
                       <span>{exam.students.length} students</span>
                       <span>·</span>

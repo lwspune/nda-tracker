@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
@@ -15,6 +15,10 @@ const mockStore = {
   endLeave: vi.fn(),
   setHomeworkDefaultersForItem: vi.fn(),
   getHomeworkForDate: vi.fn(),
+  exams: [],
+  addExam: vi.fn(),
+  replaceExam: vi.fn(),
+  deleteExam: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -68,6 +72,7 @@ beforeEach(() => {
   mockStore.submitLecture.mockResolvedValue(true)
   mockStore.getHomeworkForDate.mockResolvedValue([])
   mockStore.setHomeworkDefaultersForItem.mockResolvedValue(true)
+  mockStore.exams = []
   mockStore.deleteLectureSubmission.mockResolvedValue(true)
 })
 
@@ -515,5 +520,112 @@ describe('SchoolAttendancePage — homework is per class, not per period', () =>
   it('disables the control on a day with no classes', async () => {
     render(<SchoolAttendancePage email="akash@lwspune.com" initialDate="2026-05-24" />)  // Sunday
     expect(await screen.findByRole('button', { name: /file homework/i })).toBeDisabled()
+  })
+})
+
+// A pen-and-paper class test the teacher conducts and marks themselves. Stored
+// as a normal offline exam but stamped source:'teacher' so parent-facing
+// reports can label it "Written Quiz" rather than let it read like a mock.
+describe('SchoolAttendancePage — Written Quiz', () => {
+  async function openQuiz() {
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    fireEvent.click(await screen.findByRole('button', { name: /add a written quiz/i }))
+    return screen.findByLabelText(/quiz name/i)
+  }
+
+  it('scopes the quiz to a class the teacher actually teaches', async () => {
+    await openQuiz()
+    // t1 teaches only Maths/12th_A, so it opens straight into that quiz.
+    expect(screen.getByText(/Written Quiz — Maths · 12th_A/)).toBeInTheDocument()
+  })
+
+  it('keeps Save disabled until every student is marked or ticked absent', async () => {
+    // Blank means "not entered yet" here, NOT "did not appear" — a half-marked
+    // stack of papers must not save as a room full of no-shows.
+    await openQuiz()
+    fireEvent.change(screen.getByLabelText(/quiz name/i), { target: { value: 'Trig test' } })
+    fireEvent.change(screen.getByLabelText(/max marks/i), { target: { value: '20' } })
+
+    const save = screen.getByRole('button', { name: /save written quiz/i })
+    expect(save).toBeDisabled()
+    expect(screen.getByText(/2 not entered/i)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/marks for Arjun Sharma/i), { target: { value: '18' } })
+    expect(save).toBeDisabled()                                    // Ravi still blank
+
+    fireEvent.click(screen.getByRole('button', { name: /Ravi Kumar absent/i }))
+    expect(save).toBeEnabled()
+  })
+
+  it('saves an offline exam stamped teacher-created, omitting the absentee', async () => {
+    await openQuiz()
+    fireEvent.change(screen.getByLabelText(/quiz name/i), { target: { value: 'Trig test' } })
+    fireEvent.change(screen.getByLabelText(/max marks/i), { target: { value: '20' } })
+    fireEvent.change(screen.getByLabelText(/marks for Arjun Sharma/i), { target: { value: '18' } })
+    fireEvent.click(screen.getByRole('button', { name: /Ravi Kumar absent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save written quiz/i }))
+
+    await waitFor(() => expect(mockStore.addExam).toHaveBeenCalled())
+    const [exam, opts] = mockStore.addExam.mock.calls[0]
+    expect(exam).toMatchObject({
+      name: 'Trig test', date: THURSDAY, subject: 'Maths', batch: '12th_A',
+      maxMarks: 20, source: 'teacher', createdBy: 'akash@lwspune.com', questions: [],
+    })
+    expect(exam.students).toEqual([expect.objectContaining({ name: 'Arjun Sharma', totalMarks: 18 })])
+    // Load-bearing: absence sync is passed explicitly false, never defaulted —
+    // it is the one thing on this page that could reach a parent.
+    expect(opts).toEqual({ syncAbsences: false })
+  })
+
+  it('warns when a quiz already exists for that class on that date', async () => {
+    mockStore.exams = [
+      { id: 'e1', date: THURSDAY, subject: 'Maths', batch: '12th_A', name: 'Earlier test', source: 'admin' },
+    ]
+    await openQuiz()
+    expect(screen.getByText(/already exists on this date/i)).toBeInTheDocument()
+    expect(screen.getByText('Earlier test')).toBeInTheDocument()
+  })
+
+  it('blocks marks above the paper ceiling', async () => {
+    await openQuiz()
+    fireEvent.change(screen.getByLabelText(/quiz name/i), { target: { value: 'Trig test' } })
+    fireEvent.change(screen.getByLabelText(/max marks/i), { target: { value: '20' } })
+    fireEvent.change(screen.getByLabelText(/marks for Arjun Sharma/i), { target: { value: '25' } })
+    fireEvent.click(screen.getByRole('button', { name: /Ravi Kumar absent/i }))
+
+    expect(screen.getByText(/above 20/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save written quiz/i })).toBeDisabled()
+  })
+
+  it('lists the teacher\'s own quizzes for the day and lets them edit one', async () => {
+    mockStore.exams = [{
+      id: 'q1', date: THURSDAY, subject: 'Maths', batch: '12th_A', name: 'My quiz',
+      source: 'teacher', createdBy: 'akash@lwspune.com', maxMarks: 20, questions: [],
+      students: [{ name: 'Arjun Sharma', totalMarks: 12 }],
+    }]
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+
+    const strip = within(await screen.findByTestId('my-written-quizzes'))
+    expect(strip.getByText('My quiz')).toBeInTheDocument()
+    fireEvent.click(strip.getByRole('button', { name: /edit my quiz/i }))
+    // Pre-filled from the stored exam.
+    expect(await screen.findByLabelText(/quiz name/i)).toHaveValue('My quiz')
+    expect(screen.getByLabelText(/marks for Arjun Sharma/i)).toHaveValue(12)
+  })
+
+  it('does not show another teacher\'s quiz', async () => {
+    mockStore.exams = [{
+      id: 'q2', date: THURSDAY, subject: 'Maths', batch: '12th_A', name: 'Not mine',
+      source: 'teacher', createdBy: 'someone.else@lwspune.com', maxMarks: 20, questions: [], students: [],
+    }]
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    await screen.findByText('Maths')
+    expect(screen.queryByTestId('my-written-quizzes')).not.toBeInTheDocument()
+  })
+
+  it('is disabled for a login with no classes of its own', async () => {
+    mockStore.timetableMappings = [{ id: 'm-x', subject: 'Maths', teacherId: 'nobody' }]
+    render(<SchoolAttendancePage email="akash@lwspune.com" initialDate={THURSDAY} />)
+    expect(await screen.findByRole('button', { name: /add a written quiz/i })).toBeDisabled()
   })
 })

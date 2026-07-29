@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { supabase } from '../../lib/supabase'
-import { findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, getTeacherBatches } from '../../lib/teacherDay'
+import {
+  findTeacherByEmail, getTeacherLecturesForDate, withFilingStatus, getTeacherBatches,
+  getTeacherSubjectBatches,
+} from '../../lib/teacherDay'
+import WrittenQuizModal from './WrittenQuizModal'
 import { buildOfflineRoster } from '../../lib/offlineRoster'
 import { resolveOnLeave } from '../../lib/analytics/chain'
 import MarkAbsenteesModal from '../Attendance/MarkAbsenteesModal'
@@ -58,6 +62,10 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
   const endLeave            = useStore(s => s.endLeave)
   const setHomeworkDefaulters = useStore(s => s.setHomeworkDefaultersForItem)
   const getHomeworkForDate  = useStore(s => s.getHomeworkForDate)
+  const exams               = useStore(s => s.exams)
+  const addExam             = useStore(s => s.addExam)
+  const replaceExam         = useStore(s => s.replaceExam)
+  const deleteExam          = useStore(s => s.deleteExam)
   const deleteSubmission    = useStore(s => s.deleteLectureSubmission)
 
   const [date, setDate] = useState(initialDate ?? todayIso())
@@ -85,6 +93,9 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
   const [hwForm, setHwForm] = useState(null)
   const [hwItem, setHwItem] = useState(null)
   const [homeworkRows, setHomeworkRows] = useState([])
+  // Written Quiz: { target, exam? } — exam set when editing one already saved.
+  const [quizModal, setQuizModal] = useState(null)
+  const [quizPicker, setQuizPicker] = useState(false)
   // Raw absence rows, kept so an ad-hoc card can recover the time it was given
   // (lecture_submissions has no time columns; lecture_absences does).
   const [absenceRows, setAbsenceRows] = useState([])
@@ -101,6 +112,26 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
     () => getTeacherBatches({ teacherId: teacher?.id, timetables, mappings }),
     [teacher, timetables, mappings],
   )
+
+  // (subject, batch) pairs the teacher owns — the scope for a Written Quiz.
+  // Day-independent: Monday's quiz is often marked on Tuesday.
+  const quizTargets = useMemo(
+    () => getTeacherSubjectBatches({ teacherId: teacher?.id, timetables, mappings }),
+    [teacher, timetables, mappings],
+  )
+
+  // This teacher's own Written Quizzes on the selected date — so they can fix a
+  // typo without going through the office, which is the honest counterpart to
+  // letting them create one in the first place.
+  const myQuizzes = useMemo(() => {
+    const own = new Set(quizTargets.map(t => t.key))
+    return (exams ?? []).filter(e =>
+      e?.source === 'teacher'
+      && e.createdBy === email
+      && e.date === date
+      && own.has(`${e.subject}|${e.batch}`)
+    )
+  }, [exams, quizTargets, email, date])
 
   // Impromptu lectures already filed today, rebuilt from the teacher's own
   // submissions. lecture_submissions is the right source here rather than
@@ -302,6 +333,22 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
     if (ok) setRefresh(n => n + 1)
   }
 
+  // Written Quiz save. `syncAbsences:false` is passed EXPLICITLY on both paths,
+  // not left to a default: it is the one thing on this page that could reach a
+  // parent (exam absences drive a WhatsApp flow), and capture surfaces never
+  // send. `createdBy` is the office's review-after visibility.
+  async function handleSaveQuiz(exam) {
+    const withAuthor = { ...exam, createdBy: email ?? null }
+    if (quizModal?.exam) replaceExam(quizModal.exam.id, withAuthor, { syncAbsences: false })
+    else addExam(withAuthor, { syncAbsences: false })
+    setQuizModal(null)
+  }
+
+  function handleDeleteQuiz(exam) {
+    if (!window.confirm(`Delete "${exam.name}"? Its marks are removed too. This cannot be undone.`)) return
+    deleteExam(exam.id)
+  }
+
   // An extra / substitute class isn't in the timetable, so nothing else in the
   // system knows it happened — the admin filing board is timetable-derived and
   // will never list it. The teacher is the only person who can record it.
@@ -435,6 +482,17 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
                   is exactly the case nothing else in the system can record. */}
               <button
                 type="button"
+                onClick={() => (quizTargets.length === 1
+                  ? setQuizModal({ target: quizTargets[0], exam: null })
+                  : setQuizPicker(true))}
+                disabled={quizTargets.length === 0}
+                className="btn text-[12px] min-h-[44px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Add a Written Quiz"
+              >
+                + Written Quiz
+              </button>
+              <button
+                type="button"
                 onClick={() => setAdhocForm({ batchName: teacherBatches[0] ?? '', subject: '', start: '', end: '' })}
                 disabled={teacherBatches.length === 0}
                 className="btn text-[12px] min-h-[44px] px-3 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -522,6 +580,44 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
             ))}
           </div>
 
+          {/* The teacher's own quizzes for the day — editable and deletable by
+              their creator, so a mistyped mark doesn't need the office. */}
+          {myQuizzes.length > 0 && (
+            <div className="card px-4 py-3 mt-5" data-testid="my-written-quizzes">
+              <div className="text-[11px] font-mono uppercase tracking-widest text-ink-3 mb-2">
+                Written Quizzes today
+              </div>
+              <div className="divide-y divide-border">
+                {myQuizzes.map(q => (
+                  <div key={q.id} className="flex items-center gap-2 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-ink truncate">{q.name}</div>
+                      <div className="text-[11px] text-ink-3 truncate">
+                        {q.subject} · {q.batch} · {q.students?.length ?? 0} marks · out of {q.maxMarks}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQuizModal({
+                        target: quizTargets.find(t => t.key === `${q.subject}|${q.batch}`) ?? null,
+                        exam: q,
+                      })}
+                      className="btn text-[12px] min-h-[44px] px-3 shrink-0"
+                      aria-label={`Edit ${q.name}`}
+                    >Edit</button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteQuiz(q)}
+                      className="text-[12px] text-red-400 hover:text-red-500 min-h-[44px] px-2 rounded shrink-0
+                                 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      aria-label={`Delete ${q.name}`}
+                    >Delete</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-[11px] text-ink-3 mt-5 leading-relaxed">
             File every period, including the ones where everybody turned up — a period with no
             entry is counted as outstanding, not as full attendance.
@@ -540,6 +636,48 @@ export default function SchoolAttendancePage({ email, initialDate, onLogout }) {
         onSave={handleSave}
         onClose={() => setModalLecture(null)}
       />
+
+      <WrittenQuizModal
+        open={quizModal !== null && quizModal.target !== null}
+        target={quizModal?.target ?? null}
+        existingExam={quizModal?.exam ?? null}
+        date={date}
+        exams={exams}
+        studentProfiles={studentProfiles}
+        onSave={handleSaveQuiz}
+        onClose={() => setQuizModal(null)}
+      />
+
+      {quizPicker && (
+        <ModalShell
+          title="Written Quiz — which class?"
+          onClose={() => setQuizPicker(false)}
+          footer={
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setQuizPicker(false)}
+                className="btn text-[13px] min-h-[44px] px-4"
+              >Cancel</button>
+            </div>
+          }
+        >
+          <div className="space-y-1">
+            {quizTargets.map(t => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => { setQuizModal({ target: t, exam: null }); setQuizPicker(false) }}
+                className="w-full text-left px-3 py-2 rounded min-h-[44px] hover:bg-surface-2
+                           focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <span className="text-[13px] font-semibold text-ink">{t.subject}</span>
+                <span className="text-[12px] text-ink-3"> · {t.batchName}</span>
+              </button>
+            ))}
+          </div>
+        </ModalShell>
+      )}
 
       {hwForm && (
         <ModalShell

@@ -521,3 +521,44 @@ describe('getMonthlyReportCohort', () => {
     expect(cohort.map(s => s.name)).toEqual(['Alice', 'Bob', 'Zara'])
   })
 })
+
+// Parent-facing tag: a teacher's pen-and-paper class test must not read like a
+// full mock in the monthly report. "Written" also keeps it distinct from the
+// in-app Daily Quiz, which is a separate feature entirely.
+describe('buildMonthlyReport — Written Quiz tagging', () => {
+  const PROFILE = { name: 'Aarav Nair', lwsId: 'LWS-1', regDate: '2026-01-01', batches: ['12th'] }
+  const base = { from: '2026-07-01', to: '2026-07-31', profile: PROFILE, attendanceRows: [], examAbsences: [] }
+
+  it('flags a teacher-created exam and leaves an admin one untagged', () => {
+    const exams = [
+      { id: 'e1', name: 'Trig test', date: '2026-07-10', subject: 'Maths', source: 'teacher',
+        questions: [], maxMarks: 20, students: [{ name: 'Aarav Nair', totalMarks: 16 }] },
+      { id: 'e2', name: 'Mock 3', date: '2026-07-20', subject: 'Maths', source: 'admin',
+        questions: [], maxMarks: 300, students: [{ name: 'Aarav Nair', totalMarks: 200 }] },
+    ]
+    const rows = buildMonthlyReport({ ...base, exams }).examTable
+    expect(rows.find(r => r.examName === 'Trig test').writtenQuiz).toBe(true)
+    expect(rows.find(r => r.examName === 'Mock 3').writtenQuiz).toBe(false)
+  })
+
+  it('treats a legacy exam with no source as admin', () => {
+    // Every row predating 2026-07-28 has source defaulted to 'admin' in the DB,
+    // but an in-memory exam built before the column existed may have none.
+    const exams = [
+      { id: 'e3', name: 'Old mock', date: '2026-07-10', subject: 'Maths',
+        questions: [], maxMarks: 100, students: [{ name: 'Aarav Nair', totalMarks: 55 }] },
+    ]
+    expect(buildMonthlyReport({ ...base, exams }).examTable[0].writtenQuiz).toBe(false)
+  })
+
+  it('tags an ABSENT row for a written quiz too', () => {
+    const exams = [
+      { id: 'e4', name: 'Trig test', date: '2026-07-10', subject: 'Maths', source: 'teacher',
+        questions: [], maxMarks: 20, students: [] },
+    ]
+    const rows = buildMonthlyReport({
+      ...base, exams, examAbsences: [{ exam_id: 'e4', lws_id: 'LWS-1' }],
+    }).examTable
+    expect(rows[0]).toMatchObject({ attended: false, writtenQuiz: true })
+  })
+})
