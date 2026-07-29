@@ -12,6 +12,7 @@ const mockStore = {
   timetableTeachers: [],
   submitLecture: vi.fn(),
   getSubmissionsForDate: vi.fn(),
+  deleteLectureSubmission: vi.fn(),
   getActiveLeaves: vi.fn(),
   endLeave: vi.fn(),
   lectureMissSendHistory: {},
@@ -66,6 +67,7 @@ beforeEach(() => {
   mockStore.getLectureAbsencesForDate.mockResolvedValue([])
   mockStore.getSubmissionsForDate.mockResolvedValue([])
   mockStore.submitLecture.mockResolvedValue(true)
+  mockStore.deleteLectureSubmission.mockResolvedValue(true)
   mockStore.setLectureAbsenteesForPeriod.mockResolvedValue(true)
   mockStore.getActiveLeaves.mockResolvedValue([])   // no leaves by default (non-hostel)
   mockStore.endLeave.mockResolvedValue(true)
@@ -330,6 +332,23 @@ describe('LectureLogTab — impromptu (ad-hoc) lectures', () => {
     // The card is gone. (The roster chip is asserted separately — here the
     // mocked fetch keeps replaying the deleted row, so it can't disappear.)
     await waitFor(() => expect(screen.queryByRole('button', { name: /remove .*doubt/i })).not.toBeInTheDocument())
+  })
+
+  // …and its FILING row. This tab rebuilds ad-hoc cards from the absence log,
+  // so clearing absentees alone makes the card vanish here — but the teacher's
+  // /school-attendance page rebuilds them from lecture_submissions, where the
+  // orphaned row would resurrect a class the office had deleted.
+  it('removing an impromptu card also deletes its filing row', async () => {
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 'adhoc_abc', subject: 'Doubt', start_time: null, end_time: null },
+    ])
+    await ready()
+    await screen.findAllByText('Doubt')
+    fireEvent.click(screen.getByRole('button', { name: /remove .*doubt/i }))
+
+    await waitFor(() => expect(mockStore.deleteLectureSubmission).toHaveBeenCalledWith(
+      THURSDAY, 'adhoc_abc', 'LWS_NDA_2Y_(25-27)_A',
+    ))
   })
 })
 

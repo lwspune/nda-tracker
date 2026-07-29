@@ -33,6 +33,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   const mappings           = useStore(s => s.timetableMappings)
   const setForPeriod       = useStore(s => s.setLectureAbsenteesForPeriod)
   const submitLecture      = useStore(s => s.submitLecture)
+  const deleteSubmission   = useStore(s => s.deleteLectureSubmission)
   const getAbsencesForDate = useStore(s => s.getLectureAbsencesForDate)
   const getActiveLeaves    = useStore(s => s.getActiveLeaves)
   const endLeave           = useStore(s => s.endLeave)
@@ -248,6 +249,11 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
 
   async function removeAdhocLecture(lec) {
     await setForPeriod(date, lec.slotId, lec.subject, []) // clears any persisted rows
+    // …and the filing row. This tab rebuilds ad-hoc cards from the ABSENCE log,
+    // so clearing absentees alone makes the card vanish here — but the teacher's
+    // /school-attendance page rebuilds them from lecture_submissions, where an
+    // orphaned row resurrects a class the office had deleted.
+    await deleteSubmission(date, lec.slotId, batchName)
     setAdhocLectures(prev => prev.filter(a => a.slotId !== lec.slotId))
     setAbsencesBySlot(prev => {
       const next = { ...prev }
