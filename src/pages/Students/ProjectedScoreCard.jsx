@@ -37,11 +37,20 @@ function OpportunityRow({ label, sub, projected, marksAtStake, accuracy }) {
   )
 }
 
-// Props: projected, primarySubject, subjectMaxScore
+// Props: projected, primarySubject, subjectMaxScore, showScore
 // `projected.subtopicBreakdown` is present only when computeProjectedScore was
 // called with { withSubtopics: true } AND the subject has a subtopic taxonomy
 // (Maths only today) — its absence hides the toggle rather than disabling it.
-export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore }) {
+//
+// showScore=false is the STUDENT variant: the opportunity rows stay (including
+// their per-row marks — "Statistics is worth 22 and you are weak there" is a
+// diagnosis a student can act on) but the headline total and its SSB/merit/rank
+// scale are withheld. That number is a prediction about the student's own exam
+// and the weakest part of the model: a chapter's accuracy is extrapolated across
+// subtopics they have never been tested on. Fine as faculty triage, not a fact
+// to hand a candidate. The card is also retitled, since a card called
+// "Projected NDA Score" that shows no score reads as a bug.
+export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore, showScore = true }) {
   const [view, setView]     = useState('chapters')
   const [showAll, setShowAll] = useState(false)
 
@@ -56,7 +65,12 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
 
   return (
     <Card>
-      <CardTitle>🎯 Projected NDA {primarySubject} Score</CardTitle>
+      <CardTitle>
+        {showScore
+          ? `🎯 Projected NDA ${primarySubject} Score`
+          : `🎯 NDA ${primarySubject} — Where Your Marks Are`}
+      </CardTitle>
+      {showScore && (
       <div className="flex items-end gap-4 mb-4 flex-wrap">
         <div>
           <div className="text-[42px] font-extrabold tracking-tight leading-none"
@@ -84,6 +98,7 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
           </div>
         </div>
       </div>
+      )}
 
       {/* Top opportunities — chapters, or a flat cross-chapter subtopic ranking */}
       <div>
@@ -136,7 +151,7 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
         <div className="mt-3 text-[10px] text-ink-3 leading-relaxed">
           {bySubtopic
             ? <>Ranked across every chapter by marks recoverable — your accuracy per subtopic × its share of the chapter × NDA weightage.</>
-            : <>Based on your accuracy per chapter × NDA weightage. Edit weightages in Settings → NDA Weightage.</>}
+            : <>Based on your accuracy per chapter × NDA weightage.{showScore && <> Edit weightages in Settings → NDA Weightage.</>}</>}
           {bySubtopic && uncovered.length > 0 && (
             <> No subtopic weightage for {uncovered.join(', ')} — those chapters are scored but not listed here.</>
           )}

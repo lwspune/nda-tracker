@@ -35,8 +35,9 @@ vi.mock('../ChapterAccordion', () => ({
 }))
 
 vi.mock('../ProjectedScoreCard', () => ({
-  default: ({ primarySubject }) => (
-    <div data-testid="projected-score" data-subject={primarySubject} />
+  default: ({ primarySubject, showScore }) => (
+    <div data-testid="projected-score" data-subject={primarySubject}
+         data-show-score={String(showScore)} />
   ),
 }))
 
@@ -48,12 +49,17 @@ vi.mock('../UnattemptedAudit', () => ({
   default: () => <div data-testid="unattempted-audit" />,
 }))
 
+// Settable so the projected-card visibility tests can switch `hasFreqData` on;
+// everything else runs with an empty table, as before.
+const mockFreqRows = { current: [] }
+
 vi.mock('../../../lib/ndaFreq', () => ({
   NDA_FREQ_BY_SUBJECT: {},
-  getFreqForSubject: () => [],
+  getFreqForSubject: () => mockFreqRows.current,
 }))
 
 import StudentView from '../StudentView'
+import { ModeContext } from '../../../context/ModeContext'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +96,7 @@ beforeEach(() => {
   mockStore.savedInsights = { classReport: null, studentPlans: {} }
   mockStore.ndaFreqBySubject = {}
   mockStore.isSuperadmin = true
+  mockFreqRows.current = []
 })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -510,5 +517,67 @@ describe('StudentView — Latest Score delta', () => {
     ])
     renderView()
     expect(screen.queryByText(/from prev/)).not.toBeInTheDocument()
+  })
+})
+
+// ── Projected card visibility ────────────────────────────────────────────────
+// The card is superadmin-only for faculty, and now ALSO renders in the student
+// portal — Maths only, and with the headline score withheld (showScore=false).
+// `isSuperadmin` is false in student mode, so the two paths cannot overlap.
+
+describe('StudentView — projected card visibility', () => {
+  const withMode = (mode, ui) =>
+    render(<ModeContext.Provider value={mode}>{ui}</ModeContext.Provider>)
+
+  beforeEach(() => {
+    // `hasFreqData` reads getFreqForSubject, which is mocked file-wide; the
+    // chapter must match makeExam's so projected.total > 0 and the gate opens.
+    mockFreqRows.current = [{ chapter: 'Algebra', pct: 100 }]
+  })
+
+  it('shows the card WITH the score for a superadmin', () => {
+    setExams([makeExam({ subject: 'Maths' })])
+    mockStore.isSuperadmin = true
+    withMode('admin', <StudentView name="Alice" />)
+    expect(screen.getByTestId('projected-score')).toHaveAttribute('data-show-score', 'true')
+  })
+
+  it('shows the card WITHOUT the score in the student portal', () => {
+    setExams([makeExam({ subject: 'Maths' })])
+    mockStore.isSuperadmin = false          // never true in student mode
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.getByTestId('projected-score')).toHaveAttribute('data-show-score', 'false')
+  })
+
+  it('hides the card from students on a non-Maths subject', () => {
+    // Only Maths has a subtopic taxonomy and a curated weightage table.
+    setExams([makeExam({ subject: 'Physics' })])
+    mockStore.isSuperadmin = false
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.queryByTestId('projected-score')).not.toBeInTheDocument()
+  })
+
+  it('keeps the card for faculty on a non-Maths subject — no capability removed', () => {
+    setExams([makeExam({ subject: 'Physics' })])
+    mockStore.isSuperadmin = true
+    withMode('admin', <StudentView name="Alice" />)
+    expect(screen.getByTestId('projected-score')).toBeInTheDocument()
+  })
+
+  it('withholds the score in student mode even when isSuperadmin is true', () => {
+    // useStore.initStore sets isSuperadmin=true unconditionally on localhost, so
+    // a student logging in against the dev server has BOTH flags set. Keying the
+    // score on isSuperadmin would leak it there; it is keyed on mode instead.
+    setExams([makeExam({ subject: 'Maths' })])
+    mockStore.isSuperadmin = true
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.getByTestId('projected-score')).toHaveAttribute('data-show-score', 'false')
+  })
+
+  it('hides the card from a teacher, as before', () => {
+    setExams([makeExam({ subject: 'Maths' })])
+    mockStore.isSuperadmin = false
+    withMode('teacher', <StudentView name="Alice" />)
+    expect(screen.queryByTestId('projected-score')).not.toBeInTheDocument()
   })
 })

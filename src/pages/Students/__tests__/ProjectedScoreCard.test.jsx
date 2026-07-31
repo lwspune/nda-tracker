@@ -71,6 +71,55 @@ describe('ProjectedScoreCard', () => {
     expect(screen.getAllByText('not tested').length).toBeGreaterThan(0)
   })
 
+  // ── Student variant ─────────────────────────────────────────────────────
+  // Students see the opportunity list but not the projected score itself. The
+  // number is a prediction about their own future exam and the weakest part of
+  // the model — it extrapolates a chapter's accuracy over subtopics they have
+  // never been tested on. Per-row marks stay: "Statistics is worth 22" is a
+  // diagnosis they can act on.
+  describe('showScore={false} — the student variant', () => {
+    const studentProps = { ...base, projected: { total: 83, breakdown, subtopicBreakdown }, showScore: false }
+
+    it('hides the headline score and the SSB/merit/rank scale', () => {
+      render(<ProjectedScoreCard {...studentProps} />)
+      expect(screen.queryByText('83')).not.toBeInTheDocument()
+      expect(screen.queryByText(/out of 300/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/SSB/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/merit/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/rank/)).not.toBeInTheDocument()
+    })
+
+    it('still shows the opportunity rows, with their per-row marks', () => {
+      render(<ProjectedScoreCard {...studentProps} />)
+      expect(screen.getByText('Matrices & Determinants')).toBeInTheDocument()
+      expect(screen.getByText('8.3')).toBeInTheDocument()      // projected
+      expect(screen.getByText('/ 23.1')).toBeInTheDocument()   // marks at stake
+    })
+
+    it('still offers the subtopic toggle', async () => {
+      const user = userEvent.setup()
+      render(<ProjectedScoreCard {...studentProps} />)
+      await user.click(screen.getByRole('button', { name: /subtopics/i }))
+      expect(screen.getByText('Subtopic 1')).toBeInTheDocument()
+    })
+
+    it('drops the Settings pointer — a student has no Settings page', () => {
+      render(<ProjectedScoreCard {...studentProps} />)
+      expect(screen.queryByText(/Settings/)).not.toBeInTheDocument()
+    })
+
+    it('does not title itself a score it is not showing', () => {
+      render(<ProjectedScoreCard {...studentProps} />)
+      expect(screen.queryByText(/Projected NDA/i)).not.toBeInTheDocument()
+    })
+
+    it('keeps the score for faculty by default', () => {
+      render(<ProjectedScoreCard {...base} projected={{ total: 83, breakdown, subtopicBreakdown }} />)
+      expect(screen.getByText('83')).toBeInTheDocument()
+      expect(screen.getByText(/Projected NDA/i)).toBeInTheDocument()
+    })
+  })
+
   it('names chapters that have no subtopic taxonomy instead of dropping them silently', async () => {
     const user = userEvent.setup()
     render(<ProjectedScoreCard {...base}

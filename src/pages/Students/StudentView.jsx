@@ -410,12 +410,22 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       </div>
       )}
 
-      {/* Projected NDA Score — superadmin only, only when freq data is configured */}
-      {isSuperadmin && hasFreqData && projected.total > 0 && (
+      {/* Projected NDA Score — superadmin (all subjects, with the score) and the
+          student portal (Maths only, score withheld). Maths is the only subject
+          with a curated weightage table AND a subtopic taxonomy, so elsewhere a
+          student would get an empty or misleading card. isSuperadmin is false in
+          student mode, so the two branches never overlap. */}
+      {(isSuperadmin || (mode === 'student' && primarySubject === 'Maths'))
+        && hasFreqData && projected.total > 0 && (
         <ProjectedScoreCard
           projected={projected}
           primarySubject={primarySubject}
           subjectMaxScore={subjectMaxScore}
+          // Keyed on mode, NOT on isSuperadmin: dev sets isSuperadmin=true
+          // unconditionally on localhost (useStore.initStore), so a student
+          // logging in against the dev server would otherwise see the score.
+          // Visibility is a mode question — see CLAUDE.md.
+          showScore={mode !== 'student'}
         />
       )}
 
