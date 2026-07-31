@@ -133,7 +133,8 @@ def test_implicit_diff_exp_log():
     q = make_q("Implicit Differentiation of Exponential-Logarithmic Equations",
                chapter="Differentiation")
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
-    assert q["subtopic"] == "Differentiation of Exponential and Logarithmic Functions"
+    # Retargeted 2026-07-31 — see test_decomposition_of_functions.
+    assert q["subtopic"] == "Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions"
 
 @pytest.mark.parametrize("old", [
     "Differentiation of Inverse Trig — Simplification",
@@ -145,7 +146,8 @@ def test_implicit_diff_exp_log():
 def test_inverse_trig_diff_variants(old):
     q = make_q(old, chapter="Differentiation")
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
-    assert q["subtopic"] == "Differentiation of Inverse Trig Functions"
+    # Retargeted 2026-07-31 — see test_decomposition_of_functions.
+    assert q["subtopic"] == "Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions"
 
 @pytest.mark.parametrize("old", [
     "Standard Inverse Trig Derivatives",
@@ -170,9 +172,11 @@ def test_algebra_of_functions_variants(old):
     assert q["subtopic"] == "Algebra of Functions"
 
 def test_decomposition_of_functions():
+    # Retargeted 2026-07-31: was `Composition of Functions`, itself off the PYQ
+    # Vault taxonomy. apply_renames is single-pass, so it must reach canonical.
     q = make_q("Decomposition of Functions", chapter="Functions")
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
-    assert q["subtopic"] == "Composition of Functions"
+    assert q["subtopic"] == "Composition and Inverse of Functions"
 
 
 # ── Maths / Quadratic Equations ────────────────────────────────────────────
@@ -200,9 +204,10 @@ def test_complex_roots_given_variant():
 # ── Maths / Sets & Relations ───────────────────────────────────────────────
 
 def test_equivalence_relation_nxn():
+    # Retargeted 2026-07-31 — see test_decomposition_of_functions.
     q = make_q("Equivalence Relation on N×N", chapter="Sets & Relations")
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
-    assert q["subtopic"] == "Equivalence Relation"
+    assert q["subtopic"] == "Relations — Properties, Cartesian Product, and Counting"
 
 
 # ── Maths / Trigonometric Identities ──────────────────────────────────────
@@ -222,29 +227,29 @@ def test_trig_identity_variants(old):
 @pytest.mark.parametrize("old,new", [
     # Circles
     ("Radius of circle",                       "Radius of Circle"),
-    ("Tangent to a Circle",                    "Tangents to a Circle"),
+    ("Tangent to a Circle",                    "Inscribed Geometry, Tangents, and Segments"),
     # Complex Numbers
-    ("Argument of Complex Number",             "Argument of a Complex Number"),
+    ("Argument of Complex Number",             "Modulus, Argument, and Conjugate"),
     # Differentiation
-    ("Derivative of Absolute Value Functions", "Derivatives of Absolute Value Functions"),
-    ("Increasing/Decreasing Functions",        "Increasing and Decreasing Functions"),
-    ("Inverse Trigonometric Derivatives",      "Inverse Trigonometric Differentiation"),
+    ("Derivative of Absolute Value Functions", "Differentiability of Absolute Value, Piecewise, and Greatest Integer Functions"),
+    ("Increasing/Decreasing Functions",        "Monotonicity, Extrema, and Critical Points"),
+    ("Inverse Trigonometric Derivatives",      "Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions"),
     # Lines
     ("Diagonal of parallelogram",              "Diagonal of Parallelogram"),
     ("Area of square — parallel side lines",   "Area of Square from Parallel Sides"),
     ("Area of square from parallel sides",     "Area of Square from Parallel Sides"),
     ("Collinearity condition",                 "Collinearity Condition"),
     ("Collinearity of points",                 "Collinearity of Points"),
-    ("Distance between parallel lines",        "Distance Between Parallel Lines"),
+    ("Distance between parallel lines",        "Distance, Section, and Locus"),
     ("Perpendicular line through point",       "Perpendicular Line Through a Point"),
     # Matrices & Determinants
-    ("Adjoint of 2×2 matrix",                  "Adjoint of a Matrix"),
+    ("Adjoint of 2×2 matrix",                  "Cofactors, Adjoint, and Inverse"),
     ("Determinant with cube roots of unity",   "Determinant with Cube Roots of Unity"),
-    ("Inverse of Matrix",                      "Inverse of a Matrix"),
+    ("Inverse of Matrix",                      "Cofactors, Adjoint, and Inverse"),
     ("Sum of two determinants",                "Sum of Determinants"),
     ("Trigonometric determinant",              "Trigonometric Determinants"),
     # Probability
-    ("Conditional probability",                "Conditional Probability"),
+    ("Conditional probability",                "Conditional Probability, Total Probability, and Bayes' Theorem"),
     # Quadratic Equations
     ("Common Root of Two Equations",           "Common Roots of Two Quadratics"),
     ("Common roots of two quadratics",         "Common Roots of Two Quadratics"),
@@ -254,7 +259,7 @@ def test_trig_identity_variants(old):
     # Sequence & Series
     ("Sum of infinite GP",                     "Sum of Infinite GP"),
     # Trigonometric Identities
-    ("Double Angle Formula",                   "Double Angle Formulas"),
+    ("Double Angle Formula",                   "Multiple and Half-Angle Formulas"),
 ])
 def test_maths_cleanup_subtopic_variants(old, new):
     q = make_q(old)
@@ -278,10 +283,8 @@ def test_maths_cleanup_distinct_subtopics_preserved(kept):
 
 @pytest.mark.parametrize("old,new", [
     # Vectors
-    ("Position Vectors and Section",             "Position Vectors and Section Formula"),
     # Applications of Integration
-    ("Area Bounded by a Curve, Lines, and Axes", "Area Bounded by Curves, Lines, and Axes"),
-    ("Area Bounded by Curves, Axes, and Lines",  "Area Bounded by Curves, Lines, and Axes"),
+    ("Area Bounded by Curves, Axes, and Lines",  "Area Bounded by a Curve, Lines, and Axes"),
     # Lines
     ("Acute angle between two specific lines",   "Acute angle between two lines"),
     # Complex Numbers — cube-roots-of-unity same-concept fold
@@ -325,12 +328,12 @@ def test_maths_cleanup_2026_07_14_distinct_preserved(kept):
     # Maths
     ("Binary to decimal conversion",            "Binary to Decimal Conversion"),
     ("Roots of Unity",                          "Cube Roots of Unity"),
-    ("Logarithmic Differentiation of Products", "Logarithmic Differentiation"),
-    ("Properties of Determinants with AP",      "Properties of Determinants"),
+    ("Logarithmic Differentiation of Products", "Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions"),
+    ("Properties of Determinants with AP",      "Determinant Properties, Operations, and Sums"),
     ("Arrangements with restricted repetitions", "Arrangements with Restrictions"),
-    ("Conditional probability with dice",       "Conditional Probability"),
-    ("Sum of GP",                               "Sum of Geometric Progression"),
-    ("nth term of GP",                          "Geometric Progression - nth Term"),
+    ("Conditional probability with dice",       "Conditional Probability, Total Probability, and Bayes' Theorem"),
+    ("Sum of GP",                               "Geometric Progressions"),
+    ("nth term of GP",                          "Geometric Progressions"),
     ("Arithmetic mean of AP",                   "Arithmetic Mean"),
     ("Period of trigonometric functions",       "Periodicity of Trigonometric Functions"),
     # Chemistry
@@ -417,10 +420,10 @@ def test_cleanup_tier1_distinct_subtopics_preserved(kept):
     ("Phrasal Verbs with 'Put'",                     "Phrasal Verbs"),
     ("Phrasal Verbs with 'Run'",                     "Phrasal Verbs"),
     # Maths / Probability — split by prop, not by concept.
-    ("Classical Probability — Cards",                "Classical Probability"),
-    ("Classical Probability — Coins",                "Classical Probability"),
-    ("Classical Probability — Dice",                 "Classical Probability"),
-    ("Classical probability with repeated letters",  "Classical Probability"),
+    ("Classical Probability — Cards",                "Probability via Counting"),
+    ("Classical Probability — Coins",                "Probability via Counting"),
+    ("Classical Probability — Dice",                 "Probability via Counting"),
+    ("Classical probability with repeated letters",  "Probability via Counting"),
     # Physics / Rotational Dynamics — split by scenario.
     ("Conservation of Angular Momentum – Collision on Disc",
      "Conservation of Angular Momentum"),
@@ -488,6 +491,83 @@ def test_cleanup_tier2_distinct_subtopics_preserved(kept):
     q = make_q(kept)
     apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
     assert q["subtopic"] == kept
+
+
+# ── Tier 3: PYQ Vault subtopic conformance (2026-07-31) ────────────────────
+# Targets are the canonical NDA Maths subtopic names from the PYQ Vault
+# taxonomy (pyqvault.com/guide/nda-maths — 111 subtopics over 2,160 PYQs),
+# the same content master `NDA_FREQ_BY_SUBJECT` already tracks at chapter
+# level. Subtopic weightage can only be joined to a student's questions by
+# exact name, so an off-taxonomy tag is invisible to that analysis.
+#
+# NOTE: this batch also RETARGETS existing entries whose target was itself
+# off-taxonomy (`Sum of GP` pointed at `Sum of Geometric Progression`, not at
+# canonical `Geometric Progressions`). `apply_renames` is single-pass, so a
+# chain would silently leave those questions one hop short.
+
+@pytest.mark.parametrize("old, new", [
+    # Tier 1 — pure wording / prefix variants.
+    ("Position Vectors and Section Formula",     "Position Vectors and Section"),
+    ("Area Bounded by Curves, Lines, and Axes",  "Area Bounded by a Curve, Lines, and Axes"),
+    ("Regression",                               "Regression and Correlation"),
+    ("Composition of Functions",                 "Composition and Inverse of Functions"),
+    ("Properties of Determinants",               "Determinant Properties, Operations, and Sums"),
+    # Tier 2 — unambiguous single-parent rollup.
+    ("Classical Probability",                    "Probability via Counting"),
+    ("Combinatorial Probability",                "Probability via Counting"),
+    ("Maxima and Minima",                        "Monotonicity, Extrema, and Critical Points"),
+    ("Increasing and Decreasing Functions",      "Monotonicity, Extrema, and Critical Points"),
+    ("Implicit Differentiation",                 "Parametric, Implicit, and Higher-Order Derivatives"),
+    ("Scalar Triple Product",                    "Cross Product and Triple Product"),
+    ("Powers of i",                              "Powers and Roots"),
+    ("Sum of Geometric Progression",             "Geometric Progressions"),
+    ("Equation of a Line",                       "Equation, Slope, and Family of Lines"),
+    ("Inverse of a Matrix",                      "Cofactors, Adjoint, and Inverse"),
+])
+def test_cleanup_tier3_2026_07_31(old, new):
+    q = make_q(old)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == new
+
+
+@pytest.mark.parametrize("canonical", [
+    # These two were being renamed AWAY from the canonical name — the same
+    # wrong-direction bug as the `Height & Distance` chapter entry (2026-07-29).
+    # A canonical name must survive a pass untouched.
+    "Position Vectors and Section",
+    "Area Bounded by a Curve, Lines, and Axes",
+    # Canonical targets introduced by this batch must be terminal.
+    "Probability via Counting",
+    "Monotonicity, Extrema, and Critical Points",
+    "Geometric Progressions",
+    "Cofactors, Adjoint, and Inverse",
+    "Parametric, Implicit, and Higher-Order Derivatives",
+    "Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions",
+])
+def test_cleanup_tier3_canonical_names_survive(canonical):
+    q = make_q(canonical)
+    apply_renames([make_exam([q])], SUBTOPIC_RENAMES)
+    assert q["subtopic"] == canonical
+
+
+@pytest.mark.parametrize("name, chapters", [
+    ("Arithmetic Mean",   "Sequence & Series / Statistics"),
+    ("Mean and Variance", "Binomial Distribution / Statistics"),
+    ("Product Rule",      "Differentiation / Logarithms"),
+    ("Quotient Rule",     "Differentiation / Logarithms"),
+])
+def test_tier3_chapter_ambiguous_names_stay_unmapped(name, chapters):
+    """Same capability gap as the Vocabulary entries — one key, two targets.
+
+    Each of these appears under two chapters in the live bank and means a
+    different thing in each (`Product Rule` is the derivative rule under
+    Differentiation and log(ab)=log a+log b under Logarithms). A subtopic-keyed
+    map cannot say that, and either global target would misfile the other
+    chapter's questions.
+    """
+    assert name not in SUBTOPIC_RENAMES, (
+        f"{name!r} appears in {chapters} and needs a chapter-scoped rename"
+    )
 
 
 def test_rename_map_cannot_express_chapter_scoped_renames():

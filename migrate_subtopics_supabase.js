@@ -48,12 +48,12 @@ const SUBTOPIC_RENAMES = {
 
   // Maths / Differentiation
   'Implicit Differentiation of Exponential-Logarithmic Equations':
-      'Differentiation of Exponential and Logarithmic Functions',
-  'Differentiation of Inverse Trig — Simplification':   'Differentiation of Inverse Trig Functions',
-  'Differentiation of Inverse Trig — Rational Forms':   'Differentiation of Inverse Trig Functions',
-  'Differentiation of Inverse Trig — Sum of Terms':     'Differentiation of Inverse Trig Functions',
-  'Differentiation of Inverse Trig — Half-Angle Forms': 'Differentiation of Inverse Trig Functions',
-  'Differentiation of Inverse Trig — Composite':        'Differentiation of Inverse Trig Functions',
+      'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig — Simplification':   'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig — Rational Forms':   'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig — Sum of Terms':     'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig — Half-Angle Forms': 'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig — Composite':        'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
   'Standard Inverse Trig Derivatives':                  'Standard Derivatives',
   'Standard Log-Trig Derivatives':                      'Standard Derivatives',
 
@@ -61,7 +61,7 @@ const SUBTOPIC_RENAMES = {
   'Algebra of Functions — Domain':    'Algebra of Functions',
   'Algebra of Functions — Addition':  'Algebra of Functions',
   'Algebra of Functions — Division':  'Algebra of Functions',
-  'Decomposition of Functions':       'Composition of Functions',
+  'Decomposition of Functions':       'Composition and Inverse of Functions',
 
   // Maths / Quadratic Equations
   'BODMAS – Area Calculation':                           'BODMAS — Applications',
@@ -70,7 +70,7 @@ const SUBTOPIC_RENAMES = {
   'Complex Roots – Form Equation from Given Roots':     'Complex Roots – Form Equation from Roots',
 
   // Maths / Sets & Relations
-  'Equivalence Relation on N×N':  'Equivalence Relation',
+  'Equivalence Relation on N×N':  'Relations — Properties, Cartesian Product, and Counting',
 
   // Maths / Trigonometric Identities
   'Cosecant and Cotangent Identities': 'Reciprocal and Quotient Identities',
@@ -79,29 +79,29 @@ const SUBTOPIC_RENAMES = {
   // ── Maths subject-wide cleanup (2026-06-16) ────────────────────────────
   // Circles
   'Radius of circle':                       'Radius of Circle',
-  'Tangent to a Circle':                    'Tangents to a Circle',
+  'Tangent to a Circle':                    'Inscribed Geometry, Tangents, and Segments',
   // Complex Numbers
-  'Argument of Complex Number':             'Argument of a Complex Number',
+  'Argument of Complex Number':             'Modulus, Argument, and Conjugate',
   // Differentiation
-  'Derivative of Absolute Value Functions': 'Derivatives of Absolute Value Functions',
-  'Increasing/Decreasing Functions':        'Increasing and Decreasing Functions',
-  'Inverse Trigonometric Derivatives':      'Inverse Trigonometric Differentiation',
+  'Derivative of Absolute Value Functions': 'Differentiability of Absolute Value, Piecewise, and Greatest Integer Functions',
+  'Increasing/Decreasing Functions':        'Monotonicity, Extrema, and Critical Points',
+  'Inverse Trigonometric Derivatives':      'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
   // Lines
   'Diagonal of parallelogram':              'Diagonal of Parallelogram',
   'Area of square — parallel side lines':   'Area of Square from Parallel Sides',
   'Area of square from parallel sides':     'Area of Square from Parallel Sides',
   'Collinearity condition':                 'Collinearity Condition',
   'Collinearity of points':                 'Collinearity of Points',
-  'Distance between parallel lines':        'Distance Between Parallel Lines',
+  'Distance between parallel lines':        'Distance, Section, and Locus',
   'Perpendicular line through point':       'Perpendicular Line Through a Point',
   // Matrices & Determinants
-  'Adjoint of 2×2 matrix':                  'Adjoint of a Matrix',
+  'Adjoint of 2×2 matrix':                  'Cofactors, Adjoint, and Inverse',
   'Determinant with cube roots of unity':   'Determinant with Cube Roots of Unity',
-  'Inverse of Matrix':                      'Inverse of a Matrix',
+  'Inverse of Matrix':                      'Cofactors, Adjoint, and Inverse',
   'Sum of two determinants':                'Sum of Determinants',
   'Trigonometric determinant':              'Trigonometric Determinants',
   // Probability
-  'Conditional probability':                'Conditional Probability',
+  'Conditional probability':                "Conditional Probability, Total Probability, and Bayes' Theorem",
   // Quadratic Equations
   'Common Root of Two Equations':           'Common Roots of Two Quadratics',
   'Common roots of two quadratics':         'Common Roots of Two Quadratics',
@@ -111,14 +111,12 @@ const SUBTOPIC_RENAMES = {
   // Sequence & Series
   'Sum of infinite GP':                     'Sum of Infinite GP',
   // Trigonometric Identities
-  'Double Angle Formula':                   'Double Angle Formulas',
+  'Double Angle Formula':                   'Multiple and Half-Angle Formulas',
 
   // ── Maths cleanup (2026-07-14) ─────────────────────────────────────────
   // Vectors
-  'Position Vectors and Section':           'Position Vectors and Section Formula',
   // Applications of Integration
-  'Area Bounded by a Curve, Lines, and Axes': 'Area Bounded by Curves, Lines, and Axes',
-  'Area Bounded by Curves, Axes, and Lines':  'Area Bounded by Curves, Lines, and Axes',
+  'Area Bounded by Curves, Axes, and Lines':  'Area Bounded by a Curve, Lines, and Axes',
   // Lines
   'Acute angle between two specific lines':  'Acute angle between two lines',
   // Complex Numbers — cube-roots-of-unity same-concept fold
@@ -143,12 +141,12 @@ const SUBTOPIC_RENAMES = {
   // Maths
   'Binary to decimal conversion':            'Binary to Decimal Conversion',
   'Roots of Unity':                          'Cube Roots of Unity',
-  'Logarithmic Differentiation of Products': 'Logarithmic Differentiation',
-  'Properties of Determinants with AP':      'Properties of Determinants',
+  'Logarithmic Differentiation of Products': 'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Properties of Determinants with AP':      'Determinant Properties, Operations, and Sums',
   'Arrangements with restricted repetitions': 'Arrangements with Restrictions',
-  'Conditional probability with dice':       'Conditional Probability',
-  'Sum of GP':                               'Sum of Geometric Progression',
-  'nth term of GP':                          'Geometric Progression - nth Term',
+  'Conditional probability with dice':       "Conditional Probability, Total Probability, and Bayes' Theorem",
+  'Sum of GP':                               'Geometric Progressions',
+  'nth term of GP':                          'Geometric Progressions',
   'Arithmetic mean of AP':                   'Arithmetic Mean',
   'Period of trigonometric functions':       'Periodicity of Trigonometric Functions',
   // Chemistry
@@ -205,10 +203,10 @@ const SUBTOPIC_RENAMES = {
   "Phrasal Verbs with 'Put'":                'Phrasal Verbs',
   "Phrasal Verbs with 'Run'":                'Phrasal Verbs',
   // Maths / Probability
-  'Classical Probability — Cards':           'Classical Probability',
-  'Classical Probability — Coins':           'Classical Probability',
-  'Classical Probability — Dice':            'Classical Probability',
-  'Classical probability with repeated letters': 'Classical Probability',
+  'Classical Probability — Cards':           'Probability via Counting',
+  'Classical Probability — Coins':           'Probability via Counting',
+  'Classical Probability — Dice':            'Probability via Counting',
+  'Classical probability with repeated letters': 'Probability via Counting',
   // Physics / Rotational Dynamics
   'Conservation of Angular Momentum – Collision on Disc':
       'Conservation of Angular Momentum',
@@ -241,6 +239,90 @@ const SUBTOPIC_RENAMES = {
   'Nimbus Cloud Characteristics':            'Cloud Types and Characteristics',
   'Stratus Cloud Characteristics':           'Cloud Types and Characteristics',
   'Cloud Types':                             'Cloud Types and Characteristics',
+
+  // ── Maths subtopic conformance to the PYQ Vault taxonomy (2026-07-31) ──
+  // Mirrors merge_subtopics.py; test_js_subtopic_map_matches_python guards drift.
+  'Position Vectors and Section Formula':                          'Position Vectors and Section',
+  'Area Bounded by Curves, Lines, and Axes':                       'Area Bounded by a Curve, Lines, and Axes',
+  'Integration by Substitution':                                   'Integration by Substitution — Algebraic, Trigonometric, and Composite Forms',
+  'Dot Product and Angle Between Vectors':                         'Dot Product and Angle',
+  'Limit Evaluation Techniques':                                   "Limit Evaluation Techniques — L'Hôpital, Rationalization, Standard Forms",
+  'Angle of Elevation':                                            'Heights and Distances from Angles of Elevation',
+  'Regression':                                                    'Regression and Correlation',
+  'Composition of Functions':                                      'Composition and Inverse of Functions',
+  'Properties of Determinants':                                    'Determinant Properties, Operations, and Sums',
+  'Product-to-Sum Formulas':                                       'Product-to-Sum and Sum-to-Product Identities',
+  'Sum-to-Product Formulas':                                       'Product-to-Sum and Sum-to-Product Identities',
+  'Classical Probability':                                         'Probability via Counting',
+  'Combinatorial Probability':                                     'Probability via Counting',
+  'Conditional Probability':                                       "Conditional Probability, Total Probability, and Bayes' Theorem",
+  "Bayes' Theorem":                                                "Conditional Probability, Total Probability, and Bayes' Theorem",
+  'Addition Theorem':                                              'Event Algebra — Inclusion-Exclusion, Mutually Exclusive, Exhaustive',
+  'Scalar Triple Product':                                         'Cross Product and Triple Product',
+  'Cross Product and Area':                                        'Cross Product and Triple Product',
+  'Magnitude and Unit Vectors':                                    'Magnitude, Components, Projection, and Direction Cosines',
+  'Projection and Vector Components':                              'Magnitude, Components, Projection, and Direction Cosines',
+  'Parallel and Perpendicular Conditions':                         'Dot Product and Angle',
+  'P(X = k)':                                                      'Computing Binomial Probabilities — Exact, At-Least, and Complementary Events',
+  'At least / At most':                                            'Computing Binomial Probabilities — Exact, At-Least, and Complementary Events',
+  'Continuity at a Point — Finding Parameters':                    'Continuity and Differentiability — Piecewise, Modulus, Composed, Oscillatory',
+  'Differentiability and Continuity':                              'Continuity and Differentiability — Piecewise, Modulus, Composed, Oscillatory',
+  'Derivatives of Absolute Value Functions':                       'Differentiability of Absolute Value, Piecewise, and Greatest Integer Functions',
+  'Implicit Differentiation':                                      'Parametric, Implicit, and Higher-Order Derivatives',
+  'Parametric Differentiation':                                    'Parametric, Implicit, and Higher-Order Derivatives',
+  'Derivative of One Function with Respect to Another':            'Parametric, Implicit, and Higher-Order Derivatives',
+  'Logarithmic Differentiation':                                   'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Inverse Trig Functions':                     'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Exponential and Logarithmic Functions':      'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Polynomial Functions':                       'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Differentiation of Trigonometric Functions':                    'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Inverse Trigonometric Differentiation':                         'Differentiation Techniques — Chain Rule, Logarithmic, Composite Functions',
+  'Maxima and Minima':                                             'Monotonicity, Extrema, and Critical Points',
+  'Increasing and Decreasing Functions':                           'Monotonicity, Extrema, and Critical Points',
+  'Tangents and Normals':                                          'Tangents and Slopes',
+  'Selection and Arrangement with Constraints':                    'Arrangements with Restrictions',
+  'Counting and Geometric Applications':                           'Geometric Counting',
+  'Median':                                                        'Measures of Central Tendency — Mean, Median, Mode',
+  'Cartesian Product':                                             'Set Operations, Identities, and Cartesian Products of Sets',
+  'Union and Intersection of Sets':                                'Set Operations, Identities, and Cartesian Products of Sets',
+  'Complement of a Set':                                           'Set Operations, Identities, and Cartesian Products of Sets',
+  'Inclusion-Exclusion Principle':                                 'Counting Sets, Subsets, and Inclusion-Exclusion',
+  'Power Set':                                                     'Counting Sets, Subsets, and Inclusion-Exclusion',
+  'Properties of Relations':                                       'Relations — Properties, Cartesian Product, and Counting',
+  'Equivalence Relation':                                          'Relations — Properties, Cartesian Product, and Counting',
+  'Domain of a Function':                                          'Domain, Range, and Function Properties',
+  'Range of Functions':                                            'Domain, Range, and Function Properties',
+  'Inverse Functions':                                             'Composition and Inverse of Functions',
+  'Types of Functions':                                            'Function Definition and Classification — Injectivity, Surjectivity, Bijectivity',
+  'Solving Function Equations':                                    'Functional Equations',
+  'Sum of Geometric Progression':                                  'Geometric Progressions',
+  'Geometric Progression - nth Term':                              'Geometric Progressions',
+  'Geometric Progression - Common Ratio':                          'Geometric Progressions',
+  'Geometric Progression - Sum of Terms':                          'Geometric Progressions',
+  'AM-GM-HM Relationship':                                         'Interrelating AP, GP and HP',
+  'Summation of Series':                                           'Special Series and Special Sums',
+  'Powers of i':                                                   'Powers and Roots',
+  'Modulus of a Complex Number':                                   'Modulus, Argument, and Conjugate',
+  'Conjugate of a Complex Number':                                 'Modulus, Argument, and Conjugate',
+  'Argument of a Complex Number':                                  'Modulus, Argument, and Conjugate',
+  'Inverse of a Matrix':                                           'Cofactors, Adjoint, and Inverse',
+  'Adjoint of a Matrix':                                           'Cofactors, Adjoint, and Inverse',
+  'System of Linear Equations':                                    "Linear Systems — Consistency, Cramer's Rule, Solution Space",
+  'Equal Roots Condition':                                         'Nature of Roots and Boundary Conditions',
+  'Sum and Product of Roots':                                      "Vieta's Relations and Root-Coefficient Identities",
+  'Logarithmic Equations':                                         'Solving Logarithmic Equations and Applications',
+  'Equation of a Line':                                            'Equation, Slope, and Family of Lines',
+  'Slope and Inclination':                                         'Equation, Slope, and Family of Lines',
+  'Angle Between Lines':                                           'Angle Between Lines, Parallelism, and Perpendicularity',
+  'Locus of Points':                                               'Distance, Section, and Locus',
+  'Distance Between Parallel Lines':                               'Distance, Section, and Locus',
+  'Double Angle Formulas':                                         'Multiple and Half-Angle Formulas',
+  'Standard Trigonometric Values':                                 'Specific Values and Quadrants',
+  'Pythagorean Identities':                                        'Identities, Properties, and Sum-Difference Formulas',
+  'Evaluating Logarithms':                                         'Logarithm Identities, Change of Base, and Sums',
+  'Integration of Trigonometric Functions':                        'Standard Forms — Exponential, Logarithmic, and Paired Trigonometric Integrals',
+  'Tangents to a Circle':                                          'Inscribed Geometry, Tangents, and Segments',
+
 }
 
 // ── Chapter rename map (must stay in sync with merge_subtopics.py) ──────────
