@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjectedScoreCard from '../ProjectedScoreCard'
+
+// QuestionCard renders KaTeX and option grids; stub it so these tests assert
+// which questions surface, not how a question paints.
+vi.mock('../../../components/ui/QuestionCard', () => ({
+  default: ({ q, studentResult, showRemediation }) => (
+    <div data-testid="qcard" data-q={q.q} data-result={studentResult}
+         data-remediation={String(!!showRemediation)} />
+  ),
+}))
 
 const breakdown = [
   { chapter: 'Matrices & Determinants', marksAtStake: 23.1, projected: 8.3, accuracy: 0.4, gap: 14.8 },
@@ -126,5 +135,98 @@ describe('ProjectedScoreCard', () => {
       projected={{ total: 83, breakdown, subtopicBreakdown, subtopicsUncovered: ['Polynomials'] }} />)
     await user.click(screen.getByRole('button', { name: /subtopics/i }))
     expect(screen.getByText(/Polynomials/)).toBeInTheDocument()
+  })
+})
+
+// ── Question drill-down ─────────────────────────────────────────────────────
+// A subtopic row opens into the actual questions behind its number, reusing
+// getSubtopicQuestions + QuestionCard rather than a second implementation.
+// Absent is deliberately absent: it is a coverage fact, not a performance one,
+// and the student payload ships no questions for unsat papers.
+
+describe('ProjectedScoreCard — question drill-down', () => {
+  const exams = [{
+    id: 'e1', name: 'Mock 1', date: '2026-07-01',
+    questions: [
+      { q: 1, chapter: 'Matrices & Determinants', subtopic: 'Subtopic 1' },
+      { q: 2, chapter: 'Matrices & Determinants', subtopic: 'Subtopic 1' },
+      { q: 3, chapter: 'Matrices & Determinants', subtopic: 'Subtopic 1' },
+      { q: 4, chapter: 'Lines', subtopic: 'Subtopic 2' },
+    ],
+    students: [{ name: 'Alice', responses: { 1: 1, 2: -1, 3: 0, 4: 1 } }],
+  }]
+  const props = {
+    ...base,
+    projected: { total: 83, breakdown, subtopicBreakdown },
+    name: 'Alice',
+    exams,
+  }
+
+  async function openSubtopics(user) {
+    await user.click(screen.getByRole('button', { name: /subtopics/i }))
+  }
+
+  it('shows nothing until a row is opened', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await openSubtopics(user)
+    expect(screen.queryAllByTestId('qcard')).toHaveLength(0)
+  })
+
+  it('opens a row into its right / wrong / skipped counts', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await openSubtopics(user)
+    await user.click(screen.getByRole('button', { name: 'Subtopic 1' }))
+
+    expect(screen.getByRole('button', { name: /1 Right/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 Wrong/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 Skipped/ })).toBeInTheDocument()
+  })
+
+  it('reveals the questions for the bucket that is clicked, and only that one', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await openSubtopics(user)
+    await user.click(screen.getByRole('button', { name: 'Subtopic 1' }))
+    await user.click(screen.getByRole('button', { name: /1 Wrong/ }))
+
+    const cards = screen.getAllByTestId('qcard')
+    expect(cards).toHaveLength(1)
+    expect(cards[0]).toHaveAttribute('data-q', '2')
+    expect(cards[0]).toHaveAttribute('data-result', '-1')
+  })
+
+  it('does not offer remediation on a question the student got right', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await openSubtopics(user)
+    await user.click(screen.getByRole('button', { name: 'Subtopic 1' }))
+    await user.click(screen.getByRole('button', { name: /1 Right/ }))
+
+    expect(screen.getByTestId('qcard')).toHaveAttribute('data-remediation', 'false')
+  })
+
+  it('offers remediation on a wrong question', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await openSubtopics(user)
+    await user.click(screen.getByRole('button', { name: 'Subtopic 1' }))
+    await user.click(screen.getByRole('button', { name: /1 Wrong/ }))
+
+    expect(screen.getByTestId('qcard')).toHaveAttribute('data-remediation', 'true')
+  })
+
+  it('stays inert when the card is rendered without exam data', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...base} projected={{ total: 83, breakdown, subtopicBreakdown }} />)
+    await openSubtopics(user)
+    // No name/exams props — rows must not pretend to be expandable.
+    expect(screen.queryByRole('button', { name: 'Subtopic 1' })).not.toBeInTheDocument()
+  })
+
+  it('does not drill down in the chapter view', async () => {
+    render(<ProjectedScoreCard {...props} />)
+    expect(screen.queryByRole('button', { name: /Matrices & Determinants/ })).not.toBeInTheDocument()
   })
 })

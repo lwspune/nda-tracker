@@ -1,8 +1,80 @@
 import { useState } from 'react'
 import { Card, CardTitle } from '../../components/ui'
+import QuestionCard from '../../components/ui/QuestionCard'
 import { scoreBg } from '../../lib/analytics'
+import { getSubtopicQuestions, groupByExam, fmtDate } from './chapterAccordionHelpers'
 
 const TOP_N = 10
+
+// The three buckets behind a subtopic's number. Remediation ("Learn this") is
+// offered on wrong and skipped only — a Learn link under a question the student
+// answered correctly is noise.
+const BUCKETS = [
+  { key: 'wrong',   label: 'Wrong',   icon: '❌', remediate: true  },
+  { key: 'skipped', label: 'Skipped', icon: '⬜', remediate: true  },
+  { key: 'correct', label: 'Right',   icon: '✅', remediate: false },
+]
+
+// Questions behind one subtopic row, grouped by exam. Rendered only once the
+// row is opened — there are up to 111 rows and each walks every exam.
+function SubtopicQuestions({ chapter, subtopic, name, exams }) {
+  const [open, setOpen] = useState(null)
+  const buckets = getSubtopicQuestions(chapter, subtopic, name, exams)
+  const total = BUCKETS.reduce((n, b) => n + buckets[b.key].length, 0)
+
+  if (total === 0) {
+    return (
+      <div className="text-[10px] text-ink-3 italic py-1">
+        No questions from this subtopic in the exams on record.
+      </div>
+    )
+  }
+
+  const active = open ? BUCKETS.find(b => b.key === open) : null
+
+  return (
+    <div className="py-1">
+      <div className="flex gap-1.5 flex-wrap">
+        {BUCKETS.filter(b => buckets[b.key].length > 0).map(b => (
+          <button
+            key={b.key}
+            onClick={() => setOpen(o => (o === b.key ? null : b.key))}
+            aria-expanded={open === b.key}
+            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+              open === b.key ? 'bg-ink text-surface border-ink' : 'border-border text-ink-2 hover:text-ink'
+            }`}
+          >
+            {b.icon} {buckets[b.key].length} {b.label} {open === b.key ? '▲' : '▼'}
+          </button>
+        ))}
+      </div>
+
+      {active && (
+        <div className="mt-2 space-y-2">
+          {groupByExam(buckets[active.key]).map(g => (
+            <div key={`${g.examName}||${g.examDate}`}>
+              <div className="text-[10px] text-ink-3 mb-1">
+                {g.examName} · {fmtDate(g.examDate, true)}
+              </div>
+              <div className="space-y-2">
+                {g.items.map(item => (
+                  <QuestionCard
+                    key={`${g.examId}-${item.qObj.q}`}
+                    q={item.qObj}
+                    examId={g.examId}
+                    studentAnswer={item.studentAnswer}
+                    studentResult={item.studentResult}
+                    showRemediation={active.remediate}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // One opportunity row — a chapter or a subtopic. `label` is the headline, `sub`
 // the muted qualifier under it (a subtopic's parent chapter; nothing for a
@@ -50,9 +122,12 @@ function OpportunityRow({ label, sub, projected, marksAtStake, accuracy }) {
 // subtopics they have never been tested on. Fine as faculty triage, not a fact
 // to hand a candidate. The card is also retitled, since a card called
 // "Projected NDA Score" that shows no score reads as a bug.
-export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore, showScore = true }) {
+export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore,
+                                             showScore = true, name, exams }) {
   const [view, setView]     = useState('chapters')
   const [showAll, setShowAll] = useState(false)
+  const [openRow, setOpenRow] = useState(null)
+  const canDrill = Boolean(name && exams?.length)
 
   const subtopics    = projected.subtopicBreakdown || []
   const hasSubtopics = subtopics.length > 0
@@ -111,7 +186,7 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
               {['chapters', 'subtopics'].map(v => (
                 <button
                   key={v}
-                  onClick={() => { setView(v); setShowAll(false) }}
+                  onClick={() => { setView(v); setShowAll(false); setOpenRow(null) }}
                   aria-pressed={view === v}
                   className={`text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${
                     view === v
@@ -127,16 +202,45 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
         </div>
 
         <div className="space-y-1.5">
-          {visible.map(r => (
-            <OpportunityRow
-              key={bySubtopic ? r.subtopic : r.chapter}
-              label={bySubtopic ? r.subtopic : r.chapter}
-              sub={bySubtopic ? r.chapter : null}
-              projected={r.projected}
-              marksAtStake={r.marksAtStake}
-              accuracy={r.accuracy}
-            />
-          ))}
+          {visible.map(r => {
+            const key = bySubtopic ? r.subtopic : r.chapter
+            const row = (
+              <OpportunityRow
+                label={bySubtopic ? r.subtopic : r.chapter}
+                sub={bySubtopic ? r.chapter : null}
+                projected={r.projected}
+                marksAtStake={r.marksAtStake}
+                accuracy={r.accuracy}
+              />
+            )
+            // Drill-down needs the exam data; without it the row is display-only
+            // rather than a control that cannot do anything.
+            if (!canDrill || !bySubtopic) return <div key={key}>{row}</div>
+
+            const isOpen = openRow === key
+            return (
+              <div key={key}>
+                <button
+                  onClick={() => setOpenRow(o => (o === key ? null : key))}
+                  aria-expanded={isOpen}
+                  aria-label={r.subtopic}
+                  className="w-full text-left rounded hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  {row}
+                </button>
+                {isOpen && (
+                  <div className="pl-2 ml-2 border-l-2 border-border">
+                    <SubtopicQuestions
+                      chapter={r.chapter}
+                      subtopic={r.subtopic}
+                      name={name}
+                      exams={exams}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         {bySubtopic && rows.length > TOP_N && (

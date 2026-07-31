@@ -426,6 +426,10 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
           // logging in against the dev server would otherwise see the score.
           // Visibility is a mode question — see CLAUDE.md.
           showScore={mode !== 'student'}
+          // Powers the per-subtopic question drill-down. Same pair
+          // ChapterAccordion below takes, and the same helpers read them.
+          name={name}
+          exams={filteredExams}
         />
       )}
 
