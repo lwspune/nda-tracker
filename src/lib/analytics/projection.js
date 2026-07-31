@@ -3,17 +3,69 @@ import { filterValidExams, getAllStudents, getStudentExams } from './filters'
 import { computeStudentChapterStats } from './chapterStats'
 import { computeAttemptQuality, computeConsistency } from './performance'
 import { examMaxMarks } from '../analyticsHelpers'
+import { getSubtopicShares } from '../ndaSubtopics'
+
+// Expected marks from an accuracy + wrong-rate against a marks pool. Shared by
+// the chapter and subtopic passes so the two levels cannot drift apart.
+function expectedMarks(marksAtStake, accuracy, wrongRate) {
+  return Math.max(0, accuracy * marksAtStake - wrongRate * marksAtStake * 0.33)
+}
 
 // Projected NDA score using chapter accuracy and frequency table.
 // totalMarks: the subject's NDA paper ceiling (e.g. 300 for Maths, 200 for English).
 // Defaults to 300 for backward compatibility.
-export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
+//
+// opts.withSubtopics — also return `subtopicBreakdown`, a FLAT cross-chapter list
+// ranked by recoverable marks, plus `subtopicsUncovered` (chapters with no
+// taxonomy entry). Opt-in on purpose: getToppers calls this once per student, and
+// building + sorting 111 subtopic rows per topper is wasted work. The chapter
+// maths and `total` are identical either way.
+export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300, opts = {}) {
+  const { withSubtopics = false } = opts
   const chapterStats = computeStudentChapterStats(name, exams)
   const freqMap = {}
   ndaFreq.forEach(r => { freqMap[r.chapter.toLowerCase()] = r })
 
   let totalProjected = 0
   const breakdown = []
+  const subtopicBreakdown = []
+  const subtopicsUncovered = []
+
+  // One chapter's subtopic rows. `subs` is the student's per-subtopic stats for
+  // that chapter, or null when the chapter was never tested — in which case every
+  // subtopic is untested rather than absent, so the marks at stake stay visible.
+  const addSubtopicRows = (chapter, chapterMarks, subs) => {
+    const shares = getSubtopicShares(chapter)
+    if (!shares.length) {
+      subtopicsUncovered.push(chapter)
+      return
+    }
+    shares.forEach(({ subtopic, share, pctHard }) => {
+      const marksAtStake = chapterMarks * share / 100
+      const key = subs && Object.keys(subs).find(k => k.toLowerCase() === subtopic.toLowerCase())
+      const s = key ? subs[key] : null
+
+      if (!s || s.total === 0) {
+        subtopicBreakdown.push({
+          chapter, subtopic, marksAtStake, projected: 0, gap: marksAtStake,
+          accuracy: null, wrongRate: null, pctHard,
+          n: 0, correct: 0, wrong: 0, skipped: 0,
+        })
+        return
+      }
+
+      const accuracy  = s.weightTotal > 0 ? s.weightedSum / s.weightTotal : 0
+      const attempted = s.correct + s.wrong
+      const wrongRate = attempted > 0 ? s.wrong / attempted : 0
+      const projected = expectedMarks(marksAtStake, accuracy, wrongRate)
+
+      subtopicBreakdown.push({
+        chapter, subtopic, marksAtStake, projected, gap: marksAtStake - projected,
+        accuracy, wrongRate, pctHard,
+        n: s.total, correct: s.correct, wrong: s.wrong, skipped: s.skipped,
+      })
+    })
+  }
 
   ndaFreq.forEach(freq => {
     const marksAtStake = (parseFloat(freq.pct) || 0) / 100 * totalMarks
@@ -24,6 +76,7 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
 
     if (!chKey) {
       breakdown.push({ chapter: freq.chapter, marksAtStake, projected: 0, accuracy: null, wrongRate: null, gap: marksAtStake })
+      if (withSubtopics) addSubtopicRows(freq.chapter, marksAtStake, null)
       return
     }
 
@@ -48,8 +101,7 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
     const wrongRate = totalAttempted > 0 ? totalWrong / totalAttempted : 0
 
     // Expected marks = accuracy × marksAtStake − wrongRate × marksAtStake × 0.33
-    const projected = (accuracy * marksAtStake) - (wrongRate * marksAtStake * 0.33)
-    const clamped = Math.max(0, projected)
+    const clamped = expectedMarks(marksAtStake, accuracy, wrongRate)
     totalProjected += clamped
 
     breakdown.push({
@@ -60,10 +112,20 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300) {
       wrongRate,
       gap: marksAtStake - clamped,
     })
+
+    if (withSubtopics) addSubtopicRows(freq.chapter, marksAtStake, subs)
   })
 
   breakdown.sort((a, b) => b.gap - a.gap)
-  return { total: Math.round(totalProjected), breakdown }
+  const result = { total: Math.round(totalProjected), breakdown }
+  if (withSubtopics) {
+    // Flat and cross-chapter — the ranking question is "which subtopic anywhere
+    // is worth the most", not "which subtopic within this chapter".
+    subtopicBreakdown.sort((a, b) => b.gap - a.gap)
+    result.subtopicBreakdown = subtopicBreakdown
+    result.subtopicsUncovered = subtopicsUncovered
+  }
+  return result
 }
 
 // Toppers — students whose PROJECTED score meets the threshold, sorted by projected.

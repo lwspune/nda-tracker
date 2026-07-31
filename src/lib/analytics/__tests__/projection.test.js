@@ -64,6 +64,114 @@ describe('computeProjectedScore — pooled (no per-subtopic averaging)', () => {
   })
 })
 
+// ── Subtopic breakdown (opt-in) ────────────────────────────────────────────
+// A flat, cross-chapter ranking one level below the chapter rows. Opt-in
+// because getToppers calls computeProjectedScore once PER STUDENT — building
+// and sorting 111 subtopic rows for every topper would be pure waste.
+
+// Statistics is the fixture: 4 real subtopics whose shares are 46.87 / 27.50 /
+// 16.87 / 8.75. At pct 10 of 300 the chapter is worth 30 marks.
+const CT   = 'Measures of Central Tendency — Mean, Median, Mode'
+const DISP = 'Dispersion — Standard Deviation, Variance, Mean Deviation'
+const REG  = 'Regression and Correlation'
+const STATS_FREQ = [{ chapter: 'Statistics', pct: 10 }]
+
+function statsExam(name, qs) {
+  const questions = qs.map((q, i) => ({ q: i + 1, chapter: 'Statistics', subtopic: q.subtopic }))
+  const responses = {}
+  qs.forEach((q, i) => { responses[i + 1] = q.verdict })
+  return [{ id: 'e1', date: '2026-07-01', name: 'Mock', questions, students: [{ name, responses }] }]
+}
+
+describe('computeProjectedScore — subtopicBreakdown', () => {
+  const exams = statsExam('Dev', [
+    { subtopic: CT, verdict: 1 },
+    { subtopic: CT, verdict: 1 },
+    { subtopic: DISP, verdict: -1 },
+  ])
+
+  it('is absent unless asked for, and asking does not move the total', () => {
+    const off = computeProjectedScore('Dev', exams, STATS_FREQ, 300)
+    const on  = computeProjectedScore('Dev', exams, STATS_FREQ, 300, { withSubtopics: true })
+
+    expect(off.subtopicBreakdown).toBeUndefined()
+    expect(on.subtopicBreakdown).toBeInstanceOf(Array)
+    expect(on.total).toBe(off.total)
+    expect(on.breakdown).toEqual(off.breakdown)
+  })
+
+  it("splits the chapter's marks across its subtopics without losing any", () => {
+    const { breakdown, subtopicBreakdown } = computeProjectedScore(
+      'Dev', exams, STATS_FREQ, 300, { withSubtopics: true })
+    const chapter = breakdown.find(b => b.chapter === 'Statistics')
+    const mine    = subtopicBreakdown.filter(s => s.chapter === 'Statistics')
+
+    expect(mine).toHaveLength(4)                       // every subtopic, not just the tested ones
+    const summed = mine.reduce((s, r) => s + r.marksAtStake, 0)
+    expect(summed).toBeCloseTo(chapter.marksAtStake, 2)
+  })
+
+  it('scores a tested subtopic from its own questions, not the chapter pool', () => {
+    const { subtopicBreakdown } = computeProjectedScore(
+      'Dev', exams, STATS_FREQ, 300, { withSubtopics: true })
+
+    const ct = subtopicBreakdown.find(s => s.subtopic === CT)
+    expect(ct.accuracy).toBeCloseTo(1, 5)              // 2 correct, nothing else
+    expect(ct.marksAtStake).toBeCloseTo(14.061, 2)     // 30 × 46.87%
+    expect(ct.projected).toBeCloseTo(14.061, 2)
+
+    const disp = subtopicBreakdown.find(s => s.subtopic === DISP)
+    expect(disp.accuracy).toBeCloseTo(0, 5)            // 1 wrong
+    expect(disp.projected).toBe(0)                     // clamped, never negative
+  })
+
+  it('marks an untested subtopic null-accuracy with its full marks at stake as the gap', () => {
+    const { subtopicBreakdown } = computeProjectedScore(
+      'Dev', exams, STATS_FREQ, 300, { withSubtopics: true })
+    const reg = subtopicBreakdown.find(s => s.subtopic === REG)
+
+    expect(reg.accuracy).toBeNull()                    // null ≠ 0 — untested, not wrong
+    expect(reg.n).toBe(0)
+    expect(reg.projected).toBe(0)
+    expect(reg.gap).toBeCloseTo(reg.marksAtStake, 5)
+  })
+
+  it('ranks flat across chapters by recoverable marks, highest first', () => {
+    const multi = [{
+      id: 'e1', date: '2026-07-01', name: 'Mock',
+      questions: [
+        { q: 1, chapter: 'Statistics', subtopic: CT, },
+        { q: 2, chapter: 'Vectors', subtopic: 'Dot Product and Angle' },
+      ],
+      students: [{ name: 'Eve', responses: { 1: 1, 2: 1 } }],
+    }]
+    const { subtopicBreakdown } = computeProjectedScore(
+      'Eve', multi, [{ chapter: 'Statistics', pct: 10 }, { chapter: 'Vectors', pct: 10 }],
+      300, { withSubtopics: true })
+
+    const chapters = new Set(subtopicBreakdown.map(s => s.chapter))
+    expect(chapters).toEqual(new Set(['Statistics', 'Vectors']))   // one flat list
+
+    const gaps = subtopicBreakdown.map(s => s.gap)
+    expect(gaps).toEqual([...gaps].sort((a, b) => b - a))
+  })
+
+  it('omits chapters that have no subtopic taxonomy and counts them instead', () => {
+    const exams2 = [{
+      id: 'e1', date: '2026-07-01', name: 'Mock',
+      questions: [{ q: 1, chapter: 'Made Up Chapter', subtopic: 'Whatever' }],
+      students: [{ name: 'Fay', responses: { 1: 1 } }],
+    }]
+    const res = computeProjectedScore(
+      'Fay', exams2, [{ chapter: 'Made Up Chapter', pct: 10 }], 300, { withSubtopics: true })
+
+    // Silently shrinking the list would read as "nothing at stake here".
+    expect(res.subtopicBreakdown).toEqual([])
+    expect(res.subtopicsUncovered).toEqual(['Made Up Chapter'])
+    expect(res.total).toBeGreaterThan(0)               // chapter still scores normally
+  })
+})
+
 describe('getToppers — gates on projected marks (absolute), not avg %', () => {
   // One exam, 2 Functions questions, freq = 100% Functions → marksAtStake = 300.
   // Hi: both correct  → accuracy 1, wrongRate 0 → projected 300.

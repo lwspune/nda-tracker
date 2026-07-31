@@ -213,7 +213,10 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const chapterStats  = computeStudentChapterStats(name, filteredExams, qSubject)
   const aq            = computeAttemptQuality(name, filteredExams)
   const consistency   = computeConsistency(name, filteredExams)
-  const projected     = computeProjectedScore(name, filteredExams, ndaFreq, subjectMaxScore)
+  // withSubtopics powers the card's subtopic view. Opt-in because getToppers
+  // calls this once per student and does not need the 111-row breakdown.
+  const projected     = computeProjectedScore(name, filteredExams, ndaFreq, subjectMaxScore,
+                                              { withSubtopics: primarySubject === 'Maths' })
   const wrongAudit    = computeWrongAudit(name, filteredExams, qSubject)
   const skippedAudit  = computeSkippedAudit(name, filteredExams, qSubject)
 

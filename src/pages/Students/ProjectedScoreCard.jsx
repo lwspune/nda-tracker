@@ -1,8 +1,59 @@
+import { useState } from 'react'
 import { Card, CardTitle } from '../../components/ui'
 import { scoreBg } from '../../lib/analytics'
 
+const TOP_N = 10
+
+// One opportunity row — a chapter or a subtopic. `label` is the headline, `sub`
+// the muted qualifier under it (a subtopic's parent chapter; nothing for a
+// chapter row). Untested rows carry the same italic marker at both levels, so
+// "no data" never reads as "scored zero".
+function OpportunityRow({ label, sub, projected, marksAtStake, accuracy }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-[100px] md:w-[140px] lg:w-[180px] flex-shrink-0 min-w-0">
+        <div className="text-[11px] text-ink-2 truncate" title={label}>{label}</div>
+        {sub && <div className="text-[9px] text-ink-3 truncate" title={sub}>{sub}</div>}
+      </div>
+      <div className="flex-1 bg-surface-2 rounded-full h-2 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${marksAtStake > 0 ? (projected / marksAtStake) * 100 : 0}%`,
+            background: scoreBg(accuracy || 0)
+          }}
+        />
+      </div>
+      <div className="text-[11px] font-mono flex-shrink-0 text-right w-24">
+        <span style={{ color: scoreBg(accuracy || 0) }} className="font-bold">
+          {projected.toFixed(1)}
+        </span>
+        <span className="text-ink-3"> / {marksAtStake.toFixed(1)}</span>
+      </div>
+      {accuracy === null && (
+        <span className="text-[10px] text-ink-3 italic flex-shrink-0">not tested</span>
+      )}
+    </div>
+  )
+}
+
 // Props: projected, primarySubject, subjectMaxScore
+// `projected.subtopicBreakdown` is present only when computeProjectedScore was
+// called with { withSubtopics: true } AND the subject has a subtopic taxonomy
+// (Maths only today) — its absence hides the toggle rather than disabling it.
 export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore }) {
+  const [view, setView]     = useState('chapters')
+  const [showAll, setShowAll] = useState(false)
+
+  const subtopics    = projected.subtopicBreakdown || []
+  const hasSubtopics = subtopics.length > 0
+  const bySubtopic   = hasSubtopics && view === 'subtopics'
+  const rows         = bySubtopic ? subtopics : projected.breakdown
+  const visible      = bySubtopic
+    ? (showAll ? rows : rows.slice(0, TOP_N))
+    : rows.slice(0, 6)
+  const uncovered    = projected.subtopicsUncovered || []
+
   return (
     <Card>
       <CardTitle>🎯 Projected NDA {primarySubject} Score</CardTitle>
@@ -34,40 +85,61 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
         </div>
       </div>
 
-      {/* Chapter breakdown — top opportunities */}
+      {/* Top opportunities — chapters, or a flat cross-chapter subtopic ranking */}
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-2">
-          Biggest Opportunities — chapters with highest marks at stake
-        </div>
-        <div className="space-y-1.5">
-          {projected.breakdown.slice(0, 6).map(ch => (
-            <div key={ch.chapter} className="flex items-center gap-3">
-              <div className="w-[100px] md:w-[140px] lg:w-[180px] text-[11px] text-ink-2 truncate flex-shrink-0">
-                {ch.chapter}
-              </div>
-              <div className="flex-1 bg-surface-2 rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${ch.marksAtStake > 0 ? (ch.projected / ch.marksAtStake) * 100 : 0}%`,
-                    background: scoreBg(ch.accuracy || 0)
-                  }}
-                />
-              </div>
-              <div className="text-[11px] font-mono flex-shrink-0 text-right w-24">
-                <span style={{ color: scoreBg(ch.accuracy || 0) }} className="font-bold">
-                  {ch.projected.toFixed(1)}
-                </span>
-                <span className="text-ink-3"> / {ch.marksAtStake.toFixed(1)}</span>
-              </div>
-              {ch.accuracy === null && (
-                <span className="text-[10px] text-ink-3 italic flex-shrink-0">not tested</span>
-              )}
+        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3">
+            Biggest Opportunities — {bySubtopic ? 'subtopics' : 'chapters'} with highest marks at stake
+          </div>
+          {hasSubtopics && (
+            <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Breakdown level">
+              {['chapters', 'subtopics'].map(v => (
+                <button
+                  key={v}
+                  onClick={() => { setView(v); setShowAll(false) }}
+                  aria-pressed={view === v}
+                  className={`text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${
+                    view === v
+                      ? 'bg-ink text-surface border-ink'
+                      : 'border-border text-ink-3 hover:text-ink-2'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          {visible.map(r => (
+            <OpportunityRow
+              key={bySubtopic ? r.subtopic : r.chapter}
+              label={bySubtopic ? r.subtopic : r.chapter}
+              sub={bySubtopic ? r.chapter : null}
+              projected={r.projected}
+              marksAtStake={r.marksAtStake}
+              accuracy={r.accuracy}
+            />
           ))}
         </div>
+
+        {bySubtopic && rows.length > TOP_N && (
+          <button
+            onClick={() => setShowAll(s => !s)}
+            className="mt-2 text-[10px] text-accent hover:underline"
+          >
+            {showAll ? `Show top ${TOP_N}` : `Show all ${rows.length}`}
+          </button>
+        )}
+
         <div className="mt-3 text-[10px] text-ink-3 leading-relaxed">
-          Based on your accuracy per chapter × NDA weightage. Edit weightages in Dashboard → NDA Frequency Table.
+          {bySubtopic
+            ? <>Ranked across every chapter by marks recoverable — your accuracy per subtopic × its share of the chapter × NDA weightage.</>
+            : <>Based on your accuracy per chapter × NDA weightage. Edit weightages in Settings → NDA Weightage.</>}
+          {bySubtopic && uncovered.length > 0 && (
+            <> No subtopic weightage for {uncovered.join(', ')} — those chapters are scored but not listed here.</>
+          )}
         </div>
       </div>
     </Card>
