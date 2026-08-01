@@ -123,11 +123,39 @@ function OpportunityRow({ label, sub, projected, marksAtStake, accuracy }) {
 // to hand a candidate. The card is also retitled, since a card called
 // "Projected NDA Score" that shows no score reads as a bug.
 export default function ProjectedScoreCard({ projected, primarySubject, subjectMaxScore,
-                                             showScore = true, name, exams }) {
+                                             showScore = true, name, exams, studentNames, absentExams = [] }) {
   const [view, setView]     = useState('chapters')
   const [showAll, setShowAll] = useState(false)
   const [openRow, setOpenRow] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const canDrill = Boolean(name && exams?.length)
+
+  // The docx builder pulls in docx + temml + mathml2omml — dynamic-imported so
+  // only someone who clicks Download pays for them, matching monthlyReportZip.
+  async function handleDownload() {
+    setBusy(true); setError('')
+    try {
+      const [{ buildPracticeSet }, { downloadPracticeSet }] = await Promise.all([
+        import('../../lib/practiceSet'),
+        import('../../lib/practiceSetDocx'),
+      ])
+      const { rows: setRows, totals } = buildPracticeSet({
+        subtopicBreakdown: subtopics,
+        exams, name, names: studentNames, absentExams,
+        topN: showAll ? subtopics.length : TOP_N,
+      })
+      await downloadPracticeSet(
+        { studentName: name, subject: primarySubject, rows: setRows, totals },
+        `${name.replace(/[^\w\s-]/g, '')} — NDA ${primarySubject} Practice Set.docx`,
+      )
+    } catch (e) {
+      console.error('[practiceSet] build failed:', e)
+      setError('Could not build the file. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const subtopics    = projected.subtopicBreakdown || []
   const hasSubtopics = subtopics.length > 0
@@ -243,14 +271,26 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
           })}
         </div>
 
-        {bySubtopic && rows.length > TOP_N && (
-          <button
-            onClick={() => setShowAll(s => !s)}
-            className="mt-2 text-[10px] text-accent hover:underline"
-          >
-            {showAll ? `Show top ${TOP_N}` : `Show all ${rows.length}`}
-          </button>
-        )}
+        <div className="mt-2 flex items-center gap-3 flex-wrap">
+          {bySubtopic && rows.length > TOP_N && (
+            <button
+              onClick={() => setShowAll(s => !s)}
+              className="text-[10px] text-accent hover:underline"
+            >
+              {showAll ? `Show top ${TOP_N}` : `Show all ${rows.length}`}
+            </button>
+          )}
+          {bySubtopic && canDrill && (
+            <button
+              onClick={handleDownload}
+              disabled={busy}
+              className="text-[10px] text-accent hover:underline disabled:opacity-50 disabled:no-underline"
+            >
+              {busy ? 'Building…' : `⬇ Download these ${visible.length} as a practice set`}
+            </button>
+          )}
+          {error && <span className="text-[10px] text-danger">{error}</span>}
+        </div>
 
         <div className="mt-3 text-[10px] text-ink-3 leading-relaxed">
           {bySubtopic

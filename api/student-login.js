@@ -196,6 +196,37 @@ export default async function handler(req, res) {
     })
     .filter(exam => exam.students.length > 0)
 
+  // ── 4b. Exams this student's BATCH sat that they have no result row in ───
+  // These power the "absent" bucket of the practice-set download: questions
+  // their cohort saw and they did not. Shipped with `students: []`, so
+  // getStudentExams still excludes them from exam history — they are reachable
+  // only through findAbsentExams, which matches on the batch tag.
+  //
+  // Scoped by the exam's batch tag, NOT by "some classmate has a result here":
+  // for one real student the latter returned 12 exams where only 3 were their
+  // cohort's, because a single batch-mate had sat another cohort's paper.
+  const myBatches = (student.student_batches || []).map(b => b.batch_name).filter(Boolean)
+  let absentExams = []
+  if (myBatches.length > 0) {
+    const { data: batchExamRows } = await supabase
+      .from('exams')
+      .select('id, name, date, batch, subject, questions, max_marks, marking')
+      .or(myBatches.map(b => `batch.ilike.%${b}%`).join(','))
+
+    const sat = new Set(examIds)
+    absentExams = (batchExamRows || [])
+      // ilike is a substring match, so re-check the tag exactly — it is a
+      // comma-joined list and `_A` would otherwise also match `_A2`.
+      .filter(e => String(e.batch || '').split(',').map(s => s.trim()).some(b => myBatches.includes(b)))
+      .filter(e => !sat.has(e.id) && Array.isArray(e.questions) && e.questions.length > 0)
+      .map(e => ({
+        ...e,
+        marking:  e.marking || { correct: 4, wrong: -1 },
+        maxMarks: e.max_marks ?? null,
+        students: [],
+      }))
+  }
+
   // ── 5. Load attendance for this student ─────────────────────────────────
 
   const { data: attendanceRows } = await supabase
@@ -289,7 +320,7 @@ export default async function handler(req, res) {
     lwsId:            student.lws_id,
     viaParent,
     profile,
-    exams,
+    exams: [...exams, ...absentExams],
     attendance:       attendanceRows || [],
     lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
     homeworkPending:  (homeworkRows || []).map(r => ({ lws_id: student.lws_id, ...r })),

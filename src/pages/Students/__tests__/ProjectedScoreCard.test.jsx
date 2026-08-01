@@ -230,3 +230,55 @@ describe('ProjectedScoreCard — question drill-down', () => {
     expect(screen.queryByRole('button', { name: /Matrices & Determinants/ })).not.toBeInTheDocument()
   })
 })
+
+// ── Download ────────────────────────────────────────────────────────────────
+vi.mock('../../../lib/practiceSetDocx', () => ({
+  downloadPracticeSet: vi.fn().mockResolvedValue(undefined),
+}))
+
+describe('ProjectedScoreCard — practice-set download', () => {
+  const exams = [{
+    id: 'e1', name: 'Mock 1', date: '2026-07-01',
+    questions: [{ q: 1, chapter: 'Matrices & Determinants', subtopic: 'Subtopic 1' }],
+    students: [{ name: 'Alice', responses: { 1: -1 } }],
+  }]
+  const props = {
+    ...base,
+    projected: { total: 83, breakdown, subtopicBreakdown },
+    name: 'Alice', exams,
+  }
+
+  it('is hidden in the chapter view', () => {
+    render(<ProjectedScoreCard {...props} />)
+    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
+  })
+
+  it('appears in the subtopic view', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await user.click(screen.getByRole('button', { name: /subtopics/i }))
+    expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument()
+  })
+
+  it('is hidden when there is no exam data to build a set from', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...base} projected={{ total: 83, breakdown, subtopicBreakdown }} />)
+    await user.click(screen.getByRole('button', { name: /subtopics/i }))
+    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
+  })
+
+  it('builds the set for this student and names the file after them', async () => {
+    const { downloadPracticeSet } = await import('../../../lib/practiceSetDocx')
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...props} />)
+    await user.click(screen.getByRole('button', { name: /subtopics/i }))
+    await user.click(screen.getByRole('button', { name: /download/i }))
+
+    expect(downloadPracticeSet).toHaveBeenCalled()
+    const [args, filename] = downloadPracticeSet.mock.calls.at(-1)
+    expect(args.studentName).toBe('Alice')
+    expect(args.rows.length).toBeGreaterThan(0)
+    expect(filename).toMatch(/Alice/)
+    expect(filename).toMatch(/\.docx$/)
+  })
+})

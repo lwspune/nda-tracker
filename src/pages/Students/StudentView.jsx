@@ -17,6 +17,7 @@ import {
 } from '../../lib/analytics'
 import { getFreqForSubject } from '../../lib/ndaFreq'
 import { buildFocusAreas } from '../../lib/focusAreas'
+import { findAbsentExams } from '../../lib/practiceSet'
 import FocusAreas from './FocusAreas'
 import ChapterAccordion from './ChapterAccordion'
 import ProjectedScoreCard from './ProjectedScoreCard'
@@ -217,6 +218,12 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   // calls this once per student and does not need the 111-row breakdown.
   const projected     = computeProjectedScore(name, filteredExams, ndaFreq, subjectMaxScore,
                                               { withSubtopics: primarySubject === 'Maths' })
+  // Exams this student's batch sat that they have no result row in — the
+  // fourth bucket of the practice set. Uses the raw store `exams` (not the
+  // student-scoped list) because a missed exam is by definition absent from it.
+  const absentExams = findAbsentExams({
+    exams, names: [...allNames], batches: profile?.batches || [],
+  })
   const wrongAudit    = computeWrongAudit(name, filteredExams, qSubject)
   const skippedAudit  = computeSkippedAudit(name, filteredExams, qSubject)
 
@@ -430,6 +437,11 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
           // ChapterAccordion below takes, and the same helpers read them.
           name={name}
           exams={filteredExams}
+          // Every spelling this student's results are filed under — matching the
+          // canonical name alone reports a variant-filed student as having sat
+          // nothing, which lands their whole history in the "absent" bucket.
+          studentNames={[...allNames]}
+          absentExams={absentExams}
         />
       )}
 

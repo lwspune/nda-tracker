@@ -68,6 +68,7 @@ function makeMockClient({
   examAbsences     = [],
   integrityIncidents = [],
   absentExamMeta   = null, // null = reuse examRows; pass [] for "no rows found"
+  batchExamRows    = [],   // exams tagged to the student's batch (absent bucket)
   studentsError    = null,
   resultsError     = null,
   examsError       = null,
@@ -94,18 +95,22 @@ function makeMockClient({
         }
       }
       if (table === 'exams') {
-        examsCallCount++
-        // First call: resolves the attended-exam ids from resultRows.
-        // Second call (when present): resolves absent-exam metadata for the
-        // exam-absence enrichment in the response.
-        const data = examsCallCount === 1
-          ? examRows
-          : (absentExamMeta ?? examRows)
-        return {
-          select: vi.fn().mockReturnValue({
-            in: vi.fn().mockResolvedValue({ data, error: examsError }),
+        // Branches on the METHOD, not a call counter: the handler now makes an
+        // `.or()` call (batch exams for the absent bucket) between the two
+        // `.in()` calls, and a counter shared across both would mis-route them.
+        // Only `.in` advances the counter.
+        const builder = {
+          select: vi.fn(() => builder),
+          in: vi.fn(() => {
+            examsCallCount++
+            // First .in: attended-exam ids from resultRows.
+            // Second .in (when present): absent-exam metadata for the response.
+            const data = examsCallCount === 1 ? examRows : (absentExamMeta ?? examRows)
+            return Promise.resolve({ data, error: examsError })
           }),
+          or: vi.fn().mockResolvedValue({ data: batchExamRows, error: null }),
         }
+        return builder
       }
       if (table === 'student_logins') {
         return { insert: loginInsert }
@@ -284,12 +289,61 @@ describe('POST /api/student-login', () => {
     expect(result.exams).toEqual([])
   })
 
-  it('skips the exams table query entirely when resultRows is empty', async () => {
+  it('skips the attended-exam lookup when resultRows is empty', async () => {
+    // The `.in(examIds)` fetch is pointless with no results. The `exams` table
+    // IS still queried — step 4b pulls the batch's papers for the absent
+    // bucket, and a student who missed everything is exactly who needs them.
     const client = makeMockClient({ resultRows: [] })
     vi.mocked(createClient).mockReturnValue(client)
-    await call({ mobile: '9876543210' })
-    const fromCalls = client.from.mock.calls.map(c => c[0])
-    expect(fromCalls).not.toContain('exams')
+    const res = await call({ mobile: '9876543210' })
+    expect(res.json.mock.calls[0][0].exams).toEqual([])   // nothing attended
+  })
+
+  // ── absent bucket: the batch's papers this student has no result row in ──
+  const BATCH_EXAM = {
+    id: 'exam-absent', name: 'Mock 9', date: '2026-07-20',
+    batch: 'LWS_NDA_2Y_(25-27)', subject: 'Maths',
+    questions: [{ q: 1, chapter: 'Probability', subtopic: 'Probability via Counting' }],
+    max_marks: null, marking: { correct: 4, wrong: -1 },
+  }
+
+  it('ships missed batch exams with an empty students[]', async () => {
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ batchExamRows: [BATCH_EXAM] }))
+    const res = await call({ mobile: '9876543210' })
+    const { exams } = res.json.mock.calls[0][0]
+    const absent = exams.find(e => e.id === 'exam-absent')
+    expect(absent).toBeDefined()
+    expect(absent.students).toEqual([])        // so exam history still excludes it
+    expect(absent.questions).toHaveLength(1)
+  })
+
+  it('excludes a batch exam the student actually sat', async () => {
+    // MOCK_EXAM_ROW is the attended one; returning it from the batch query too
+    // must not duplicate it as "absent".
+    const sameId = { ...BATCH_EXAM, id: MOCK_EXAM_ROW.id }
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ batchExamRows: [sameId] }))
+    const res = await call({ mobile: '9876543210' })
+    const { exams } = res.json.mock.calls[0][0]
+    expect(exams.filter(e => e.id === MOCK_EXAM_ROW.id)).toHaveLength(1)
+    expect(exams.find(e => e.id === MOCK_EXAM_ROW.id).students.length).toBe(1)
+  })
+
+  it('re-checks the batch tag exactly — ilike is a substring match', async () => {
+    // `batch.ilike.%...(25-27)%` also matches `...(25-27)_A2`; the tag is a comma-joined
+    // list and must be split and compared exactly.
+    const other = { ...BATCH_EXAM, id: 'other-cohort', batch: 'LWS_NDA_2Y_(25-27)_A2' }
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ batchExamRows: [other] }))
+    const res = await call({ mobile: '9876543210' })
+    const { exams } = res.json.mock.calls[0][0]
+    expect(exams.find(e => e.id === 'other-cohort')).toBeUndefined()
+  })
+
+  it('drops offline batch exams — no questions, nothing to practise', async () => {
+    const offline = { ...BATCH_EXAM, id: 'offline', questions: [] }
+    vi.mocked(createClient).mockReturnValue(makeMockClient({ batchExamRows: [offline] }))
+    const res = await call({ mobile: '9876543210' })
+    const { exams } = res.json.mock.calls[0][0]
+    expect(exams.find(e => e.id === 'offline')).toBeUndefined()
   })
 
   it('normalises mobile with country code prefix', async () => {
