@@ -96,3 +96,37 @@ describe('buildPracticeSetDocx', () => {
     expect(doc).not.toContain('\\frac')
   }, 30000)
 })
+
+// ── interop + fallback ──────────────────────────────────────────────────────
+// docx/mathml2omml are CJS. Under Node the named export is present, but
+// Vite's browser interop can leave it undefined with `.default` holding the
+// exports OBJECT — a `a || b || c` chain then yields a non-callable object and
+// every equation silently degrades to stripped text. That shipped once.
+
+import { prettifyMath } from '../practiceSetDocx'
+
+describe('prettifyMath — the last-resort renderer', () => {
+  it('renders a fraction readably instead of leaking the macro name', () => {
+    expect(prettifyMath(String.raw`\dfrac{1}{16}`)).toBe('(1)/(16)')
+    expect(prettifyMath(String.raw`\frac{3}{4}`)).toBe('(3)/(4)')
+    expect(prettifyMath(String.raw`\tfrac{1}{2}`)).toBe('(1)/(2)')
+  })
+
+  it('never emits a bare macro name — the "dfrac 1 16" leak', () => {
+    for (const src of [String.raw`\dfrac{1}{16}`, String.raw`\sqrt{2}`,
+                       String.raw`\pi`, String.raw`\times`]) {
+      expect(prettifyMath(src)).not.toMatch(/frac|sqrt|pi\b|times/)
+    }
+  })
+
+  it('maps the common symbols', () => {
+    expect(prettifyMath(String.raw`\sqrt{2}`)).toBe('√(2)')
+    expect(prettifyMath(String.raw`\pi`)).toBe('π')
+    expect(prettifyMath(String.raw`a \times b`)).toBe('a × b')
+    expect(prettifyMath(String.raw`x \leq y`)).toBe('x ≤ y')
+  })
+
+  it('leaves plain text alone', () => {
+    expect(prettifyMath('n + 1')).toBe('n + 1')
+  })
+})

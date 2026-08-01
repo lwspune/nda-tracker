@@ -4,14 +4,14 @@
 // src/lib/export/docxBuilder.ts so both apps produce the same-looking paper:
 // US Letter, 0.5" margins, Cambria 10pt, two-column question body.
 //
-// Maths is rendered as REAL Word equations, not ASCII: LaTeX -> temml ->
+// Maths is rendered as REAL Word equations, not ASCII: LaTeX -> KaTeX ->
 // MathML -> mathml2omml -> OMML. The `docx` package has no OMML node, so each
 // equation is emitted as a marker run and swapped into word/document.xml after
 // packing. The <m:mathPr> block is NOT optional — without it Word gives every
 // fraction about an inch of phantom left indent.
 //
-// Every import here is dynamic: docx + temml together are large, and nobody who
-// doesn't click Download should pay for them.
+// Every import here is dynamic: docx is large, and nobody who does not click
+// Download should pay for it.
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -36,6 +36,25 @@ const MATH_RE = /(\\\[[\s\S]+?\\\]|\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\$[^$\n]+?\
 
 const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+// Last resort when a LaTeX snippet will not convert. Stripping backslashes and
+// braces turns \dfrac{1}{16} into "dfrac 1 16", which is worse than useless on a
+// maths paper — render the common forms readably instead.
+export function prettifyMath(latex) {
+  return String(latex)
+    .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\(?:left|right|displaystyle|text|mathrm)\b/g, '')
+    .replace(/\\times\b/g, '×').replace(/\\div\b/g, '÷')
+    .replace(/\\leq?\b/g, '≤').replace(/\\geq?\b/g, '≥')
+    .replace(/\\neq?\b/g, '≠').replace(/\\pm\b/g, '±')
+    .replace(/\\pi\b/g, 'π').replace(/\\theta\b/g, 'θ')
+    .replace(/\\alpha\b/g, 'α').replace(/\\beta\b/g, 'β')
+    .replace(/\\infty\b/g, '∞').replace(/\\cdot\b/g, '·')
+    .replace(/[\\{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // Escape raw <, > and & inside <m:t> — "0 < \alpha" otherwise yields XML Word
 // refuses to open.
 function sanitizeOmml(omml) {
@@ -48,27 +67,50 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   const [
     { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
       AlignmentType, BorderStyle, WidthType, PageOrientation },
-    JSZipMod, temmlMod, mml2ommlMod,
+    JSZipMod, katexMod, mml2ommlMod,
   ] = await Promise.all([
     import('docx'),
     import('jszip'),
-    import('temml'),
+    import('katex'),
     import('mathml2omml'),
   ])
   const JSZip = JSZipMod.default
-  const temml = temmlMod.default || temmlMod
-  // mathml2omml exports a NAMED `mml2omml` and no default — `.default || module`
-  // silently yields the namespace object, which is not callable, so every
-  // equation falls back to stripped text with nothing thrown.
-  const mml2omml = mml2ommlMod.mml2omml || mml2ommlMod.default || mml2ommlMod
+
+  // Resolve to the actual FUNCTION, whatever the interop shape.
+  // These are CJS packages: under Node/Vitest the named export is present, but
+  // Vite's browser interop can leave `.name` undefined with `.default` holding
+  // the exports OBJECT. A plain `a || b || c` chain then yields an object, not a
+  // callable — every equation degrades to stripped text and the paper ships with
+  // "dfrac 1 16" where a fraction belongs. Resolve by typeof, and THROW if no
+  // function is found: a silent fallback is what let that reach a student.
+  const pickFn = (mod, name) => {
+    const found = [mod?.[name], mod?.default?.[name], mod?.default, mod]
+      .find(c => typeof c === 'function')
+    if (!found) throw new Error(`practiceSetDocx: could not resolve ${name}() from its module`)
+    return found
+  }
+  const renderToString = pickFn(katexMod, 'renderToString')
+  const mml2omml       = pickFn(mml2ommlMod, 'mml2omml')
 
   const ommlByIndex = []
 
+  // KaTeX, not temml. temml's lexer breaks in the browser — every macro throws
+  // "Unsupported function name: \f", consuming only ONE character after the
+  // backslash, so every equation degraded to fallback text. It works fine under
+  // Node, which is why the vitest suite was green while the shipped file said
+  // "dfrac 1 16". KaTeX is already a dependency, already renders this app's
+  // maths on screen, and handles fractions/roots/vectors/integrals here.
+  //
+  // KaTeX wraps its MathML in <span class="katex">…<math>…</math></span>;
+  // mathml2omml needs the bare <math> element.
   const latexToOmml = (latex) => {
     try {
-      const mathml = temml.renderToString(latex, { throwOnError: true })
-      if (!mathml) return null
-      const omml = mml2omml(mathml)
+      const html = renderToString(latex, {
+        output: 'mathml', throwOnError: true, displayMode: false,
+      })
+      const math = String(html || '').match(/<math[\s\S]*?<\/math>/)
+      if (!math) return null
+      const omml = mml2omml(math[0])
       if (!omml || typeof omml !== 'string' || !omml.includes('m:oMath')) return null
       return sanitizeOmml(omml)
     } catch { return null }
@@ -92,7 +134,7 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
           out.push(new TextRun({ text: `${MARKER}${ommlByIndex.length - 1}` }))
           return
         }
-        out.push(new TextRun({ text: body.replace(/[\\{}]/g, ' ').replace(/\s+/g, ' ').trim(), ...extra }))
+        out.push(new TextRun({ text: prettifyMath(body), ...extra }))
         return
       }
       part.split('\n').forEach((line, i) => {

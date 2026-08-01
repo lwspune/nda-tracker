@@ -131,7 +131,7 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
   const [error, setError] = useState('')
   const canDrill = Boolean(name && exams?.length)
 
-  // The docx builder pulls in docx + temml + mathml2omml — dynamic-imported so
+  // The docx builder pulls in docx + mathml2omml — dynamic-imported so
   // only someone who clicks Download pays for them, matching monthlyReportZip.
   async function handleDownload() {
     setBusy(true); setError('')
