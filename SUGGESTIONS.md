@@ -937,6 +937,8 @@ Several subtopics are a single question's text — `f(π/2) for f(x)=sin[π²]x+
 
 **How to apply:** validate at upload in `src/lib/validateTags.js`, as a **non-blocking warning** in the Step 1 preview (same posture as `KeyMismatchPanel` — surface it, let the uploader decide; never silently rewrite). Cheap signals that catch the real cases: length over ~60 chars, contains `=` or a digit-heavy run, or matches the question text for that row. A per-chapter naming convention (`<AP|GP|HP> - <nth Term | Sum of n Terms | Mean>`) would prevent the scheme drift, but the warning is the smaller first step.
 
+> **Carry-forward 2026-07-31 — this got easier, and more urgent.** `src/lib/ndaSubtopics.js` now ships the canonical **111 NDA Maths subtopic names**, so validation no longer needs heuristics for Maths: check the tag against `getSubtopicShares(chapter)` and offer a closest-match suggestion, exactly like the existing chapter check (heuristics still apply to subjects with no taxonomy). More urgent because the 2026-07-31 sweep took Maths from 1,014 distinct names to canonical and **every subtopic-level surface now joins by exact name** — projected-score subtopic rows, the cross-chapter ranking, and the question drill-down all silently drop an off-taxonomy tag. Without the gate, each new tag file re-earns the problem this cleanup just paid off.
+
 ### Chapter-name conformance: Maths + English tags, then the incomplete freq tables
 
 The validation leak is closed and `Height & Distance` is fixed (2026-07-29), but **1,850 questions still sit on chapter names the weightage table doesn't carry**, so they contribute nothing to projected NDA score. This is *two* different jobs, and the per-subject numbers say which is which:
@@ -1000,3 +1002,31 @@ Neither is a tagging problem, so neither was fixed by the re-tag.
 **Not easy — flagged, not attempted.** (a) Merged super-labels spanning several canonical subtopics, e.g. `Inverse Trigonometric Functions — Identities, Equations, Principal Values, and Sums` (13 Q) covers three at once. *Resolved for mock test 6 by per-question split; the label still exists elsewhere.* (b) **Real taxonomy gaps with no canonical home at all**: `Arc Length` (11), `Degree to Radian Conversion` (10), `Rate of Change` + `Rate of Change of Quantities` (15), `Clock Angle Problems` (6). Either NDA does not test these and our papers over-cover, or PYQ Vault's taxonomy has a hole — worth resolving on the PYQ Vault side. (c) ~679 free-text singletons (`BODMAS – Distance-Speed-Time`, `Square of rotation at π`) — one name per question, nothing to rename to; almost all pre-May, so irrelevant to LWS 25-27.
 
 **Why this mattered.** Subtopic weightage joins to a student's questions by exact name, so an off-taxonomy tag is invisible to any subtopic-level analysis — the same way an off-table chapter name scores 0 in `computeProjectedScore`. This sweep is the prerequisite for taking the ProjectedScoreCard breakdown one level deeper than chapters.
+
+## 2026-08-01
+
+*Surfaced during the 2026-07-31 subtopic-analysis session; filed after midnight.*
+
+### `/api/student-login` has no dev shim — the student portal cannot be verified locally
+
+`vite.config.js` shims every `api/*` endpoint except this one, and `src/config.js` treats `localhost`, `127.*`, `192.168.*`, `10.*` and `172.*` all as dev — so a local server renders the **admin** portal with no login screen at all, and the one hostname trick that flips it (`lvh.me`) is rejected by Vite's `allowedHosts`. The only way to exercise a student login is a Vercel deployment.
+
+**Why:** the student portal is the most externally-visible surface in the app (students and parents), and it is the one nobody can smoke-test before shipping. Verifying the 2026-07-31 student card needed a branch push, a preview build, and an SSO share token — several minutes per iteration, and easy to skip under time pressure. Every student-portal change since has been effectively test-only until deployed.
+
+**How to apply:** add `server.middlewares.use('/api/student-login', makeApiShim('./api/student-login.js'))` alongside the others. It needs `SUPABASE_SERVICE_ROLE_KEY` from `.env.local` (already how the other shims work). Separately, decide whether `IS_READ_ONLY` should honour an explicit override (e.g. `?portal=student` or a `VITE_FORCE_READ_ONLY` env) so the student/teacher portals are reachable in dev at all — today the LAN-IP allowances make that impossible by construction. Note the standing caveat: editing `vite.config.js` breaks all shim dynamic imports until a clean restart. Procedure for the deployment route meanwhile: memory `reference_browser_verify_portals`.
+
+### Decide whether the chapter projection should stop extrapolating over untested subtopics
+
+`computeProjectedScore` applies one pooled chapter accuracy across the chapter's **entire** marks allocation, including subtopics the student has never seen a question from. The subtopic breakdown added 2026-07-31 does not extrapolate — it scores untested at 0 — so the two disagree by **~11 marks (19%)** for a typical student (57 vs 46.6 on the sample checked).
+
+**Why:** both numbers are on the same card. The chapter total is the one faculty quote to students, and it is systematically optimistic in exactly the situation that matters most — a student with thin coverage. With ~60% of subtopics untested for a median student, the headline is substantially an assumption rather than a measurement. Nobody has decided which behaviour is wanted; today it is an accident of the two views being written years apart.
+
+**How to apply:** three options, in increasing order of disruption. (1) Leave it and document — done; CLAUDE.md now states the non-reconciliation and warns against "fixing" it by summing. (2) Surface coverage alongside the score: a "based on N of M subtopics tested" line makes the assumption visible without changing the number. (3) Change the basis so the chapter scores only its tested subtopics' share and reports the rest as untested marks — most honest, but it **moves every projected score downward**, so it needs a deliberate call and a heads-up to faculty before students see a different number. Recommend (2).
+
+### `Direction Cosines and Ratios` is filed under a different chapter than PYQ Vault puts it
+
+PYQ Vault's taxonomy places this subtopic in **3D Geometry**; several tracker questions carry it under **Vectors**. The projected card therefore shows it as a 3D Geometry blind spot while the student has in fact answered questions with that exact name.
+
+**Why:** it is small (a handful of questions) but it is the failure mode the whole 2026-07-31 conformance sweep exists to prevent — a *chapter*-level disagreement that the subtopic-name join cannot detect, because the name matches perfectly. It will read as "never tested" forever, and any similar case is equally invisible.
+
+**How to apply:** run a check for `(chapter, subtopic)` pairs where the subtopic is canonical but sits under a different chapter than `NDA_SUBTOPIC_SHARES` assigns it — a single query over `exams.questions`, and a natural addition to `/subtopic-analyse`. Then decide per case whether the tracker's chapter or PYQ Vault's is right (here PYQ Vault looks correct; direction cosines are 3D geometry) and fix via `CHAPTER_SUBTOPIC_RENAMES`. Worth adding the same check as a validation warning at upload alongside the subtopic gate above.
