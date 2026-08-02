@@ -127,33 +127,45 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
   const [view, setView]     = useState('chapters')
   const [showAll, setShowAll] = useState(false)
   const [openRow, setOpenRow] = useState(null)
-  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(null)   // { pct, label } | null
   const [error, setError] = useState('')
   const canDrill = Boolean(name && exams?.length)
+  const busy = progress !== null
 
   // The docx builder pulls in docx + mathml2omml — dynamic-imported so
   // only someone who clicks Download pays for them, matching monthlyReportZip.
+  //
+  // The build is one long synchronous block, so this callback does two jobs:
+  // set the state AND hand back a promise that yields a frame. The builder
+  // awaits it; without the yield React never repaints and the bar sits at 0
+  // until the file lands.
+  const report = (pct, label) => {
+    setProgress({ pct, label })
+    return new Promise(res => { setTimeout(res, 0) })
+  }
+
   async function handleDownload() {
-    setBusy(true); setError('')
+    setProgress({ pct: 0, label: 'Loading the builder…' }); setError('')
     try {
       const [{ buildPracticeSet }, { downloadPracticeSet }] = await Promise.all([
         import('../../lib/practiceSet'),
         import('../../lib/practiceSetDocx'),
       ])
+      await report(5, 'Collecting your questions…')
       const { rows: setRows, totals } = buildPracticeSet({
         subtopicBreakdown: subtopics,
         exams, name, names: studentNames, absentExams,
         topN: showAll ? subtopics.length : TOP_N,
       })
       await downloadPracticeSet(
-        { studentName: name, subject: primarySubject, rows: setRows, totals },
+        { studentName: name, subject: primarySubject, rows: setRows, totals, onProgress: report },
         `${name.replace(/[^\w\s-]/g, '')} — NDA ${primarySubject} Practice Set.docx`,
       )
     } catch (e) {
       console.error('[practiceSet] build failed:', e)
       setError('Could not build the file. Try again.')
     } finally {
-      setBusy(false)
+      setProgress(null)
     }
   }
 
@@ -291,6 +303,32 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
           )}
           {error && <span className="text-[10px] text-danger">{error}</span>}
         </div>
+
+        {/* Determinate bar — the build takes seconds, and a button that only
+            greys out reads as hung. Percentages are fixed weights, not measured
+            time; the question stretch is the widest band because it is the bulk
+            of the wait. */}
+        {busy && (
+          <div className="mt-2 max-w-sm">
+            <div className="flex items-center justify-between text-[10px] text-ink-3 mb-1">
+              <span>{progress.label}</span>
+              <span className="font-mono tabular-nums">{progress.pct}%</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-valuenow={progress.pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Building your practice set"
+              className="bg-surface-2 rounded-full h-1.5 overflow-hidden"
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-200"
+                style={{ width: `${progress.pct}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 text-[10px] text-ink-3 leading-relaxed">
           {bySubtopic

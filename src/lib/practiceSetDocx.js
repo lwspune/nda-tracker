@@ -63,7 +63,20 @@ function sanitizeOmml(omml) {
       .replace(/</g, '&lt;').replace(/>/g, '&gt;')}</m:t>`)
 }
 
-export async function buildPracticeSetDocx({ studentName, subject = 'Maths', rows, totals }) {
+// Progress checkpoints. The build is one long synchronous CPU block — KaTeX per
+// equation, then Packer, then the JSZip patch — so a caller that just flips a
+// boolean gets no repaint until it is over. `onProgress(pct, label)` is AWAITED
+// at each checkpoint: the caller returns a promise that yields a frame, and that
+// yield is the only reason a bar can move. Weights are fixed, not measured; the
+// question stretch is the bulk of the wall-clock and gets the widest band.
+const P = { deps: 4, cover: 12, body: 15, bodyEnd: 70, pack: 75, equations: 85, zip: 95, done: 100 }
+
+export async function buildPracticeSetDocx({ studentName, subject = 'Maths', rows, totals, onProgress }) {
+  const report = typeof onProgress === 'function'
+    ? (pct, label) => onProgress(Math.round(pct), label)
+    : () => {}
+
+  await report(0, 'Loading the builder…')
   const [
     { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
       AlignmentType, BorderStyle, WidthType, PageOrientation },
@@ -75,6 +88,7 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
     import('mathml2omml'),
   ])
   const JSZip = JSZipMod.default
+  await report(P.deps, 'Loading the builder…')
 
   // Resolve to the actual FUNCTION, whatever the interop shape.
   // These are CJS packages: under Node/Vitest the named export is present, but
@@ -209,9 +223,15 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   }))
 
   // ── questions, two columns ──────────────────────────────────────────────
+  await report(P.cover, 'Building the summary…')
   const body = []
   const labels = ['a', 'b', 'c', 'd']
-  rows.forEach(r => {
+  // for...of, not forEach — this loop has to await the progress seam, and it is
+  // where the time goes (every equation is a KaTeX render).
+  const span = P.bodyEnd - P.body
+  for (const [i, r] of rows.entries()) {
+    await report(P.body + (span * i) / rows.length,
+      `Rendering questions… ${i + 1} of ${rows.length}`)
     body.push(new Paragraph({
       spacing: { before: 200, after: 40 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '999999', space: 1 } },
@@ -227,7 +247,7 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
       body.push(new Paragraph({
         children: [new TextRun({ text: 'No questions available for this subtopic yet.', italics: true, size: SIZE })],
       }))
-      return
+      continue
     }
     r.questions.forEach(q => {
       body.push(blank())
@@ -241,15 +261,16 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
           }),
         ],
       }))
-      q.options.forEach((o, i) => {
+      q.options.forEach((o, oi) => {
         if (!o) return
         body.push(new Paragraph({
           indent: { left: 0 },
-          children: [new TextRun({ text: `(${labels[i]}) ` }), ...mathRuns(o)],
+          children: [new TextRun({ text: `(${labels[oi]}) ` }), ...mathRuns(o)],
         }))
       })
     })
-  })
+  }
+  await report(P.bodyEnd, 'Building the answer key…')
 
   // ── answer key: compact grid, answers only ──────────────────────────────
   const key = rows.flatMap(r => r.questions.map(q => ({ n: q.n, answer: q.answer })))
@@ -291,8 +312,10 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   })
 
   // Pack, then swap markers for real OMML and inject mathPr.
+  await report(P.pack, 'Laying out the document…')
   const blob = await Packer.toBlob(doc)
   const zip = await JSZip.loadAsync(blob)
+  await report(P.equations, 'Placing equations…')
   const docFile = zip.file('word/document.xml')
   if (docFile && ommlByIndex.length) {
     let xml = await docFile.async('text')
@@ -312,10 +335,13 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   }
   // JSZip defaults to application/zip; give it the real OOXML type so the OS
   // and mail clients treat the file as a Word document rather than an archive.
-  return zip.generateAsync({
+  await report(P.zip, 'Finishing the file…')
+  const out = await zip.generateAsync({
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   })
+  await report(P.done, 'Done')
+  return out
 }
 
 export async function downloadPracticeSet(args, filename) {

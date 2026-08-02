@@ -103,6 +103,68 @@ describe('buildPracticeSetDocx', () => {
 // exports OBJECT — a `a || b || c` chain then yields a non-callable object and
 // every equation silently degrades to stripped text. That shipped once.
 
+// ── progress reporting ──────────────────────────────────────────────────────
+// The build is one synchronous CPU block: without an AWAITED seam the caller
+// never gets a frame to repaint in, so a progress bar sits at 0 and then
+// disappears. These pin the seam, not the cosmetics.
+
+describe('buildPracticeSetDocx — onProgress', () => {
+  it('reports monotonically and finishes at exactly 100', async () => {
+    const seen = []
+    await buildPracticeSetDocx({
+      studentName: 'Amy Example', rows, totals,
+      onProgress: (pct, label) => { seen.push({ pct, label }) },
+    })
+    expect(seen.length).toBeGreaterThan(3)
+    expect(seen[0].pct).toBeLessThanOrEqual(15)
+    expect(seen.at(-1).pct).toBe(100)
+    for (const { pct } of seen) {
+      expect(pct).toBeGreaterThanOrEqual(0)
+      expect(pct).toBeLessThanOrEqual(100)
+    }
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i].pct, `step ${i} went backwards`).toBeGreaterThanOrEqual(seen[i - 1].pct)
+    }
+    expect(seen.every(s => typeof s.label === 'string' && s.label.length > 0)).toBe(true)
+  }, 30000)
+
+  it('ticks once per subtopic through the rendering stretch', async () => {
+    const seen = []
+    await buildPracticeSetDocx({
+      studentName: 'Amy Example', rows, totals,
+      onProgress: (pct, label) => { seen.push({ pct, label }) },
+    })
+    // rows has 2 subtopics — the question stretch must report each, else the
+    // bar jumps the part of the build that actually takes the time.
+    const rendering = seen.filter(s => /question/i.test(s.label))
+    expect(rendering.length).toBeGreaterThanOrEqual(rows.length)
+  }, 30000)
+
+  it('AWAITS a promise-returning callback — the repaint seam', async () => {
+    const order = []
+    await buildPracticeSetDocx({
+      studentName: 'Amy Example', rows, totals,
+      onProgress: (pct) => {
+        order.push(`report:${pct}`)
+        // A real caller yields a frame here. If the builder does not await,
+        // every report lands before any resume and the strict alternation below
+        // fails — which is exactly the bug that leaves the bar frozen at 0.
+        return new Promise(res => setTimeout(() => { order.push(`resume:${pct}`); res() }, 0))
+      },
+    })
+    expect(order.length).toBeGreaterThan(6)
+    for (let i = 0; i < order.length; i += 2) {
+      expect(order[i].startsWith('report:'), `${order[i]} at ${i}`).toBe(true)
+      expect(order[i + 1]).toBe(order[i].replace('report:', 'resume:'))
+    }
+  }, 30000)
+
+  it('builds fine with no onProgress at all', async () => {
+    const { doc } = await build()
+    expect(doc).toContain('Answer Key')
+  }, 30000)
+})
+
 import { prettifyMath } from '../practiceSetDocx'
 
 describe('prettifyMath — the last-resort renderer', () => {

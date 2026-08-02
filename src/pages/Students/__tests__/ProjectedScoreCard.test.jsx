@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjectedScoreCard from '../ProjectedScoreCard'
 
@@ -274,11 +274,89 @@ describe('ProjectedScoreCard — practice-set download', () => {
     await user.click(screen.getByRole('button', { name: /subtopics/i }))
     await user.click(screen.getByRole('button', { name: /download/i }))
 
-    expect(downloadPracticeSet).toHaveBeenCalled()
+    // The handler yields a frame for the progress bar before it reaches the
+    // builder, so the call lands a macrotask after the click, not synchronously.
+    await waitFor(() => expect(downloadPracticeSet).toHaveBeenCalled())
     const [args, filename] = downloadPracticeSet.mock.calls.at(-1)
     expect(args.studentName).toBe('Alice')
     expect(args.rows.length).toBeGreaterThan(0)
     expect(filename).toMatch(/Alice/)
     expect(filename).toMatch(/\.docx$/)
+  })
+
+  // ── progress ────────────────────────────────────────────────────────────
+  // The docx build takes seconds; without a bar the button reads as hung.
+  //
+  // These use waitFor only. Do NOT import `act` from RTL here — importing it
+  // flips IS_REACT_ACT_ENVIRONMENT for the whole file, which changes how
+  // userEvent flushes an async click handler and breaks the unrelated
+  // "names the file after them" test above.
+  describe('progress bar', () => {
+    async function startBuild() {
+      const { downloadPracticeSet } = await import('../../../lib/practiceSetDocx')
+      let report
+      let finish
+      downloadPracticeSet.mockImplementationOnce((args) => {
+        report = args.onProgress
+        return new Promise(res => { finish = res })
+      })
+      const user = userEvent.setup()
+      render(<ProjectedScoreCard {...props} />)
+      await user.click(screen.getByRole('button', { name: /subtopics/i }))
+      await user.click(screen.getByRole('button', { name: /download/i }))
+      return { report: (...a) => report(...a), finish: () => finish() }
+    }
+
+    it('shows nothing before the first click', async () => {
+      const user = userEvent.setup()
+      render(<ProjectedScoreCard {...props} />)
+      await user.click(screen.getByRole('button', { name: /subtopics/i }))
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    })
+
+    it('renders the reported percentage and phase label', async () => {
+      const { report, finish } = await startBuild()
+      report(52, 'Rendering questions…')
+
+      const bar = await screen.findByRole('progressbar')
+      expect(bar).toHaveAttribute('aria-valuenow', '52')
+      expect(bar).toHaveAttribute('aria-valuemin', '0')
+      expect(bar).toHaveAttribute('aria-valuemax', '100')
+      expect(screen.getByText(/Rendering questions/)).toBeInTheDocument()
+      finish()
+    })
+
+    it('yields to the browser so the bar can actually paint', async () => {
+      const { report, finish } = await startBuild()
+      // A synchronous callback repaints nothing — the whole build runs in one
+      // task. The card must hand back a promise the builder awaits.
+      const yielded = report(20, 'Rendering questions…')
+      expect(yielded).toBeInstanceOf(Promise)
+      await yielded
+      finish()
+    })
+
+    it('clears the bar when the build finishes', async () => {
+      const { report, finish } = await startBuild()
+      report(52, 'Rendering questions…')
+      await screen.findByRole('progressbar')
+
+      finish()
+      await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
+    })
+
+    it('clears the bar and shows the error when the build fails', async () => {
+      const { downloadPracticeSet } = await import('../../../lib/practiceSetDocx')
+      downloadPracticeSet.mockRejectedValueOnce(new Error('boom'))
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const user = userEvent.setup()
+      render(<ProjectedScoreCard {...props} />)
+      await user.click(screen.getByRole('button', { name: /subtopics/i }))
+      await user.click(screen.getByRole('button', { name: /download/i }))
+
+      expect(await screen.findByText(/Could not build/i)).toBeInTheDocument()
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+      spy.mockRestore()
+    })
   })
 })
