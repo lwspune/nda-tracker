@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert } from '../ui'
 import { getValidChapters } from '../../lib/validateTags'
+import { getTaxonomySubtopics } from '../../lib/gatTaxonomy'
 import { SUBJECTS } from '../../lib/ndaFreq'
 import useStore from '../../store/useStore'
 
@@ -123,6 +124,8 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
           // For GAT: chapter list scoped to this row's subject
           const rowChapters = isGAT ? getValidChapters(tag.subject || '', ndaFreqBySubject) : validChapters
           const rowHasChapterList = rowChapters.length > 0
+          // Subtopic suggestions narrow to the chapter actually chosen.
+          const rowSubtopics = getTaxonomySubtopics(isGAT ? tag.subject : subject, tag.chapter)
 
           return (
             <div
@@ -138,6 +141,7 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
               {/* Subject dropdown — GAT only */}
               {isGAT && (
                 <select
+                  aria-label={`Subject for Q${tag.q}`}
                   className={`text-[11px] border rounded-md px-2 py-1 outline-none font-sans
                               transition-colors focus:border-accent bg-surface cursor-pointer
                               ${!tag.subject ? 'border-yellow-300 bg-yellow-50' : 'border-border'}`}
@@ -151,42 +155,53 @@ export default function Step3Tags({ state, onChange, onNext, onBack }) {
                 </select>
               )}
 
-              {/* Chapter — scoped to row subject for GAT */}
-              {rowHasChapterList ? (
-                <select
-                  className={`text-[11px] border rounded-md px-2 py-1 outline-none font-sans
-                              transition-colors focus:border-accent bg-surface cursor-pointer
-                              ${!rowChapters.includes(tag.chapter)
+              {/* Chapter — suggestions scoped to the row subject.
+                  ALWAYS an <input list>, never a <select>: a select cannot
+                  display a value that has no matching <option>, so a correct
+                  chapter the list doesn't know rendered BLANK and read as
+                  missing. That is what cost 193 questions on 2026-08-08. An
+                  off-list value now shows, and is merely flagged yellow. */}
+              <div className="min-w-0">
+                <input
+                  aria-label={`Chapter for Q${tag.q}`}
+                  list={rowHasChapterList ? `chapters-${i}` : undefined}
+                  className={`w-full text-[11px] border rounded-md px-2 py-1 outline-none
+                              bg-surface font-sans transition-colors focus:border-accent
+                              disabled:opacity-40 disabled:cursor-not-allowed
+                              ${rowHasChapterList && tag.chapter && !rowChapters.includes(tag.chapter)
                                 ? 'border-yellow-300 bg-yellow-50'
                                 : 'border-border'}`}
-                  value={tag.chapter || ''}
-                  onChange={e => updateTag(i, 'chapter', e.target.value)}
-                  disabled={isGAT && !tag.subject}
-                >
-                  <option value="">— select chapter —</option>
-                  {rowChapters.map(ch => (
-                    <option key={ch} value={ch}>{ch}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  className="text-[11px] border border-border rounded-md px-2 py-1 outline-none
-                             bg-surface font-sans transition-colors focus:border-accent
-                             disabled:opacity-40 disabled:cursor-not-allowed"
                   value={tag.chapter || ''}
                   onChange={e => updateTag(i, 'chapter', e.target.value)}
                   placeholder={isGAT && !tag.subject ? 'pick subject first' : 'Chapter name'}
                   disabled={isGAT && !tag.subject}
                 />
-              )}
+                {rowHasChapterList && (
+                  <datalist id={`chapters-${i}`}>
+                    {rowChapters.map(ch => <option key={ch} value={ch} />)}
+                  </datalist>
+                )}
+              </div>
 
-              <input
-                className="text-[11px] border border-border rounded-md px-2 py-1 outline-none
-                           bg-surface font-sans transition-colors focus:border-accent"
-                value={tag.subtopic || ''}
-                onChange={e => updateTag(i, 'subtopic', e.target.value)}
-                placeholder="Subtopic"
-              />
+              {/* Subtopic — suggestions scoped to the chosen chapter. Same rule:
+                  suggestions, never a locked list. Being unable to enter the
+                  right value is precisely what makes someone enter a wrong one. */}
+              <div className="min-w-0">
+                <input
+                  aria-label={`Subtopic for Q${tag.q}`}
+                  list={rowSubtopics.length ? `subtopics-${i}` : undefined}
+                  className="w-full text-[11px] border border-border rounded-md px-2 py-1 outline-none
+                             bg-surface font-sans transition-colors focus:border-accent"
+                  value={tag.subtopic || ''}
+                  onChange={e => updateTag(i, 'subtopic', e.target.value)}
+                  placeholder="Subtopic"
+                />
+                {rowSubtopics.length > 0 && (
+                  <datalist id={`subtopics-${i}`}>
+                    {rowSubtopics.map(s => <option key={s} value={s} />)}
+                  </datalist>
+                )}
+              </div>
             </div>
           )
         })}
