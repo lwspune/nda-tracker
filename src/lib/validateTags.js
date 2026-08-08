@@ -1,19 +1,34 @@
 import { NDA_FREQ_BY_SUBJECT } from './ndaFreq'
+import { getTaxonomyChapters, hasTaxonomy } from './gatTaxonomy'
 
 // Returns the valid chapter list for a given subject.
-// Returns [] for subjects with no freq data — callers treat this as "skip validation".
+// Returns [] for subjects with no chapter knowledge — callers treat this as
+// "skip validation".
 //
-// `ndaFreqBySubject` is the faculty-configured table (store field, persisted to
-// faculty_state). It WINS over the hardcoded seed, which is empty for every
-// subject except Maths — so without it, validation silently skipped every GAT
-// subject even after faculty filled its weightage in. Pass it wherever it's
-// available; omitting it degrades to the old seed-only behaviour.
+// PRECEDENCE, and why it differs by subject:
+//
+// 1. GAT subjects (Physics, Chemistry, …) — `gatTaxonomy.js` WINS outright.
+//    It is generated from PYQ Vault, the same content master the tags files are
+//    generated from, so the picker and the file finally speak one vocabulary.
+//    It deliberately overrides `ndaFreqBySubject`: that table had accreted from
+//    past uploads into a junk drawer (33 "Physics" chapters, nine overlapping
+//    Optics variants) that did NOT contain the chapters the files actually use.
+//    Step3Tags binds its chapter control to this list, so every missing name
+//    read as "needs tagging" and got overwritten with the nearest wrong option —
+//    193 questions across three mocks, repaired 2026-08-08.
+//    The weightage table itself is untouched and still editable in Settings;
+//    only what counts as a VALID CHAPTER moved to the taxonomy.
+//
+// 2. Maths — unchanged: faculty-configured list, else the hardcoded seed.
+//    Its taxonomy already lives in `ndaSubtopics.js` and its seed is populated,
+//    so there was never a gap to fill.
 //
 // Deliberately does NOT fall back to Maths the way getFreqForSubject does.
 // That fallback is right for SCORING (a projected score needs some weightage)
 // and wrong here — it would validate Physics tags against Maths chapters and
 // flag every single one.
 export function getValidChapters(subject, ndaFreqBySubject) {
+  if (hasTaxonomy(subject)) return getTaxonomyChapters(subject)
   const configured = ndaFreqBySubject?.[subject]
   const rows = configured?.length ? configured : (NDA_FREQ_BY_SUBJECT[subject] || [])
   return rows.map(r => r.chapter).filter(Boolean)
