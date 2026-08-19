@@ -1115,3 +1115,21 @@ The 2026-08-11 leak existed because a table created by hand via SQL starts with 
 **Why:** this is the durable control the incident actually calls for. Memory recall and good intentions are not mechanisms; a check that runs is. Note it needs **no** new npm dependency and no CI infrastructure to start.
 
 **How to apply:** simplest useful version — add a line to [`OPERATIONS.md`](./OPERATIONS.md)'s pre-deploy checklist and to the "before adding a collaborator" list in SECURITY.md: *after any hand-written DDL, run the Supabase advisors and confirm zero `rls_disabled_in_public`.* Stronger version: a small script that hits the advisors API and exits non-zero on any ERROR-level lint, run alongside `npm run lint`. Two current INFO-level `rls_enabled_no_policy` notices (`teacher_calendar_blocks`, the backup table) are **intentional** service-role-only tables — any gate should allow-list them rather than treat them as failures.
+
+---
+
+## 2026-08-19
+
+### Sunday routine has no home in the timetable model
+
+`TT_Prototype_1.xlsx` specifies a full Sunday routine (trekking 07:30–09:00, clubs 10:00–13:00, self time 14:00–20:00) for the four APJ boarding batches. The Mon–Sat restructure shipped; **Sunday was deliberately left out** and is being captured as free text in each timetable's `footnotes` instead.
+
+**Why it wasn't just "add a 7th column":** the blocker is the **slot-time invariant** — a lecture's clock time is owned by the *slot row* and shared across every day; there is no per-(slot, day) override. Sunday runs on almost entirely different clock times, so representing it needs ~8 extra slot rows that are **blank on all six weekdays and overlap existing teaching times** (Sunday's 14:00–20:00 Self Time alone spans five weekday rows). The grid would go to ~25 rows sorted by start time with weekday and Sunday rows interleaved.
+
+Adding `'Sunday'` to `DAYS` is the small part. The real cost is one of:
+- **per-(slot, day) time overrides** — a data-model change the codebase explicitly rules out, and which `getTodaysLectures` / `getTeacherDayHours` / `getWeekDates` all assume away (`getWeekDates` also encodes "a Sunday anchor groups with the *preceding* Mon–Sat week", which a Mon–Sun week would invert); or
+- **a separate read-only "Sunday routine" concept**, stored outside `grid` and rendered as its own card.
+
+**Worth noting:** the prototype's Sunday contains **no teaching at all** — every cell is a break. So it has zero effect on attendance filing, the `FilingBoard`, teacher hours, or calendar sync. It is purely a display artifact, which is why footnotes are an honest interim answer and why the second option above (a static card) is almost certainly the right shape if it's ever built.
+
+**How to apply:** if it's wanted, prefer the separate-card route. Do **not** widen `DAYS` without first deciding what owns a Sunday slot's clock time.

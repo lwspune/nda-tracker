@@ -1,0 +1,2735 @@
+{
+  "timetables": [
+    {
+      "id": "tt_moinrph4",
+      "grid": {
+        "slot_moinrph5": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          }
+        },
+        "slot_moinrph6": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mol14jmb"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgx"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          }
+        },
+        "slot_moinrph7": {
+          "Friday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lunch"
+          }
+        },
+        "slot_moinrph8": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          }
+        },
+        "slot_moinrph9": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgx"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          }
+        },
+        "slot_moiugvw6": {
+          "Friday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Wake Up"
+          }
+        },
+        "slot_moiugvw7": {
+          "Friday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Physical Training"
+          }
+        },
+        "slot_moiugvw8": {
+          "Friday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Breakfast"
+          }
+        },
+        "slot_moiugvwa": {
+          "Friday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rest"
+          }
+        },
+        "slot_moiugvwb": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_moiugvwc": {
+          "Friday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Dinner"
+          }
+        },
+        "slot_moiugvwd": {
+          "Friday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Phone Call"
+          }
+        },
+        "slot_moiugvwe": {
+          "Friday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rounds"
+          }
+        },
+        "slot_moiugvwf": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_mszi0nuo": {
+          "Friday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          }
+        },
+        "slot_mszi0nup": {
+          "Friday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Parade"
+          }
+        },
+        "slot_mszi0nuq": {
+          "Friday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Tea Time"
+          }
+        },
+        "slot_mszi0nur": {
+          "Friday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          }
+        }
+      },
+      "title": "APJ 11th Arjuna Batch",
+      "branch": "APJ",
+      "batchName": "APJ_NDA_11th_(26-27)_A",
+      "footnotes": "If there are no doubts, regular lecture will follow",
+      "timeSlots": [
+        {
+          "id": "slot_moiugvw6",
+          "endTime": "7:00 AM",
+          "startTime": "6:30 AM"
+        },
+        {
+          "id": "slot_moiugvw7",
+          "endTime": "7:30 AM",
+          "startTime": "7:00 AM"
+        },
+        {
+          "id": "slot_mszi0nuo",
+          "endTime": "8:00 AM",
+          "startTime": "7:30 AM"
+        },
+        {
+          "id": "slot_moiugvw8",
+          "endTime": "8:20 AM",
+          "startTime": "8:00 AM"
+        },
+        {
+          "id": "slot_moinrph5",
+          "endTime": "10:00 AM",
+          "startTime": "8:30 AM"
+        },
+        {
+          "id": "slot_moinrph6",
+          "endTime": "12:30 PM",
+          "startTime": "10:00 AM"
+        },
+        {
+          "id": "slot_moinrph7",
+          "endTime": "1:00 PM",
+          "startTime": "12:30 PM"
+        },
+        {
+          "id": "slot_moinrph8",
+          "endTime": "2:30 PM",
+          "startTime": "1:00 PM"
+        },
+        {
+          "id": "slot_moinrph9",
+          "endTime": "4:00 PM",
+          "startTime": "2:30 PM"
+        },
+        {
+          "id": "slot_moiugvwa",
+          "endTime": "4:30 PM",
+          "startTime": "4:00 PM"
+        },
+        {
+          "id": "slot_mszi0nup",
+          "endTime": "5:30 PM",
+          "startTime": "4:30 PM"
+        },
+        {
+          "id": "slot_mszi0nuq",
+          "endTime": "6:00 PM",
+          "startTime": "5:30 PM"
+        },
+        {
+          "id": "slot_moiugvwb",
+          "endTime": "8:00 PM",
+          "startTime": "6:00 PM"
+        },
+        {
+          "id": "slot_moiugvwc",
+          "endTime": "9:00 PM",
+          "startTime": "8:00 PM"
+        },
+        {
+          "id": "slot_moiugvwd",
+          "endTime": "9:15 PM",
+          "startTime": "9:00 PM"
+        },
+        {
+          "id": "slot_moiugvwe",
+          "endTime": "9:30 PM",
+          "startTime": "9:15 PM"
+        },
+        {
+          "id": "slot_moiugvwf",
+          "endTime": "11:30 PM",
+          "startTime": "9:30 PM"
+        },
+        {
+          "id": "slot_mszi0nur",
+          "endTime": "11:59 PM",
+          "startTime": "11:30 PM"
+        }
+      ]
+    },
+    {
+      "id": "tt_mpl2575a",
+      "grid": {
+        "slot_mpl2575b": {
+          "Friday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Wake Up"
+          }
+        },
+        "slot_mpl2575c": {
+          "Friday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Physical Training"
+          }
+        },
+        "slot_mpl2575d": {
+          "Friday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Breakfast"
+          }
+        },
+        "slot_mpl2575k": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          }
+        },
+        "slot_mpl2575l": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgx"
+          }
+        },
+        "slot_mpl2575m": {
+          "Friday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lunch"
+          }
+        },
+        "slot_mpl2575n": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgx"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mol14jmb"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgx"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          }
+        },
+        "slot_mpl2575o": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mq7paku9"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgw"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgz"
+          }
+        },
+        "slot_mpl2575p": {
+          "Friday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rest"
+          }
+        },
+        "slot_mpl2575q": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_mpl2575r": {
+          "Friday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Dinner"
+          }
+        },
+        "slot_mpl2575s": {
+          "Friday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Phone Call"
+          }
+        },
+        "slot_mpl2575t": {
+          "Friday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rounds"
+          }
+        },
+        "slot_mpl2575u": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_mszi0nus": {
+          "Friday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          }
+        },
+        "slot_mszi0nut": {
+          "Friday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Parade"
+          }
+        },
+        "slot_mszi0nuu": {
+          "Friday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Tea Time"
+          }
+        },
+        "slot_mszi0nuv": {
+          "Friday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          }
+        }
+      },
+      "title": "APJ 11th Karna Batch",
+      "branch": "APJ",
+      "batchName": "APJ_NDA_11th_(26-27)_B",
+      "footnotes": "If there are no doubts, regular lecture will follow",
+      "timeSlots": [
+        {
+          "id": "slot_mpl2575b",
+          "endTime": "7:00 AM",
+          "startTime": "6:30 AM"
+        },
+        {
+          "id": "slot_mpl2575c",
+          "endTime": "7:30 AM",
+          "startTime": "7:00 AM"
+        },
+        {
+          "id": "slot_mszi0nus",
+          "endTime": "8:00 AM",
+          "startTime": "7:30 AM"
+        },
+        {
+          "id": "slot_mpl2575d",
+          "endTime": "8:40 AM",
+          "startTime": "8:20 AM"
+        },
+        {
+          "id": "slot_mpl2575k",
+          "endTime": "10:30 AM",
+          "startTime": "9:00 AM"
+        },
+        {
+          "id": "slot_mpl2575l",
+          "endTime": "12:30 PM",
+          "startTime": "10:30 AM"
+        },
+        {
+          "id": "slot_mpl2575m",
+          "endTime": "1:00 PM",
+          "startTime": "12:30 PM"
+        },
+        {
+          "id": "slot_mpl2575n",
+          "endTime": "2:30 PM",
+          "startTime": "1:00 PM"
+        },
+        {
+          "id": "slot_mpl2575o",
+          "endTime": "4:00 PM",
+          "startTime": "2:30 PM"
+        },
+        {
+          "id": "slot_mpl2575p",
+          "endTime": "4:30 PM",
+          "startTime": "4:00 PM"
+        },
+        {
+          "id": "slot_mszi0nut",
+          "endTime": "5:30 PM",
+          "startTime": "4:30 PM"
+        },
+        {
+          "id": "slot_mszi0nuu",
+          "endTime": "6:00 PM",
+          "startTime": "5:30 PM"
+        },
+        {
+          "id": "slot_mpl2575q",
+          "endTime": "8:00 PM",
+          "startTime": "6:00 PM"
+        },
+        {
+          "id": "slot_mpl2575r",
+          "endTime": "9:00 PM",
+          "startTime": "8:00 PM"
+        },
+        {
+          "id": "slot_mpl2575s",
+          "endTime": "9:15 PM",
+          "startTime": "9:00 PM"
+        },
+        {
+          "id": "slot_mpl2575t",
+          "endTime": "9:30 PM",
+          "startTime": "9:15 PM"
+        },
+        {
+          "id": "slot_mpl2575u",
+          "endTime": "11:30 PM",
+          "startTime": "9:30 PM"
+        },
+        {
+          "id": "slot_mszi0nuv",
+          "endTime": "11:59 PM",
+          "startTime": "11:30 PM"
+        }
+      ]
+    },
+    {
+      "id": "tt_moiugvwg",
+      "grid": {
+        "slot_moiugvwh": {
+          "Friday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Wake Up"
+          }
+        },
+        "slot_moiugvwi": {
+          "Friday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Physical Training"
+          }
+        },
+        "slot_moiugvwj": {
+          "Friday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Breakfast"
+          }
+        },
+        "slot_moiugvwl": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7f"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu2"
+          }
+        },
+        "slot_moiugvwm": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu2"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu0"
+          }
+        },
+        "slot_moiugvwn": {
+          "Friday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lunch"
+          }
+        },
+        "slot_moiugvwo": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqx64u42"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7e"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mrlq39es"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cy"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu0"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7e"
+          }
+        },
+        "slot_moiugvwp": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_moinrpgy"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mqx64u42"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu2"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7f"
+          }
+        },
+        "slot_moiugvwq": {
+          "Friday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rest"
+          }
+        },
+        "slot_moiugvwr": {
+          "Friday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          }
+        },
+        "slot_moiugvws": {
+          "Friday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Dinner"
+          }
+        },
+        "slot_moiugvwt": {
+          "Friday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Phone Call"
+          }
+        },
+        "slot_moiugvwu": {
+          "Friday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rounds"
+          }
+        },
+        "slot_moiugvwv": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_mszi0nuw": {
+          "Friday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          }
+        },
+        "slot_mszi0nux": {
+          "Friday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Parade"
+          }
+        },
+        "slot_mszi0nuy": {
+          "Friday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Tea Time"
+          }
+        },
+        "slot_mszi0nuz": {
+          "Friday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          }
+        }
+      },
+      "title": "APJ 10th Batch",
+      "branch": "APJ",
+      "batchName": "APJ_NDA_10th_(26-27)",
+      "footnotes": "",
+      "timeSlots": [
+        {
+          "id": "slot_moiugvwh",
+          "endTime": "7:00 AM",
+          "startTime": "6:30 AM"
+        },
+        {
+          "id": "slot_moiugvwi",
+          "endTime": "7:30 AM",
+          "startTime": "7:00 AM"
+        },
+        {
+          "id": "slot_mszi0nuw",
+          "endTime": "8:00 AM",
+          "startTime": "7:30 AM"
+        },
+        {
+          "id": "slot_moiugvwj",
+          "endTime": "9:00 AM",
+          "startTime": "8:40 AM"
+        },
+        {
+          "id": "slot_moiugvwl",
+          "endTime": "10:30 AM",
+          "startTime": "9:00 AM"
+        },
+        {
+          "id": "slot_moiugvwm",
+          "endTime": "12:30 PM",
+          "startTime": "10:30 AM"
+        },
+        {
+          "id": "slot_moiugvwn",
+          "endTime": "1:00 PM",
+          "startTime": "12:30 PM"
+        },
+        {
+          "id": "slot_moiugvwo",
+          "endTime": "2:30 PM",
+          "startTime": "1:00 PM"
+        },
+        {
+          "id": "slot_moiugvwp",
+          "endTime": "4:00 PM",
+          "startTime": "2:30 PM"
+        },
+        {
+          "id": "slot_moiugvwq",
+          "endTime": "4:30 PM",
+          "startTime": "4:00 PM"
+        },
+        {
+          "id": "slot_mszi0nux",
+          "endTime": "5:30 PM",
+          "startTime": "4:30 PM"
+        },
+        {
+          "id": "slot_mszi0nuy",
+          "endTime": "6:00 PM",
+          "startTime": "5:30 PM"
+        },
+        {
+          "id": "slot_moiugvwr",
+          "endTime": "8:00 PM",
+          "startTime": "6:00 PM"
+        },
+        {
+          "id": "slot_moiugvws",
+          "endTime": "9:00 PM",
+          "startTime": "8:00 PM"
+        },
+        {
+          "id": "slot_moiugvwt",
+          "endTime": "9:15 PM",
+          "startTime": "9:00 PM"
+        },
+        {
+          "id": "slot_moiugvwu",
+          "endTime": "9:30 PM",
+          "startTime": "9:15 PM"
+        },
+        {
+          "id": "slot_moiugvwv",
+          "endTime": "11:30 PM",
+          "startTime": "9:30 PM"
+        },
+        {
+          "id": "slot_mszi0nuz",
+          "endTime": "11:59 PM",
+          "startTime": "11:30 PM"
+        }
+      ]
+    },
+    {
+      "id": "tt_mqx64u3m",
+      "grid": {
+        "slot_mqx64u3n": {
+          "Friday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Wake Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Wake Up"
+          }
+        },
+        "slot_mqx64u3o": {
+          "Friday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Physical Training"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Physical Training"
+          }
+        },
+        "slot_mqx64u3p": {
+          "Friday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Breakfast"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Breakfast"
+          }
+        },
+        "slot_mqx64u3r": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7e"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7e"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7f"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbtz"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7f"
+          }
+        },
+        "slot_mqx64u3s": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu0"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mpsni7cx"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7f"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mpl2575v"
+          }
+        },
+        "slot_mqx64u3t": {
+          "Friday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lunch"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lunch"
+          }
+        },
+        "slot_mqx64u3u": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbtz"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbtz"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mqx64u42"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_mqcmgw7c"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbu1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbtz"
+          }
+        },
+        "slot_mqx64u3v": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_mqxvlbtz"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_mrlq39es"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_mrlq39es"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_mrlq39et"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_mrlq39et"
+          }
+        },
+        "slot_mqx64u3w": {
+          "Friday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rest"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rest"
+          }
+        },
+        "slot_mqx64u3x": {
+          "Friday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Self Study/Doubts"
+          }
+        },
+        "slot_mqx64u3y": {
+          "Friday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Dinner"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Dinner"
+          }
+        },
+        "slot_mqx64u3z": {
+          "Friday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Phone Call"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Phone Call"
+          }
+        },
+        "slot_mqx64u40": {
+          "Friday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Rounds"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Rounds"
+          }
+        },
+        "slot_mqx64u41": {
+          "Friday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Monday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Tuesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Saturday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Thursday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          },
+          "Wednesday": {
+            "type": "class",
+            "mappingId": "map_ms7r9iv1"
+          }
+        },
+        "slot_mszi0nv0": {
+          "Friday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Freshen Up"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Freshen Up"
+          }
+        },
+        "slot_mszi0nv1": {
+          "Friday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Games"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Personality Classes"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Clubs"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Parade"
+          }
+        },
+        "slot_mszi0nv2": {
+          "Friday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Tea Time"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Tea Time"
+          }
+        },
+        "slot_mszi0nv3": {
+          "Friday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Monday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Tuesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Saturday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Thursday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          },
+          "Wednesday": {
+            "type": "break",
+            "label": "Lights Out & Sleep"
+          }
+        }
+      },
+      "title": "APJ 9th Batch",
+      "branch": "APJ",
+      "batchName": "APJ_NDA_9th_(26-27)",
+      "timeSlots": [
+        {
+          "id": "slot_mqx64u3n",
+          "endTime": "7:00 AM",
+          "startTime": "6:30 AM"
+        },
+        {
+          "id": "slot_mqx64u3o",
+          "endTime": "7:30 AM",
+          "startTime": "7:00 AM"
+        },
+        {
+          "id": "slot_mszi0nv0",
+          "endTime": "8:00 AM",
+          "startTime": "7:30 AM"
+        },
+        {
+          "id": "slot_mqx64u3p",
+          "endTime": "9:00 AM",
+          "startTime": "8:40 AM"
+        },
+        {
+          "id": "slot_mqx64u3r",
+          "endTime": "10:30 AM",
+          "startTime": "9:00 AM"
+        },
+        {
+          "id": "slot_mqx64u3s",
+          "endTime": "12:30 PM",
+          "startTime": "10:30 AM"
+        },
+        {
+          "id": "slot_mqx64u3t",
+          "endTime": "1:00 PM",
+          "startTime": "12:30 PM"
+        },
+        {
+          "id": "slot_mqx64u3u",
+          "endTime": "2:30 PM",
+          "startTime": "1:00 PM"
+        },
+        {
+          "id": "slot_mqx64u3v",
+          "endTime": "4:00 PM",
+          "startTime": "2:30 PM"
+        },
+        {
+          "id": "slot_mqx64u3w",
+          "endTime": "4:30 PM",
+          "startTime": "4:00 PM"
+        },
+        {
+          "id": "slot_mszi0nv1",
+          "endTime": "5:30 PM",
+          "startTime": "4:30 PM"
+        },
+        {
+          "id": "slot_mszi0nv2",
+          "endTime": "6:00 PM",
+          "startTime": "5:30 PM"
+        },
+        {
+          "id": "slot_mqx64u3x",
+          "endTime": "8:00 PM",
+          "startTime": "6:00 PM"
+        },
+        {
+          "id": "slot_mqx64u3y",
+          "endTime": "9:00 PM",
+          "startTime": "8:00 PM"
+        },
+        {
+          "id": "slot_mqx64u3z",
+          "endTime": "9:15 PM",
+          "startTime": "9:00 PM"
+        },
+        {
+          "id": "slot_mqx64u40",
+          "endTime": "9:30 PM",
+          "startTime": "9:15 PM"
+        },
+        {
+          "id": "slot_mqx64u41",
+          "endTime": "11:30 PM",
+          "startTime": "9:30 PM"
+        },
+        {
+          "id": "slot_mszi0nv3",
+          "endTime": "11:59 PM",
+          "startTime": "11:30 PM"
+        }
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "id": "map_moinrpgw",
+      "label": "Physics",
+      "subject": "Physics",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_moinrpgx",
+      "label": "Eng/GS",
+      "subject": "Eng/GS",
+      "teacherId": "tchr_moinrpgm"
+    },
+    {
+      "id": "map_moinrpgy",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_moinrpgn"
+    },
+    {
+      "id": "map_moinrpgz",
+      "label": "Chemistry",
+      "subject": "Chemistry",
+      "teacherId": "tchr_moinrpgo"
+    },
+    {
+      "id": "map_moinrph1",
+      "label": "Eng/GS Exam",
+      "subject": "Eng/GS Exam",
+      "teacherId": "tchr_moinrph0"
+    },
+    {
+      "id": "map_moinrph2",
+      "label": "Phy/Chem Exam",
+      "subject": "Phy/Chem Exam",
+      "teacherId": "tchr_moinrph0"
+    },
+    {
+      "id": "map_moinrph3",
+      "label": "Maths Exam",
+      "subject": "Maths Exam",
+      "teacherId": "tchr_moinrph0"
+    },
+    {
+      "id": "map_moiugvwx",
+      "label": "SSB",
+      "subject": "SSB",
+      "teacherId": "tchr_moiugvww"
+    },
+    {
+      "id": "map_moiugvwy",
+      "label": "Maths (Navneet Sir)",
+      "subject": "Maths",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_mol14jm6",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlv"
+    },
+    {
+      "id": "map_mol14jm7",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlw"
+    },
+    {
+      "id": "map_mol14jm8",
+      "label": "Chemistry",
+      "subject": "Chemistry",
+      "teacherId": "tchr_mol14jlx"
+    },
+    {
+      "id": "map_mol14jm9",
+      "label": "Physics",
+      "subject": "Physics",
+      "teacherId": "tchr_mol14jly"
+    },
+    {
+      "id": "map_mol14jma",
+      "label": "Chemistry",
+      "subject": "Chemistry",
+      "teacherId": null
+    },
+    {
+      "id": "map_mol14jmb",
+      "label": "Bio_NDA",
+      "subject": "Biology",
+      "teacherId": "tchr_mol14jm0"
+    },
+    {
+      "id": "map_mol14jmc",
+      "label": "Physics PYQs",
+      "subject": "Physics PYQs",
+      "teacherId": "tchr_mol14jly"
+    },
+    {
+      "id": "map_mol14jmd",
+      "label": "Chem PYQs",
+      "subject": "Chem PYQs",
+      "teacherId": null
+    },
+    {
+      "id": "map_moolfdq3",
+      "label": "Maths Doubts",
+      "subject": "Maths",
+      "teacherId": "tchr_moinrpgn"
+    },
+    {
+      "id": "map_mopfzgd3",
+      "label": "Maths Doubt Session",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlw"
+    },
+    {
+      "id": "map_mozlqeqk",
+      "label": "Maths PYQs",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlw"
+    },
+    {
+      "id": "map_mpaub3be",
+      "label": "Phy/Chem PYQs",
+      "subject": "Phy/Chem PYQs",
+      "teacherId": "tchr_mol14jlx"
+    },
+    {
+      "id": "map_mpaub3bg",
+      "label": "Maths_Extra",
+      "subject": "Maths",
+      "teacherId": "tchr_mqcmgw7d"
+    },
+    {
+      "id": "map_mpaub3bh",
+      "label": "GAT Exam",
+      "subject": "GAT",
+      "teacherId": "tchr_moinrph0"
+    },
+    {
+      "id": "map_mpjk5bvj",
+      "label": "Chemistry_NDA",
+      "subject": "Chemistry",
+      "teacherId": "tchr_moinrpgo"
+    },
+    {
+      "id": "map_mpjk5bvk",
+      "label": "Physics_NDA",
+      "subject": "Physics",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_mpjk5bvl",
+      "label": "Physics_12th",
+      "subject": "Physics",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_mpjk5bvm",
+      "label": "Chemistry_12th",
+      "subject": "Chemistry",
+      "teacherId": "tchr_moinrpgo"
+    },
+    {
+      "id": "map_mpjk5bvn",
+      "label": "Maths_12th_NDA",
+      "subject": "Maths",
+      "teacherId": "tchr_moinrpgn"
+    },
+    {
+      "id": "map_mpjk5bvo",
+      "label": "Eng/GS_NDA",
+      "subject": "Eng/GS",
+      "teacherId": "tchr_moinrpgm"
+    },
+    {
+      "id": "map_mpl2575h",
+      "label": "Newspaper Reading",
+      "subject": "Newspaper",
+      "teacherId": null
+    },
+    {
+      "id": "map_mpl2575i",
+      "label": "Newspaper Reading",
+      "subject": "Newspaper",
+      "teacherId": "tchr_mpl2575f"
+    },
+    {
+      "id": "map_mpl2575v",
+      "label": "SSB_Lecturate",
+      "subject": "SSB",
+      "teacherId": "tchr_mpl2575f"
+    },
+    {
+      "id": "map_mpl2575w",
+      "label": "SSB_Lecturate",
+      "subject": "SSB",
+      "teacherId": null
+    },
+    {
+      "id": "map_mpl6w33x",
+      "label": "English Practice",
+      "subject": "English",
+      "teacherId": "tchr_mpl6w33w"
+    },
+    {
+      "id": "map_mpl6w33y",
+      "label": "Maths_Exam",
+      "subject": "Maths",
+      "teacherId": "tchr_mqcmgw7d"
+    },
+    {
+      "id": "map_mpsni7cx",
+      "label": "English",
+      "subject": "English",
+      "teacherId": "tchr_mpsni7cw"
+    },
+    {
+      "id": "map_mpsni7cy",
+      "label": "English Practice",
+      "subject": "English",
+      "teacherId": "tchr_mpsni7cw"
+    },
+    {
+      "id": "map_mq38ub6u",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_mpl2575f"
+    },
+    {
+      "id": "map_mq38ub6v",
+      "label": "Maths Practice",
+      "subject": "Maths",
+      "teacherId": "tchr_mpl2575f"
+    },
+    {
+      "id": "map_mq7paku7",
+      "label": "English Vocab",
+      "subject": "English",
+      "teacherId": "tchr_mpsni7cw"
+    },
+    {
+      "id": "map_mq7paku9",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_mq7paku8"
+    },
+    {
+      "id": "map_mqcmgw7a",
+      "label": "Maths PYQs",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlv"
+    },
+    {
+      "id": "map_mqcmgw7c",
+      "label": "Exam",
+      "subject": "Exam",
+      "teacherId": "tchr_moinrph0"
+    },
+    {
+      "id": "map_mqcmgw7e",
+      "label": "Hindi",
+      "subject": "Hindi",
+      "teacherId": "tchr_mqcmgw7d"
+    },
+    {
+      "id": "map_mqcmgw7f",
+      "label": "Marathi",
+      "subject": "Marathi",
+      "teacherId": "tchr_mqcmgw7d"
+    },
+    {
+      "id": "map_mqn4etsv",
+      "label": "Chemistry",
+      "subject": "Chemistry",
+      "teacherId": "tchr_mqn4etsu"
+    },
+    {
+      "id": "map_mqx64u3l",
+      "label": "Physics",
+      "subject": "Physics",
+      "teacherId": "tchr_mol14jlx"
+    },
+    {
+      "id": "map_mqx64u42",
+      "label": "Sci - Bio",
+      "subject": "Biology",
+      "teacherId": "tchr_mol14jm0"
+    },
+    {
+      "id": "map_mqxvlbtz",
+      "label": "Maths",
+      "subject": "Maths",
+      "teacherId": "tchr_mpl2575f"
+    },
+    {
+      "id": "map_mqxvlbu0",
+      "label": "Sci - Physics",
+      "subject": "Physics",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_mqxvlbu1",
+      "label": "Sci - Chem",
+      "subject": "Chemistry",
+      "teacherId": "tchr_moinrpgo"
+    },
+    {
+      "id": "map_mqxvlbu2",
+      "label": "Geog",
+      "subject": "Geography",
+      "teacherId": "tchr_moinrpgm"
+    },
+    {
+      "id": "map_mr6f3o7c",
+      "label": "Maths_Extra",
+      "subject": "Maths",
+      "teacherId": "tchr_mol14jlw"
+    },
+    {
+      "id": "map_mr6f3o7e",
+      "label": "Physics_Extra",
+      "subject": "Physics",
+      "teacherId": "tchr_mol14jly"
+    },
+    {
+      "id": "map_mr6f3o7f",
+      "label": "Chem_Extra",
+      "subject": "Chemistry",
+      "teacherId": "tchr_mqn4etsu"
+    },
+    {
+      "id": "map_mrlq39eq",
+      "label": "Physics Doubts",
+      "subject": "Physics",
+      "teacherId": "tchr_moinrpgl"
+    },
+    {
+      "id": "map_mrlq39er",
+      "label": "Chem Doubts",
+      "subject": "Chemistry",
+      "teacherId": "tchr_moinrpgo"
+    },
+    {
+      "id": "map_mrlq39es",
+      "label": "History",
+      "subject": "History",
+      "teacherId": "tchr_mpsni7cw"
+    },
+    {
+      "id": "map_mrlq39et",
+      "label": "Hist",
+      "subject": "History",
+      "teacherId": "tchr_mpsni7cw"
+    },
+    {
+      "id": "map_mrrpv0r4",
+      "label": "Maths Exam",
+      "subject": "Maths",
+      "teacherId": "tchr_mrrpv0r3"
+    },
+    {
+      "id": "map_mrrpv0r5",
+      "label": "Maths_Extra",
+      "subject": "Maths",
+      "teacherId": "tchr_moinrpgn"
+    },
+    {
+      "id": "map_ms7r9iv1",
+      "label": "Self-Study",
+      "subject": "Self-Study",
+      "teacherId": "tchr_moiugvww"
+    }
+  ],
+  "teachers": [
+    {
+      "id": "tchr_moinrpgl",
+      "name": "Navneet Sir"
+    },
+    {
+      "id": "tchr_moinrpgm",
+      "name": "Akash Rathod Sir"
+    },
+    {
+      "id": "tchr_moinrpgn",
+      "name": "Akash Singh Sir"
+    },
+    {
+      "id": "tchr_moinrpgo",
+      "name": "Sameer Sir"
+    },
+    {
+      "id": "tchr_moinrph0",
+      "name": "Asha Bade Mam"
+    },
+    {
+      "id": "tchr_moiugvww",
+      "name": "Sahil Sir"
+    },
+    {
+      "id": "tchr_mol14jlv",
+      "name": "Vilas Sir"
+    },
+    {
+      "id": "tchr_mol14jlw",
+      "name": "Vishal Sir"
+    },
+    {
+      "id": "tchr_mol14jlx",
+      "name": "Rajeev Sir"
+    },
+    {
+      "id": "tchr_mol14jly",
+      "name": "Kiran Mam"
+    },
+    {
+      "id": "tchr_mol14jm0",
+      "name": "Deepak Sir"
+    },
+    {
+      "id": "tchr_mpaub3bf",
+      "name": "Amol Badhe Sir"
+    },
+    {
+      "id": "tchr_mpkx3v33",
+      "name": "Ravi Nagpurkar"
+    },
+    {
+      "id": "tchr_mpl2575f",
+      "name": "Harsh Sir"
+    },
+    {
+      "id": "tchr_mpl6w33w",
+      "name": "Ganesh Nikam Sir"
+    },
+    {
+      "id": "tchr_mpsni7cw",
+      "name": "Manisha Mam"
+    },
+    {
+      "id": "tchr_mq7paku8",
+      "name": "Sumit Sir"
+    },
+    {
+      "id": "tchr_mqcmgw7d",
+      "name": "Mayur Sir"
+    },
+    {
+      "id": "tchr_mqn4etsu",
+      "name": "Pranjali Mam"
+    },
+    {
+      "id": "tchr_mrrpv0r3",
+      "name": "Yogita Mam"
+    }
+  ]
+}
