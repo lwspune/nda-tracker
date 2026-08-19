@@ -60,9 +60,10 @@ A login number may be the student's **own** mobile or any entry in their `parent
 | `class_reports`, `student_plans` | Enabled | Authenticated read / insert / delete |
 | `homework_pending` | Enabled | Authenticated users only |
 | **`teacher_feedback`** | Enabled | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The **first role-restricted policy** in the project: a normal admin (no role claim) cannot read or write it. This is a real DB-level boundary, not just a UI gate. |
-| **`student_logins`** | **Disabled** | **Exposed to anon + authenticated** (see Known gaps) |
+| `student_logins` | Enabled | **Authenticated read only** (`authenticated can read`). Deliberately **no insert policy** — the only writer is `api/student-login.js` via the service role, which bypasses RLS. Fixed 2026-08-11. |
+| `faculty_state_backup_selfstudy_20260730` | Enabled | **No policies = service-role only.** Dead 30-July snapshot; RLS enabled 2026-08-11 (see Known gaps for the delete review date). |
 
-Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` / the `isSuperadmin` store flag and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the admin data — it can read everything authenticated users can read; teacher mode is read-only by UI convention, not by RLS. **`teacher_feedback` is the exception**: because its policy checks the `superadmin` role claim, the `isSuperadmin` UI gate is backed by a true RLS boundary — a normal admin who navigates to the page (or queries the table directly) gets nothing.
+Component-level visibility (which features render for which mode) is enforced in the UI via `useMode()` / the `isSuperadmin` store flag and acts as defence-in-depth on top of RLS. **UI gating is not a security boundary by itself** — anyone able to obtain a Supabase session for an authenticated user can read any RLS-permitted table directly. The teacher account is not a security boundary against the admin data — it can read everything authenticated users can read; teacher mode is read-only by UI convention, not by RLS. **`teacher_feedback` was believed to be the exception** — its policy checks the `superadmin` role claim, so the `isSuperadmin` UI gate looked like it was backed by a true RLS boundary. **It is not (found 2026-08-11).** The policy reads `auth.jwt() -> 'user_metadata' ->> 'role'`, and `user_metadata` is **self-editable** by any signed-in user via `supabase.auth.updateUser({ data: { role: 'superadmin' } })`. The same flaw affects the three `faculty_state` `faculty_write_*` policies, so the "teacher writes are denied at the DB" boundary is also defeatable by a teacher relabelling their own account. Supabase's linter flags all four as `rls_references_user_metadata` (level ERROR). **The fix is `app_metadata`**, which only the Admin API can set — see Known gaps. Until then, treat both as UI conventions, not boundaries.
 
 **Superadmin account provenance:** `vilas11shinde@gmail.com` was created directly in `auth.users` + `auth.identities` via SQL (the local env had no service-role key for the Admin API), mirroring an existing working row, with `raw_user_meta_data = {"role":"superadmin"}` and a bcrypt password. Password resets / future superadmins should go through the Supabase dashboard or the Admin API, not more hand-rolled SQL.
 
@@ -102,41 +103,30 @@ Secrets are managed at three levels.
 
 ---
 
-## What about `student_logins`?
+## Hand-created tables default to RLS OFF — the 2026-08-11 incident
 
-This table has RLS disabled. Supabase's advisor flags it as critical. The reasons it was left disabled, and the recommended fix:
+**Two tables were readable with the browser-bundle anon key, bypassing every gate the app assumes.** Both were created by hand via SQL, where **RLS defaults to disabled** — so they silently opted out of the protection every table created through the normal path has. This is a *class* of bug, not two instances: any future hand-created table starts wide open.
 
-**Why RLS is off today:**
-- `api/student-login.js` writes to `student_logins` after every successful student login.
-- Students do not have a Supabase Auth session at that point (they authenticate by mobile, not by Supabase Auth).
-- The serverless function uses the **service role key** server-side, which bypasses RLS regardless. So RLS-on-with-no-policy would not have broken the insert path.
-- The table was left as `RLS disabled` rather than `RLS enabled + permissive policy` during initial setup.
+| Table | What was exposed | Fixed |
+|---|---|---|
+| `faculty_state_backup_selfstudy_20260730` | A 30-July snapshot of the `faculty_state` blob whose `studentProfiles` key held **493 student profiles** — name, `mobile`, `parentMobiles`, `dob`, `gender`, `lwsId`, branch, batches, `accountStatus`, `regDate`. Readable **and writable** (anon held `SELECT,INSERT,UPDATE,DELETE,TRUNCATE`). | RLS enabled, no policies → service-role only |
+| `student_logins` | Every student's login timestamps + `lws_id`s; anon could also `INSERT`/`TRUNCATE` — i.e. pollute or erase the audit trail. | RLS enabled + `authenticated can read`; **no insert policy** |
 
-**Why this matters:**
-- With the anon key (which is in the browser bundle), anyone can `SELECT *` from `student_logins` and read every student's login timestamps and `lws_id`s.
-- Anyone can also `INSERT` arbitrary rows — pollute the audit log.
+**Why the backup table mattered more than it looks.** Student auth is mobile-only, which is defensible *because the mobile number is the gate*. That table **was the list of mobile numbers** — 493 of them, downloadable by anyone who opened devtools on the deployed site. It converted "an attacker must know a number" into "an attacker reads all the numbers, then walks them through `/api/student-login`". The front door was sound; the keys were in the lobby.
 
-**Recommended fix** (review the policy shape before running):
+**No insert policy on `student_logins`, deliberately.** An earlier draft of this fix granted `anon` INSERT "defensively". That would have preserved exactly the audit-log pollution listed above. The only writer is `api/student-login.js` via the service role, which bypasses RLS — so no policy is needed, and adding one only re-opens the hole.
 
-```sql
-ALTER TABLE student_logins ENABLE ROW LEVEL SECURITY;
+**Verified at the real REST boundary**, not just in the DB (an internal `select` runs privileged and bypasses RLS, so it proves nothing):
 
--- The serverless function uses the service role key (bypasses RLS), so a permissive
--- insert policy is redundant for that path. We grant it explicitly to be defensive
--- against the policy ever being relied on from an anon client in future.
-CREATE POLICY "anon + auth can insert"
-  ON student_logins FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
+| Probe | Before | After |
+|---|---|---|
+| anon `GET` either table | full rows | `[]` (empty, matching a locked control table) |
+| anon `POST student_logins` | inserted | `401` — `new row violates row-level security policy` |
+| service-role `GET` / `POST` | works | works (351 KB blob; insert `201`) |
 
--- Reads restricted to admin/teacher.
-CREATE POLICY "authenticated can read"
-  ON student_logins FOR SELECT
-  TO authenticated
-  USING (true);
-```
+**Prevention:** `mcp__supabase__get_advisors` (or the Supabase dashboard linter) catches `rls_disabled_in_public` in one call. Run it after **any** hand-written DDL — that is the durable control, not remembering this incident.
 
-After running, verify the student-portal login flow still works (the audit insert should still succeed via service role) and that the admin view of `student_logins` (Student profile page → "Last login" badge) still renders.
+**Still open from the same advisor run:** three `rls_references_user_metadata` ERRORs (see Row Level Security above and Known gaps below).
 
 ---
 
@@ -169,8 +159,12 @@ There is no automated "right-to-be-forgotten" tool today. If this becomes a recu
 
 | Gap | Severity | Mitigation / accepted reason |
 |---|---|---|
-| `student_logins` RLS disabled | High | Fix proposed above. Risk window: as long as the anon key works against this table. |
-| Student auth is mobile-only (no OTP, no password) | Medium | Accepted. Mobile numbers are not secret. The coaching context tolerates this; anonymity is not the goal. |
+| ~~`student_logins` RLS disabled~~ | ~~High~~ | **FIXED 2026-08-11** — RLS enabled, authenticated read only, no insert policy. See the incident section above. |
+| ~~`faculty_state_backup_selfstudy_20260730` anon-readable (493 student profiles)~~ | ~~Critical~~ | **FIXED 2026-08-11** — RLS enabled, service-role only. Data preserved; **delete decision deferred to ~2026-09-11** by explicit choice (it is the only 30-July rollback point, and two small unexplained diffs vs live were noted: `studentProfiles` 6 bytes smaller, `timetableMappings` changed at identical length). Nothing in the codebase references it. |
+| **`user_metadata` used in 4 RLS policies** (`teacher_feedback.superadmin_all`, `faculty_state.faculty_write_{insert,update,delete}`) | **High** | **OPEN.** `user_metadata` is self-editable, so a signed-in teacher can relabel their own account `superadmin` and defeat both the teacher-feedback boundary and the teacher-write denial. Needs migration to `app_metadata` (Admin-API-only) plus a re-check of `create_teacher_account.js` / `api/teacher-account.js`, which set the role today. Requires an authenticated account, so not publicly reachable. |
+| No rate limiting on `/api/student-login` | **Medium→High** | **OPEN.** No throttle anywhere in `api/`. Responses distinguish hit (200 + name) from miss (404), so a known-prefix scan enumerates the roster cheaply. Materially worse while any copy of the 493-number list may already be out. Fix belongs in a shared `api/_rateLimit.js` (underscore-prefixed helpers do not count against the 12-function cap). |
+| Student payload discloses more than the portal renders | Low→Medium | **OPEN.** `api/student-login.js` returns `parentMobiles`, `dob`, `gender`, and `integrity_incidents.counterpart_name` — the last discloses *another* student's name through a mobile-only gate. Shrinking it reduces the blast radius of every threat at once at zero friction. |
+| Student auth is mobile-only (no OTP, no password) | Medium | Accepted, re-affirmed 2026-08-11. Mobile numbers are not secret; the coaching context tolerates this. Note the ceiling: any classmate with your number (every batch WhatsApp group lists them) can open your portal, and only OTP or a real second factor changes that. Throttling makes it non-scalable and detectable, which is the chosen posture. |
 | The admin account is a single shared login | Medium | Accepted today (one institute, two staff members who trust each other). Becomes a problem if expanded. |
 | The Supabase anon key is in the browser bundle | Low | Inherent to Supabase architecture. RLS is the enforcement layer; the anon key is not a secret. |
 | No CI gate on lint/tests before deploy | Low | Vercel auto-deploys from `main`. Discipline is to run `npm test && npm run lint` locally before pushing. |

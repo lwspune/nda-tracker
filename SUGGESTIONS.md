@@ -994,6 +994,7 @@ Neither is a tagging problem, so neither was fixed by the re-tag.
 **2. Four names need a chapter-scoped rename the map cannot express.** `Arithmetic Mean` (Sequence & Series | Statistics), `Mean and Variance` (Binomial Distribution | Statistics), `Product Rule` and `Quotient Rule` (Differentiation | Logarithms — the derivative rule vs `log(ab)=log a+log b`). One key, two chapters, two meanings; either global target misfiles the other chapter. Same gap as the `Vocabulary - Nouns` entries. Pinned by `test_tier3_chapter_ambiguous_names_stay_unmapped`. Fixing needs `apply_renames` to key on `(chapter, subtopic)` — worth doing only if the list grows.
 
 **3. `validateTags` never inspects `subtopic` — this WILL decay without a gate.** `src/lib/validateTags.js` validates chapters only; `src/lib/excel.js` defaults `subtopic` to `'General'` and nothing downstream constrains it. That is why 1,014 distinct names existed for 111 real subtopics. Add subtopic validation at upload (same closest-match warning pattern as chapters, plus a dropdown in `Step3Tags`) — otherwise every new tag file re-earns this problem.
+  - **PARTIAL 2026-08-09 (commit `3b8255b`).** `Step3Tags` now offers chapter-scoped subtopic **suggestions** via `<input list>`+`<datalist>`, sourced from `src/lib/gatTaxonomy.js`. Two deliberate limits remain: (a) it is **suggestions, not validation** — `validateTags` still never inspects `subtopic`, and that is now an intentional stance, because a locked control is exactly what destroyed 193 correct tags (see the 2026-08-09 entry); the gate should be a **warning panel**, never a blocker. (b) **GAT only** — `getTaxonomySubtopics` has no Maths branch, so Maths tagging still gets no suggestions. Carried forward below.
 
 **4. `Math's: mock test 6` — chapter fix DONE, 2 questions remain.**
 - **Q91, Q93, Q95 — mis-chaptered, now corrected.** All three were definite-integral evaluations filed under `Applications of Integration`, whose only two canonical subtopics are area-based. Moved to `Definite Integration`: Q91 (`∫₀⁵x²[x]dx`) → *Integration of Absolute Value, Piecewise, and Greatest Integer Functions*; Q93 (`∫₀¹√((1-x)/(1+x))dx`, rationalises to `sin⁻¹x + √(1-x²)`) → *Fundamental Theorem, Periodic Integrals, and Leibniz Rule*; Q95 (symmetric-interval rational) → *Properties of Definite Integrals — Symmetry, King's, Odd/Even*. The 6 genuine area questions stayed put. Both chapters carry NDA weightage (`Applications of Integration` 1.2%, `Definite Integration` 3.1%), so this **moved 3 questions' accuracy from one scoring chapter to another** — intended, but note it when reading either chapter's trend across this exam.
@@ -1030,3 +1031,87 @@ PYQ Vault's taxonomy places this subtopic in **3D Geometry**; several tracker qu
 **Why:** it is small (a handful of questions) but it is the failure mode the whole 2026-07-31 conformance sweep exists to prevent — a *chapter*-level disagreement that the subtopic-name join cannot detect, because the name matches perfectly. It will read as "never tested" forever, and any similar case is equally invisible.
 
 **How to apply:** run a check for `(chapter, subtopic)` pairs where the subtopic is canonical but sits under a different chapter than `NDA_SUBTOPIC_SHARES` assigns it — a single query over `exams.questions`, and a natural addition to `/subtopic-analyse`. Then decide per case whether the tracker's chapter or PYQ Vault's is right (here PYQ Vault looks correct; direction cosines are 3D geometry) and fix via `CHAPTER_SUBTOPIC_RENAMES`. Worth adding the same check as a validation warning at upload alongside the subtopic gate above.
+
+## 2026-08-09
+
+*Surfaced while repairing GAT tagging on three mocks (commits `45da592`, `3b8255b`, `adbf8b0`).*
+
+### Browser golden-path verify the Step 3 tag pickers
+
+The chapter control changed from `<select>` to `<input list>` + `<datalist>`, and subtopic gained a chapter-scoped datalist. Nine component tests cover the regression (an off-list value renders its value, untouched file chapters pass through `onChange` unmodified), but nobody has driven the real screen.
+
+**Why:** the defect being fixed was *invisible in tests and visible only on screen* — a `<select>` bound to an unknown value fails silently in exactly the way jsdom will not complain about. Re-verifying in a browser is the one check that would have caught the original bug, so skipping it here is the specific irony worth avoiding. Datalist rendering also differs across browsers more than most controls.
+
+**How to apply:** upload `Question_Bank/generated-papers/Tags_NDA_GAT_Mock_W2.xlsx` against any results file on a Vercel preview, stop at Step 3, and confirm: the header reads **all tagged ✓** (not "95 need tagging"); every chapter cell shows its real value; clicking a chapter cell suggests that subject's taxonomy chapters; the subtopic cell suggests only that chapter's subtopics; typing a brand-new subtopic is accepted. Do **not** confirm the upload — W02 already exists and is correct.
+
+### Decide what to do with the pre-taxonomy GAT papers
+
+Everything from `NDA GAT : Test 4` (2026-06-13) backwards uses a subtopic vocabulary that predates the PYQ Vault taxonomy: 115–156 unknown subtopics per paper, and the four papers before May 2026 have **zero** overlap with it. The 2026-08-09 repair deliberately touched only W02 / G1 / W09.
+
+**Why:** these are invisible to every subtopic-level surface, the same way the Maths tags were before the 2026-07-31 sweep. Unlike that sweep there is no rename map — the names are free-text singletons, so this is a re-tagging job, not a mapping one. It is also lower value: they are older papers and mostly other cohorts. Worth an explicit "not doing this" as much as a plan.
+
+**How to apply:** first measure — for each pre-June GAT exam, the share of questions whose subtopic is in `NDA_GAT_TAXONOMY` and whose chapter matches. Then pick a cut-off by *cohort relevance*, not completeness: only papers a currently-active batch actually sat are worth re-tagging. For those, re-tag question-by-question against each question's own chapter (the method used for the three Maths mocks on 2026-07-31), since a global rename map cannot express one name meaning two things. For the rest, record the decision to leave them and move on.
+
+### Give Maths subtopic suggestions the same treatment as GAT
+
+`Step3Tags` reads suggestions from `getTaxonomySubtopics`, which is backed by `NDA_GAT_TAXONOMY` — and Maths is deliberately absent from it (`ndaSubtopics.js` owns that level). So a Maths tags upload gets chapter suggestions but **no subtopic suggestions at all**, which is the surface that generated 1,014 names against 111 real ones.
+
+**Why:** the fix that just landed protects GAT from re-earning the problem and leaves Maths exactly as exposed as it was. The asymmetry is an accident of where the taxonomies live, not a decision — and Maths is the subject with the mature 111-subtopic taxonomy, so it is the easier half.
+
+**How to apply:** add a Maths branch to `getTaxonomySubtopics` reading `NDA_SUBTOPIC_SHARES` (keys are chapter names, values carry the subtopic names) — roughly a five-line change plus a test, no new data. Keep `NDA_GAT_TAXONOMY` free of Maths so the two masters stay separate; branch in the accessor, not in the constant. Then re-check suggestion #3 from 2026-07-31, which this would largely close.
+
+---
+
+## 2026-08-11
+
+*Surfaced while reviewing the risk of password-less student login. The login itself turned out not to be the problem — two hand-created tables were readable with the browser-bundle anon key, bypassing the mobile gate entirely. Both are now locked; full write-up in [`SECURITY.md`](./SECURITY.md) → "Hand-created tables default to RLS OFF".*
+
+### ⏰ Review deleting `faculty_state_backup_selfstudy_20260730` — **due ~2026-09-11**
+
+The table is locked (RLS on, service-role only), so there is no longer any urgency. What is deferred is whether to **delete** it. Deliberately not deleted on 2026-08-11: it is the only snapshot of 30 July state, and locking achieved the entire security benefit with zero data loss and full reversibility.
+
+**Why revisit at all:** a dead 341 KB copy of student PII is a standing liability with no consumer — nothing in the codebase references it (verified by full-tree grep). Once enough time has passed that a 30-July rollback is worthless, it should go.
+
+**How to apply:**
+- First resolve the two unexplained diffs vs live, or accept them: `studentProfiles` is **6 bytes smaller** live than in the backup (both hold 493 students, so no student was lost — some field shortened), and `timetableMappings` **differs at identical length** (something swapped rather than added). Neither looks like damage; neither has been examined.
+- Then: download a copy locally (`select data from …` → a JSON file kept off-repo), confirm nothing references it, and `DROP TABLE`.
+- If in doubt, leaving it locked indefinitely is a perfectly acceptable outcome — the security issue is already closed.
+
+### Migrate 4 RLS policies off `user_metadata` onto `app_metadata`
+
+`teacher_feedback.superadmin_all` and `faculty_state.faculty_write_{insert,update,delete}` all gate on `auth.jwt() -> 'user_metadata' ->> 'role'`. **`user_metadata` is self-editable** — any signed-in teacher can call `supabase.auth.updateUser({ data: { role: 'superadmin' } })` and thereby read HR-sensitive teacher feedback *and* regain `faculty_state` write access. Supabase's linter flags all four as ERROR.
+
+**Why:** these are the only two places in the project documented as *real DB-level boundaries* rather than UI conventions (CLAUDE.md calls the teacher-write denial "the boundary"; SECURITY.md called `teacher_feedback` "a real RLS boundary, not just a UI gate"). Both claims are false as written — now corrected in SECURITY.md, but the code is unchanged. It needs an authenticated account, so it is not publicly reachable; the exposure is teacher → superadmin escalation.
+
+**How to apply:**
+- Move the role claim to `app_metadata`, which only the Admin API (service-role) can write. Update the four policies to read `auth.jwt() -> 'app_metadata' ->> 'role'`.
+- Backfill existing accounts' `app_metadata.role` before switching the policies, or every teacher/superadmin check fails closed at once.
+- Audit the writers: `create_teacher_account.js` and `api/teacher-account.js` set `user_metadata.role` today, as does the hand-rolled superadmin SQL noted in SECURITY.md.
+- ⚠️ `App.jsx` routing and `isSuperadmin` also read `user_metadata.role`. Those are *visibility* gates, so they can keep reading it or move too — but decide deliberately, and remember `initStore` sets `isSuperadmin: true` unconditionally on localhost.
+
+### Rate-limit `/api/student-login` (and the two other mobile-identified endpoints)
+
+There is **no rate limiting anywhere** in `api/` — grep confirms the only 429 handling is Google Calendar's *outbound* backoff. Responses cleanly distinguish a hit (200 + the student's name) from a miss (404), so a known-prefix scan of the last four digits (~10,000 requests, no throttle) harvests the roster. `student-quizzes.js` and `quiz-submit.js` share the same mobile-only trust model.
+
+**Why:** blind brute force is genuinely infeasible (4×10⁹ space vs ~750 valid numbers), so this was low-priority in theory. It is not low-priority in practice: a copy of the 493-number list may already have been taken while the backup table was open, which turns the login endpoint into a bulk-extraction API. Throttling is what makes "you must know a mobile number" an *enforced* property rather than a description.
+
+**How to apply:**
+- Shared `api/_rateLimit.js` — **underscore-prefixed helpers are not counted against the 12-function Hobby cap**, so this adds no deployable function.
+- Per-IP sliding window off `x-forwarded-for` (e.g. 5 distinct failed mobiles / 10 min → 429 + backoff) plus a per-mobile ceiling. Back it with a small Supabase table: no new dependency, and each handler already opens a service-role client. **An in-memory `Map` is not an option** — Vercel runs many instances.
+- If a CAPTCHA is ever wanted, trigger it *only* after the throttle trips, so real students never see one.
+
+### Trim the student-login payload to what the portal renders
+
+`api/student-login.js` returns `parentMobiles`, `dob`, `gender`, `nameVariants`, and every `integrity_incidents` row including **`counterpart_name`** — which discloses *another student's* name through a mobile-only gate. Confirmed rendered: [`IntegrityIncidents.jsx:77`](src/pages/Students/IntegrityIncidents.jsx#L77) inside the shared `StudentView`, and DOB/gender/parent numbers in `studentViewComponents.jsx`'s profile header (not mode-gated).
+
+**Why:** this is the highest-leverage *non-auth* mitigation — it shrinks the blast radius of every threat at once, including the one throttling cannot touch (a classmate who already has your number from the batch WhatsApp group). Zero friction, no schema change.
+
+**How to apply:** gate per audience in the response, following the existing `ProjectedScoreCard` `showScore` precedent (keyed on `mode`, **not** `isSuperadmin` — `initStore` sets that true on localhost). Drop `parentMobiles`/`dob`/`gender` from the student branch and redact `counterpart_name` to a neutral label. Faculty keep everything.
+
+### Add the Supabase security linter to the deploy routine
+
+The 2026-08-11 leak existed because a table created by hand via SQL starts with **RLS off**, silently opting out of the protection every other table has. One `get_advisors` call (or the dashboard linter) catches it as `rls_disabled_in_public`. It also caught the `user_metadata` escalation above, which no amount of code review had surfaced in months.
+
+**Why:** this is the durable control the incident actually calls for. Memory recall and good intentions are not mechanisms; a check that runs is. Note it needs **no** new npm dependency and no CI infrastructure to start.
+
+**How to apply:** simplest useful version — add a line to [`OPERATIONS.md`](./OPERATIONS.md)'s pre-deploy checklist and to the "before adding a collaborator" list in SECURITY.md: *after any hand-written DDL, run the Supabase advisors and confirm zero `rls_disabled_in_public`.* Stronger version: a small script that hits the advisors API and exits non-zero on any ERROR-level lint, run alongside `npm run lint`. Two current INFO-level `rls_enabled_no_policy` notices (`teacher_calendar_blocks`, the backup table) are **intentional** service-role-only tables — any gate should allow-list them rather than treat them as failures.
