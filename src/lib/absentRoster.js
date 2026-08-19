@@ -1,4 +1,4 @@
-import { parseTimeToMinutes } from './timetable'
+import { parseTimeToMinutes } from './timetable.js'
 
 // Turns the day's raw `lecture_absences` rows into a per-STUDENT roster:
 // who missed something today, which periods, and whether they've been notified.
