@@ -16,6 +16,13 @@ vi.mock('../../../lib/monthlyReportZip', () => ({
   zipFilename: (...args) => mockZipFilename(...args),
 }))
 
+// Word export sits beside the PDF one — same report object, real Devanagari.
+const mockDocxDownload = vi.fn(() => Promise.resolve('file.docx'))
+vi.mock('../../../lib/monthlyReportDocx', async (importOriginal) => ({
+  ...(await importOriginal()),
+  downloadMonthlyReportDocx: (...args) => mockDocxDownload(...args),
+}))
+
 // Mock the store.
 const mockFetch = vi.fn()
 let mockState = {}
@@ -149,13 +156,13 @@ describe('MonthlyReportsPage', () => {
     expect(mockDownload.mock.calls[0][1]).toEqual({ remark: 'Solid start.' })
   })
 
-  it('clicking "Download all as ZIP" calls downloadMonthlyReportsZip with one item per cohort student', async () => {
+  it('clicking "ZIP (PDF)" calls downloadMonthlyReportsZip with one item per cohort student', async () => {
     const user = userEvent.setup()
     render(<MonthlyReportsPage />)
     await user.click(screen.getByRole('button', { name: /^generate$/i }))
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
-    await user.click(screen.getByRole('button', { name: /download all as zip/i }))
+    await user.click(screen.getByRole('button', { name: /zip \(pdf\)/i }))
     await waitFor(() => expect(mockZipDownload).toHaveBeenCalledTimes(1))
 
     const [items, zipName] = mockZipDownload.mock.calls[0]
@@ -163,6 +170,44 @@ describe('MonthlyReportsPage', () => {
     expect(items.map(i => i.report.meta.name).sort()).toEqual(['Alice', 'Bob'])
     expect(items.every(i => i.filename.endsWith('.pdf'))).toBe(true)
     expect(zipName).toMatch(/_Reports\.zip$/)
+  })
+
+  it('offers a Word download per student, alongside the PDF one', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await user.type(screen.getByLabelText(/Remark for Alice/i), 'Solid start.')
+    await user.click(screen.getByRole('button', { name: /download word report for alice/i }))
+
+    await waitFor(() => expect(mockDocxDownload).toHaveBeenCalled())
+    expect(mockDocxDownload.mock.calls[0][1]).toEqual({ remark: 'Solid start.' })
+    expect(mockDownload).not.toHaveBeenCalled()
+  })
+
+  it('"ZIP (Word)" asks for docx files and docx filenames', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /zip \(word\)/i }))
+    await waitFor(() => expect(mockZipDownload).toHaveBeenCalledTimes(1))
+
+    const [items, , opts] = mockZipDownload.mock.calls[0]
+    expect(items.every(i => i.filename.endsWith('.docx'))).toBe(true)
+    expect(opts).toMatchObject({ format: 'docx' })
+  })
+
+  // Content-driven, not class-driven: the hint follows the exam titles.
+  it('does not show the Devanagari hint when every exam title is Latin', async () => {
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    expect(screen.queryByText(/shows them correctly/i)).not.toBeInTheDocument()
   })
 
   it('typed remarks land in the ZIP payload per student', async () => {
@@ -173,7 +218,7 @@ describe('MonthlyReportsPage', () => {
 
     await user.type(screen.getByLabelText(/Remark for Alice/i), 'Solid start.')
     await user.type(screen.getByLabelText(/Remark for Bob/i),   'Needs review.')
-    await user.click(screen.getByRole('button', { name: /download all as zip/i }))
+    await user.click(screen.getByRole('button', { name: /zip \(pdf\)/i }))
 
     await waitFor(() => expect(mockZipDownload).toHaveBeenCalled())
     const [items] = mockZipDownload.mock.calls[0]
@@ -183,7 +228,7 @@ describe('MonthlyReportsPage', () => {
 
   it('"Download all as ZIP" button does not appear before Generate', () => {
     render(<MonthlyReportsPage />)
-    expect(screen.queryByRole('button', { name: /download all as zip/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /zip \(pdf\)/i })).not.toBeInTheDocument()
   })
 
   it('shows an error banner when fetchMonthlyReportData returns null', async () => {

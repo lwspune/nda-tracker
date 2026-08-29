@@ -3,6 +3,7 @@ import useStore from '../../store/useStore'
 import { buildMonthlyReport, getMonthlyReportCohort } from '../../lib/monthlyReportBuilder'
 import { downloadMonthlyReportPdf } from '../../lib/monthlyReportPdf'
 import { downloadMonthlyReportsZip, zipFilename } from '../../lib/monthlyReportZip'
+import { downloadMonthlyReportDocx, docxFilename, hasNonLatinExamTitle } from '../../lib/monthlyReportDocx'
 import ReportRow from './ReportRow'
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -116,13 +117,20 @@ export default function MonthlyReportsPage() {
     await downloadMonthlyReportPdf(report, { remark: remarks[profile.lwsId] || '' })
   }
 
+  // Word renders Marathi/Hindi exam titles as typed; the PDF substitutes an
+  // English stand-in for them (see src/lib/pdfSafeText.js). Same report object.
+  async function handleDownloadDocx(profile) {
+    const report = reportFor(profile)
+    await downloadMonthlyReportDocx(report, { remark: remarks[profile.lwsId] || '' })
+  }
+
   function safeFile(s) {
     return (s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
   }
 
-  async function handleBulkZip() {
+  async function handleBulkZip(format = 'pdf') {
     if (!generated || cohort.length === 0) return
-    setBulkBusy(true)
+    setBulkBusy(format)
     setError('')
     try {
       const label = rangeLabel(from, to)
@@ -131,10 +139,12 @@ export default function MonthlyReportsPage() {
         return {
           report,
           remark: remarks[profile.lwsId] || '',
-          filename: `${safeFile(profile.name)}_${safeFile(label)}_Report.pdf`,
+          filename: format === 'docx'
+            ? docxFilename(profile.name, label)
+            : `${safeFile(profile.name)}_${safeFile(label)}_Report.pdf`,
         }
       })
-      await downloadMonthlyReportsZip(items, zipFilename(batch, label))
+      await downloadMonthlyReportsZip(items, zipFilename(batch, label), { format })
     } catch (e) {
       console.error(e)
       setError('Failed to build the ZIP archive. Try again.')
@@ -142,6 +152,13 @@ export default function MonthlyReportsPage() {
       setBulkBusy(false)
     }
   }
+
+  // Content-driven, never class-driven. 9th/10th are where the language papers
+  // live today, but several of those teachers already type Latin titles, and
+  // nothing stops a Devanagari title appearing in another batch tomorrow.
+  const nonLatinCount = generated
+    ? cohort.filter(p => hasNonLatinExamTitle(reportFor(p))).length
+    : 0
 
   // Reset preview when controls change so users don't see mismatched data.
   function clearPreview() { setGenerated(null); setRemarks({}) }
@@ -247,18 +264,38 @@ export default function MonthlyReportsPage() {
       {generated && cohort.length > 0 && (
         <div>
           <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="text-[11px] font-mono uppercase tracking-[1.5px] text-ink-3">
-              Preview · {cohort.length} report{cohort.length !== 1 ? 's' : ''}
+            <div className="min-w-0">
+              <div className="text-[11px] font-mono uppercase tracking-[1.5px] text-ink-3">
+                Preview · {cohort.length} report{cohort.length !== 1 ? 's' : ''}
+              </div>
+              {nonLatinCount > 0 && (
+                <div className="text-[11.5px] text-warning mt-1">
+                  {nonLatinCount} report{nonLatinCount !== 1 ? 's have' : ' has'} Marathi/Hindi exam
+                  titles — Word shows them correctly; the PDF prints the subject and chapter number
+                  instead.
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={handleBulkZip}
-              disabled={bulkBusy}
-              className="btn btn-primary text-[12px] min-h-[40px] px-4
-                         disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {bulkBusy ? `Building ZIP… (${cohort.length} files)` : `Download all as ZIP (${cohort.length})`}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleBulkZip('pdf')}
+                disabled={!!bulkBusy}
+                className="btn btn-primary text-[12px] min-h-[40px] px-4
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {bulkBusy === 'pdf' ? `Building ZIP… (${cohort.length} files)` : `ZIP (PDF) · ${cohort.length}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBulkZip('docx')}
+                disabled={!!bulkBusy}
+                className="btn text-[12px] min-h-[40px] px-4
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {bulkBusy === 'docx' ? `Building ZIP… (${cohort.length} files)` : `ZIP (Word) · ${cohort.length}`}
+              </button>
+            </div>
           </div>
           {cohort.map(profile => (
             <ReportRow
@@ -268,6 +305,7 @@ export default function MonthlyReportsPage() {
               remark={remarks[profile.lwsId] || ''}
               onRemarkChange={(value) => setRemarks(r => ({ ...r, [profile.lwsId]: value }))}
               onDownload={handleDownload}
+              onDownloadDocx={handleDownloadDocx}
             />
           ))}
         </div>

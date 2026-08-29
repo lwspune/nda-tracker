@@ -25,6 +25,43 @@ function sampleReport(name, rangeLabel = 'Jan 2026') {
   }
 }
 
+describe('buildMonthlyReportsZipBlob — format: docx', () => {
+  it('writes .docx entries that are real Word files (PK zip magic + word/document.xml)', async () => {
+    const blob = await buildMonthlyReportsZipBlob([
+      { report: sampleReport('Alice'), remark: '', filename: 'Alice_Report.docx' },
+    ], { format: 'docx' })
+    const zip = await JSZip.loadAsync(blob)
+    expect(Object.keys(zip.files)).toEqual(['Alice_Report.docx'])
+    const inner = await JSZip.loadAsync(await zip.file('Alice_Report.docx').async('arraybuffer'))
+    expect(Object.keys(inner.files)).toContain('word/document.xml')
+  })
+
+  // The point of the Word export: a title jsPDF cannot draw survives intact.
+  it('keeps a Devanagari exam title verbatim in the document XML', async () => {
+    const report = sampleReport('Alice')
+    report.examTable = [{
+      examName: '३. कबीर', subject: 'Hindi', date: '2026-08-28',
+      marks: 3, percentage: 60, attended: true, format: 'written',
+    }]
+    const blob = await buildMonthlyReportsZipBlob(
+      [{ report, remark: '', filename: 'Alice_Report.docx' }], { format: 'docx' },
+    )
+    const zip = await JSZip.loadAsync(blob)
+    const inner = await JSZip.loadAsync(await zip.file('Alice_Report.docx').async('arraybuffer'))
+    const xml = await inner.file('word/document.xml').async('string')
+    expect(xml).toContain('३. कबीर')
+  })
+
+  it('defaults to PDF when no format is given', async () => {
+    const blob = await buildMonthlyReportsZipBlob([
+      { report: sampleReport('Alice'), remark: '', filename: 'Alice.pdf' },
+    ])
+    const zip = await JSZip.loadAsync(blob)
+    const head = await zip.file('Alice.pdf').async('string')
+    expect(head.startsWith('%PDF')).toBe(true)
+  })
+})
+
 describe('buildMonthlyReportsZipBlob', () => {
   it('returns a non-empty Blob', async () => {
     const blob = await buildMonthlyReportsZipBlob([

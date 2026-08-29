@@ -5,8 +5,9 @@ import { useState } from 'react'
 // remarks at once); this row is a controlled component for that input.
 // Calls onDownload(profile) when the user clicks Download — the parent
 // already has the remark.
-export default function ReportRow({ profile, report, remark, onRemarkChange, onDownload }) {
+export default function ReportRow({ profile, report, remark, onRemarkChange, onDownload, onDownloadDocx }) {
   const [busy, setBusy] = useState(false)
+  const [docxBusy, setDocxBusy] = useState(false)
 
   const examCount = report.examTable.filter(r => r.attended).length
   const absentCount = report.examTable.filter(r => !r.attended).length
@@ -21,6 +22,15 @@ export default function ReportRow({ profile, report, remark, onRemarkChange, onD
     }
   }
 
+  async function handleDownloadDocx() {
+    setDocxBusy(true)
+    try {
+      await onDownloadDocx(profile)
+    } finally {
+      setDocxBusy(false)
+    }
+  }
+
   return (
     <div className="card px-4 py-3 mb-2">
       <div className="flex items-start justify-between gap-3 mb-2">
@@ -28,15 +38,27 @@ export default function ReportRow({ profile, report, remark, onRemarkChange, onD
           <div className="text-[13px] font-bold text-ink truncate">{profile.name}</div>
           <div className="text-[11px] text-ink-3 font-mono">{profile.lwsId}</div>
         </div>
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={busy}
-          className="btn btn-primary text-[12px] min-h-[40px] px-3 flex-shrink-0
-                     disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy ? 'Generating…' : 'Download PDF'}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={busy || docxBusy}
+            className="btn btn-primary text-[12px] min-h-[40px] px-3
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy ? 'Generating…' : 'Download PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadDocx}
+            disabled={busy || docxBusy}
+            className="btn text-[12px] min-h-[40px] px-3
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label={`Download Word report for ${profile.name}`}
+          >
+            {docxBusy ? 'Generating…' : 'Word'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2 text-[11px]">
