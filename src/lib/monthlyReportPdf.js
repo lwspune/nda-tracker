@@ -3,6 +3,8 @@
 // transient remark. Async because jsPDF + autotable are dynamic imports
 // (smaller initial bundle).
 
+import { pdfSafeExamLabel } from './pdfSafeText'
+
 const C = {
   accent:   [37,  99, 235],
   ink:      [15,  23,  42],
@@ -27,7 +29,7 @@ function safeFile(s) {
   return (s || 'student').replace(/[^A-Za-z0-9_-]+/g, '_')
 }
 
-function pctColor(p) {
+export function pctColor(p) {
   if (p == null) return C.ink2
   if (p >= 70) return C.success
   if (p >= 45) return C.warning
@@ -46,7 +48,7 @@ function ordinal(n) {
     default: return n + 'th'
   }
 }
-function prettyDate(iso) {
+export function prettyDate(iso) {
   if (!iso || typeof iso !== 'string') return ''
   const [y, m, d] = iso.split('-').map(Number)
   return `${ordinal(d)} ${SHORT_MONTHS[m - 1]} ${y}`
@@ -103,7 +105,11 @@ async function drawExamTable(doc, y, report, autoTable) {
   }
 
   const rows = report.examTable.map(row => [
-    `${row.examName} (${row.format === 'mcq' ? 'MCQ' : 'Written'})`,
+    // pdfSafeExamLabel is a no-op for every Latin name. It only fires on a
+    // Devanagari title, which jsPDF's WinAnsi fonts cannot draw — see
+    // src/lib/pdfSafeText.js. The stored name is untouched; the Word export
+    // and every on-screen surface still show the real title.
+    `${pdfSafeExamLabel({ name: row.examName, subject: row.subject })} (${row.format === 'mcq' ? 'MCQ' : 'Written'})`,
     prettyDate(row.date),
     row.attended ? String(row.marks ?? '') : 'ABSENT',
     row.attended ? (row.percentage != null ? `${row.percentage}%` : '') : 'ABSENT',
@@ -138,11 +144,13 @@ async function drawExamTable(doc, y, report, autoTable) {
   return doc.lastAutoTable.finalY + 4
 }
 
-// Builds the ordered attendance / conduct blocks as pure {label, value} data —
-// exception-only: a block is included ONLY when it has something to report, so a
-// clean month renders just the positive attendance line (or nothing).
-//   • Attendance — shown whenever attendance was recorded (totalWorkingDays > 0);
-//     omitted at 0/0. Numerator = present + late (they showed up, some late).
+// Builds the ordered attendance / conduct blocks as pure {label, value} data.
+// The EXCEPTION blocks are included only when they have something to report;
+// attendance is always stated, one way or the other.
+//   • Attendance — the figure when attendance was recorded (totalWorkingDays > 0),
+//     otherwise an explicit "Not recorded for this period" (muted). Never absent:
+//     a missing block reads as a clean month, which is what it used to do on
+//     every APJ 9th card. Numerator = present + late (they showed up, some late).
 //   • Late days — omitted at zero (same source as attendance).
 //   • Missed lectures / Homework incomplete — exception logs; omitted when empty.
 //     Homework counts ONLY unresolved items.
@@ -155,6 +163,16 @@ export function conductBlocks(report) {
     blocks.push({
       label: 'ATTENDANCE',
       value: `${a.present + a.late} / ${a.totalWorkingDays} days present (${a.attendancePercentage}%)`,
+    })
+  } else {
+    // Say it rather than draw nothing. An omitted block reads as "nothing to
+    // report", which is indistinguishable from "the register was never taken" —
+    // and on these cards it is always the latter. `muted` keeps it grey instead
+    // of running it through pctColor, which would paint a non-figure red.
+    blocks.push({
+      label: 'ATTENDANCE',
+      value: 'Not recorded for this period',
+      muted: true,
     })
   }
   if (a.late > 0) {
@@ -198,7 +216,7 @@ function drawConduct(doc, y, report) {
     cursor += 4
 
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...(b.label === 'ATTENDANCE'
+    doc.setTextColor(...(b.label === 'ATTENDANCE' && !b.muted
       ? pctColor(report.attendance.attendancePercentage)
       : C.ink2))
     const wrapped = doc.splitTextToSize(b.value || '', maxW)
