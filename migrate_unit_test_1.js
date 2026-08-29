@@ -105,6 +105,11 @@ const CLASSES = [
     // Zero in five papers, 8 in Maths — appeared for one paper only. Only his
     // 0 cells are dropped; the 8 lands.
     skipZeros: ['Saif samalewale'],
+    // The sheet records 31 on a 25-mark paper. Faculty confirmed 21 (2026-08-29).
+    // It belongs here rather than as a direct database edit: this import deletes
+    // and re-inserts each exam's results, so a correction living only in the DB
+    // would be erased by the next re-run.
+    markOverrides: { 'Aditya Suryawanshi': { Maths: 21 } },
   },
 ]
 
@@ -203,6 +208,7 @@ async function main() {
     for (const r of report.unmatched)       { lines.push(`✗ UNMATCHED name, row dropped: "${r.name}"`); blocking++ }
     for (const r of report.unmappedColumns) { lines.push(`✗ sheet column with no configured paper: "${r.column}"`); blocking++ }
     for (const r of report.missingColumns)  { lines.push(`✗ configured paper with no sheet column: "${r.column}"`); blocking++ }
+    for (const r of report.corrected)       lines.push(`~ corrected: ${r.name} ${r.column} = ${r.from} → ${r.to}`)
     for (const r of report.overMax)         lines.push(`· over max, cell omitted: ${r.name} ${r.column} = ${r.value} (max ${r.max})`)
     for (const r of report.nonNumeric)      lines.push(`· non-numeric, absent: ${r.name} ${r.column} = "${r.value}"`)
     for (const r of report.skippedAll)      lines.push(`· absent from all ${r.papers} papers: ${r.name}`)

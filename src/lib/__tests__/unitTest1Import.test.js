@@ -149,6 +149,52 @@ describe('buildUnitTestExams', () => {
     expect(report.skippedZeros).toEqual([{ cls: '11th', name: 'Bhavesh Rao', papers: 2 }])
   })
 
+  // The sheet is not always right. A faculty-confirmed correction replaces the
+  // cell value BEFORE the ceiling check, so a mark the sheet recorded as
+  // impossible (31/25) can be restored to the real one rather than dropped.
+  // Recorded here, not patched into the database directly: this import deletes
+  // and re-inserts an exam's results, so a correction that lives only in the DB
+  // would be erased by the next re-run.
+  it('markOverrides replaces a sheet value and reports the correction', () => {
+    const rows = ROWS.map(r => [...r])
+    rows[2][5] = 31                                  // Asha Kale, Maths, max 25
+    const config = { ...CONFIG, markOverrides: { 'Asha Kale': { Maths: 21 } } }
+    const { exams, report } = buildUnitTestExams({ rows, config, resolveName: resolveAll })
+
+    const maths = exams.find(e => e.subject === 'Maths')
+    expect(maths.students.find(s => s.name === 'Asha Kale').totalMarks).toBe(21)
+    expect(report.overMax).toEqual([])
+    expect(report.corrected).toEqual([
+      { cls: '11th', name: 'Asha Kale', column: 'Maths', from: 31, to: 21 },
+    ])
+  })
+
+  it('markOverrides touches only the named paper', () => {
+    const config = { ...CONFIG, markOverrides: { 'Asha Kale': { Maths: 21 } } }
+    const { exams } = buildUnitTestExams({ rows: ROWS, config, resolveName: resolveAll })
+    expect(exams.find(e => e.subject === 'Physics').students.find(s => s.name === 'Asha Kale').totalMarks).toBe(20)
+  })
+
+  // A correction is a claim about a real mark, so it must still be a real mark.
+  it('still rejects an override that is itself above the ceiling', () => {
+    const config = { ...CONFIG, markOverrides: { 'Asha Kale': { Maths: 99 } } }
+    const { exams, report } = buildUnitTestExams({ rows: ROWS, config, resolveName: resolveAll })
+    expect(exams.find(e => e.subject === 'Maths').students.map(s => s.name)).not.toContain('Asha Kale')
+    expect(report.overMax).toHaveLength(1)
+  })
+
+  // An override for someone who did not sit the paper would silently invent a
+  // result row; it corrects a value, it does not create one.
+  it('does not resurrect a student who is skipped entirely', () => {
+    const config = {
+      ...CONFIG,
+      skipAll: ['Bhavesh Rao'],
+      markOverrides: { 'Bhavesh Rao': { Maths: 10 } },
+    }
+    const { exams } = buildUnitTestExams({ rows: ROWS, config, resolveName: resolveAll })
+    expect(exams.find(e => e.subject === 'Maths').students.map(s => s.name)).not.toContain('Bhavesh Rao')
+  })
+
   it('skipPapers drops one named paper for one student only', () => {
     const config = { ...CONFIG, skipPapers: { 'Asha Kale': ['Maths'] } }
     const { exams, report } = buildUnitTestExams({ rows: ROWS, config, resolveName: resolveAll })

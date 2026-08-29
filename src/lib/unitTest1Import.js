@@ -82,9 +82,10 @@ export function buildUnitTestExams({ rows, config, resolveName }) {
   const skipAll    = new Set(config.skipAll ?? [])
   const skipZeros  = new Set(config.skipZeros ?? [])
   const skipPapers = config.skipPapers ?? {}
+  const overrides  = config.markOverrides ?? {}
 
   const report = {
-    unmatched: [], nonNumeric: [], overMax: [],
+    unmatched: [], nonNumeric: [], overMax: [], corrected: [],
     skippedAll: [], skippedZeros: [], skippedPapers: [],
     unmappedColumns: [], missingColumns: [],
   }
@@ -124,7 +125,17 @@ export function buildUnitTestExams({ rows, config, resolveName }) {
         continue
       }
 
-      const cell = readMark(st.marks[paper.column])
+      // Applied AFTER the skip lists (a correction must not resurrect someone
+      // recorded as absent) and BEFORE the ceiling check (its whole purpose is
+      // to replace a value the sheet got wrong, including an impossible one).
+      const override = overrides[st.name]?.[paper.column]
+      let cell = readMark(st.marks[paper.column])
+      if (override !== undefined) {
+        const before = cell.kind === 'mark' ? cell.value : String(st.marks[paper.column] ?? '')
+        report.corrected.push({ cls, name: st.name, column: paper.column, from: before, to: override })
+        cell = readMark(override)
+      }
+
       if (cell.kind === 'blank') continue
       if (cell.kind === 'nonNumeric') {
         report.nonNumeric.push({ cls, name: st.name, column: paper.column, value: cell.value })
