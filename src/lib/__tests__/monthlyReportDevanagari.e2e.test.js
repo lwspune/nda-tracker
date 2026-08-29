@@ -22,8 +22,9 @@ const REPORT = {
     // The one title in the batch with no leading chapter number.
     { examName: 'योगी सर्वकाळ सुखदाता',   subject: 'Marathi', date: '2026-08-26', marks: 4, percentage: 80, attended: true, format: 'written' },
   ],
-  // The APJ 9th batch has no attendance rows at all — this is the case that
-  // used to render as a blank space.
+  // The APJ 9th batch has no attendance rows at all, so the attendance block
+  // is omitted — deliberately, since that gap is internal and this card goes
+  // to parents.
   attendance: {
     present: 0, absent: 0, late: 0, missedLectures: 5, totalWorkingDays: 0,
     attendancePercentage: 0, lateDates: [],
@@ -82,9 +83,10 @@ describe('Devanagari report cards — end to end', () => {
     expect(hasNonLatinExamTitle(REPORT)).toBe(true)
   })
 
-  it('states that attendance was not recorded rather than leaving a blank', () => {
-    const att = conductBlocks(REPORT).find(b => b.label === 'ATTENDANCE')
-    expect(att).toEqual({ label: 'ATTENDANCE', value: 'Not recorded for this period', muted: true })
+  // The APJ 9th batch has no register at all. That is an internal gap, and this
+  // card goes to parents, so the block is omitted rather than stating it.
+  it('omits the attendance block when there is no register', () => {
+    expect(conductBlocks(REPORT).find(b => b.label === 'ATTENDANCE')).toBeUndefined()
   })
 
   it('both formats agree on marks, dates and percentages', async () => {

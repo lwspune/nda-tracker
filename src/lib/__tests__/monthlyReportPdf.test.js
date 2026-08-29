@@ -101,19 +101,11 @@ describe('conductBlocks — exception-only attendance / conduct section', () => 
     expect(blocks[0]).toEqual({ label: 'ATTENDANCE', value: '10 / 12 days present (83%)' })
   })
 
-  // Changed 2026-08-29: it used to omit the block. Silence is ambiguous on a
-  // parent-facing card — "no absences" and "we never took the register" looked
-  // identical. The whole APJ 9th batch has zero attendance rows, so every card
-  // printed as if attendance simply weren't reported.
-  it('says attendance was NOT RECORDED when there are no working days (0/0)', () => {
+  // Deliberate: a batch with no register is an internal gap and this card goes
+  // to parents, so the card says nothing rather than advertising it.
+  it('OMITS the Attendance block entirely when there are no working days (0/0)', () => {
     const blocks = conductBlocks(report(att({ present: 0, absent: 0, late: 0, totalWorkingDays: 0, attendancePercentage: 0 })))
-    expect(blocks.find(b => b.label === 'ATTENDANCE'))
-      .toEqual({ label: 'ATTENDANCE', value: 'Not recorded for this period', muted: true })
-  })
-
-  it('marks a real attendance figure as not muted, so it keeps its colour coding', () => {
-    const [block] = conductBlocks(report(att()))
-    expect(block.muted).toBeFalsy()
+    expect(blocks.find(b => b.label === 'ATTENDANCE')).toBeUndefined()
   })
 
   it('OMITS the Late days block when there were zero late days, even with attendance data', () => {
@@ -164,14 +156,9 @@ describe('conductBlocks — exception-only attendance / conduct section', () => 
     ])
   })
 
-  // Changed 2026-08-29 alongside the block above: with nothing recorded the
-  // card now states that, instead of rendering a blank space that reads as a
-  // clean month. The exception blocks stay exception-only.
-  it('returns only the "not recorded" attendance line when nothing was recorded', () => {
+  it('returns an empty array when nothing was recorded (no attendance, no exceptions)', () => {
     const blocks = conductBlocks(report(att({ present: 0, absent: 0, late: 0, totalWorkingDays: 0, attendancePercentage: 0 })))
-    expect(blocks).toEqual([
-      { label: 'ATTENDANCE', value: 'Not recorded for this period', muted: true },
-    ])
+    expect(blocks).toEqual([])
   })
 })
 

@@ -94,9 +94,7 @@ describe('buildMonthlyReportDocxBlob — smoke', () => {
   })
 
   // The conduct section is shared with the PDF so the two cannot drift.
-  it('reuses conductBlocks, so the attendance line matches the PDF', () => {
-    expect(conductBlocks(report())).toEqual([
-      { label: 'ATTENDANCE', value: 'Not recorded for this period', muted: true },
-    ])
+  it('reuses conductBlocks, so the conduct section matches the PDF', () => {
+    expect(conductBlocks(report())).toEqual([])
   })
 })

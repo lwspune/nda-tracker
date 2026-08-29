@@ -144,13 +144,13 @@ async function drawExamTable(doc, y, report, autoTable) {
   return doc.lastAutoTable.finalY + 4
 }
 
-// Builds the ordered attendance / conduct blocks as pure {label, value} data.
-// The EXCEPTION blocks are included only when they have something to report;
-// attendance is always stated, one way or the other.
-//   • Attendance — the figure when attendance was recorded (totalWorkingDays > 0),
-//     otherwise an explicit "Not recorded for this period" (muted). Never absent:
-//     a missing block reads as a clean month, which is what it used to do on
-//     every APJ 9th card. Numerator = present + late (they showed up, some late).
+// Builds the ordered attendance / conduct blocks as pure {label, value} data —
+// exception-only: a block is included ONLY when it has something to report, so a
+// clean month renders just the positive attendance line (or nothing).
+//   • Attendance — shown whenever attendance was recorded (totalWorkingDays > 0);
+//     omitted at 0/0. Numerator = present + late (they showed up, some late).
+//     The omission is deliberate: a batch with no register (APJ 9th, 11th_B) is
+//     an internal gap, and this card goes to parents. Do not print it here.
 //   • Late days — omitted at zero (same source as attendance).
 //   • Missed lectures / Homework incomplete — exception logs; omitted when empty.
 //     Homework counts ONLY unresolved items.
@@ -163,16 +163,6 @@ export function conductBlocks(report) {
     blocks.push({
       label: 'ATTENDANCE',
       value: `${a.present + a.late} / ${a.totalWorkingDays} days present (${a.attendancePercentage}%)`,
-    })
-  } else {
-    // Say it rather than draw nothing. An omitted block reads as "nothing to
-    // report", which is indistinguishable from "the register was never taken" —
-    // and on these cards it is always the latter. `muted` keeps it grey instead
-    // of running it through pctColor, which would paint a non-figure red.
-    blocks.push({
-      label: 'ATTENDANCE',
-      value: 'Not recorded for this period',
-      muted: true,
     })
   }
   if (a.late > 0) {
@@ -216,7 +206,7 @@ function drawConduct(doc, y, report) {
     cursor += 4
 
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...(b.label === 'ATTENDANCE' && !b.muted
+    doc.setTextColor(...(b.label === 'ATTENDANCE'
       ? pctColor(report.attendance.attendancePercentage)
       : C.ink2))
     const wrapped = doc.splitTextToSize(b.value || '', maxW)

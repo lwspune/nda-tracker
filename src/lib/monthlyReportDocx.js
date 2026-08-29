@@ -155,7 +155,7 @@ export async function buildMonthlyReportDocxBlob(report, { remark = '' } = {}) {
     }))
     children.push(new Paragraph({
       children: [run(b.value || '', {
-        color: b.label === 'ATTENDANCE' && !b.muted
+        color: b.label === 'ATTENDANCE'
           ? rgbToHex(pctColor(report?.attendance?.attendancePercentage))
           : INK2,
         size: SIZE_SM,
