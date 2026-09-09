@@ -124,6 +124,43 @@ describe('buildPracticeSetDocx', () => {
     const { doc } = await build()
     expect(doc).not.toContain('\\frac')
   }, 30000)
+
+  // Each equation is emitted as an indexed marker run and swapped for its OMML
+  // after packing. A mis-mapped index puts question 7's equation on question 3:
+  // the package is still valid, still parses, still has no markers left and
+  // still contains the right SET of equations — so every other assertion here
+  // passes. Only position tells you. Distinct denominators (101…115) make each
+  // equation identifiable; 15 of them takes the index into two digits, where a
+  // prefix-matching swap (OMML_1 eating OMML_12) would show up.
+  it('swaps each marker for its OWN equation, in order', async () => {
+    const n = 15
+    const rowsMany = [{
+      subtopic: 'Marker Order', chapter: 'Algebra',
+      marksAtStake: 1, projected: 0, lift: 1,
+      counts: { right: 0, wrong: 0, skipped: n, absent: 0 },
+      questions: Array.from({ length: n }, (_, i) => ({
+        n: i + 1, bucket: 'skipped', difficulty: '', q: i + 1,
+        question: `Marker check \\(\\frac{1}{${101 + i}}\\)`,
+        options: ['', '', '', ''], answer: 'A',
+      })),
+    }]
+    const blob = await buildPracticeSetDocx({
+      studentName: 'Amy Example', rows: rowsMany,
+      totals: { questions: n, lift: 1, counts: { right: 0, wrong: 0, skipped: n, absent: 0 } },
+    })
+    const doc = await (await JSZip.loadAsync(blob)).file('word/document.xml').async('text')
+    expect(doc).not.toContain('OMML_')
+
+    for (let i = 0; i < n; i++) {
+      const here = doc.indexOf(`>Q${i + 1}. <`)
+      const next = i + 1 < n ? doc.indexOf(`>Q${i + 2}. <`) : doc.length
+      const eq   = doc.indexOf(`>${101 + i}</m:t>`)
+      expect(here, `Q${i + 1} missing`).toBeGreaterThan(-1)
+      expect(eq, `equation ${101 + i} missing`).toBeGreaterThan(-1)
+      expect(eq > here && eq < next,
+        `equation ${101 + i} landed outside Q${i + 1}`).toBe(true)
+    }
+  }, 30000)
 })
 
 // ── interop + fallback ──────────────────────────────────────────────────────

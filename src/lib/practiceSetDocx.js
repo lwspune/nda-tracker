@@ -324,12 +324,19 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   await report(P.equations, 'Placing equations…')
   const docFile = zip.file('word/document.xml')
   if (docFile && ommlByIndex.length) {
-    let xml = await docFile.async('text')
-    for (let i = 0; i < ommlByIndex.length; i++) {
-      const re = new RegExp(
-        `<w:r>(?:<w:rPr>[\\s\\S]*?</w:rPr>)?<w:t[^>]*>${escapeRegex(MARKER + i)}</w:t></w:r>`, 'g')
-      xml = xml.replace(re, ommlByIndex[i])
-    }
+    // ONE pass over the document, not one per equation. This was a loop that
+    // built a marker-specific regex per index and re-scanned the whole of
+    // document.xml each time — O(equations × document size), on a document that
+    // GROWS as OMML is spliced in. Measured on a real 1.19 MB set with 1740
+    // equations: 388 ms per pass × 1740 = 675 s, against 441 ms for the single
+    // pass below. That was ~90% of the build, and it is why the download felt
+    // hung for minutes; the progress bar made the wait legible, not shorter.
+    // The index is captured instead, and an unknown marker is left untouched
+    // rather than deleted.
+    const xml = (await docFile.async('text')).replace(
+      new RegExp(
+        `<w:r>(?:<w:rPr>[\\s\\S]*?</w:rPr>)?<w:t[^>]*>${escapeRegex(MARKER)}(\\d+)</w:t></w:r>`, 'g'),
+      (whole, i) => ommlByIndex[Number(i)] ?? whole)
     zip.file('word/document.xml', xml)
   }
   const settings = zip.file('word/settings.xml')
