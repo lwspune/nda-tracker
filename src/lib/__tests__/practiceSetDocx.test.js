@@ -24,6 +24,15 @@ const rows = [
         options: ['one', 'two', '', ''],
         answer: 'A',
       },
+      {
+        // A genuine "<" inside the maths — the whole reason sanitizeOmml exists.
+        // Paired with the fractions above it pins both halves of the sanitizer:
+        // real text must be escaped, real markup must not.
+        n: 3, bucket: 'skipped', difficulty: 'Hard', q: 3,
+        question: 'How many integers satisfy \\(0 < x < 1\\)?',
+        options: ['\\(\\frac{1}{x} > 2\\)', 'none', '', ''],
+        answer: 'B',
+      },
     ],
   },
   {
@@ -61,6 +70,26 @@ describe('buildPracticeSetDocx', () => {
   it('emits real Word equations for the LaTeX', async () => {
     const { doc } = await build()
     expect(doc).toContain('<m:oMath')
+  }, 30000)
+
+  // The failure class this closes: the package is a valid ZIP and every part is
+  // present, so every structural assertion above still passes — but document.xml
+  // does not parse and Word refuses the file outright ("Word experienced an error
+  // trying to open the file"). Containment checks cannot see that; only a parse can.
+  it('produces well-formed XML — Word refuses the file otherwise', async () => {
+    const { doc } = await build()
+    const parsed = new DOMParser().parseFromString(doc, 'application/xml')
+    expect(parsed.querySelector('parsererror')?.textContent ?? '').toBe('')
+  }, 30000)
+
+  // sanitizeOmml escapes <, > and & inside <m:t> text. Its element test must be
+  // exact: `<m:t` is ALSO a prefix of `<m:type>`, which every fraction emits, and
+  // a prefix match swallows the live markup up to the next </m:t> and escapes it.
+  it('escapes the maths text without escaping the markup around it', async () => {
+    const { doc } = await build()
+    expect(doc).toContain('<m:type m:val="bar"/>')  // every fraction emits one
+    expect(doc).not.toContain('&lt;m:')             // no live OMML turned into text
+    expect(doc).toContain('0&lt;x&lt;1')            // a real "<" still escaped
   }, 30000)
 
   it('injects mathPr — without it Word indents every fraction', async () => {

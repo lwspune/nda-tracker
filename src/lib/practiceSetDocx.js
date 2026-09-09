@@ -57,8 +57,14 @@ export function prettifyMath(latex) {
 
 // Escape raw <, > and & inside <m:t> — "0 < \alpha" otherwise yields XML Word
 // refuses to open.
+//
+// The element test must be EXACT. `<m:t` is also a prefix of `<m:type>`, which
+// mathml2omml emits inside <m:fPr> for EVERY fraction, so `<m:t([^>]*)>` matched
+// `<m:type m:val="bar"/>` and the lazy body then swallowed all the live markup up
+// to the next real </m:t> and escaped it — producing malformed XML that Word
+// refuses outright. Require whitespace or '>' after the tag name.
 function sanitizeOmml(omml) {
-  return omml.replace(/<m:t([^>]*)>([\s\S]*?)<\/m:t>/g, (_, attrs, body) =>
+  return omml.replace(/<m:t(\s[^>]*)?>([\s\S]*?)<\/m:t>/g, (_, attrs = '', body) =>
     `<m:t${attrs}>${body.replace(/&(?!(amp|lt|gt|quot|apos);)/g, '&amp;')
       .replace(/</g, '&lt;').replace(/>/g, '&gt;')}</m:t>`)
 }
