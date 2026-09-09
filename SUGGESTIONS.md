@@ -1133,3 +1133,16 @@ Adding `'Sunday'` to `DAYS` is the small part. The real cost is one of:
 **Worth noting:** the prototype's Sunday contains **no teaching at all** — every cell is a break. So it has zero effect on attendance filing, the `FilingBoard`, teacher hours, or calendar sync. It is purely a display artifact, which is why footnotes are an honest interim answer and why the second option above (a static card) is almost certainly the right shape if it's ever built.
 
 **How to apply:** if it's wanted, prefer the separate-card route. Do **not** widen `DAYS` without first deciding what owns a Sunday slot's clock time.
+
+### Backfill ledger — stale `exam_absences` where the student actually sat the exam (LWS-055)
+
+Renaming three students on 2026-09-07 (LWS-222 `Dhyuthi D N`, LWS-493 `Dropadi Sarpale`, LWS-442 `Jishan Shaikh`) required hand-running `cleanStaleAbsencesForVariant`, because a raw-SQL variant link skips the side-effect `addNameVariant` normally fires. The verification sweep — *does any `exam_absences` row share an exam with an `exam_results` row under one of that student's own `name_variants`?* — found **8 more rows, all on LWS-055 `Sarthak Santosh Mane`**, untouched by that rename and outside the request. Left in place pending a decision.
+
+Two distinct causes, and only one is the known variant-lag pattern:
+
+- **6 rows, `marked_by='upload'`, `notified_at IS NULL`** (2026-03-26 → 2026-05-04) — he sat these as `Sarthak mane`, linked as a variant after the absences were filed. Same shape as the three cleaned today; the sweep never ran for him. Harmless beyond a wrong audit log.
+- **2 rows, `notified_at` set** (`NDA GAT (23 May)` and `Maths Mock (23 May 2026)`, both 2026-05-23) — **these are not variant lag.** The result is filed under his *exact canonical name* with a real score (64.36 and 70.06), yet the absence was marked by `upload` on 2026-05-24 and a parent absence message went out 3 minutes later. So the absence flagging ran against a sheet that did not yet contain him, and the results landed in a later pass. **A parent was told he missed two exams he actually sat.**
+
+**Why it matters:** the first bucket is cosmetic, the second is a false parent-facing send — and the *mechanism* behind it (flag absences from a partial upload, results arrive later, nothing re-checks) is not specific to this student. Worth knowing whether 2026-05-24 was a one-off or the general behaviour of a two-pass upload.
+
+**How to apply:** deleting the 6 unnotified rows is the same one-statement sweep already run for the three renames and is safe. The 2 notified rows want a decision first — deleting them silently erases the only evidence that a wrong message was sent, and the sent message itself cannot be unsent. Before either, check whether the two-pass upload path can re-flag: if `exam_absences` is written once at upload and never reconciled against a later results pass, the same false send can recur, and the fix belongs at the writer, not in a backfill. Touches shipped data outside any request — needs a 360 + explicit go-ahead.
