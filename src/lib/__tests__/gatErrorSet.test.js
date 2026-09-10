@@ -58,7 +58,7 @@ describe('buildGatErrorSet', () => {
     expect(all.every(q => GAT_BUCKETS.includes(q.bucket))).toBe(true)
     // mock1: q2 wrong, q3 skipped, q4 wrong. mock2: q1 repeat, q2 skipped,
     // q3 wrong, q4 dropped (blank stem).
-    expect(totals.counts).toEqual({ wrong: 3, skipped: 2 })
+    expect(totals.counts).toEqual({ wrong: 3, skipped: 2, absent: 0 })
     expect(totals.questions).toBe(5)
   })
 
@@ -132,5 +132,92 @@ describe('buildGatErrorSet', () => {
     const { totals } = buildGatErrorSet(base)
     // mock1 q3 (kept vocab), q4 and mock2 q2, q3 carry no solution.
     expect(totals.missingSolution).toBe(4)
+  })
+})
+
+// ── Error Sets page options: absent bucket, subject filter, cap ─────────────
+// These are additive — every default below must leave the behaviour above
+// untouched, which the "unchanged by default" tests pin.
+
+// A paper the student's batch sat but they have no result row in.
+const missed = {
+  id: 'g3', name: 'GAT Mock 3', date: '2026-06-20',
+  questions: [
+    { q: 1, subject: 'Polity', chapter: 'Constitution', subtopic: 'Preamble',
+      question: 'The Preamble declares India to be', optionA: 'a', optionB: 'b',
+      optionC: 'c', optionD: 'd', answer: 'A' },
+    { q: 2, subject: 'Polity', chapter: 'Constitution', subtopic: 'Rights',
+      question: 'Right to equality is Article', optionA: '12', optionB: '14',
+      optionC: '19', optionD: '21', answer: 'B' },
+  ],
+  students: [{ name: 'Someone Else', responses: { 1: 1, 2: 1 } }],
+}
+
+describe('buildGatErrorSet — absent bucket', () => {
+  it('adds every question of a missed exam when absentExams is given', () => {
+    const { subjects, totals } = buildGatErrorSet({ ...base, absentExams: [missed] })
+    const polity = subjects.find(s => s.subject === 'Polity')
+    expect(polity.chapters[0].questions.map(q => q.bucket)).toEqual(['absent', 'absent'])
+    expect(totals.counts.absent).toBe(2)
+  })
+
+  it('is off by default — an unattempted paper is not a mistake', () => {
+    const { totals } = buildGatErrorSet(base)
+    expect(totals.counts.absent ?? 0).toBe(0)
+    expect(totals.questions).toBe(5)
+  })
+
+  it('still numbers contiguously once absent questions join', () => {
+    const { subjects } = buildGatErrorSet({ ...base, absentExams: [missed] })
+    const ns = subjects.flatMap(s => s.chapters.flatMap(c => c.questions)).map(q => q.n)
+    expect(ns).toEqual([1, 2, 3, 4, 5, 6, 7])
+  })
+})
+
+describe('buildGatErrorSet — qSubject filter', () => {
+  it('keeps only the named question subject on a combined paper', () => {
+    const { subjects, totals } = buildGatErrorSet({ ...base, qSubject: 'English' })
+    expect(subjects.map(s => s.subject)).toEqual(['English'])
+    // mock1 q2 (wrong) + q3 (skipped), mock2 q2 (skipped) + q3 (wrong).
+    expect(totals.questions).toBe(4)
+  })
+
+  it('returns nothing for a subject with no errors, rather than everything', () => {
+    const { subjects, totals } = buildGatErrorSet({ ...base, qSubject: 'Chemistry' })
+    expect(subjects).toEqual([])
+    expect(totals.questions).toBe(0)
+  })
+})
+
+describe('buildGatErrorSet — cap', () => {
+  it('limits the set to the cap, keeping the most recent sittings', () => {
+    const { subjects, totals } = buildGatErrorSet({ ...base, cap: 2 })
+    expect(totals.questions).toBe(2)
+    const kept = subjects.flatMap(s => s.chapters.flatMap(c => c.questions))
+    // mock2 (13 Jun) is newer than mock1 (06 Jun), so its two errors survive.
+    expect(kept.every(q => q.examDate === '2026-06-13')).toBe(true)
+  })
+
+  it('renumbers from 1 after capping so the solutions key still lines up', () => {
+    const { subjects } = buildGatErrorSet({ ...base, cap: 3 })
+    const ns = subjects.flatMap(s => s.chapters.flatMap(c => c.questions)).map(q => q.n)
+    expect(ns).toEqual([1, 2, 3])
+  })
+
+  it('reports the pre-cap total so the page can say what was left out', () => {
+    const { totals } = buildGatErrorSet({ ...base, cap: 2 })
+    expect(totals.available).toBe(5)
+    expect(totals.questions).toBe(2)
+  })
+
+  it('is a no-op when the cap exceeds what is available', () => {
+    const { totals } = buildGatErrorSet({ ...base, cap: 500 })
+    expect(totals.questions).toBe(5)
+    expect(totals.available).toBe(5)
+  })
+
+  it('treats a blank or zero cap as no cap', () => {
+    expect(buildGatErrorSet({ ...base, cap: 0 }).totals.questions).toBe(5)
+    expect(buildGatErrorSet({ ...base, cap: null }).totals.questions).toBe(5)
   })
 })

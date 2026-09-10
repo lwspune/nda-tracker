@@ -32,6 +32,12 @@
 
 export const GAT_BUCKETS = ['wrong', 'skipped']
 
+// Print order within a context group. `absent` is not in GAT_BUCKETS because it
+// is not a verdict — it is the whole of a paper the student never sat, opted in
+// separately — but it still needs a defined position, and indexOf(-1) would
+// silently sort it FIRST.
+const BUCKET_ORDER = ['wrong', 'skipped', 'absent']
+
 const VERDICT = { 1: 'right', '-1': 'wrong', 0: 'skipped' }
 
 // Stems differ across sheets only by whitespace far more often than by wording.
@@ -61,18 +67,35 @@ function toQuestion(q, exam, bucket) {
   }
 }
 
-// buildGatErrorSet({ exams, name, names, buckets })
-//   exams   — the exams in scope, each with students[] carrying `responses`
-//   names   — every spelling this student's results are filed under
-//   buckets — which verdicts to include (default: wrong + skipped)
+// buildGatErrorSet({ exams, name, names, buckets, absentExams, qSubject, cap })
+//   exams       — the exams in scope, each with students[] carrying `responses`
+//   names       — every spelling this student's results are filed under
+//   buckets     — which verdicts to include (default: wrong + skipped)
+//   absentExams — papers the student's batch sat that they have no result row
+//                 in. Every question becomes an `absent` entry. Opt-in: an
+//                 unattempted paper is not a mistake, and including it can
+//                 double the document.
+//   qSubject    — keep only this question subject. For a COMBINED paper, where
+//                 one exam carries several subjects at question level; an
+//                 exam-level subject filter belongs in errorSetSelect.js.
+//   cap         — keep at most this many questions, most recent sitting first.
+//                 0/blank means no cap. `totals.available` always reports the
+//                 pre-cap count so the caller can say what was left out.
 export function buildGatErrorSet({
   exams = [],
   name,
   names,
   buckets = GAT_BUCKETS,
+  absentExams = [],
+  qSubject = '',
+  cap = 0,
 } = {}) {
   const who = new Set((names && names.length ? names : [name]).filter(Boolean))
   const wanted = new Set(buckets)
+  // Normalise the same way toQuestion does, or a filter on 'Others' would never
+  // match the questions that landed there by defaulting.
+  const subjectOf = q => q.subject || 'Others'
+  const inSubject = q => !qSubject || subjectOf(q) === qSubject
 
   const flat = []
   let droppedNoText = 0
@@ -83,6 +106,7 @@ export function buildGatErrorSet({
     ;(exam.questions || []).forEach(q => {
       const bucket = VERDICT[student.responses?.[q.q]]
       if (!bucket || !wanted.has(bucket)) return
+      if (!inSubject(q)) return
       // A blank stem cannot be printed at a student. Count it so the gap is
       // visible on the cover rather than silently shrinking the set.
       if (!String(q.question || '').trim()) {
@@ -90,6 +114,19 @@ export function buildGatErrorSet({
         return
       }
       flat.push(toQuestion(q, exam, bucket))
+    })
+  })
+
+  // Papers the student missed entirely: no result row, so no verdict to read —
+  // every question counts, and the same blank-stem and subject rules apply.
+  ;(absentExams || []).forEach(exam => {
+    ;(exam.questions || []).forEach(q => {
+      if (!inSubject(q)) return
+      if (!String(q.question || '').trim()) {
+        droppedNoText += 1
+        return
+      }
+      flat.push(toQuestion(q, exam, 'absent'))
     })
   })
 
@@ -108,9 +145,19 @@ export function buildGatErrorSet({
     kept.push(q)
   })
 
+  // Cap AFTER the repeat collapse, so a question that appeared in three mocks
+  // spends one slot rather than three. Ranked most recent first: a 900-error
+  // pool has to be cut somewhere, and the freshest sittings are the ones the
+  // student still remembers sitting.
+  const available = kept.length
+  const limit = Number(cap) > 0 ? Number(cap) : 0
+  const selected = limit && available > limit
+    ? [...kept].sort((a, b) => byDateThenQ(b, a)).slice(0, limit)
+    : kept
+
   // Group: subject -> chapter -> context group.
   const subjectMap = new Map()
-  kept.forEach(q => {
+  selected.forEach(q => {
     if (!subjectMap.has(q.subject)) subjectMap.set(q.subject, new Map())
     const chapters = subjectMap.get(q.subject)
     if (!chapters.has(q.chapter)) chapters.set(q.chapter, [])
@@ -120,9 +167,9 @@ export function buildGatErrorSet({
   const countOf = qs => qs.reduce((acc, q) => {
     acc[q.bucket] += 1
     return acc
-  }, { wrong: 0, skipped: 0 })
+  }, { wrong: 0, skipped: 0, absent: 0 })
 
-  const total = c => c.wrong + c.skipped
+  const total = c => c.wrong + c.skipped + c.absent
 
   const subjects = [...subjectMap.entries()].map(([subject, chapterMap]) => {
     const chapters = [...chapterMap.entries()].map(([chapter, qs]) => {
@@ -140,7 +187,7 @@ export function buildGatErrorSet({
         .sort(([a], [b]) => (a === '' ? -1 : b === '' ? 1 : 0))
         .flatMap(([key, group]) => {
           group.sort((x, y) =>
-            GAT_BUCKETS.indexOf(x.bucket) - GAT_BUCKETS.indexOf(y.bucket) || byDateThenQ(x, y))
+            BUCKET_ORDER.indexOf(x.bucket) - BUCKET_ORDER.indexOf(y.bucket) || byDateThenQ(x, y))
           if (key) group[0].showContext = true
           return group
         })
@@ -163,6 +210,7 @@ export function buildGatErrorSet({
     subjects,
     totals: {
       questions: n,
+      available,
       counts,
       droppedNoText,
       missingSolution: all.filter(q => !q.solution).length,
