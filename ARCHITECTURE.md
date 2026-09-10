@@ -277,7 +277,9 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | Delete an integrity incident | ✓ | — | — |
 | Attendance rings (student monthly % view) | ✓ (StudentView) | ✓ (StudentView) | ✓ (portal, inline scroll) |
 | Syllabus Tracker (edit) | ✓ | — | — |
-| Performance block (StudentView) — stat tiles (Latest Score / Exams Taken / Attempt Quality / Consistency) + ProjectedScoreCard | superadmin only (gated on `isSuperadmin`; regular admin, teacher, and student portal all hidden) | — | — |
+| Performance block (StudentView) — stat tiles (Latest Score / Exams Taken / Attempt Quality / Consistency) | superadmin only (gated on `isSuperadmin`; regular admin, teacher, and student portal all hidden) | — | — |
+| `ProjectedScoreCard` (StudentView) | superadmin only (all subjects, score shown) | — | ✓ (portal, **Maths only**, `showScore={false}` — headline score + SSB/merit/rank scale withheld) |
+| Practice-set .docx download (from the card's subtopic view) | ✓ (with the card) | — | ✓ (portal) |
 | WrongAnswerAudit / UnattemptedAudit | ✓ | ✓ | ✓ |
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |
@@ -341,6 +343,10 @@ The high-level code map is §6. This is the exhaustive file→purpose inventory 
 | `src/lib/monthlyReportBuilder.js` | Pure `buildMonthlyReport({ profile, month, exams, attendance, lectureAbsences, examAbsences, batchChapterTimelines, syllabusPrograms })` + `getMonthlyReportCohort(profiles, batch, month)` |
 | `src/lib/monthlyReportPdf.js` | `buildMonthlyReportPdfBlob(report, { remark })` + `downloadMonthlyReportPdf` + exported `conductBlocks(report)` helper (ordered exception-only attendance/late/missed-lecture/homework-incomplete blocks). Dynamic jsPDF + autotable imports. |
 | `src/lib/monthlyReportZip.js` | `buildMonthlyReportsZipBlob(items)` + `downloadMonthlyReportsZip(items, zipName)` + `zipFilename(batch, monthLabel)`. Dynamic JSZip import. |
+| `src/lib/practiceSet.js` | Pure `buildPracticeSet({subtopicBreakdown, exams, name, names, absentExams, topN})` → top-N subtopics by marks recoverable, every question split wrong/skipped/absent/right (bucket = the Evalbee verdict, never a key comparison) + `findAbsentExams({exams, name, names, batches})`. Matches on **subtopic name alone** and takes `names[]`, not one canonical name. |
+| `src/lib/practiceSetDocx.js` | `buildPracticeSetDocx({studentName, subject, rows, totals, onProgress})` + `downloadPracticeSet`. Cover summary table → two-column question body → answer-key grid. Dynamic `docx`/`jszip`/`katex`/`mathml2omml`; equations emitted as marker runs and swapped into `word/document.xml` in **one** pass after packing; `<m:mathPr>` injected into `settings.xml`. Exports `prettifyMath` (the fallback renderer). `onProgress` is **awaited** — that yield is the only reason the caller can repaint. |
+| `src/lib/ommlRepair.js` | Pure OMML post-processing: `sanitizeOmml` → `wrapMatrixDelimiters` (KaTeX fence chars — U+2223/U+2225, plus a one-sided `\begin{cases}` rule) → `remapAccentChars` (spacing→combining, scoped to `<m:accPr>`), gated by `ommlNestingError`. `repairOmml` returns **null** on structurally invalid markup so one bad zone degrades to text instead of making Word refuse the file. |
+| `src/lib/richText.js` | Pure text parsing shared by the practice set: `maskMathZones`, `splitBold`, `parseRichSegments` (text/inline/block runs carrying a `bold` flag), `parseTableBlocks` (GFM pipe-tables, recognised only when a row-like line is followed by a separator row). |
 | `src/store/slices/monthlyReportSlice.js` | `fetchMonthlyReportData(month, lwsIds)` — bulk reads `student_attendance`, `lecture_absences`, `exam_absences` for the cohort. Returns `{ attendanceByLwsId, lectureAbsencesByLwsId, examAbsencesByLwsId }` or `null` on error/no-session. |
 | `src/pages/Timetable/` | TimetablePage (Student / Teacher Schedule / Subject Hours / Exam Schedule views; batch-tab reorder; 📅 Sync calendars), TimetableGrid, ExamScheduleView, AddExamScheduleModal, Edit/Add modals, SendScheduleModal, SyncCalendarModal |
 | `src/lib/calendarSync.js` | Pure Google-Calendar reconcile: `buildTeacherBlocks` / `diffBlocks` / `toGCalEvent` (weekly RRULE, teacher attendee, signature). Keyed `teacherId\|timetableId\|slotId\|day` → teacher swap = release-old + add-new. |

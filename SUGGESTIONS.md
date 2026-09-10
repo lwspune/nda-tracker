@@ -1188,3 +1188,46 @@ Surfaced while linking name variants. `Ronit Sujata Dhimdhime` (LWS-547) and `Ap
 ### `Student Full Name` — a template row that got graded
 
 2 `exam_results` rows (2026-06-05, 2026-06-26, `LWS_NDA_2Y_(25-27)_B`) are filed under the literal placeholder `Student Full Name`. It is the only unresolved name left in the whole table. It should be **deleted**, not linked — it also inflates the roster count on those two exams by one. Deletion of result rows was outside the ask, so it was left in place.
+
+### `\left(...\right)` fences don't stretch — in BOTH apps
+
+`\left(\dfrac{1}{2}\right)` converts to plain, fixed-height fence runs rather than an OMML `<m:d>` delimiter object, so an ordinary bracket around a fraction renders at normal letter height next to a two-line fraction. **1,322 occurrences** in the Maths corpus — the single most common maths construct after `\frac` itself, and visually the most obvious remaining defect in a downloaded practice set.
+
+It was deliberately not fixed on 2026-09-10 because it is **not a gap between the two apps**: running the identical LaTeX through temml showed PYQ Vault's `docxBuilder.ts` produces exactly the same output. It is a shared `mathml2omml` limitation. Fixing it in the tracker alone would make the two exporters diverge from each other for the first time.
+
+**Why:** it affects far more questions than the matrix defect that was fixed (1,322 vs 283), and students see it on nearly every algebra question. The reason to defer was scope discipline, not low value.
+
+**How to apply:**
+- The shape is the same as `wrapMatrixDelimiters` but harder: the fence runs are not adjacent to a single well-marked element like `<m:m>`, so the closing fence has to be found by scanning forward with depth counting over sibling OMML elements — a bare non-greedy regex will span out of the expression. Reuse the `rewriteElements` depth-counting approach from PYQ Vault's `ommlBuilder.ts` rather than inventing a new scanner.
+- **Do it in both repos in the same change, or explicitly decide to diverge and record it in DECISIONS.md.** The parity between the two exporters is currently a deliberate property.
+- Guard with the existing `ommlNestingError` gate; a delimiter rewrite that mis-pairs makes Word refuse the whole file.
+- Cheap partial alternative: KaTeX has `\left.`/`\right.` handling but the real win is only for `( ) [ ] |` around tall content, so a rule scoped to "fence + element containing `<m:f>` or `<m:rad>` + fence" would cover most of the 1,322 at a fraction of the risk.
+
+### Lint the tags files for undefined LaTeX macros at upload
+
+Auditing the whole Maths corpus through the real converter found that hard conversion failure is rare — **77 macro occurrences across 6,356 questions** — and that *every single one is a data-entry typo*: `\x` (17), `\c` (9), `\b` (8), `\z` (7), `\y` (6), `\p` (4), `\a` (4), `\h`/`\l`/`\r`/`\g` (3 each), `\pa`, `\hx`, `\gx`, `\kx`, `\k`, `\m`, `\q`, `\yz` (1–2 each). None are real macros; they are almost certainly mis-typed `\(` delimiters or stray backslashes.
+
+**Why:** each one silently degrades its **whole math zone** to fallback text — not just the bad token — so one stray `\x` can flatten an entire equation in a student's paper. They are invisible today: nothing throws, the .docx builds, and the on-screen KaTeX render fails just as quietly. And they are trivially fixable *at the point of authoring*, where the person knows what was meant.
+
+**How to apply:**
+- Add a check to `validateTags` (`src/lib/validateTags.js`) or Step 1 of the upload: extract every `\[a-zA-Z]+` from `question`/`optionA–D`/`solution`, run each through `katex.renderToString(..., {throwOnError: true})` in a minimal context, and surface the failures as **warnings, not blockers** — same posture as the chapter-name mismatch warnings, and for the same reason (see `feedback_control_cannot_represent_value`).
+- KaTeX is already a dependency and already loaded on that page; this costs no bundle.
+- Show the question number and the offending token, and let the uploader fix the sheet and re-upload. Do not auto-correct — `\pa` could plausibly be `\partial` or a typo'd `\pi`, and guessing is how 193 tags got overwritten in August.
+- Backfill separately: the 77 existing occurrences are a one-off SQL-identifiable set, but editing `exams.questions` directly needs the usual whole-blob caution.
+
+### Decide whether the practice-set answer key should carry solutions
+
+The practice-set .docx ends with a compact answer-key grid — question number → letter, nothing more. **13,404 of 13,568 questions in the bank have a populated `solution` field**, and `api/student-login.js` already ships `exam.questions[]` to the student portal, so the data is present on the client at build time. `src/lib/practiceSet.js` `toQuestion()` simply does not copy it through.
+
+PYQ Vault's `buildAnswerKey` takes an `includeSolutions` flag and renders prose + maths + GFM tables per solution (`solutionBlocks`), so the rendering pattern is already written and now — after the 2026-09-10 rich-text port — fully supported on the tracker side too.
+
+**Why:** a practice set a student cannot self-mark is half a tool; they get the letter but not the method, which is exactly the "I study but don't retain" gap. Against that: solutions roughly triple the page count, and a worksheet whose answers are in the same file is weaker as practice. This is a **teaching decision, not a technical one**, which is why it was left alone.
+
+**How to apply:**
+- If yes: add `solution` to `toQuestion()`, add an `includeSolutions` argument to `buildPracticeSetDocx`, and render each solution with `parseTableBlocks` + `mathRuns` (both now exist) in the key section. Mirror `solutionBlocks`' rule that the label rides the first paragraph so a solution opening with a table doesn't lose it.
+- Consider a **second file** instead of a longer one — `<Name> — Practice Set.docx` plus `<Name> — Solutions.docx` — which preserves the worksheet's value and matches how LWS hands out papers.
+- Note the solution field is *not* currently shipped for the `absent` bucket's exams (`students: []` payload still includes `questions`), so verify coverage before promising it.
+
+### Carry-forward: memory index entries still exceed the 150-character guideline
+
+Re-measured on 2026-09-10: **57 of 63** entries in `MEMORY.md` are over the guideline, the longest at 481 characters. The three entries touched this session were trimmed to ≤150, but the bulk sweep from the earlier entry (see the `2026-07-28` section) remains open and unchanged in scope.
