@@ -1146,3 +1146,45 @@ Two distinct causes, and only one is the known variant-lag pattern:
 **Why it matters:** the first bucket is cosmetic, the second is a false parent-facing send — and the *mechanism* behind it (flag absences from a partial upload, results arrive later, nothing re-checks) is not specific to this student. Worth knowing whether 2026-05-24 was a one-off or the general behaviour of a two-pass upload.
 
 **How to apply:** deleting the 6 unnotified rows is the same one-statement sweep already run for the three renames and is safe. The 2 notified rows want a decision first — deleting them silently erases the only evidence that a wrong message was sent, and the sent message itself cannot be unsent. Before either, check whether the two-pass upload path can re-flag: if `exam_absences` is written once at upload and never reconciled against a later results pass, the same false send can recur, and the fix belongs at the writer, not in a backfill. Touches shipped data outside any request — needs a 360 + explicit go-ahead.
+
+**Update 2026-09-10 — the mechanism is confirmed general, not LWS-055-specific.** Linking 16 orphaned Evalbee spellings (see the 2026-09-10 entries) required hand-running the same sweep again, which cleared **34 more rows across 6 students** — LWS-354, LWS-502, LWS-509, LWS-529 (29 rows) and LWS-176, LWS-185 (5 rows), spanning 10 exams from 2026-06-27 to 2026-09-07. So the first bucket above ("variant linked after the absences were filed") is the routine outcome of *any* raw-SQL variant link, and will recur every time one is done outside `addNameVariant`.
+
+**Caveat on those 34:** they were deleted **without** first checking `notified_at`, which the bucket-2 discussion above says to do. Post-hoc evidence is strong that none were notified — all 10 affected exams have **0 notified absences** among their 142 surviving rows, i.e. no absence-notification run ever touched them (base rate across the table is 79 notified of 2012). Not proof for the deleted rows themselves. **The lesson stands: check `notified_at` before the sweep, not after** — a notified row is evidence of a wrong parent message and deleting it destroys the only record.
+
+---
+
+## 2026-09-10
+
+### Share one name-resolver across the ~7 `studentProfiles` lookup sites
+
+`studentProfiles` is an exact-string map, so an Evalbee sheet spelling that differs from the roster by **one capital letter** resolves to `undefined` — silently, with no error. Fixing this by normalising the key is **rejected**; see the 2026-09-10 row in [`DECISIONS.md`](./DECISIONS.md) for the 16-call-site blast radius. The safe shape is to leave the map alone and make the *lookups* lenient.
+
+**Why:** three sites have already grown their own private case-insensitive fallback (`getValidStudentNames` in `analytics/filters.js`, `Toppers/index.jsx`, `StudentView.jsx`) and `api/send-whatsapp.js` lowercases its contact keys server-side — but `WhatsAppPreviewModal.jsx` does **not**. So the preview renders a blank Branch/Mobile for a student the sender resolves fine. That is the same preview-vs-sender divergence the `whatsappResultScore.js` guardrail exists to prevent, in a different field. Four copies of the rule means four chances to drift.
+
+**Evidence (2026-09-10):** 16 orphaned spellings were linked by hand across three rounds — Mayur Thaware (LWS-472), then 8 from `Maths: Mock 1`, then 7 more. Of those, **7 were case/whitespace-only** and would never have needed a human. `Shrivardhan Khot` (LWS-176) now carries four spellings (`Khot` / `knot` / `Kont` / `Shivwardhan Khot`) — three separate people patched this three separate times.
+
+**How to apply:**
+- Add `findProfile(studentProfiles, name)` — exact key, then normalised (`lower` + collapse internal whitespace + trim). **`.trim()` alone is not enough**: `Sourav␠␠Sahoo` (two spaces) is a live failure that trim does not fix.
+- Use it at: `WhatsAppPreviewModal.jsx:20`, `store/slices/attendanceSlice.js:42`, `store/slices/examSupabase.js:34`, `pages/Attendance/index.jsx:493,578`, `lib/merge/deduplication.js:50` — and replace the three private fallbacks so there is one rule.
+- Mirror it in `api/send-whatsapp.js` so preview and sender cannot diverge.
+- **Do not touch** the `p.name === key` guard or the map's keys. That is the whole point.
+
+### Flag unmatched names at results-upload time (uses `matchName`, already written)
+
+The 9 of 16 that normalising cannot reach (`Sonwane`/`Sonawane`, `Veer Repale`/`Veer Jaysingh Repale`, `Shourya Pragat`/`Shaurya Pargat`, …) need a human — but the human should be asked **while the sheet is on screen**, not two months later via a wrongly-marked absence.
+
+**Why:** an unmatched result is invisible until it does damage. This round it cost **34 stale `exam_absences`** — students recorded absent from exams they had sat, back to 23 July — plus 4 parents who never received a Mock 1 result. Upload time is the only moment the uploader knows which name was meant.
+
+**How to apply:**
+- `src/lib/matchStudents.js` `matchName()` already returns `{profile, confidence: 'exact'|'variant'|'fuzzy'|null}` with a 0.55 bigram threshold. **It is currently imported by nothing** — only `detectBatch` from that file is used. The infrastructure exists.
+- In the results upload, after parsing: list names whose `confidence` is `fuzzy` or `null`, with suggested profiles, and let the uploader link (writing `name_variants` via `addNameVariant`, which fires `cleanStaleAbsencesForVariant`) or skip.
+- **Never auto-apply the fuzzy tier** — `Kartik Jagdale` had 8 plausible neighbours. Per `memory/feedback_conservative_auto_merge.md`, ambiguity surfaces, it does not resolve itself.
+- Same reasoning as `Step3Tags`' input+datalist: suggest, never lock.
+
+### Two students carry results but no batch (LWS-547, LWS-539)
+
+Surfaced while linking name variants. `Ronit Sujata Dhimdhime` (LWS-547) and `Apoorva Dhamal` (LWS-539) have exam results that now resolve to a profile, but **no `student_batches` row**, so they stay outside every batch-scoped surface. Both are `Block`, so it is low-stakes and was left alone.
+
+### `Student Full Name` — a template row that got graded
+
+2 `exam_results` rows (2026-06-05, 2026-06-26, `LWS_NDA_2Y_(25-27)_B`) are filed under the literal placeholder `Student Full Name`. It is the only unresolved name left in the whole table. It should be **deleted**, not linked — it also inflates the roster count on those two exams by one. Deletion of result rows was outside the ask, so it was left in place.
