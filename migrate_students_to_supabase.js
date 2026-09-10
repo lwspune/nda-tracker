@@ -52,7 +52,6 @@ const studentRows = students.map(s => ({
   evalbee_roll_nos:  s.evalbee_roll_nos || [],
   match_signatures:  s.match_signatures || [],
   parent_mobiles:    s.parent_mobiles || [],
-  fees:              s.fees || {},
   updated_at:        new Date().toISOString(),
 }))
 

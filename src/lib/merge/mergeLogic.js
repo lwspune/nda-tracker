@@ -219,7 +219,6 @@ export function mergeStudents(existingStudents, importedRows, opts = {}) {
         ].filter(Boolean),
         attendance: [],
         exams:      [],
-        fees:       {},
       }
 
       students.push(newStudent)

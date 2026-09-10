@@ -3,7 +3,7 @@
 Live schema of the Supabase project `exjnzrrlzcrsoxfoojcq` (production).
 Column-level reference. For *how* the app uses this data (load/save paths, dual-path mutations, mode-conditional reads), see `CLAUDE.md` → "Data persistence".
 
-**Last verified:** event/quiz/feedback tables (§6–8) on 2026-06-06 via `information_schema` + `pg_constraint`/`pg_policy`. Core 10 tables (§1–5) row counts as of 2026-05-20 — not re-counted since.
+**Last verified:** fee tables (§11) + all RLS policies on 2026-09-10 via `pg_policy` + anon/teacher/admin/superadmin REST probes. Event/quiz/feedback tables (§6–8) on 2026-06-06 via `information_schema` + `pg_constraint`/`pg_policy`. Core 10 tables (§1–5) row counts as of 2026-05-20 — not re-counted since.
 
 ---
 
@@ -22,8 +22,9 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
+| **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-21 tables. All RLS-enabled except `student_logins` — see warning below. **Two** role-restricted policies: `teacher_feedback` (superadmin-only, read+write) and `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+24 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -65,10 +66,11 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | `evalbee_roll_nos` | text[] | `'{}'` | |
 | `match_signatures` | text[] | `'{}'` | For dedup |
 | `parent_mobiles` | text[] | `'{}'` | Receivers for WhatsApp results |
-| `fees` | jsonb | `'{}'` | |
 | `updated_at` | timestamptz | `now()` | |
 
-**FKs in:** `student_batches`, `student_attendance`, `student_logins`, `student_plans`.
+**FKs in:** `student_batches`, `student_attendance`, `student_logins`, `student_plans`, `student_fee_plans`, `fee_payments`.
+
+**`fees` jsonb was DROPPED 2026-09-10.** It held an all-`null` 8-key skeleton on 126 of 329 rows and a real value on **none** of them — it was mapped from the Student Search List's fee columns and then never wired up. It is not coming back: `loadExistingStudents` reads this table with `select('*')` in **every teacher session**, so any fee column here is fee data in every teacher's browser. Fee data lives in §11, behind a superadmin policy. `mergeStudents` and `mergeStudentRecords` have tests asserting they never put a `fees` key on a student record.
 
 **Import matching:** the student-import flow (`mergeStudents` in `src/lib/merge/mergeLogic.js`) tries `eis_reg_no` first, falls back to `mobile` (unique-hit only), then to `canonical_name` + `branch` (both non-empty, unique-hit only). Blank-EIS rows that find no match are skipped — never inserted as new — so the canonical identifier contract is preserved. See the import section in [`CLAUDE.md`](./CLAUDE.md).
 
@@ -450,6 +452,64 @@ Indexes: `(teacher_id, date)`, `(lws_id)`. RLS ✓ authenticated (`faculty_rw`).
 
 ---
 
+## 11. Fees (superadmin-only, 2026-09-10)
+
+Money, so three rules shape these tables:
+
+1. **Superadmin only, at the DB.** One policy per table, `FOR ALL TO authenticated USING/WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin')`. Not `user_metadata` — the account holder can rewrite that. The plain shared admin login (`official.lwspune@gmail.com`, no role claim) is **deliberately excluded**; fee work requires the superadmin account. Verified at the REST boundary: anon `GET` → `[]`, anon `POST` → 401, teacher → 0 rows, admin → 0 rows, superadmin → visible.
+2. **Nothing derivable is stored.** `paid`, `remaining`, next due, overdue set and status are computed in `src/lib/fees.js`. The exports prove `Remaining = Committed − Paid` on every row, so a stored copy could only ever go stale.
+3. **`eis_*` columns are a second opinion, never the source of truth.** They are the vendor's own snapshot figures, kept so our ledger-derived numbers can be cross-checked against an independent computation. A disagreement is a finding to surface, not a value to silently prefer.
+
+### `student_fee_plans` — the agreement, one per (student, plan_label)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `plan_label` | text | nullable | From the export's `Registrationfor Course` |
+| `gross` | numeric(12,2) | nullable | List price before discount |
+| `committed` | numeric(12,2) | nullable | Agreed price. **NULL means not yet known** — render "unknown", never 0 |
+| `notes` | text | nullable | |
+| `eis_paid` / `eis_next_due_date` / `eis_next_due_amount` / `eis_fees_status` | — | nullable | Vendor snapshot; cross-check only |
+| `snapshot_date` | date | nullable | Which export the `eis_*` values came from |
+| `created_by` | text | nullable | |
+| `created_at` / `updated_at` | timestamptz | `now()` | |
+
+**Unique index on `(lws_id, coalesce(plan_label, ''))`** — a plain `UNIQUE` would not dedupe, because NULLs never collide, so a re-import would keep adding unlabelled plans.
+
+### `fee_installments` — the agreed schedule
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `plan_id` | uuid NOT NULL | — | FK → `student_fee_plans(id)` ON DELETE CASCADE |
+| `seq` | int NOT NULL | — | UNIQUE `(plan_id, seq)` |
+| `due_date` | date NOT NULL | — | |
+| `amount` | numeric(12,2) NOT NULL | — | |
+| `waived` | bool NOT NULL | `false` | Excluded from outstanding |
+| `snapshot_date` | date | nullable | The EMI export this schedule came from |
+
+Source is the EMI export's packed `[DD/MM/YYYY:amount] …` cell. **That export lists only students who still owe**, and its `Amount` column equals Σ EMI — i.e. it is the *outstanding balance*, not the course fee, with paid installments already dropped. So an import must replace the schedule **scoped to the reg numbers present in the file**; a global delete-then-insert would wipe the schedule of everyone who has since paid off.
+
+### `fee_payments` — the receipt ledger
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `lws_id` | text NOT NULL | — | FK → `students(lws_id)` ON DELETE CASCADE |
+| `receipt_no` | text NOT NULL **UNIQUE** | — | Unique across every export row → the idempotent upsert key |
+| `paid_on` | date NOT NULL | — | |
+| `cleared_on` | date | nullable | |
+| `amount` | numeric(12,2) NOT NULL | — | |
+| `mode` | text | nullable | `Online Gateway` / `Cash` / `Google Pay` |
+| `reference` / `reference_date` / `bank_name` / `cleared_status` / `course_raw` | text/date | nullable | |
+| `recorded_by` | text | nullable | |
+| `imported_at` | timestamptz | `now()` | |
+
+Attached to the **student, not the plan**: the receipts export names the payer but not which plan the money was for, and inferring it from a free-text course string would be a guess. **Upsert on `receipt_no`, never replace** — the export is date-windowed, so a replace would delete history outside its window.
+
+---
+
 ## FK graph
 
 ```
@@ -487,38 +547,23 @@ Indexes: `(teacher_id, date)`, `(lws_id)`. RLS ✓ authenticated (`faculty_rw`).
 
 | Table | RLS | Policy |
 |---|---|---|
-| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** `(auth.jwt() -> 'user_metadata' ->> 'role') = 'teacher'`. Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
+| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** where **either** `app_metadata.role` **or** `user_metadata.role` is `'teacher'` (a deny-union; the `user_metadata` half is transitional, covering pre-2026-09-10 tokens that RLS cannot revoke — see SECURITY.md). Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
 | `lecture_absences`, `lecture_submissions`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) — teachers write `lecture_absences` + `lecture_submissions` from `/school-attendance` |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
-| **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'`. The only role-restricted policy. |
+| **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'` (migrated from the self-editable `user_metadata` on 2026-09-10). |
+| **`student_fee_plans`, `fee_installments`, `fee_payments`** | ✓ | **Superadmin only** — same `app_metadata` predicate, one `fees_superadmin_all` policy each. The plain admin login is excluded by design. See §11. |
 | **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |
 | `mentor_assignments`, `mentor_nudges` | ✓ | Authenticated only (`faculty_rw`). The cron send path reads/writes via the service-role client (no user session). |
-| **`student_logins`** | **✗ DISABLED** | **Exposed to `anon` + `authenticated`** |
+| `student_logins` | ✓ | **Authenticated read only** (`authenticated can read`). Deliberately **no insert policy** — the sole writer is `api/student-login.js` via the service role, which bypasses RLS. Fixed 2026-08-11. |
 
-### ⚠️ `student_logins` RLS gap
+### `student_logins` — resolved
 
-Supabase advisory flags this as critical. With the anon key, anyone can `SELECT *` from the audit log or `INSERT` arbitrary rows. The reason RLS is off: `api/student-login.js` writes here without a Supabase session (students authenticate by mobile, not by Supabase Auth), and any policy must allow that insert path.
+This table was RLS-disabled and readable **and writable** with the browser anon key until 2026-08-11 (see SECURITY.md → "Hand-created tables default to RLS OFF"). It now has RLS enabled with a single `authenticated can read` SELECT policy and **no insert policy** — deliberately, because the only writer is `api/student-login.js` through the service role, which bypasses RLS. Adding an anon INSERT policy "defensively" would re-open the audit-log pollution the fix closed.
 
-**Recommended fix** (run manually after reviewing the policy shape):
-
-```sql
-ALTER TABLE student_logins ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "anon + auth can insert"
-  ON student_logins FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "authenticated can read"
-  ON student_logins FOR SELECT
-  TO authenticated
-  USING (true);
-```
-
-This matches the existing behaviour (`api/student-login.js` insert succeeds; `StudentView` admin/teacher read succeeds) while blocking unauthenticated reads.
+Re-verified 2026-09-10: `relrowsecurity = true`, policies = `authenticated can read [r]`.
 
 ---
 

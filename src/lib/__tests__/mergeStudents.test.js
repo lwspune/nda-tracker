@@ -24,7 +24,6 @@ function makeExisting(overrides = {}) {
     match_signatures:  ['alice sharma', '9000000001', 'EIS-001'],
     attendance:        [{ date: '2026-04-01', status: 'P' }],
     exams:             [],
-    fees:              { paid: 10000 },
     ...overrides,
   }
 }
@@ -163,7 +162,7 @@ describe('mergeStudents — new student', () => {
     expect(ids).toEqual(['LWS-006', 'LWS-007'])
   })
 
-  it('initialises attendance, exams, fees, evalbee_roll_nos as empty', () => {
+  it('initialises attendance, exams, evalbee_roll_nos as empty', () => {
     const { students } = mergeStudents(
       [],
       [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar' })],
@@ -171,8 +170,20 @@ describe('mergeStudents — new student', () => {
     const s = students[0]
     expect(s.attendance).toEqual([])
     expect(s.exams).toEqual([])
-    expect(s.fees).toEqual({})
     expect(s.evalbee_roll_nos).toEqual([])
+  })
+
+  // Fee data lives in the superadmin-only fee tables (2026-09-10), never on the
+  // student record. `loadExistingStudents` reads students with `select('*')` in
+  // EVERY teacher session, so a `fees` key here would put financial data in the
+  // browser of every teacher — the reason the dead `students.fees` column was
+  // dropped rather than reused.
+  it('does NOT put a fees key on the student record', () => {
+    const { students } = mergeStudents(
+      [],
+      [makeImportRow({ eis_reg_no: 'EIS-NEW', canonical_name: 'Bob Kumar' })],
+    )
+    expect(students[0]).not.toHaveProperty('fees')
   })
 
   it('sets name_variants to [canonical_name] for a new student', () => {
@@ -238,13 +249,12 @@ describe('mergeStudents — existing student field updates', () => {
     expect(students[0].mobile).toBe('9000000001')
   })
 
-  it('preserves attendance, fees, evalbee_roll_nos from existing record', () => {
+  it('preserves attendance, evalbee_roll_nos from existing record', () => {
     const { students } = mergeStudents(
       [makeExisting({ mobile: '9000000001' })],
       [makeImportRow({ mobile: '9999999999' })],
     )
     expect(students[0].attendance).toEqual([{ date: '2026-04-01', status: 'P' }])
-    expect(students[0].fees).toEqual({ paid: 10000 })
     expect(students[0].evalbee_roll_nos).toEqual(['001'])
   })
 })
@@ -832,7 +842,6 @@ function makeFullStudent(overrides = {}) {
     match_signatures: ['alice sharma'],
     attendance:       [{ date: '2026-04-01', batch: 'Batch A', status: 'P' }],
     exams:            [{ exam_name: 'NDA Mock 1', exam_date: '2026-04-01', total_marks: 250 }],
-    fees:             { paid: 10000, remaining: 5000 },
     ...overrides,
   }
 }
@@ -853,11 +862,14 @@ describe('mergeStudentRecords — scalar fields', () => {
     expect(result.find(s => s.lws_id === 'LWS-001').mobile).toBe('9000000001')
   })
 
-  it("preserves the primary's fees", () => {
-    const primary   = makeFullStudent({ lws_id: 'LWS-001', fees: { paid: 10000 } })
-    const secondary = makeFullStudent({ lws_id: 'LWS-002', fees: { paid: 99999 } })
+  // Was "preserves the primary's fees". Fee data moved to the superadmin-only
+  // tables, so the merge must not carry a fees key through at all — a duplicate
+  // merge is exactly where stale financial data would otherwise be resurrected.
+  it('does not carry a fees key through a record merge', () => {
+    const primary   = makeFullStudent({ lws_id: 'LWS-001' })
+    const secondary = makeFullStudent({ lws_id: 'LWS-002' })
     const result = mergeStudentRecords([primary, secondary], 'LWS-001', 'LWS-002')
-    expect(result.find(s => s.lws_id === 'LWS-001').fees).toEqual({ paid: 10000 })
+    expect(result.find(s => s.lws_id === 'LWS-001')).not.toHaveProperty('fees')
   })
 })
 

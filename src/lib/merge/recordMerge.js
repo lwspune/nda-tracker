@@ -19,7 +19,6 @@
  *   batches:           union (dedup)
  *   attendance:        union, dedup by date+batch (primary wins on conflict)
  *   exams:             union, dedup by exam_name+exam_date (primary wins)
- *   fees:              primary wins entirely
  *
  * @param {Array}  students        current students array (not mutated)
  * @param {string} primaryLwsId   lws_id of the record to keep
@@ -68,7 +67,6 @@ export function mergeStudentRecords(students, primaryLwsId, secondaryLwsId) {
     batches:          unionStrings(primary.batches, secondary.batches),
     attendance:       mergeAttendance(primary.attendance, secondary.attendance),
     exams:            mergeExams(primary.exams, secondary.exams),
-    // fees: primary wins — do not merge financial data automatically
   }
 
   return students

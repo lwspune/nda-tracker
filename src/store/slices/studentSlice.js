@@ -100,7 +100,6 @@ export const createStudentSlice = (set, get) => ({
           evalbee_roll_nos:  s.evalbee_roll_nos || [],
           match_signatures:  s.match_signatures || [],
           parent_mobiles:    s.parent_mobiles || [],
-          fees:              s.fees || {},
           updated_at:        new Date().toISOString(),
         }))
         await supabase.from('students').upsert(rows, { onConflict: 'lws_id' })
