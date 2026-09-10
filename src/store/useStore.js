@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { loadFromDisk, saveToStorage, onSaveConflict, loadExamsFromSupabase as fetchExamsFromSupabase, loadInsightsFromSupabase as fetchInsightsFromSupabase, loadQuizzesFromSupabase as fetchQuizzesFromSupabase } from './persist'
 import { supabase } from '../lib/supabase'
+import { isSuperadminSession } from '../lib/authRole'
 import { IS_READ_ONLY } from '../config'
 import { migrateFreq } from '../lib/persistence'
 import { DEFAULTS, hydrate, seedBranches } from './slices/defaults'
@@ -56,7 +57,7 @@ const useStore = create((set, get) => ({
           // Derived once and re-applied in EVERY set below — the data-load set()
           // spreads ...DEFAULTS (isSuperadmin:false), which would otherwise clobber
           // the flag once loadFromDisk resolves (it's intentionally not persisted).
-          const isSuperadmin = session.user?.user_metadata?.role === 'superadmin'
+          const isSuperadmin = isSuperadminSession(session)
           set({ hydrated: false, isSuperadmin })
           const saved = await loadFromDisk()
           if (saved) {

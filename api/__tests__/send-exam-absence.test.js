@@ -63,7 +63,7 @@ function setAuthTeacher() {
   createClient.mockImplementation(() => ({
     auth: {
       getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'teacher-uid', user_metadata: { role: 'teacher' } } },
+        data: { user: { id: 'teacher-uid', app_metadata: { role: 'teacher' } } },
       }),
     },
   }))

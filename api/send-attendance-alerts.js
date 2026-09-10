@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { buildDailyChain, resolveOnLeave, buildWardenAlert } from '../src/lib/analytics/chain.js'
+import { isTeacherUser } from './_authRole.js'
 
 // Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
 // deployment at 12). Dispatched by `kind` in the POST body:
@@ -241,7 +242,7 @@ async function handleHostelAlert(req, res) {
     const anon = createClient(supabaseUrl, supabaseAnon)
     const { data: { user } } = await anon.auth.getUser(bearer)
     if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
-    if (user.user_metadata?.role === 'teacher') { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
   }
 
   const { dryRun = false, redirectTo = null, date = null } = (req.method === 'POST' ? req.body : null) || {}

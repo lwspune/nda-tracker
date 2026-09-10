@@ -29,7 +29,7 @@ function mockSupabase({ sessionActive = true, role, ...builderOpts } = {}) {
   supabase.auth.getSession.mockResolvedValue({
     data: {
       session: sessionActive
-        ? { user: { id: 'u1', email: 'akash@lwspune.com', user_metadata: role ? { role } : {} } }
+        ? { user: { id: 'u1', email: 'akash@lwspune.com', app_metadata: role ? { role } : {} } }
         : null,
     },
   })

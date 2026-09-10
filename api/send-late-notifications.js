@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { isTeacherUser } from './_authRole.js'
 
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -83,7 +84,7 @@ export default async function handler(req, res) {
   // Teachers hold real sessions and capture attendance at /school-attendance,
   // so a valid session no longer implies admin. Parent-facing sends stay with
   // the office (mirrors api/send-attendance-alerts.js).
-  if (user.user_metadata?.role === 'teacher') { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
   const { date, redirectTo, students } = req.body || {}
   if (!date || !Array.isArray(students)) {

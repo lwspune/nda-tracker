@@ -44,7 +44,7 @@ function setEnv() {
 
 // Two clients are created: anon (for verifying caller JWT) and service-role
 // (for admin.* operations). Mock both via successive createClient invocations.
-function setupClients({ caller = { id: 'admin-uid', user_metadata: {} }, adminOps = {} } = {}) {
+function setupClients({ caller = { id: 'admin-uid', app_metadata: {} }, adminOps = {} } = {}) {
   const anonClient = {
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: caller } }) },
   }
@@ -97,7 +97,7 @@ describe('teacher-account — gate', () => {
 
   it('returns 403 when caller is a teacher (role=teacher)', async () => {
     setEnv()
-    setupClients({ caller: { id: 'teacher-uid', user_metadata: { role: 'teacher' } } })
+    setupClients({ caller: { id: 'teacher-uid', app_metadata: { role: 'teacher' } } })
     const { res } = await call({ action: 'list' })
     expect(res.statusCode).toBe(403)
   })
@@ -117,10 +117,10 @@ describe('teacher-account — list action', () => {
       adminOps: {
         listUsers: vi.fn().mockResolvedValue({
           data: { users: [
-            { id: '1', email: 'admin@x.com',   user_metadata: {} },
-            { id: '2', email: 'teach1@x.com',  user_metadata: { role: 'teacher' } },
-            { id: '3', email: 'teach2@x.com',  user_metadata: { role: 'teacher' } },
-            { id: '4', email: 'someone@x.com', user_metadata: { role: 'other' } },
+            { id: '1', email: 'admin@x.com',   app_metadata: {} },
+            { id: '2', email: 'teach1@x.com',  app_metadata: { role: 'teacher' } },
+            { id: '3', email: 'teach2@x.com',  app_metadata: { role: 'teacher' } },
+            { id: '4', email: 'someone@x.com', app_metadata: { role: 'other' } },
           ] },
           error: null,
         }),
@@ -137,7 +137,7 @@ describe('teacher-account — list action', () => {
       adminOps: {
         listUsers: vi.fn().mockResolvedValue({
           data: { users: [
-            { id: '1', email: 'Mixed.Case@X.com', user_metadata: { role: 'teacher' } },
+            { id: '1', email: 'Mixed.Case@X.com', app_metadata: { role: 'teacher' } },
           ] },
           error: null,
         }),
@@ -159,7 +159,7 @@ describe('teacher-account — create action', () => {
     expect(r2.res.statusCode).toBe(400)
   })
 
-  it('calls auth.admin.createUser with email_confirm + teacher metadata', async () => {
+  it('calls auth.admin.createUser with email_confirm + role in app_metadata', async () => {
     setEnv()
     const createUser = vi.fn().mockResolvedValue({ data: { user: { id: 'new-uid' } }, error: null })
     setupClients({ adminOps: { createUser } })
@@ -170,17 +170,21 @@ describe('teacher-account — create action', () => {
       email: 'new@x.com',
       password: 'pw12345678',
       email_confirm: true,
-      user_metadata: { role: 'teacher', full_name: 'Navneet Sir' },
+      app_metadata:  { role: 'teacher' },
+      user_metadata: { full_name: 'Navneet Sir' },
     })
   })
 
-  it('omits full_name from user_metadata when name not provided', async () => {
+  it('puts the role in app_metadata and leaves user_metadata empty when no name given', async () => {
     setEnv()
     const createUser = vi.fn().mockResolvedValue({ data: { user: { id: 'new-uid' } }, error: null })
     setupClients({ adminOps: { createUser } })
     await call({ action: 'create', email: 'new@x.com', password: 'pw12345678' })
     const args = createUser.mock.calls[0][0]
-    expect(args.user_metadata).toEqual({ role: 'teacher' })
+    expect(args.app_metadata).toEqual({ role: 'teacher' })
+    expect(args.user_metadata).toEqual({})
+    // The role must NOT be mirrored into the self-editable block.
+    expect(args.user_metadata.role).toBeUndefined()
   })
 
   it('surfaces Supabase error (e.g. duplicate email)', async () => {
@@ -210,8 +214,8 @@ describe('teacher-account — delete action', () => {
       adminOps: {
         listUsers: vi.fn().mockResolvedValue({
           data: { users: [
-            { id: 'uid-1', email: 'admin@x.com', user_metadata: {} },
-            { id: 'uid-2', email: 'teach@x.com', user_metadata: { role: 'teacher' } },
+            { id: 'uid-1', email: 'admin@x.com', app_metadata: {} },
+            { id: 'uid-2', email: 'teach@x.com', app_metadata: { role: 'teacher' } },
           ] },
           error: null,
         }),
@@ -240,7 +244,7 @@ describe('teacher-account — delete action', () => {
     setupClients({
       adminOps: {
         listUsers: vi.fn().mockResolvedValue({
-          data: { users: [{ id: 'uid-1', email: 'Mixed@X.com', user_metadata: { role: 'teacher' } }] },
+          data: { users: [{ id: 'uid-1', email: 'Mixed@X.com', app_metadata: { role: 'teacher' } }] },
           error: null,
         }),
         deleteUser,
@@ -269,7 +273,7 @@ describe('teacher-account — reset action', () => {
     setupClients({
       adminOps: {
         listUsers: vi.fn().mockResolvedValue({
-          data: { users: [{ id: 'uid-2', email: 'teach@x.com', user_metadata: { role: 'teacher' } }] },
+          data: { users: [{ id: 'uid-2', email: 'teach@x.com', app_metadata: { role: 'teacher' } }] },
           error: null,
         }),
         updateUserById,

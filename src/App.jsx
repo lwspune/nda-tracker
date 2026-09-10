@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import useStore from './store/useStore'
 import { IS_READ_ONLY } from './config'
 import { supabase } from './lib/supabase'
+import { isTeacherSession, isSuperadminSession } from './lib/authRole'
 import { ModeContext } from './context/ModeContext'
 import { loadFromSupabase } from './store/persist'
 import Sidebar from './components/layout/Sidebar'
@@ -49,7 +50,7 @@ export default function App() {
       // initial restore), not just once in initStore — otherwise logging in
       // after the page loaded logged-out never reveals the superadmin surfaces.
       if (IS_READ_ONLY) {
-        useStore.setState({ isSuperadmin: session?.user?.user_metadata?.role === 'superadmin' })
+        useStore.setState({ isSuperadmin: isSuperadminSession(session) })
       }
     })
     return () => subscription.unsubscribe()
@@ -113,7 +114,7 @@ export default function App() {
     }
 
     // Teacher role — individual Supabase account with role='teacher'
-    if (supabaseSession?.user?.user_metadata?.role === 'teacher') {
+    if (isTeacherSession(supabaseSession)) {
       return <TeacherPortal session={supabaseSession} onLogout={() => supabase.auth.signOut()} />
     }
 
@@ -183,7 +184,7 @@ export default function App() {
 // so this route pulls the faculty_state blob (timetables, mappings, teacher
 // records) and the student roster itself rather than depending on TeacherPortal.
 function StaffCaptureRoute({ surface, session, onLogout }) {
-  const isTeacher = session?.user?.user_metadata?.role === 'teacher'
+  const isTeacher = isTeacherSession(session)
   const loadRemoteData = useStore(s => s.loadRemoteData)
   const loadStudents   = useStore(s => s.loadStudentsFromSupabase)
   const [ready, setReady] = useState(!isTeacher)

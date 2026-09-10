@@ -47,7 +47,7 @@ function mockDb({ assignments = [], students = [], nudges = [], teachers = [], r
     : t === 'faculty_state' ? { data: { data: { timetableTeachers: teachers } }, error: null }
     : { data: null, error: null }
   createClient.mockImplementation(() => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', user_metadata: role ? { role } : {} } } }) },
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', app_metadata: role ? { role } : {} } } }) },
     from: t => {
       const result = resultFor(t)
       const b = {

@@ -46,7 +46,7 @@ function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], h
     : t === 'faculty_state' ? { data: { data: { hostelAlertMobiles } }, error: null }
     : { data: null, error: null }
   createClient.mockImplementation(() => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', user_metadata: role ? { role } : {} } } }) },
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', app_metadata: role ? { role } : {} } } }) },
     from: t => {
       const result = resultFor(t)
       const b = {
@@ -165,7 +165,7 @@ describe('send-attendance-alerts (hostel) — date format per table', () => {
       t === 'faculty_state' ? { data: { data: { hostelAlertMobiles: [] } }, error: null }
       : { data: [], error: null }
     createClient.mockImplementation(() => ({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', user_metadata: role ? { role } : {} } } }) },
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', app_metadata: role ? { role } : {} } } }) },
       from: t => {
         const result = resultFor(t)
         const b = {

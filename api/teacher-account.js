@@ -1,7 +1,7 @@
 // Admin-only endpoint to manage Supabase auth accounts for teachers.
 //
 // Single POST endpoint, action-routed:
-//   list   → { emails }                returns lowercase emails of users with user_metadata.role==='teacher'
+//   list   → { emails }                returns lowercase emails of users with app_metadata.role==='teacher'
 //   create → { email, password, name? } creates an instant-active auth user with role='teacher'
 //   delete → { email }                  removes the auth user
 //   reset  → { email, newPassword }     sets a new password on the auth user
@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { isTeacherUser } from './_authRole.js'
 
 function readEnvLocal() {
   try {
@@ -49,7 +50,7 @@ export default async function handler(req, res) {
   const anonClient = createClient(supabaseUrl, supabaseAnon)
   const { data: { user } } = await anonClient.auth.getUser(jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
-  if (user.user_metadata?.role === 'teacher') {
+  if (isTeacherUser(user)) {
     res.status(403).json({ ok: false, error: 'Forbidden — teacher accounts cannot manage auth accounts' })
     return
   }
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
     const { data, error } = await admin.auth.admin.listUsers()
     if (error) { res.status(500).json({ ok: false, error: error.message }); return }
     const emails = (data?.users || [])
-      .filter(u => u.user_metadata?.role === 'teacher' && u.email)
+      .filter(u => isTeacherUser(u) && u.email)
       .map(u => u.email.toLowerCase())
     res.status(200).json({ ok: true, emails })
     return
@@ -73,9 +74,14 @@ export default async function handler(req, res) {
 
   if (action === 'create') {
     if (!email || !password) { res.status(400).json({ ok: false, error: 'email and password are required' }); return }
-    const user_metadata = name ? { role: 'teacher', full_name: name } : { role: 'teacher' }
+    // The role is authorization data, so it goes in app_metadata (Admin-API-only).
+    // full_name is display data and stays in the self-editable user_metadata —
+    // a teacher correcting their own name must not be able to touch their role.
+    const user_metadata = name ? { full_name: name } : {}
     const { data, error } = await admin.auth.admin.createUser({
-      email, password, email_confirm: true, user_metadata,
+      email, password, email_confirm: true,
+      app_metadata: { role: 'teacher' },
+      user_metadata,
     })
     if (error) { res.status(400).json({ ok: false, error: error.message }); return }
     res.status(200).json({ ok: true, id: data?.user?.id })

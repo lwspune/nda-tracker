@@ -4,7 +4,7 @@
  * Three possible modes:
  *   'admin'    — localhost dev OR online admin (Supabase session without role metadata).
  *                Full read-write access.
- *   'teacher'  — Supabase session with user_metadata.role === 'teacher'.
+ *   'teacher'  — Supabase session with app_metadata.role === 'teacher'.
  *                All pages visible, no mutation UI.
  *   'student'  — Mobile-number login via /api/student-login. Own data only.
  *

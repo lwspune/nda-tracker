@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { isTeacherUser } from './_authRole.js'
 
 const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
 
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
   // Teachers hold real sessions and capture at /school-attendance, so a valid
   // session no longer implies admin. Parent-facing sends stay with the office
   // (mirrors api/send-attendance-alerts.js).
-  if (user.user_metadata?.role === 'teacher') { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
   // `date` is still required (used by the client for send-history keying) but the
   // approved template carries no date field — it isn't a message variable.

@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import { supabase } from '../lib/supabase'
+import { isTeacherSession } from '../lib/authRole'
 import { IS_READ_ONLY } from '../config'
 
 // `IS_READ_ONLY` is a runtime hostname check — `true` on Vercel/GitHub Pages, `false` on localhost.
@@ -184,7 +185,7 @@ async function doSave(data) {
   // write policies exclude role='teacher'), but stopping here matters for UX: an
   // RLS-blocked UPDATE matches zero rows, which the version guard below would
   // read as a lost race and show a teacher the "your data is out of date" banner.
-  if (session.user?.user_metadata?.role === 'teacher') return
+  if (isTeacherSession(session)) return
   // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
   const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
 

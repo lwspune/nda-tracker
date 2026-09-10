@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { buildTeacherBlocks, diffBlocks, toGCalEvent } from '../src/lib/calendarSync.js'
 import { getAccessToken, insertEvent, patchEvent, deleteEvent } from './_googleCalendar.js'
+import { isTeacherUser } from './_authRole.js'
 
 function readEnvLocal() {
   try {
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
   const anon = createClient(supabaseUrl, supabaseAnon)
   const { data: { user } } = await anon.auth.getUser(jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
-  if (user.user_metadata?.role === 'teacher') { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
   const { dryRun = false, teacherId = null } = req.body || {}
 

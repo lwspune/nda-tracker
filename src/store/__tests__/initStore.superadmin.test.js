@@ -23,7 +23,7 @@ import { supabase } from '../../lib/supabase'
 import { loadFromDisk } from '../persist'
 
 function session(role) {
-  return { data: { session: { user: { user_metadata: role ? { role } : {} } } } }
+  return { data: { session: { user: { app_metadata: role ? { role } : {} } } } }
 }
 
 // Regression guard for the two-trap session-flag clobber (2026-06-05): the prod

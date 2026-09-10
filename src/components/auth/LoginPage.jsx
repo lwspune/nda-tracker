@@ -5,7 +5,7 @@
  *   - Student: mobile → /api/student-login (serverless) → onStudentLogin(data)
  *   - Admin / Teacher: email + password → supabase.auth.signInWithPassword.
  *     Role distinction (admin vs teacher) happens after login in App.jsx
- *     based on user_metadata.role.
+ *     based on app_metadata.role.
  *
  * On mount, restores any valid student session automatically.
  */

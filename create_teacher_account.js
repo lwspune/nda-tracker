@@ -1,7 +1,7 @@
 /**
  * create_teacher_account.js
  *
- * Creates (or updates) a Supabase teacher account with role='teacher' in user_metadata.
+ * Creates (or updates) a Supabase teacher account with role='teacher' in app_metadata.
  * Run once per teacher. Re-running with the same email updates the password.
  *
  * Usage:
@@ -54,7 +54,7 @@ const existing = users.find(u => u.email === email)
 if (existing) {
   const { error } = await supabase.auth.admin.updateUserById(existing.id, {
     password,
-    user_metadata: { role: 'teacher' },
+    app_metadata: { role: 'teacher' },
   })
   if (error) { console.error('Update failed:', error.message); process.exit(1) }
   console.log(`Updated teacher account: ${email} (id: ${existing.id})`)
@@ -63,7 +63,7 @@ if (existing) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { role: 'teacher' },
+    app_metadata: { role: 'teacher' },
   })
   if (error) { console.error('Create failed:', error.message); process.exit(1) }
   console.log(`Created teacher account: ${email} (id: ${data.user.id})`)
