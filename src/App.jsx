@@ -19,6 +19,7 @@ import SyllabusPage from './pages/Syllabus/SyllabusPage'
 import TimetablePage from './pages/Timetable/TimetablePage'
 import SettingsPage from './pages/Settings/SettingsPage'
 import MonthlyReportsPage from './pages/MonthlyReports'
+import ErrorSetsPage from './pages/ErrorSets'
 import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
@@ -151,6 +152,7 @@ export default function App() {
     toppers:    <ToppersPage />,
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
+    errorSets:  <ErrorSetsPage />,
     insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
@@ -237,6 +239,7 @@ function OnlineAdminPortal({ session, onLogout }) {
     toppers:    <ToppersPage />,
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
+    errorSets:  <ErrorSetsPage />,
     insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
@@ -300,6 +303,7 @@ function TeacherPortal({ session, onLogout }) {
     toppers:    <ToppersPage />,
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
+    errorSets:  <ErrorSetsPage />,
   }
 
   if (!loaded) {

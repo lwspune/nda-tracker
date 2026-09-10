@@ -19,6 +19,9 @@ const NAV = [
   { id: 'toppers',    icon: '🏆', label: 'Toppers' },
   { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
+  // Not adminOnly: a teacher handing their own class its mistakes is the point.
+  // Read-only + a local download, so it grants nothing a teacher can't already see.
+  { id: 'errorSets', icon: '📕', label: 'Error Sets' },
   { id: 'insights',       icon: '🧠', label: 'Insights', adminOnly: true },
   { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
   { id: 'costs',          icon: '💰', label: 'API Costs', adminOnly: true },
