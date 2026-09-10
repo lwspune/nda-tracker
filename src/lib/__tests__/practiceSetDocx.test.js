@@ -258,3 +258,212 @@ describe('prettifyMath — the last-resort renderer', () => {
     expect(prettifyMath('n + 1')).toBe('n + 1')
   })
 })
+
+// ── formatting parity with PYQ Vault's exporter ─────────────────────────────
+// Each block below is a defect that reached a downloaded practice set: the file
+// opened fine and every structural assertion above passed, but the maths on the
+// page was wrong. Counts are from the live question bank (Maths scope).
+
+async function buildOne(question, options = ['', '', '', '']) {
+  const blob = await buildPracticeSetDocx({
+    studentName: 'Amy Example',
+    rows: [{
+      subtopic: 'Fixture', chapter: 'Fixture',
+      marksAtStake: 1, projected: 0, lift: 1,
+      counts: { right: 0, wrong: 1, skipped: 0, absent: 0 },
+      questions: [{ n: 1, bucket: 'wrong', difficulty: '', q: 1, question, options, answer: 'A' }],
+    }],
+    totals: { questions: 1, lift: 1, counts: { right: 0, wrong: 1, skipped: 0, absent: 0 } },
+  })
+  return (await JSZip.loadAsync(blob)).file('word/document.xml').async('text')
+}
+
+describe('buildPracticeSetDocx — matrices and determinants (283 questions)', () => {
+  // mathml2omml renders the stretchy fence as a plain text run beside the grid,
+  // so Word draws a tiny fixed-height bar that does not enclose the matrix.
+  it('encloses a determinant in a stretching delimiter', async () => {
+    const doc = await buildOne(String.raw`Evaluate \(\begin{vmatrix} 1 & 2 \\ 3 & 4 \end{vmatrix}\)`)
+    expect(doc).toContain('<m:begChr m:val="|"/>')
+    expect(doc).toContain('<m:endChr m:val="|"/>')
+    // the detached flanking run is gone
+    expect(doc).not.toContain('<m:t xml:space="preserve">∣</m:t>')
+  }, 30000)
+
+  it('encloses a pmatrix', async () => {
+    const doc = await buildOne(String.raw`Given \(\begin{pmatrix} a & b \\ c & d \end{pmatrix}\)`)
+    expect(doc).toContain('<m:begChr m:val="("/>')
+    expect(doc).toContain('<m:endChr m:val=")"/>')
+  }, 30000)
+
+  it('encloses a one-sided cases brace', async () => {
+    const doc = await buildOne(String.raw`Let \(f(x)=\begin{cases} x & x>0 \\ 0 & x\le 0 \end{cases}\)`)
+    expect(doc).toContain('<m:begChr m:val="{"/>')
+    expect(doc).toContain('<m:endChr m:val=""/>')
+  }, 30000)
+
+  it('still parses — a bad rewrite makes Word refuse the file', async () => {
+    const doc = await buildOne(String.raw`\(\begin{vmatrix} 1 & 2 \\ 3 & 4 \end{vmatrix}\)`)
+    const parsed = new DOMParser().parseFromString(doc, 'application/xml')
+    expect(parsed.querySelector('parsererror')?.textContent ?? '').toBe('')
+  }, 30000)
+})
+
+describe('buildPracticeSetDocx — accents (57 questions)', () => {
+  // KaTeX gets the structure right (<m:acc>) but hands Word a SPACING glyph.
+  // Word can only position a combining mark over the base.
+  it('gives \\bar a combining overline, not a spacing macron', async () => {
+    const doc = await buildOne(String.raw`The mean is \(\bar{x}\)`)
+    expect(doc).toContain('<m:chr m:val="̅"/>')
+    expect(doc).not.toContain('<m:chr m:val="ˉ"/>')
+  }, 30000)
+
+  it('gives \\overline a combining overline', async () => {
+    const doc = await buildOne(String.raw`The segment \(\overline{AB}\)`)
+    expect(doc).toContain('<m:chr m:val="̅"/>')
+    expect(doc).not.toContain('<m:chr m:val="‾"/>')
+  }, 30000)
+
+  it('leaves \\vec alone — already combining', async () => {
+    const doc = await buildOne(String.raw`The vector \(\vec{a}\)`)
+    expect(doc).toContain('<m:chr m:val="⃗"/>')
+  }, 30000)
+})
+
+describe('buildPracticeSetDocx — pipe tables (15 questions)', () => {
+  const STEM = 'Study the table.\n\n| x | y |\n|---|---|\n| 1 | 2 |\n\nFind y at x=3.'
+
+  it('renders a GFM table as a Word table, not raw pipes', async () => {
+    const doc = await buildOne(STEM)
+    expect(doc).not.toContain('|---|')
+  }, 30000)
+
+  it('adds a table to the document that a table-free stem does not', async () => {
+    const withTable = await buildOne(STEM)
+    const without = await buildOne('Study the table. Find y at x=3.')
+    const count = d => (d.match(/<w:tbl>/g) || []).length
+    expect(count(withTable)).toBe(count(without) + 1)
+  }, 30000)
+
+  it('keeps the prose either side of the table', async () => {
+    const doc = await buildOne(STEM)
+    expect(doc).toContain('Study the table.')
+    expect(doc).toContain('Find y at x=3.')
+  }, 30000)
+
+  // Sliced between the two prose blocks, so this pins the cell values AND the
+  // table's position in the stem — the cover and answer-key tables sit outside
+  // the window and cannot satisfy it.
+  it('puts the cell values in a table between the prose', async () => {
+    const doc = await buildOne(STEM)
+    const between = doc.slice(doc.indexOf('Study the table.'), doc.indexOf('Find y at x=3.'))
+    expect(between).toContain('<w:tbl>')
+    expect(between).toContain('>x</w:t>')
+    expect(between).toContain('>1</w:t>')
+  }, 30000)
+
+  // The number rides on the first PARAGRAPH; a stem that opens with a table
+  // would otherwise lose it.
+  it('still numbers a question whose stem OPENS with a table', async () => {
+    const doc = await buildOne('| x | y |\n|---|---|\n| 1 | 2 |')
+    expect(doc).toContain('Q1. ')
+  }, 30000)
+
+  // The bucket tag rides on the last PROSE paragraph, so a stem ending in a
+  // table needs it emitted separately.
+  it('still tags a question whose stem ENDS with a table', async () => {
+    const doc = await buildOne('Study this.\n\n| x | y |\n|---|---|\n| 1 | 2 |')
+    expect(doc).toContain('[WRONG]')
+  }, 30000)
+})
+
+describe('buildPracticeSetDocx — markdown bold (427 questions bank-wide)', () => {
+  it('renders **bold** as a bold run, never as asterisks', async () => {
+    const doc = await buildOne('Which of the following is **not** a prime?')
+    expect(doc).not.toContain('**')
+    // docx emits <w:b/><w:bCs/> plus sizing in the run properties, so match the
+    // bold flag and the text within one run rather than an exact rPr.
+    expect(doc).toMatch(/<w:b\/>[\s\S]{0,200}?<w:t[^>]*>not<\/w:t>/)
+  }, 30000)
+
+  it('resolves bold in an option too', async () => {
+    const doc = await buildOne('Pick one', ['**yes**', 'no', '', ''])
+    expect(doc).not.toContain('**')
+    expect(doc).toMatch(/<w:b\/>[\s\S]{0,200}?<w:t[^>]*>yes<\/w:t>/)
+  }, 30000)
+
+  // Bold is a flag, not a segment type: the span has to survive the math zone
+  // inside it, and the math still has to convert.
+  it('carries bold across a maths zone', async () => {
+    const doc = await buildOne(String.raw`A **matrix of order \(m \times n\) here**`)
+    expect(doc).not.toContain('**')
+    expect(doc).toContain('<m:oMath')
+  }, 30000)
+})
+
+describe('buildPracticeSetDocx — the structural guard', () => {
+  // A zone whose OMML is malformed must fall back to text. Shipping it makes
+  // Word refuse the ENTIRE document, so one bad equation loses the whole set.
+  it('never emits an unparseable document for a hostile stem', async () => {
+    const doc = await buildOne(String.raw`Compare \(0 < \alpha < 90\) and \(a & b\) and \(\x\)`)
+    const parsed = new DOMParser().parseFromString(doc, 'application/xml')
+    expect(parsed.querySelector('parsererror')?.textContent ?? '').toBe('')
+    expect(doc).not.toContain('OMML_')
+  }, 30000)
+
+  // \x is not a KaTeX macro (17 occurrences in the live bank, all typos). The
+  // zone must degrade to readable text, not vanish and not leak a backslash.
+  it('falls back to readable text for an unconvertible zone', async () => {
+    const doc = await buildOne(String.raw`Let \(\x\) be given`)
+    expect(doc).not.toContain('\\x')
+    expect(doc).toContain('Let ')
+    expect(doc).toContain(' be given')
+  }, 30000)
+})
+
+// prettifyMath only fires when conversion FAILS, which on the live bank is ~77
+// macro occurrences (all data-entry typos). The cost of a thin map is that the
+// surrounding, perfectly good maths gets mangled with it — so the map covers
+// what the bank actually uses.
+describe('prettifyMath — set notation and accents survive the fallback', () => {
+  it('maps set operators instead of dropping them', () => {
+    expect(prettifyMath(String.raw`A \cup B`)).toBe('A ∪ B')
+    expect(prettifyMath(String.raw`A \cap B`)).toBe('A ∩ B')
+    expect(prettifyMath(String.raw`x \in A`)).toBe('x ∈ A')
+    expect(prettifyMath(String.raw`x \notin A`)).toBe('x ∉ A')
+    expect(prettifyMath(String.raw`A \subseteq B`)).toBe('A ⊆ B')
+    expect(prettifyMath(String.raw`A \setminus B`)).toBe('A ∖ B')
+  })
+
+  // \cap\bar used to become "∩bar": a plain \b word boundary breaks when the
+  // next character is a letter, so the macro must be matched as a whole
+  // control word instead.
+  it('matches a whole control word, not a prefix', () => {
+    expect(prettifyMath(String.raw`\cup`)).toBe('∪')
+    expect(prettifyMath(String.raw`A \cap \bar{B}`)).not.toMatch(/bar|cap/)
+    // \in must not fire inside \infty
+    expect(prettifyMath(String.raw`x \to \infty`)).toBe('x → ∞')
+  })
+
+  it('keeps an overline as an overline', () => {
+    expect(prettifyMath(String.raw`\overline{AB}`)).toBe('A̅B̅')
+    expect(prettifyMath(String.raw`\bar{x}`)).toBe('x̅')
+  })
+
+  it('renders a complement superscript', () => {
+    expect(prettifyMath(String.raw`(A \cup B)^c`)).toBe('(A ∪ B)ᶜ')
+  })
+
+  it('maps the greek and relation macros the bank uses', () => {
+    expect(prettifyMath(String.raw`\alpha + \beta`)).toBe('α + β')
+    expect(prettifyMath(String.raw`\triangle ABC`)).toBe('△ ABC')
+    expect(prettifyMath(String.raw`x \geq y`)).toBe('x ≥ y')
+  })
+
+  it('keeps a function name as a word', () => {
+    expect(prettifyMath(String.raw`\sin x + \cos y`)).toBe('sin x + cos y')
+  })
+
+  it('renders degrees', () => {
+    expect(prettifyMath(String.raw`90^\circ`)).toBe('90°')
+  })
+})

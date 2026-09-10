@@ -10,8 +10,12 @@
 // packing. The <m:mathPr> block is NOT optional — without it Word gives every
 // fraction about an inch of phantom left indent.
 //
-// Every import here is dynamic: docx is large, and nobody who does not click
-// Download should pay for it.
+// The heavy imports here are dynamic: docx is large, and nobody who does not
+// click Download should pay for it. The two modules below are pure, tiny, and
+// live in this same lazy chunk.
+
+import { parseRichSegments, parseTableBlocks } from './richText'
+import { repairOmml } from './ommlRepair'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -31,42 +35,82 @@ const TAG_COLOR = {
   wrong: 'B00020', skipped: '8A6D00', absent: '555555', right: '0F7B4F',
 }
 
-// Math zones: \[..\], $$..$$, \(..\), $..$
-const MATH_RE = /(\\\[[\s\S]+?\\\]|\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\$[^$\n]+?\$)/g
-
 const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// Last resort when a LaTeX snippet will not convert. Stripping backslashes and
-// braces turns \dfrac{1}{16} into "dfrac 1 16", which is worse than useless on a
-// maths paper — render the common forms readably instead.
-export function prettifyMath(latex) {
-  return String(latex)
-    .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
-    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
-    .replace(/\\(?:left|right|displaystyle|text|mathrm)\b/g, '')
-    .replace(/\\times\b/g, '×').replace(/\\div\b/g, '÷')
-    .replace(/\\leq?\b/g, '≤').replace(/\\geq?\b/g, '≥')
-    .replace(/\\neq?\b/g, '≠').replace(/\\pm\b/g, '±')
-    .replace(/\\pi\b/g, 'π').replace(/\\theta\b/g, 'θ')
-    .replace(/\\alpha\b/g, 'α').replace(/\\beta\b/g, 'β')
-    .replace(/\\infty\b/g, '∞').replace(/\\cdot\b/g, '·')
-    .replace(/[\\{}]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-// Escape raw <, > and & inside <m:t> — "0 < \alpha" otherwise yields XML Word
-// refuses to open.
+// ── the last-resort renderer ────────────────────────────────────────────────
 //
-// The element test must be EXACT. `<m:t` is also a prefix of `<m:type>`, which
-// mathml2omml emits inside <m:fPr> for EVERY fraction, so `<m:t([^>]*)>` matched
-// `<m:type m:val="bar"/>` and the lazy body then swallowed all the live markup up
-// to the next real </m:t> and escaped it — producing malformed XML that Word
-// refuses outright. Require whitespace or '>' after the tag name.
-function sanitizeOmml(omml) {
-  return omml.replace(/<m:t(\s[^>]*)?>([\s\S]*?)<\/m:t>/g, (_, attrs = '', body) =>
-    `<m:t${attrs}>${body.replace(/&(?!(amp|lt|gt|quot|apos);)/g, '&amp;')
-      .replace(/</g, '&lt;').replace(/>/g, '&gt;')}</m:t>`)
+// Fires only when conversion FAILS. On the live bank that is ~77 macro
+// occurrences, every one a data-entry typo (\x, \b, \pa) — but a failure takes
+// the whole surrounding zone down with it, so the map has to cover what the bank
+// actually writes, not just the typo. Stripping backslashes and braces alone
+// turns \dfrac{1}{16} into "dfrac 1 16", which is worse than useless on a maths
+// paper, and drops \cup / \in / \overline entirely.
+
+// Whole control words. `(?![a-zA-Z])` rather than \b: a \b matches between the
+// 'p' and the '\' of `\cap\bar`, so the macro would be replaced and the next
+// one's name left behind as "∩bar".
+const W = '(?![a-zA-Z])'
+const PRETTIFY_TOKENS = [
+  ['subseteq', '⊆'], ['subsetneq', '⊊'], ['subset', '⊂'],
+  ['supseteq', '⊇'], ['supset', '⊃'], ['setminus', '∖'],
+  ['varnothing', '∅'], ['emptyset', '∅'], ['notin', '∉'], ['in', '∈'],
+  ['cup', '∪'], ['cap', '∩'],
+  ['bigtriangleup', '△'], ['triangle', '△'], ['angle', '∠'],
+  ['times', '×'], ['div', '÷'], ['cdot', '·'], ['pm', '±'], ['mp', '∓'],
+  ['leq', '≤'], ['le', '≤'], ['geq', '≥'], ['ge', '≥'],
+  ['neq', '≠'], ['ne', '≠'], ['approx', '≈'], ['equiv', '≡'],
+  ['sim', '∼'], ['propto', '∝'], ['perp', '⊥'], ['parallel', '∥'],
+  ['Leftrightarrow', '⇔'], ['Rightarrow', '⇒'],
+  ['leftarrow', '←'], ['rightarrow', '→'], ['to', '→'],
+  ['infty', '∞'], ['forall', '∀'], ['exists', '∃'],
+  ['ldots', '…'], ['cdots', '⋯'], ['dots', '…'],
+  ['int', '∫'], ['sum', 'Σ'], ['prod', '∏'],
+  ['lbrack', '['], ['rbrack', ']'], ['langle', '⟨'], ['rangle', '⟩'],
+  ['lfloor', '⌊'], ['rfloor', '⌋'], ['mid', '|'], ['circ', '∘'],
+  ['alpha', 'α'], ['beta', 'β'], ['gamma', 'γ'], ['Delta', 'Δ'], ['delta', 'δ'],
+  ['epsilon', 'ε'], ['varphi', 'φ'], ['phi', 'φ'], ['Phi', 'Φ'], ['theta', 'θ'],
+  ['lambda', 'λ'], ['mu', 'μ'], ['nu', 'ν'], ['xi', 'ξ'], ['pi', 'π'],
+  ['rho', 'ρ'], ['sigma', 'σ'], ['tau', 'τ'], ['omega', 'ω'], ['Omega', 'Ω'],
+  ['psi', 'ψ'], ['kappa', 'κ'], ['varkappa', 'ϰ'], ['eta', 'η'], ['zeta', 'ζ'],
+].map(([name, ch]) => [new RegExp(`\\\\${name}${W}`, 'g'), ch])
+
+// Accent macros the bank uses, as a combining mark laid on each base character.
+const PRETTIFY_ACCENTS = [
+  [/\\(?:overline|bar)\s*\{([^{}]*)\}/g, '̅'],
+  [/\\(?:overrightarrow|vec)\s*\{([^{}]*)\}/g, '⃗'],
+  [/\\(?:widehat|hat)\s*\{([^{}]*)\}/g, '̂'],
+  [/\\tilde\s*\{([^{}]*)\}/g, '̃'],
+  [/\\dot\s*\{([^{}]*)\}/g, '̇'],
+]
+
+// Single-char superscripts with a real Unicode glyph: set complement and the
+// small powers. `n` covers the common cardinality exponent.
+const PRETTIFY_SUP = { c: 'ᶜ', C: 'ᶜ', 1: '¹', 2: '²', 3: '³', n: 'ⁿ' }
+
+// Function names are real words — drop the backslash, keep the word.
+const FUNCTIONS = /\\(sin|cos|tan|cot|sec|csc|cosec|sinh|cosh|tanh|log|ln|exp|lim|det|arg|max|min|gcd|lcm)(?![a-zA-Z])/g
+
+export function prettifyMath(latex) {
+  let s = String(latex)
+    // Degrees before \circ becomes a ring operator.
+    .replace(/\^\s*\{?\s*\\circ\s*\}?/g, '°')
+    .replace(/\\[dtc]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+  for (const [re, mark] of PRETTIFY_ACCENTS) {
+    s = s.replace(re, (_, inner) =>
+      [...inner].map(c => (c === ' ' ? c : c + mark)).join(''))
+  }
+  for (const [re, ch] of PRETTIFY_TOKENS) s = s.replace(re, ch)
+  s = s.replace(FUNCTIONS, '$1')
+    .replace(/\^\{([cC123n])\}|\^([cC123n])/g, (_, a, b) => PRETTIFY_SUP[a ?? b] ?? `^${a ?? b}`)
+    // Structural macros carry no glyph of their own.
+    .replace(new RegExp(`\\\\(?:left|right|displaystyle|limits|operatorname|text|textbf|textit|mathrm|mathbf|mathbb|[Bb]ig)${W}`, 'g'), '')
+    .replace(/\\[,;:!]/g, ' ').replace(/\\ /g, ' ')
+    .replace(/\\([{}])/g, '$1')
+    .replace(/'/g, '′')
+    // Anything still unmapped: a bare macro name reads better than a backslash.
+    .replace(/[\\{}]/g, ' ')
+  return s.replace(/\s+/g, ' ').trim()
 }
 
 // Progress checkpoints. The build is one long synchronous CPU block — KaTeX per
@@ -123,45 +167,45 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   //
   // KaTeX wraps its MathML in <span class="katex">…<math>…</math></span>;
   // mathml2omml needs the bare <math> element.
-  const latexToOmml = (latex) => {
+  // repairOmml both fixes the presentation (matrix fences, accent characters)
+  // and REFUSES markup Word would reject. That refusal is the point: malformed
+  // OMML does not render badly, it makes Word decline to open the whole file, so
+  // one bad equation would cost the student the entire set. Returning null here
+  // drops that one zone to readable text and keeps the other 300.
+  const latexToOmml = (latex, displayMode = false) => {
     try {
-      const html = renderToString(latex, {
-        output: 'mathml', throwOnError: true, displayMode: false,
-      })
+      const html = renderToString(latex, { output: 'mathml', throwOnError: true, displayMode })
       const math = String(html || '').match(/<math[\s\S]*?<\/math>/)
       if (!math) return null
       const omml = mml2omml(math[0])
       if (!omml || typeof omml !== 'string' || !omml.includes('m:oMath')) return null
-      return sanitizeOmml(omml)
+      return repairOmml(omml)
     } catch { return null }
   }
 
-  // Text with inline maths -> runs. A failed conversion falls back to the
-  // stripped source rather than dumping raw LaTeX at a student.
+  // Text with inline maths and **bold** -> runs. A failed conversion falls back
+  // to the prettified source rather than dumping raw LaTeX at a student.
   const mathRuns = (text, extra = {}) => {
     const out = []
-    const parts = String(text || '').split(MATH_RE)
-    parts.forEach(part => {
-      if (!part) return
-      const isMath = MATH_RE.test(part)
-      MATH_RE.lastIndex = 0
-      if (isMath) {
-        const body = part.replace(/^\\\[|\\\]$/g, '').replace(/^\$\$|\$\$$/g, '')
-          .replace(/^\\\(|\\\)$/g, '').replace(/^\$|\$$/g, '')
-        const omml = latexToOmml(body)
-        if (omml) {
-          ommlByIndex.push(omml)
-          out.push(new TextRun({ text: `${MARKER}${ommlByIndex.length - 1}` }))
-          return
-        }
-        out.push(new TextRun({ text: prettifyMath(body), ...extra }))
-        return
+    for (const seg of parseRichSegments(text)) {
+      const props = { bold: seg.bold || undefined, ...extra }
+      if (seg.type === 'text') {
+        seg.content.split('\n').forEach((line, i) => {
+          if (i > 0) out.push(new TextRun({ break: 1 }))
+          if (line) out.push(new TextRun({ text: line, ...props }))
+        })
+        continue
       }
-      part.split('\n').forEach((line, i) => {
-        if (i > 0) out.push(new TextRun({ break: 1 }))
-        if (line) out.push(new TextRun({ text: line, ...extra }))
-      })
-    })
+      const omml = latexToOmml(seg.content, seg.type === 'block')
+      if (omml) {
+        ommlByIndex.push(omml)
+        // The marker run carries NO properties: the whole run is replaced by
+        // OMML after packing, and the swap regex has to recognise its shape.
+        out.push(new TextRun({ text: `${MARKER}${ommlByIndex.length - 1}` }))
+        continue
+      }
+      out.push(new TextRun({ text: prettifyMath(seg.content), ...props }))
+    }
     return out.length ? out : [new TextRun({ text: '', ...extra })]
   }
 
@@ -172,6 +216,31 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
     shading: header ? { fill: 'EEEEEE' } : undefined,
     children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: header, size: SIZE })] })],
   })
+  const TABLE_BORDERS = {
+    top: EDGE, bottom: EDGE, left: EDGE, right: EDGE,
+    insideHorizontal: EDGE, insideVertical: EDGE,
+  }
+
+  // A GFM pipe-table lifted out of a question stem, as a native Word table.
+  // Cells go through mathRuns rather than a plain TextRun — a data-interpretation
+  // table routinely has \(n^2\) in a header — and the header row is marked by
+  // shading, the same convention the cover table uses.
+  const contentTable = (block) => {
+    const colPct = Math.floor(100 / Math.max(1, block.headers.length))
+    const tcell = (content, header) => new TableCell({
+      width: { size: colPct, type: WidthType.PERCENTAGE },
+      shading: header ? { fill: 'EEEEEE' } : undefined,
+      children: [new Paragraph({ children: mathRuns(content) })],
+    })
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: TABLE_BORDERS,
+      rows: [
+        new TableRow({ tableHeader: true, children: block.headers.map(h => tcell(h, true)) }),
+        ...block.rows.map(row => new TableRow({ children: row.map(c => tcell(c, false)) })),
+      ],
+    })
+  }
 
   // ── cover: name + summary table (single column — a 7-column table is
   //    unreadable at half width) ─────────────────────────────────────────────
@@ -191,7 +260,7 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   cover.push(blank())
   cover.push(new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: { top: EDGE, bottom: EDGE, left: EDGE, right: EDGE, insideHorizontal: EDGE, insideVertical: EDGE },
+    borders: TABLE_BORDERS,
     rows: [
       new TableRow({
         tableHeader: true,
@@ -257,16 +326,44 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
     }
     r.questions.forEach(q => {
       body.push(blank())
-      body.push(new Paragraph({
-        children: [
-          new TextRun({ text: `Q${q.n}. `, bold: true }),
-          ...mathRuns(q.question),
-          new TextRun({
-            text: ` [${q.bucket.toUpperCase()}]${q.difficulty ? ` [${q.difficulty.toUpperCase()}]` : ''}`,
-            bold: true, size: 15, color: TAG_COLOR[q.bucket],
-          }),
-        ],
-      }))
+      // Factories, not shared instances — a docx run object belongs to one
+      // paragraph.
+      const numRun = () => new TextRun({ text: `Q${q.n}. `, bold: true })
+      const tagRun = () => new TextRun({
+        text: ` [${q.bucket.toUpperCase()}]${q.difficulty ? ` [${q.difficulty.toUpperCase()}]` : ''}`,
+        bold: true, size: 15, color: TAG_COLOR[q.bucket],
+      })
+      // A stem may carry a GFM pipe-table, which has to become a real Word
+      // table rather than print as raw pipes. The question NUMBER rides on the
+      // first paragraph and the bucket tag on the last prose one; a stem that
+      // opens with a table, or ends with one, gets each as its own paragraph so
+      // neither is lost. Options are never tables.
+      const blocks = parseTableBlocks(q.question)
+      const lastText = blocks.reduce((acc, b, i) => (b.kind === 'text' ? i : acc), -1)
+      let numbered = false
+      let tagged = false
+      blocks.forEach((b, i) => {
+        if (b.kind === 'table') {
+          if (!numbered) {
+            body.push(new Paragraph({ children: [numRun()] }))
+            numbered = true
+          }
+          body.push(contentTable(b))
+          return
+        }
+        const withTag = i === lastText
+        body.push(new Paragraph({
+          children: [
+            ...(numbered ? [] : [numRun()]),
+            ...mathRuns(b.text),
+            ...(withTag ? [tagRun()] : []),
+          ],
+        }))
+        numbered = true
+        tagged = tagged || withTag
+      })
+      if (!numbered) body.push(new Paragraph({ children: [numRun(), tagRun()] }))
+      else if (!tagged) body.push(new Paragraph({ children: [tagRun()] }))
       q.options.forEach((o, oi) => {
         if (!o) return
         body.push(new Paragraph({
@@ -299,7 +396,7 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
   if (keyRows.length) {
     keySection.push(new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: { top: EDGE, bottom: EDGE, left: EDGE, right: EDGE, insideHorizontal: EDGE, insideVertical: EDGE },
+      borders: TABLE_BORDERS,
       rows: keyRows,
     }))
   }
