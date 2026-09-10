@@ -1231,3 +1231,26 @@ PYQ Vault's `buildAnswerKey` takes an `includeSolutions` flag and renders prose 
 ### Carry-forward: memory index entries still exceed the 150-character guideline
 
 Re-measured on 2026-09-10: **57 of 63** entries in `MEMORY.md` are over the guideline, the longest at 481 characters. The three entries touched this session were trimmed to ≤150, but the bulk sweep from the earlier entry (see the `2026-07-28` section) remains open and unchanged in scope.
+
+### The two per-row Monthly Report downloads have no error handling at all
+
+`handleDownload` and `handleDownloadDocx` in [`src/pages/MonthlyReports/index.jsx`](./src/pages/MonthlyReports/index.jsx) (~line 115-125) `await` a lazily-imported builder with **no `try`/`catch`**. Every other download surface in the app has one. Found while fixing the stale-chunk message on 2026-09-10; left alone because adding one means adding per-row error UI, which is a different change from the message fix that was asked for.
+
+**Why:** the failure is completely silent. The user clicks Download, the promise rejects, nothing renders, no banner appears, and the only trace is an unhandled rejection in the console. That is strictly worse than the wrong-message bug just fixed — at least that one told the user something. The bulk-ZIP path right below it (`setError(...)`) shows the pattern to copy.
+
+**How to apply:**
+- Wrap both handlers, and route the message through the shared predicate:
+  `setError(isStaleChunkError(e) ? STALE_CHUNK_MESSAGE : 'Could not build the report. Try again.')` — `isStaleChunkError` and `STALE_CHUNK_MESSAGE` are already imported in this file.
+- The page already owns an `error` state rendered above the table, so no new UI is needed — but check whether a per-row failure reads sensibly in a page-level banner, or whether the row itself should carry it.
+- While there: `ReportRow.jsx` has no catch either, so confirm which component actually owns the click before choosing where the state lives.
+
+### Consider a build-version check so a stale tab announces itself
+
+The stale-chunk fix (2026-09-10) makes the *symptom* legible at three download surfaces, but it is still reactive — the user finds out only when they click something that lazy-loads, and only at those three places. Every deploy silently arms this for anyone with the app open, and the app is left open all day at the front desk.
+
+**Why:** the app deploys on every push to `main`, several times on an active day. Each one leaves open tabs running code that can no longer load its own chunks. Faculty hit it, not developers, and the failure looks like the feature is broken rather than the page being old.
+
+**How to apply:**
+- Cheapest useful version: write the build SHA into `index.html` at build time (Vite `define` + `VERCEL_GIT_COMMIT_SHA`), poll `/index.html` every few minutes, and surface a dismissible "A new version is available — reload" banner when it differs. No service worker, no new dependency.
+- Do **not** auto-reload. Someone mid-way through marking a roster or editing timetable cells would lose unsaved local state; the existing `StaleDataBanner` already establishes reload-on-user-action as this app's convention.
+- Reuse `StaleDataBanner`'s look so the two "your page is out of date" messages read as one idea rather than two unrelated warnings.
