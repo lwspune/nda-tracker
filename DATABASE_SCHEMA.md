@@ -547,7 +547,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 
 | Table | RLS | Policy |
 |---|---|---|
-| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** where **either** `app_metadata.role` **or** `user_metadata.role` is `'teacher'` (a deny-union; the `user_metadata` half is transitional, covering pre-2026-09-10 tokens that RLS cannot revoke — see SECURITY.md). Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
+| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** `(auth.jwt() -> 'app_metadata' ->> 'role') = 'teacher'` (migrated from the self-editable `user_metadata` on 2026-09-10). Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
