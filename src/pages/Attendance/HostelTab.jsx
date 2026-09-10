@@ -8,6 +8,7 @@ import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkp
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 import { buildBoarderRoster, HOSTEL_BRANCHES } from '../../lib/hostelRoster'
 import { downloadHostelLeaveReportPdf } from '../../lib/hostelLeaveReportPdf'
+import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
@@ -407,7 +408,9 @@ export default function HostelTab() {
       })
       await downloadHostelLeaveReportPdf({ date, rows })
     } catch (e) {
-      setBanner({ type: 'error', msg: `Could not build the report — ${e.message}` })
+      setBanner({ type: 'error', msg: isStaleChunkError(e)
+        ? STALE_CHUNK_MESSAGE
+        : `Could not build the report — ${e.message}` })
     } finally {
       setDownloadingReport(false)
     }

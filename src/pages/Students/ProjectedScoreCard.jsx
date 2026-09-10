@@ -3,6 +3,7 @@ import { Card, CardTitle } from '../../components/ui'
 import QuestionCard from '../../components/ui/QuestionCard'
 import { scoreBg } from '../../lib/analytics'
 import { getSubtopicQuestions, groupByExam, fmtDate } from './chapterAccordionHelpers'
+import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
 
 const TOP_N = 10
 
@@ -163,7 +164,10 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
       )
     } catch (e) {
       console.error('[practiceSet] build failed:', e)
-      setError('Could not build the file. Try again.')
+      // The builder is behind a dynamic import, so a tab left open across a
+      // deploy fails here with a dead chunk URL rather than a real build error.
+      // Retrying cannot fix that — see src/lib/chunkError.js.
+      setError(isStaleChunkError(e) ? STALE_CHUNK_MESSAGE : 'Could not build the file. Try again.')
     } finally {
       setProgress(null)
     }

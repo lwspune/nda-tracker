@@ -5,6 +5,7 @@ import { downloadMonthlyReportPdf } from '../../lib/monthlyReportPdf'
 import { downloadMonthlyReportsZip, zipFilename } from '../../lib/monthlyReportZip'
 import { downloadMonthlyReportDocx, docxFilename, hasNonLatinExamTitle } from '../../lib/monthlyReportDocx'
 import ReportRow from './ReportRow'
+import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -147,7 +148,9 @@ export default function MonthlyReportsPage() {
       await downloadMonthlyReportsZip(items, zipFilename(batch, label), { format })
     } catch (e) {
       console.error(e)
-      setError('Failed to build the ZIP archive. Try again.')
+      // Behind a dynamic import (jszip + docx/jspdf), so a tab open across a
+      // deploy fails with a dead chunk URL, not a real build error.
+      setError(isStaleChunkError(e) ? STALE_CHUNK_MESSAGE : 'Failed to build the ZIP archive. Try again.')
     } finally {
       setBulkBusy(false)
     }
