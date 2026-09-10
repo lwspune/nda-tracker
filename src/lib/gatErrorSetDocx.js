@@ -64,6 +64,7 @@ const P = { deps: 4, cover: 10, body: 12, bodyEnd: 62, solutions: 74, pack: 80, 
 
 export async function buildGatErrorSetDocx({
   studentName, subject = 'GAT', subjects, totals, meta = {}, onProgress,
+  includeSolutions = true,
 }) {
   const report = typeof onProgress === 'function'
     ? (pct, label) => onProgress(Math.round(pct), label)
@@ -222,9 +223,11 @@ export async function buildGatErrorSetDocx({
   cover.push(new Paragraph({
     spacing: { before: 160 },
     children: [new TextRun({
-      text: 'Every question here is one you got wrong or left blank in a GAT mock. '
+      text: 'Every question here is one you got wrong or left blank in a mock. '
         + 'Each is tagged [WRONG] or [SKIPPED] and, where the paper recorded it, its difficulty. '
-        + 'Attempt them cold — the solutions are in a separate section at the back, on purpose.',
+        + (includeSolutions
+          ? 'Attempt them cold — the solutions are in a separate section at the back, on purpose.'
+          : 'Attempt them cold — your teacher has the solutions.'),
       size: SMALL, italics: true, color: '666666',
     })],
   }))
@@ -315,13 +318,18 @@ export async function buildGatErrorSetDocx({
   }
 
   // ── solutions, two columns, keyed by question number ────────────────────
-  await report(P.bodyEnd, 'Building the solutions…')
-  const solutions = [new Paragraph({
+  // Skipped entirely (not merely hidden) when the caller asks for a
+  // questions-only copy: the answers must not be present in the file at all,
+  // since anything in document.xml is one Ctrl+F away.
+  await report(P.bodyEnd, includeSolutions ? 'Building the solutions…' : 'Laying out the document…')
+  const solutions = !includeSolutions ? [] : [new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 120 },
     children: [new TextRun({ text: 'Solutions', bold: true, size: TITLE_SIZE })],
   })]
-  const allQuestions = subjects.flatMap(s => s.chapters.flatMap(c => c.questions))
+  const allQuestions = includeSolutions
+    ? subjects.flatMap(s => s.chapters.flatMap(c => c.questions))
+    : []
   allQuestions.forEach(q => {
     const letter = LABELS[['A', 'B', 'C', 'D'].indexOf(String(q.answer).trim().toUpperCase())]
     solutions.push(new Paragraph({
@@ -355,7 +363,7 @@ export async function buildGatErrorSetDocx({
     sections: [
       { properties: { page }, children: cover },
       { properties: { page, column: twoCol }, children: body },
-      { properties: { page, column: twoCol }, children: solutions },
+      ...(includeSolutions ? [{ properties: { page, column: twoCol }, children: solutions }] : []),
     ],
   })
 
@@ -391,4 +399,16 @@ export async function buildGatErrorSetDocx({
   })
   await report(P.done, 'Done')
   return out
+}
+
+// Word filename for one student's error set. Same sanitising rule as the
+// monthly-report helpers — keep [A-Za-z0-9_-], collapse every other run to a
+// single underscore — so a name with an apostrophe or a slash can't produce a
+// path the ZIP writer rejects.
+export function errorSetFilename(studentName, rangeLabel) {
+  const safe = s => String(s || '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return `${safe(studentName)}_${safe(rangeLabel)}_Errors.docx`
 }

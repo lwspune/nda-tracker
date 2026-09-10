@@ -113,3 +113,49 @@ describe('buildGatErrorSetDocx', () => {
     expect(xml).toContain('[SKIPPED]')
   })
 })
+
+describe('buildGatErrorSetDocx — includeSolutions', () => {
+  async function buildWith(opts) {
+    const blob = await buildGatErrorSetDocx({
+      studentName: 'Jagannath Rout', subjects, totals, ...opts,
+    })
+    const zip = await JSZip.loadAsync(blob)
+    return zip.file('word/document.xml').async('text')
+  }
+
+  it('includes the solutions section by default', async () => {
+    const xml = await buildWith({})
+    expect(xml).toContain('Solutions')
+    expect(xml).toContain('The second paragraph says so.')
+  })
+
+  it('omits the whole solutions section when includeSolutions is false', async () => {
+    const xml = await buildWith({ includeSolutions: false })
+    expect(xml).not.toContain('The second paragraph says so.')
+    // The questions themselves must survive — only the answers go.
+    expect(xml).toContain('The author most nearly implies that')
+  })
+
+  it('does not promise a solutions section on the cover when there is none', async () => {
+    // The cover tells the student the answers are "in a separate section at the
+    // back". Printing that on a questions-only copy sends them hunting for
+    // pages that were never generated.
+    const xml = await buildWith({ includeSolutions: false })
+    expect(xml).not.toMatch(/separate section at the back/i)
+  })
+})
+
+describe('errorSetFilename', () => {
+  it('builds a Word filename from the student name and range label', async () => {
+    const { errorSetFilename } = await import('../gatErrorSetDocx')
+    // A hyphen survives — it is legal in a filename and the shared safeFile
+    // rule keeps [A-Za-z0-9_-] deliberately, so a spanning range stays readable.
+    expect(errorSetFilename('Jagannath Rout', 'Aug - Sep 2026'))
+      .toBe('Jagannath_Rout_Aug_-_Sep_2026_Errors.docx')
+  })
+
+  it('collapses characters that are illegal in a filename', async () => {
+    const { errorSetFilename } = await import('../gatErrorSetDocx')
+    expect(errorSetFilename('D\'Souza, R./M', 'Sep 2026')).toBe('D_Souza_R_M_Sep_2026_Errors.docx')
+  })
+})
