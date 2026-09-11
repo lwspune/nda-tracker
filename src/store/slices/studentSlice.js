@@ -75,6 +75,36 @@ export const createStudentSlice = (set, get) => ({
     } catch (_) { /* no-op */ }
   },
 
+  // Set of lws_ids that have opened the student portal at least once. Feeds the
+  // Dashboard "never logged in" widget, which subtracts it from the roster.
+  //
+  // Returns null — never an empty Set — when the read cannot be completed (no
+  // session, or a Supabase error). An empty Set is a *claim* that nobody has ever
+  // logged in, which would render every student as never-logged-in; the caller
+  // must be able to tell "unknown" from "nobody". See
+  // [[feedback_silent_fallback_hides_edge_errors]].
+  async fetchStudentLoginIds() {
+    const session = await getSession()
+    if (!session) return null
+
+    const PAGE = 1000
+    const ids = new Set()
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('student_logins')
+        .select('lws_id')
+        .range(from, from + PAGE - 1)
+      if (error) {
+        console.error('[students] login-id read failed:', error)
+        return null
+      }
+      if (!data?.length) break
+      for (const r of data) if (r?.lws_id) ids.add(r.lws_id)
+      if (data.length < PAGE) break
+    }
+    return ids
+  },
+
   // Called by ImportStudentsModal after mergeStudents() produces the merged array.
   async importStudentsFromExcel(mergeResult) {
     const { students, added, updated, unchanged } = mergeResult
