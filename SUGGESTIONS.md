@@ -527,7 +527,9 @@ Deferred by design this session: "persist-until-return" leaves are closed **manu
 
 ## 2026-07-14
 
-### Align (or deliberately keep divergent) `getPriorityChapters` accuracy vs the pooled projection
+### ~~Align (or deliberately keep divergent) `getPriorityChapters` accuracy vs the pooled projection~~ — **MOOT 2026-09-12**
+
+The Priority Chapters widget was removed from the Dashboard (2026-09-12), so there is no longer a second surface for faculty to cross-read against the Projected card — the credibility gap this described cannot be seen. `getPriorityChapters` itself is untouched and still tested; if the widget is ever re-wired, decide (a) or (b) below *before* shipping it.
 
 The projected-score accuracy was reworked (2026-07-14) to **pool a chapter's questions** (`Σ score×weight / Σ weight`) instead of averaging per-subtopic ratios — see `computeProjectedScore` in [src/lib/analytics/projection.js](src/lib/analytics/projection.js) and the DECISIONS.md entry. The Dashboard's **Priority Chapters** widget (`getPriorityChapters` in `src/lib/analytics/dashboard.js`) still computes chapter accuracy its own way (`priority = weightPct × (1 − accuracy)`), so the two surfaces can now disagree slightly on a chapter's accuracy for the same student/cohort. This divergence was **deliberately deferred** to keep the projection change's blast radius small.
 
@@ -1310,3 +1312,17 @@ Removing the Insights page + the `ImprovementPlan` card left **`savedInsights` w
 - `savedInsights` in `DEFAULTS`, the `saveToStorage` allow-list, `loadRemoteData`, and `loadStudentData`'s reset.
 
 **Kept on purpose**, not an oversight: the Supabase tables and `migrate_insights_to_supabase.js` are untouched, so the single surviving plan (LWS-129) and the ability to resurrect the feature by re-adding a page both survive. Remove the plumbing only if the decision is that AI-written plans are not coming back — otherwise the cost is 2 idle queries per admin page load.
+
+## 2026-09-12 — Orphaned dashboard analytics (after the trend / priority / at-risk removal)
+
+Four Dashboard widgets were removed on request: **Class Performance Over Time**, **Priority Chapters**, **Chapter Performance — Class Average** (it rendered in two mutually-exclusive slots) and **At-Risk Students**. `PerformanceTrend.jsx` + `PriorityChapters.jsx` were deleted; the other two were inline cards in `index.jsx`.
+
+**Deliberately kept, decided in the same session:** nothing under `src/lib/analytics/` was deleted. Three of the five aggregators are still live *through* `getBatchComparison`, which internally calls `getPerformanceSeries` and `getAtRisk` and is still rendered — so deleting on "the widget is gone" alone would have broken the batch table.
+
+Two exports now have **zero app consumers** (tests only):
+- `getPriorityChapters` (`src/lib/analytics/dashboard.js`) — pinned by `dashboard.test.js` and by the `GUARDRAILS.md` priority-formula rule.
+- `rootCauseMap` (`src/lib/conceptGraph.js`) — pinned by `conceptGraph.test.js`. `focusAreas.js` uses *other* conceptGraph exports (`getRootCauseChain`, `getReadyToLearn`), so the module stays live either way.
+
+**Why kept:** both are pure, cheap, tested, and the root-cause idea still ships to students through `focusAreas`. Removing them is a doc-touching change (a GUARDRAILS bullet) for no runtime gain.
+
+**How to apply** (only if the call is that neither widget is coming back): delete the two exports, their test blocks, the `GUARDRAILS.md` priority-formula bullet, and the moot 2026-07-14 alignment suggestion above. Otherwise leave as is — this entry is the record that it's intentional, not drift.

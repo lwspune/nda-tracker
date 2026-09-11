@@ -163,11 +163,13 @@ describe('Dashboard — command-center widgets', () => {
     expect(screen.getByText(/Most Lectures Missed/)).toBeInTheDocument()
   })
 
-  it('renders the performance-over-time and priority-chapters widgets', () => {
+  it('no longer renders the trend / priority / chapter-average / at-risk widgets', () => {
     setExams([makeExam()])
     renderDashboard()
-    expect(screen.getByText(/Class Performance Over Time/i)).toBeInTheDocument()
-    expect(screen.getByText(/Priority Chapters/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Class Performance Over Time/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Priority Chapters/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chapter Performance/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/At-Risk Students/i)).not.toBeInTheDocument()
   })
 
   it('no longer renders the frequency-table editor on the dashboard', () => {

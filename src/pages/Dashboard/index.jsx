@@ -1,15 +1,12 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
-import { EmptyState, PageHeader, Card, CardTitle, HeatBar, Badge } from '../../components/ui'
+import { EmptyState, PageHeader, Card, CardTitle, Badge } from '../../components/ui'
 import {
-  computeChapterStats, getAtRisk, getHardestQuestions, getValidStudentNames,
-  getBatchOptions, getExamsForBatch, getExamsForBranch, getBatchMemberNames, getBranchMemberNames, computeTrend,
-  getPerformanceSeries, getPriorityChapters, getBatchComparison,
+  getHardestQuestions, getValidStudentNames,
+  getBatchOptions, getExamsForBatch, getExamsForBranch, getBatchMemberNames, getBranchMemberNames,
+  getBatchComparison,
 } from '../../lib/analytics'
 import { getFreqForSubject, NDA_TOTAL_MARKS_BY_SUBJECT } from '../../lib/ndaFreq'
-import { rootCauseMap } from '../../lib/conceptGraph'
-import PerformanceTrend from './PerformanceTrend'
-import PriorityChapters from './PriorityChapters'
 import BatchComparison from './BatchComparison'
 import AttendanceRollup from './AttendanceRollup'
 import AttendanceLeaders from './AttendanceLeaders'
@@ -74,7 +71,7 @@ export default function DashboardPage() {
     return base
   }, [filtered, studentProfiles, branchFilter, batchFilter])
 
-  // Subject whose weightage table drives projection + priority chapters.
+  // Subject whose weightage table drives the per-batch projected column.
   const prioritySubject = subjectFilter === 'all' ? 'Maths' : subjectFilter
   const freq      = getFreqForSubject(ndaFreqBySubject, prioritySubject)
   const totalMarks = ndaMarksBySubject?.[prioritySubject] ?? NDA_TOTAL_MARKS_BY_SUBJECT[prioritySubject] ?? 300
@@ -88,35 +85,15 @@ export default function DashboardPage() {
     )
   }
 
-  const chapterStats = computeChapterStats(filtered, validNames)
-  const atRisk       = getAtRisk(filtered, validNames)
-  const hardest      = getHardestQuestions(filtered, 8, validNames)
+  const hardest = getHardestQuestions(filtered, 8, validNames)
 
-  // Performance over time (class avg %-of-max per exam, chronological)
-  const series       = getPerformanceSeries(filtered, validNames)
-  const classTrend   = computeTrend(series.map(p => p.avgPct))
-
-  // Subject-scoped exam set for priority chapters + per-batch comparison
+  // Subject-scoped exam set for the per-batch comparison (its projected column
+  // reads one subject's weightage table, so it can't span subjects).
   const prioritySubjectExams = subjectFilter === 'all'
     ? filtered.filter(e => (e.subject || 'Maths') === prioritySubject)
     : filtered
 
-  // Weak × high-yield priorities + per-batch comparison
-  const priorityRows = getPriorityChapters(prioritySubjectExams, freq, totalMarks, { validNames })
-  const batchRows    = getBatchComparison(prioritySubjectExams, studentProfiles, freq, totalMarks)
-
-  // Root-cause annotation: when a weak priority chapter's weakness traces to a
-  // deeper weak prerequisite, surface it ("↳ root cause: X"). Concept graph is
-  // NDA-Maths-specific, so only meaningful for the Maths subject.
-  const rootCauseByChapter = prioritySubject === 'Maths'
-    ? rootCauseMap(priorityRows, { threshold: 0.5 })
-    : {}
-
-  const chapterRows = Object.entries(chapterStats).map(([ch, subs]) => {
-    let correct = 0, total = 0
-    Object.values(subs).forEach(s => { correct += s.correct; total += s.total })
-    return { name: ch, pct: total > 0 ? correct / total : 0, correct, total }
-  }).sort((a, b) => a.pct - b.pct)
+  const batchRows = getBatchComparison(prioritySubjectExams, studentProfiles, freq, totalMarks)
 
   const selectCls = 'form-input w-auto text-[13px] pr-8 cursor-pointer'
 
@@ -203,80 +180,12 @@ export default function DashboardPage() {
         setActiveStudent={setActiveStudent}
       />
 
-      {/* Performance over time */}
-      <div className="mb-4 md:mb-5">
-        <PerformanceTrend series={series} trend={classTrend} />
-      </div>
-
-      {/* Priority chapters + Batch comparison */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <PriorityChapters rows={priorityRows} subject={prioritySubject} rootCauseByChapter={rootCauseByChapter} />
-        {batchRows.length > 1
-          ? <BatchComparison rows={batchRows} />
-          : (
-            <Card>
-              <CardTitle>Chapter Performance — Class Average</CardTitle>
-              <div className="flex flex-col gap-1.5">
-                {chapterRows.length === 0
-                  ? <p className="text-[12px] text-ink-3">No chapter data for this filter.</p>
-                  : chapterRows.map(ch => (
-                    <HeatBar key={ch.name} pct={ch.pct} label={ch.name} count={`${ch.correct}/${ch.total}`} />
-                  ))
-                }
-              </div>
-            </Card>
-          )}
-      </div>
-
-      {/* Chapter heatmap (when batch comparison took the slot above) + At-risk */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        {batchRows.length > 1 && (
-          <Card>
-            <CardTitle>Chapter Performance — Class Average</CardTitle>
-            <div className="flex flex-col gap-1.5">
-              {chapterRows.length === 0
-                ? <p className="text-[12px] text-ink-3">No chapter data for this filter.</p>
-                : chapterRows.map(ch => (
-                  <HeatBar key={ch.name} pct={ch.pct} label={ch.name} count={`${ch.correct}/${ch.total}`} />
-                ))
-              }
-            </div>
-          </Card>
-        )}
-
-        <Card>
-          <CardTitle>⚠️ At-Risk Students (Weak in 2+ Chapters)</CardTitle>
-          {atRisk.length === 0 ? (
-            <p className="text-[12px] text-ink-3 py-4">No at-risk students — great performance!</p>
-          ) : (
-            <div className="flex flex-col divide-y divide-border">
-              {atRisk.slice(0, 12).map(s => (
-                <button
-                  key={s.name}
-                  type="button"
-                  onClick={() => setActiveStudent(s.name)}
-                  className="flex items-center justify-between py-2 text-left hover:bg-surface-2 rounded
-                             focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  aria-label={`Open ${s.name} — weak in ${s.count} chapters`}
-                >
-                  <div>
-                    <div className="text-[12px] font-semibold text-ink">{s.name}</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {s.weakChapters.slice(0, 3).map(c => (
-                        <span key={c} className="text-[10px] font-mono bg-red-50 text-danger px-2 py-0.5 rounded-full">{c}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <Badge variant="red">{s.count} weak</Badge>
-                </button>
-              ))}
-              {atRisk.length > 12 && (
-                <p className="text-[11px] text-ink-3 pt-2">+{atRisk.length - 12} more</p>
-              )}
-            </div>
-          )}
-        </Card>
-      </div>
+      {/* Per-batch comparison — only meaningful with more than one batch in scope */}
+      {batchRows.length > 1 && (
+        <div className="mb-4 md:mb-5">
+          <BatchComparison rows={batchRows} />
+        </div>
+      )}
 
       {/* Hardest questions */}
       <Card className="mb-5">
