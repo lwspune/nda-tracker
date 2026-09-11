@@ -300,6 +300,25 @@ describe('Exams page — re-upload buttons (faculty mode)', () => {
     expect(screen.getByRole('button', { name: /update tags/i })).toBeInTheDocument()
   })
 
+  // "Refresh from bank" pulls content by PYQ Vault question id. An exam with no
+  // ids has nothing to pull, and a button that cannot work is worse than a
+  // missing one — so the control is gated on the ids, not on the mode alone.
+  it('hides Refresh from bank when the exam carries no PYQ Vault ids', () => {
+    setExams([makeExam({ name: 'Hand-typed paper' })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /refresh from bank/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Refresh from bank once a question carries a PYQ Vault id', () => {
+    setExams([makeExam({
+      name: 'Vault-built paper',
+      questions: [{ q: 1, chapter: 'Algebra', subtopic: 'Equations',
+                    questionId: '11111111-1111-4111-8111-111111111111' }],
+    })])
+    renderExams()
+    expect(screen.getByRole('button', { name: /refresh from bank/i })).toBeInTheDocument()
+  })
+
   it('shows Update Results button for each exam in faculty mode', () => {
     setExams([makeExam({ name: 'Mock 1' })])
     renderExams()

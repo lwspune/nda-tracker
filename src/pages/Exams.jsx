@@ -5,6 +5,8 @@ import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
 import { getBatchOptions, getExamsForBatch, examMaxMarks, examFormat, examFormatLabel } from '../lib/analytics'
 import { useMode } from '../context/ModeContext'
 import ReuploadTagsModal    from '../components/upload/ReuploadTagsModal'
+import RefreshFromBankModal from '../components/upload/RefreshFromBankModal'
+import { bankQuestionIds } from '../lib/bankFetch'
 import ReuploadResultsModal from '../components/upload/ReuploadResultsModal'
 import OfflineExamModal     from '../components/upload/OfflineExamModal'
 import ExamInsightsPanel    from './Exams/ExamInsightsPanel'
@@ -49,6 +51,7 @@ export default function ExamsPage() {
 
   const PAGE_SIZE = 10
   const [reuploadTagsExam, setReuploadTagsExam]       = useState(null)
+  const [refreshBankExam, setRefreshBankExam]         = useState(null)
   const [reuploadResultsExam, setReuploadResultsExam] = useState(null)
   const [offlineModalOpen, setOfflineModalOpen]       = useState(false)
   const [editMarksExam, setEditMarksExam]             = useState(null)
@@ -500,6 +503,18 @@ export default function ExamsPage() {
                             >
                               🏷️ Update Tags
                             </button>
+                            {/* Only for papers carrying PYQ Vault ids — there is
+                                nothing to pull otherwise, and a button that cannot
+                                work is worse than a missing one. */}
+                            {bankQuestionIds(exam).length > 0 && (
+                              <button
+                                onClick={() => setRefreshBankExam(exam)}
+                                className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
+                                title="Pull question content (diagrams, solutions) from PYQ Vault"
+                              >
+                                🔄 Refresh from bank
+                              </button>
+                            )}
                           </>
                         ) : (
                           <button
@@ -560,6 +575,13 @@ export default function ExamsPage() {
       )}
 
       {/* Re-upload modals — faculty only */}
+      {refreshBankExam && (
+        <RefreshFromBankModal
+          exam={refreshBankExam}
+          onClose={() => setRefreshBankExam(null)}
+        />
+      )}
+
       {reuploadTagsExam && (
         <ReuploadTagsModal
           exam={reuploadTagsExam}
