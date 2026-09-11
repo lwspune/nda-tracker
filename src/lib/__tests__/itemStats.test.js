@@ -79,6 +79,57 @@ describe('computeItemStats — pooling across sittings', () => {
   })
 })
 
+describe('computeItemStats — scoping to a cohort', () => {
+  // A batch filter scopes by CURRENT membership (the Toppers/Dashboard rule),
+  // passed in as a name set. batch_at_exam is capture-only and must not become
+  // a reader here.
+  function mixed() {
+    return {
+      id: 'e1', name: 'Exam e1', subject: 'Maths',
+      questions: q1(),
+      students: [
+        { name: 'inA', totalMarks: 10, responses: { 1: 1 }, choices: { 1: 'B' } },
+        { name: 'inA2', totalMarks: 9, responses: { 1: -1 }, choices: { 1: 'C' } },
+        { name: 'notInA', totalMarks: 8, responses: { 1: -1 }, choices: { 1: 'D' } },
+      ],
+    }
+  }
+
+  it('counts only students in the set', () => {
+    const out = computeItemStats([mixed()], { minAttempts: 1, validNames: new Set(['inA', 'inA2']) })
+    const r = out.rows[0]
+    expect(r.seen).toBe(2)
+    expect(r.attempted).toBe(2)
+    expect(r.correct).toBe(1)
+    expect(r.choiceCounts).toEqual({ A: 0, B: 1, C: 1, D: 0 })  // D excluded
+  })
+
+  it('counts everyone when no set is given', () => {
+    expect(computeItemStats([mixed()], { minAttempts: 1 }).rows[0].seen).toBe(3)
+  })
+
+  it('ranks discrimination WITHIN the scoped cohort', () => {
+    // Outside the set, 20 top scorers all correct. If they leaked into the
+    // ranking they would drag discrimination positive.
+    const outsiders = Array.from({ length: 20 }, (_, i) => ({
+      name: `out${i}`, totalMarks: 500 - i, responses: { 1: 1 }, choices: { 1: 'B' },
+    }))
+    const insiders = [
+      ...Array.from({ length: 10 }, (_, i) => ({ name: `hi${i}`, totalMarks: 100 - i, responses: { 1: -1 }, choices: { 1: 'C' } })),
+      ...Array.from({ length: 10 }, (_, i) => ({ name: `lo${i}`, totalMarks: i, responses: { 1: 1 }, choices: { 1: 'B' } })),
+    ]
+    const exam = { id: 'e1', name: 'Exam e1', subject: 'Maths', questions: q1(), students: [...outsiders, ...insiders] }
+    const names = new Set(insiders.map(s => s.name))
+    const out = computeItemStats([exam], { minAttempts: 1, validNames: names })
+    expect(out.rows[0].discrimination).toBeLessThan(0)
+  })
+
+  it('drops a question nobody in the set saw', () => {
+    const out = computeItemStats([mixed()], { minAttempts: 1, validNames: new Set(['nobody']) })
+    expect(out.rows).toEqual([])
+  })
+})
+
 describe('computeItemStats — discrimination', () => {
   // Ability is ranked WITHIN a record: batches differ, so a cross-batch ranking
   // would confuse "weaker student" with "weaker cohort".

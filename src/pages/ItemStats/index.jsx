@@ -4,6 +4,9 @@ import { PageHeader, EmptyState, Card } from '../../components/ui'
 import { RichText } from '../../components/ui/RichText'
 import QuestionCard from '../../components/ui/QuestionCard'
 import { computeItemStats } from '../../lib/itemStats'
+import {
+  getBatchOptions, getExamsForBranch, getBatchMemberNames, getBranchMemberNames,
+} from '../../lib/analytics'
 
 // What the answer sheets say about each BANK question, pooled across every
 // sitting of the same paper. Admin-only instrumentation for faculty and the
@@ -59,6 +62,10 @@ const TD = 'py-2 px-2 align-top'
 
 export default function ItemStatsPage() {
   const exams = useStore(s => s.exams)
+  const studentProfiles = useStore(s => s.studentProfiles)
+  const branches = useStore(s => s.branches)
+  const [branch, setBranch] = useState('all')
+  const [batch, setBatch] = useState('all')
   const [subject, setSubject] = useState('all')
   const [chapter, setChapter] = useState('all')
   const [sort, setSort] = useState('distractorRatio')
@@ -69,9 +76,28 @@ export default function ItemStatsPage() {
   // below is what the "Min attempts" control actually promises. A row seen by
   // three students is not evidence, and letting it sort to the top of a review
   // queue buries the questions that are.
-  const { rows, keyConflicts } = useMemo(
-    () => computeItemStats(exams, { minAttempts }), [exams, minAttempts]
+  // Current membership, not the exam roster and not batch_at_exam — the rule
+  // Toppers and Dashboard already use. null means everyone.
+  const validNames = useMemo(() => {
+    if (batch !== 'all') return getBatchMemberNames(studentProfiles, batch)
+    if (branch !== 'all') return getBranchMemberNames(studentProfiles, branch)
+    return null
+  }, [studentProfiles, branch, batch])
+
+  const { rows } = useMemo(
+    () => computeItemStats(exams, { minAttempts, validNames }),
+    [exams, minAttempts, validNames]
   )
+
+  // Conflicts are a property of the QUESTION — the same bank question keyed two
+  // ways — so they are never cohort-filtered. Narrowing to a batch must not make
+  // a wrong key disappear.
+  const { keyConflicts } = useMemo(() => computeItemStats(exams), [exams])
+
+  const batchOptions = useMemo(() => getBatchOptions(
+    branch === 'all' ? exams : getExamsForBranch(exams, studentProfiles, branch),
+    studentProfiles
+  ), [exams, studentProfiles, branch])
 
   const subjects = useMemo(
     () => [...new Set(rows.map(r => r.subject).filter(Boolean))].sort(), [rows]
@@ -86,6 +112,9 @@ export default function ItemStatsPage() {
     (chapter === 'all' || r.chapter === chapter)), [rows, subject, chapter])
 
   const thin = inScope.filter(r => r.insufficient).length
+  // When a cohort has no question above the threshold, an empty table reads as
+  // broken. Naming its biggest sample says what actually happened.
+  const bestN = inScope.reduce((m, r) => window.Math.max(m, r.attempted), 0)
 
   const visible = useMemo(() => {
     // A missing value sorts LAST in every mode. "No ratio exists" is not an
@@ -149,6 +178,32 @@ export default function ItemStatsPage() {
 
       <Card className="mb-4">
         <div className="flex flex-wrap gap-4 items-end">
+          <label className="text-[12px]">
+            <span className="block text-ink-3 mb-1">Branch</span>
+            <select
+              aria-label="Branch"
+              value={branch}
+              onChange={e => { setBranch(e.target.value); setBatch('all') }}
+              className="border border-border rounded-md px-2 py-1 bg-surface min-h-[36px]"
+            >
+              <option value="all">All branches</option>
+              {(branches || []).map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </label>
+
+          <label className="text-[12px]">
+            <span className="block text-ink-3 mb-1">Batch</span>
+            <select
+              aria-label="Batch"
+              value={batch}
+              onChange={e => setBatch(e.target.value)}
+              className="border border-border rounded-md px-2 py-1 bg-surface min-h-[36px] max-w-[220px]"
+            >
+              <option value="all">All batches</option>
+              {batchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </label>
+
           <label className="text-[12px]">
             <span className="block text-ink-3 mb-1">Subject</span>
             <select
@@ -214,6 +269,7 @@ export default function ItemStatsPage() {
         </div>
         <p className="text-[11px] text-ink-3 mt-3">
           {visible.length} question{visible.length === 1 ? '' : 's'} shown
+          {validNames && <> · <strong>{batch !== 'all' ? batch : branch} only</strong></>}
           {thin > 0 && <> · {thin} hidden below {minAttempts} attempts</>}
           {' '}· counts only, no student names leave this page. A high distractor ratio is a lead to
           review, not a verdict: an option outpulls the key when the key is wrong, and also when the
@@ -298,7 +354,12 @@ export default function ItemStatsPage() {
         {visible.length === 0 && (
           <p className="text-[13px] text-ink-3 px-4 py-6 text-center">
             Nothing above {minAttempts} attempts in this scope
-            {thin > 0 && <> — {thin} question{thin === 1 ? '' : 's'} below the threshold are hidden</>}.
+            {thin > 0 && <> — {thin} question{thin === 1 ? '' : 's'} are below it</>}.
+            {bestN > 0 && (
+              <> The largest sample here is <strong>{bestN}</strong>
+                {validNames && <> — a single batch sits far fewer papers than the school does</>}.
+              </>
+            )}
           </p>
         )}
       </Card>

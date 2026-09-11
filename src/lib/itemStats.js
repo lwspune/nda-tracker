@@ -32,13 +32,21 @@ function emptyCounts() {
  * a distractor outpulls the key when the key is wrong, AND when the question is
  * hard and the trap is well built. Only a human reading the question can say.
  */
-export function computeItemStats(exams, { minAttempts = 20 } = {}) {
+export function computeItemStats(exams, { minAttempts = 20, validNames = null } = {}) {
   const acc = new Map()
 
   for (const exam of exams || []) {
     const questions = (exam && exam.questions) || []
     if (!questions.length) continue                     // written quiz: nothing per-question
-    const students = exam.students || []
+
+    // A cohort filter scopes by CURRENT membership — the name set comes from
+    // getBatchMemberNames/getBranchMemberNames, the same rule Toppers and
+    // Dashboard use, and it carries each student's name variants because
+    // results are filed under whatever the Evalbee sheet spelled.
+    // `exam_results.batch_at_exam` is capture-only and deliberately NOT read.
+    const all = exam.students || []
+    const students = validNames ? all.filter(s => validNames.has(s.name)) : all
+    if (!students.length) continue
 
     // Ability groups for THIS sitting only. Batches differ, so a ranking across
     // records would confuse a weaker student with a weaker cohort.

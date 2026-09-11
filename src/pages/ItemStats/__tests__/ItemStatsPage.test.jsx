@@ -2,7 +2,8 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockStore = { exams: [] }
+// studentProfiles is required by any page using batch filtering (CLAUDE.md).
+const mockStore = { exams: [], studentProfiles: {}, branches: [] }
 vi.mock('../../../store/useStore', () => ({ default: (selector) => selector(mockStore) }))
 
 import ItemStatsPage from '../index'
@@ -23,6 +24,11 @@ function exam(id, subject, questions, rows) {
 
 function setExams(list) { mockStore.exams = list }
 
+function setCohort(profiles, branches = []) {
+  mockStore.studentProfiles = profiles
+  mockStore.branches = branches
+}
+
 // Both fixtures have 4 attempts, which is below the default threshold — so most
 // tests drop the threshold first. That is deliberate: the default must hide
 // thin evidence, and a test that never exercises the filter would not notice.
@@ -34,6 +40,7 @@ function showEverything() {
 }
 
 beforeEach(() => {
+  setCohort({}, [])
   setExams([
     exam('m1', 'Maths', [{ q: 1, questionId: Q(1), chapter: 'Vectors', subtopic: 'Dot', answer: 'B', question: 'find a dot b' }],
       [[10, -1, 'C'], [9, -1, 'C'], [8, -1, 'C'], [7, 1, 'B']]),
@@ -99,6 +106,74 @@ describe('ItemStatsPage — filters', () => {
     await user.selectOptions(screen.getByLabelText(/sort/i), 'pCorrect')
     const rows = screen.getAllByTestId('item-row')
     expect(within(rows[0]).getByText(/find a dot b/)).toBeInTheDocument()  // 25% < 75%
+  })
+})
+
+describe('ItemStatsPage — cohort filter', () => {
+  // Scoped by CURRENT membership, the Toppers/Dashboard rule. A batch's numbers
+  // are its own; a wrong key is everybody's.
+  function twoBatches() {
+    setCohort({
+      Asha: { name: 'Asha', batches: ['11A'], branch: 'APJ' },
+      Bela: { name: 'Bela', batches: ['11B'], branch: 'APJ' },
+    }, ['APJ'])
+    setExams([{
+      id: 'e1', name: 'Exam e1', date: '2026-09-01', subject: 'Maths',
+      questions: [{ q: 1, questionId: Q(1), chapter: 'Vectors', answer: 'B', question: 'find a dot b' }],
+      students: [
+        { name: 'Asha', totalMarks: 10, responses: { 1: 1 }, choices: { 1: 'B' } },
+        { name: 'Bela', totalMarks: 9, responses: { 1: -1 }, choices: { 1: 'C' } },
+      ],
+    }])
+  }
+
+  it('counts only the chosen batch', async () => {
+    const user = userEvent.setup()
+    twoBatches()
+    render(<ItemStatsPage />)
+    showEverything()
+    await user.selectOptions(screen.getByLabelText(/batch/i), '11A')
+    await user.click(screen.getAllByTestId('item-row')[0])
+    // Asha answered correctly; Bela is excluded entirely
+    expect(within(screen.getByTestId('item-detail')).getByText(/attempted 1/)).toBeInTheDocument()
+  })
+
+  it('says whose numbers are on screen', async () => {
+    const user = userEvent.setup()
+    twoBatches()
+    render(<ItemStatsPage />)
+    showEverything()
+    await user.selectOptions(screen.getByLabelText(/batch/i), '11B')
+    expect(screen.getByText(/11B only/)).toBeInTheDocument()
+  })
+
+  it('does NOT hide a key conflict behind a cohort filter', async () => {
+    const user = userEvent.setup()
+    setCohort({ Asha: { name: 'Asha', batches: ['11A'], branch: 'APJ' } }, ['APJ'])
+    setExams([
+      { id: 'a', name: 'Exam a', subject: 'Maths',
+        questions: [{ q: 1, questionId: Q(3), chapter: 'Algebra', answer: 'B', question: 'conflicted' }],
+        // Asha sits exam a so 11A is an offered batch; the CONFLICT is on a
+        // question Asha's cohort never saw the other side of.
+        students: [
+          { name: 'Asha', totalMarks: 10, responses: { 1: 1 }, choices: { 1: 'B' } },
+          { name: 'Zeb', totalMarks: 10, responses: { 1: 1 }, choices: { 1: 'B' } },
+        ] },
+      { id: 'b', name: 'Exam b', subject: 'Maths',
+        questions: [{ q: 1, questionId: Q(3), chapter: 'Algebra', answer: 'C', question: 'conflicted' }],
+        students: [{ name: 'Zeb', totalMarks: 10, responses: { 1: 1 }, choices: { 1: 'C' } }] },
+    ])
+    render(<ItemStatsPage />)
+    await user.selectOptions(screen.getByLabelText(/batch/i), '11A')   // Zeb is in neither
+    expect(screen.getByText(/keyed differently/i)).toBeInTheDocument()
+  })
+
+  it('explains an empty cohort instead of showing a blank table', async () => {
+    const user = userEvent.setup()
+    twoBatches()
+    render(<ItemStatsPage />)   // threshold 20, one student per batch
+    await user.selectOptions(screen.getByLabelText(/batch/i), '11A')
+    expect(screen.getByText(/largest sample here is/i)).toBeInTheDocument()
   })
 })
 
