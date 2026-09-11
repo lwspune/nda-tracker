@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState, Card } from '../../components/ui'
 import { RichText } from '../../components/ui/RichText'
+import QuestionCard from '../../components/ui/QuestionCard'
 import { computeItemStats } from '../../lib/itemStats'
 
 // What the answer sheets say about each BANK question, pooled across every
@@ -235,8 +236,8 @@ export default function ItemStatsPage() {
           </thead>
           <tbody>
             {visible.map(r => (
+            <Fragment key={r.questionId}>
               <tr
-                key={r.questionId}
                 data-testid="item-row"
                 onClick={() => setOpen(open === r.questionId ? null : r.questionId)}
                 className="border-b border-border last:border-0 hover:bg-bg cursor-pointer align-top"
@@ -248,21 +249,6 @@ export default function ItemStatsPage() {
                   <div className="text-[11px] text-ink-3 mt-0.5">
                     {r.chapter || '—'}{r.subtopic ? ` · ${r.subtopic}` : ''}
                   </div>
-                  {open === r.questionId && (
-                    <div className="mt-2 pt-2 border-t border-border space-y-1">
-                      <div className="flex gap-4">
-                        {LABELS.map(l => (
-                          <span key={l} className={l === r.keyed ? 'font-semibold text-accent' : 'text-ink-2'}>
-                            {l}: {r.choiceCounts[l]}{l === r.keyed ? ' (key)' : ''}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="text-ink-3 text-[11px]">
-                        seen {r.seen} · attempted {r.attempted} · skipped {r.skipped} · in{' '}
-                        {r.exams.map(e => e.name).join(', ')}
-                      </div>
-                    </div>
-                  )}
                 </td>
                 <td className={`${TD} text-right tabular-nums`}>{r.attempted}</td>
                 <td className={`${TD} text-right tabular-nums`}>{pct(r.pCorrect)}</td>
@@ -279,6 +265,32 @@ export default function ItemStatsPage() {
                   {num(r.discrimination)}
                 </td>
               </tr>
+              {open === r.questionId && (
+                // Full width, not inside the question cell: a key cannot be
+                // judged from the stem, so the reviewer gets the same card the
+                // rest of the app uses — options, the key highlighted, and the
+                // solution behind its toggle.
+                <tr data-testid="item-detail" className="border-b border-border bg-bg">
+                  <td colSpan={7} className="px-2 py-3">
+                    <div className="flex flex-wrap gap-4 text-[12px] mb-2">
+                      {LABELS.map(l => (
+                        <span key={l} className={l === r.keyed ? 'font-semibold text-accent' : 'text-ink-2'}>
+                          {l}: {r.choiceCounts[l]}{l === r.keyed ? ' (key)' : ''}
+                        </span>
+                      ))}
+                      <span className="text-ink-3">
+                        seen {r.seen} · attempted {r.attempted} · skipped {r.skipped} · in{' '}
+                        {r.exams.map(e => e.name).join(', ')}
+                      </span>
+                    </div>
+                    {/* No examId on purpose: editing writes to ONE exam record,
+                        and a pooled question lives in several — fixing the key in
+                        one would manufacture the very conflict this page reports. */}
+                    {r.source && <QuestionCard q={r.source} />}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
             ))}
           </tbody>
         </table>

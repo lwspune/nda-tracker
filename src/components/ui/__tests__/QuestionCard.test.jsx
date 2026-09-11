@@ -43,3 +43,37 @@ describe('QuestionCard — remediation links', () => {
     expect(screen.queryByText(/Learn this/)).not.toBeInTheDocument()
   })
 })
+
+// A card can be rendered for a QUESTION rather than for one student's attempt —
+// the teacher cohort panel already did (studentResult={null}), and Question
+// Stats does. The pill defaulted to "Unknown", which is not a result, it is the
+// absence of one.
+describe('QuestionCard — no student attached', () => {
+  const q = {
+    q: 1, chapter: 'Vectors', subtopic: 'Dot', question: 'find a dot b',
+    optionA: 'p', optionB: 'q', optionC: 'r', optionD: 's', answer: 'B',
+    solution: 'because',
+  }
+
+  it('shows no result pill when no student result is given', () => {
+    render(<QuestionCard q={q} />)
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+    expect(screen.queryByText('Correct')).not.toBeInTheDocument()
+  })
+
+  it('shows no result pill for an explicit null', () => {
+    render(<QuestionCard q={q} studentResult={null} />)
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+  })
+
+  it('still shows the pill when a real result is given', () => {
+    render(<QuestionCard q={q} studentResult={1} />)
+    expect(screen.getByText('Correct')).toBeInTheDocument()
+  })
+
+  it('still shows the options and the key', () => {
+    render(<QuestionCard q={q} />)
+    expect(screen.getByText('p')).toBeInTheDocument()
+    expect(screen.getByText('q')).toBeInTheDocument()
+  })
+})

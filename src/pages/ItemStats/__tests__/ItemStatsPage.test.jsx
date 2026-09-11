@@ -102,6 +102,35 @@ describe('ItemStatsPage — filters', () => {
   })
 })
 
+describe('ItemStatsPage — reviewing a row', () => {
+  // A distractor beating the key is only a LEAD; deciding it needs the options
+  // and the solution, which is what the shared QuestionCard already renders.
+  it('expands to the full question card, options and all', async () => {
+    const user = userEvent.setup()
+    setExams([exam('m1', 'Maths',
+      [{ q: 1, questionId: Q(1), chapter: 'Vectors', answer: 'B', question: 'find a dot b',
+         optionA: 'alpha', optionB: 'beta', optionC: 'gamma', optionD: 'delta',
+         solution: 'because beta' }],
+      [[10, -1, 'C'], [9, -1, 'C'], [8, 1, 'B'], [7, 1, 'B']])])
+    render(<ItemStatsPage />)
+    showEverything()
+    await user.click(screen.getAllByTestId('item-row')[0])
+
+    const detail = screen.getByTestId('item-detail')
+    expect(within(detail).getByText('alpha')).toBeInTheDocument()
+    expect(within(detail).getByText('beta')).toBeInTheDocument()
+    expect(within(detail).getByText(/show solution/i)).toBeInTheDocument()
+  })
+
+  it('shows no student-result pill — there is no single student here', async () => {
+    const user = userEvent.setup()
+    render(<ItemStatsPage />)
+    showEverything()
+    await user.click(screen.getAllByTestId('item-row')[0])
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+  })
+})
+
 describe('ItemStatsPage — findings and empty states', () => {
   it('surfaces a question keyed differently in two sittings', () => {
     setExams([

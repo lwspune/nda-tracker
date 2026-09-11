@@ -45,11 +45,15 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult, 
     return null
   }
 
+  // A card can describe a QUESTION rather than one student's attempt — the
+  // teacher cohort panel passes null, and Question Stats has no single student
+  // at all. The pill used to fall back to "Unknown", which is not a result but
+  // the absence of one, so it is simply omitted now.
   const resultLabel = {
     1:    { text: 'Correct',  color: 'bg-green-50 text-success' },
     '-1': { text: 'Wrong',    color: 'bg-red-50 text-danger' },
     0:    { text: 'Skipped',  color: 'bg-surface-2 text-ink-3' },
-  }[studentResult] || { text: 'Unknown', color: 'bg-surface-2 text-ink-3' }
+  }[studentResult] || null
 
   function handleSave(patch) {
     updateQuestion(examId, q.q, patch)
@@ -78,9 +82,11 @@ export default function QuestionCard({ q, examId, studentAnswer, studentResult, 
           })()}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full font-mono ${resultLabel.color}`}>
-            {resultLabel.text}
-          </span>
+          {resultLabel && (
+            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full font-mono ${resultLabel.color}`}>
+              {resultLabel.text}
+            </span>
+          )}
           {canEdit && (
             <button
               onClick={() => setEditing(e => !e)}

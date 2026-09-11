@@ -61,6 +61,10 @@ export function computeItemStats(exams, { minAttempts = 20 } = {}) {
           subtopic: question.subtopic ?? null,
           subject: question.subject ?? exam.subject ?? null,
           question: question.question ?? null,
+          // The whole question as first seen, so a reviewer can be shown the
+          // OPTIONS and the SOLUTION. A key cannot be judged from the stem.
+          // Pooled copies are the same bank question, so the first will do.
+          source: question,
           keys: new Map(),           // answer -> {examId, examName, answer}
           seen: 0, attempted: 0, skipped: 0, correct: 0, wrong: 0,
           choiceCounts: emptyCounts(),
@@ -110,7 +114,7 @@ export function computeItemStats(exams, { minAttempts = 20 } = {}) {
     if (keys.length > 1) {
       keyConflicts.push({
         questionId: row.questionId, chapter: row.chapter,
-        subject: row.subject, question: row.question, keys,
+        subject: row.subject, question: row.question, source: row.source, keys,
       })
       continue
     }
@@ -130,6 +134,7 @@ export function computeItemStats(exams, { minAttempts = 20 } = {}) {
       subtopic: row.subtopic,
       subject: row.subject,
       question: row.question,
+      source: row.source,
       keyed,
       seen: row.seen,
       attempted: row.attempted,
