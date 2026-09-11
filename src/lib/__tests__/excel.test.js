@@ -201,3 +201,38 @@ describe('parseTagsFile — notes slug columns (remediation)', () => {
     expect(tag.conceptSlug).toBeNull()
   })
 })
+
+describe('parseTagsFile — QuestionId column (PYQ Vault provenance)', () => {
+  const WITH_ID = ['Q', 'Subject', 'Chapter', 'Subtopic', 'Question', 'Answer', 'QuestionId']
+
+  it('parses QuestionId into the tag', async () => {
+    const file = buildTagsFile(WITH_ID, [
+      [1, 'Maths', 'Vectors', 'Dot Product', 'find a.b', 'B', '7f3c1e2a-0000-4000-8000-000000000001'],
+    ])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.questionId).toBe('7f3c1e2a-0000-4000-8000-000000000001')
+  })
+
+  it('does not confuse QuestionId with the Q or Question columns', async () => {
+    const file = buildTagsFile(WITH_ID, [
+      [4, 'Maths', 'Vectors', 'Dot Product', 'find a.b', 'B', 'uuid-4'],
+    ])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.q).toBe(4)               // the printed number, not the uuid
+    expect(tag.question).toBe('find a.b') // the stem, not the uuid
+    expect(tag.questionId).toBe('uuid-4')
+  })
+
+  it('accepts the Question_Id / PyqId header spellings', async () => {
+    const a = await parseTagsFile(buildTagsFile(['Q', 'Chapter', 'Question_Id'], [[1, 'Vectors', 'uuid-a']]))
+    const b = await parseTagsFile(buildTagsFile(['Q', 'Chapter', 'PyqId'], [[1, 'Vectors', 'uuid-b']]))
+    expect(a[0].questionId).toBe('uuid-a')
+    expect(b[0].questionId).toBe('uuid-b')
+  })
+
+  it('returns null when the column is absent (hand-typed / historical sheets)', async () => {
+    const file = buildTagsFile(['Q', 'Chapter', 'Subtopic'], [[1, 'Probability', 'Classical']])
+    const [tag] = await parseTagsFile(file)
+    expect(tag.questionId).toBeNull()
+  })
+})

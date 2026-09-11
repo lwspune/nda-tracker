@@ -245,6 +245,17 @@ export async function parseTagsFile(file) {
   // finder above) — enable slug-precise /go remediation links. Optional.
   const ssi  = headers.findIndex(c => c === 'subtopicslug' || c === 'subtopic slug' || c === 'subtopic_slug')
   const csi  = headers.findIndex(c => c === 'conceptslug' || c === 'concept slug' || c === 'concept_slug')
+  // PYQ Vault's `questions.id` for this row - cross-app provenance, so a result
+  // can be traced back to the bank item. Exact-match finders again: 'questionid'
+  // must not be caught by the `Q` regex or the exact-'question' stem finder.
+  // A SOFT reference (different Supabase projects, no FK) and always optional -
+  // hand-typed sheets, teacher quizzes and every historical file have no such
+  // column, so every consumer must tolerate null and fall back to name-based
+  // behaviour. Provenance for linking/reporting ONLY: the stored question text
+  // stays the record of what the student actually sat.
+  const qidi = headers.findIndex(c =>
+    c === 'questionid' || c === 'question id' || c === 'question_id' ||
+    c === 'pyqid' || c === 'pyq id' || c === 'pyq_id')
 
   if (qi < 0)  throw new Error('Could not find "Q" column')
   if (chi < 0) throw new Error('Could not find "Chapter" column')
@@ -273,6 +284,7 @@ export async function parseTagsFile(file) {
       context:    cell(row, cxi),    // shared passage / context, null when absent
       subtopicSlug: cell(row, ssi),  // notes subtopic slug, null when untagged
       conceptSlug:  cell(row, csi),  // notes concept slug, null when untagged
+      questionId:   cell(row, qidi), // PYQ Vault question id, null when absent
     })
   }
 

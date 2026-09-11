@@ -238,3 +238,41 @@ describe('ReuploadTagsModal — step 2 review', () => {
     expect(screen.getByRole('button', { name: /review tags/i })).toBeInTheDocument()
   })
 })
+
+// ── PYQ Vault question id ─────────────────────────────────────────────────────
+// Re-uploading a freshly generated Tags sheet is the cheapest way to attach bank
+// ids to an exam that was uploaded before the column existed, so the merge must
+// carry `questionId` through — and must never wipe an id already on the exam.
+
+describe('ReuploadTagsModal — questionId (PYQ Vault provenance)', () => {
+  async function uploadAndSave(container, user) {
+    await user.upload(getFileInput(container), makeFakeFile())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /review tags/i })).not.toBeDisabled()
+    )
+    await user.click(screen.getByRole('button', { name: /review tags/i }))
+    await user.click(screen.getByRole('button', { name: /save tags/i }))
+    return mockStore.replaceExam.mock.calls[0][1]
+  }
+
+  it('attaches the question id from a re-uploaded vault sheet', async () => {
+    mockParseTagsFile.mockResolvedValue([
+      { q: 1, chapter: 'Algebra',      subtopic: 'Equations', questionId: 'uuid-1' },
+      { q: 2, chapter: 'Trigonometry', subtopic: 'Ratios',    questionId: 'uuid-2' },
+    ])
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    const saved = await uploadAndSave(container, user)
+    expect(saved.questions.map(q => q.questionId)).toEqual(['uuid-1', 'uuid-2'])
+  })
+
+  it('keeps an existing id when the new sheet has no QuestionId column', async () => {
+    // default mock: tags with no questionId at all
+    const exam = makeExam()
+    exam.questions[0].questionId = 'uuid-existing'
+    const user = userEvent.setup()
+    const { container } = renderModal(exam)
+    const saved = await uploadAndSave(container, user)
+    expect(saved.questions[0].questionId).toBe('uuid-existing')
+  })
+})

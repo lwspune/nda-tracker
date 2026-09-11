@@ -1254,3 +1254,31 @@ The stale-chunk fix (2026-09-10) makes the *symptom* legible at three download s
 - Cheapest useful version: write the build SHA into `index.html` at build time (Vite `define` + `VERCEL_GIT_COMMIT_SHA`), poll `/index.html` every few minutes, and surface a dismissible "A new version is available — reload" banner when it differs. No service worker, no new dependency.
 - Do **not** auto-reload. Someone mid-way through marking a roster or editing timetable cells would lose unsaved local state; the existing `StaleDataBanner` already establishes reload-on-user-action as this app's convention.
 - Reuse `StaleDataBanner`'s look so the two "your page is out of date" messages read as one idea rather than two unrelated warnings.
+
+---
+
+## 2026-09-11
+
+### Backfill `questionId` onto exams uploaded before the column existed
+
+The PYQ Vault Tags export now emits `QuestionId` and `parseTagsFile` stores it, but **forward-only** — every exam already in the bank has no bank provenance. Logged as a backfill candidate, **not** to be run without an explicit decision (it edits shipped exam rows).
+
+**Why:** the value of the link (measured item difficulty, exposure control, finding every exam that used a mis-keyed question) scales with how much history carries ids. The forward-only set will take a full season to become useful on its own.
+
+**How to apply:**
+- **Do NOT fuzzy-match question text.** The vault knows exactly which questions went into which generated paper — `paper_questions` (migration 0039) holds the junction, and `papers` carries the finalize-snapshot. A per-paper join is exact; text matching would re-introduce the guessing this feature exists to remove.
+- Papers built before the paper-builder existed, hand-typed sheets, and teacher written quizzes have no vault row at all — they stay null, permanently and correctly.
+- Cheapest path for a recent exam needing no script: re-export its Tags sheet from the vault and re-upload via **Update Tags** — `ReuploadTagsModal` already merges `questionId` (`?? q.questionId` so a sheet without the column never wipes one).
+- A backfill must be a dry-run-first script that reports matched/unmatched per exam and writes only `questions[].questionId`, touching no other field. Run the 360 (scope · blast radius · does-it-apply · risk · cost) before proposing it.
+
+### Follow-on phases for the cross-app question link (nothing consumes `questionId` yet)
+
+Phase 0 (the link) shipped 2026-09-11. The column is inert until something reads it — these are the agreed follow-ons, each a separate decision.
+
+**Why:** an unread provenance column silently rots. Phase 1 is deliberately tiny so the link is proven to resolve against real data long before anything expensive is built on it.
+
+**How to apply:**
+- **Phase 1 — prove it resolves.** A faculty-only "source" link on `QuestionCard`. Note the memory's warning: that component has **six** render sites and each must opt in ([[reference_remediation_links]]).
+- **Phase 2 — item statistics back to the vault**, keyed by id: p-value, skip rate and distractor pull from `exam_results.responses` + `choices`. Replaces the hand-set `EASY/MODERATE/HARD` with measurement and flags probable wrong keys (correct option chosen less often than a distractor). **Start as a manual export/import script, NOT an endpoint** — Vercel's Hobby plan hard-fails the build at >12 `api/*.js` files and we are at the ceiling ([[project_vercel_function_cap]]).
+- **Phase 3 — exposure control.** Export the id set a batch has already sat, for the vault's paper builder (`papers`/`batches` already model per-batch non-repetition).
+- **Phase 2+ needs the images question answered:** the Tags sheet is text-only, so a question with a figure loses it. Fetching by id is the fix, but it must be a *display* enrichment — the stored text stays the record of what the student sat.

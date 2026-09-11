@@ -83,6 +83,10 @@ export default function ReuploadTagsModal({ exam, onClose }) {
         optionD:  newTag.optionD  ?? q.optionD,
         answer:   newTag.answer   ?? q.answer,
         solution: newTag.solution ?? q.solution,
+        // PYQ Vault provenance — re-uploading a freshly generated sheet is how
+        // an exam uploaded before the column existed picks up its bank ids.
+        // `?? q.questionId` so a sheet without the column never wipes one.
+        questionId: newTag.questionId ?? q.questionId ?? null,
       }
     })
 
