@@ -222,6 +222,62 @@ If lint reports more than the 11 expected errors, the new errors are real. If te
 
 ---
 
+## Procedure — retiring a finished batch
+
+**Not a failure mode — a scheduled operation.** Runs every September and January as a cohort
+finishes. Rationale, blast radius and the traps behind each step: [`BATCH_RETIREMENT.md`](./BATCH_RETIREMENT.md).
+
+**The two rules that make the rest safe:**
+- **Archive, never delete.** Settings → Batches → **Archive**. Delete drops the batch's syllabus
+  progress and timelines with no undo, and is blocked while students still hold the batch.
+- **Never clear `student_batches`.** Membership is what keeps the cohort's exams reachable —
+  strip it and the batch's whole history becomes unfilterable on Dashboard / Exams / Item Stats,
+  permanently, even though `exams.batch` still names it.
+
+**Order matters.** Step 1 must precede step 2.
+
+1. **Freeze historical absence times — before touching any timetable.**
+   ```bash
+   node migrate_absence_times.js --dry-run    # inspect
+   node migrate_absence_times.js              # apply (idempotent)
+   ```
+   A timetabled `lecture_absences` row stores no clock time; `buildAbsentRoster` re-derives it
+   from the slot row. Deleting the timetable first strips the time off every row still holding
+   `start_time IS NULL`. Verify none are left for the batch:
+   ```sql
+   select count(*) from lecture_absences where start_time is null;
+   ```
+2. **Archive the batch** (Settings → Batches). It leaves every picker that assigns new work —
+   uploads, quizzes, new timetables, the student row editor. Nothing is deleted. The archived row
+   now lists what is **still live** on the batch; work that list down.
+3. **Delete the batch's timetable** (Timetable page). Until this is done teachers still see the
+   class on `/school-attendance` and it still appears on the Lecture-log filing board.
+4. **Run calendar sync** — releases the teachers' recurring Google Calendar events. There is no
+   other trigger; skip it and the class sits on their calendar indefinitely.
+5. **Clear its exam schedules**, and untick it in any quiz's batch targeting.
+6. **Block the departing students** (Students page → Block). Login 403s on
+   `account_status ∈ {Block, Quit, Inactive}` and every WhatsApp flow is gated by
+   `isBlockedStatus`. Reversible, and it keeps their history — unlike delete.
+7. **Verify.** The archived row should show no residue warning, and:
+   ```sql
+   -- membership intact (this is correct — do NOT clear it)
+   select count(*) from student_batches where batch_name = '<batch>';
+   -- nothing new should be filed against it from here on
+   select max(date) from lecture_submissions where batch_name = '<batch>';
+   ```
+   The batch must still be selectable on Dashboard / Exams / Item Stats. If it is not, membership
+   was cleared — restore it from a backup before anything else.
+
+**If the batch is co-tagged.** `exams.batch` is a comma-joined list, so a shared paper names two
+batches (`APJ_NDA_6M_(Sep26)` shares 55 exams with `APJ_NDA_12th_(26-27)`). Nothing in this
+procedure edits `exams.batch`, and nothing should — retiring one batch must not touch the other's
+papers.
+
+**Rolling a cohort forward** (11th → 12th) is a **rename**, not a retirement: Settings → Batches →
+Rename cascades the syllabus, timetable, `student_batches` and `exams.batch` in one step.
+
+---
+
 ## Useful one-liners
 
 ```sql
