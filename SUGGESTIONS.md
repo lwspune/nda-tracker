@@ -1259,6 +1259,21 @@ The stale-chunk fix (2026-09-10) makes the *symptom* legible at three download s
 
 ## 2026-09-11
 
+### Build the re-grade action if key corrections recur
+
+Three wrong answer keys were found and corrected on 2026-09-11 (surfaced by Question Stats' key-conflict panel; the bank was consulted for the true key). All three sittings had been **graded by Evalbee against the wrong key**, so 30 result rows were re-graded — **by hand, in SQL**, because the re-grade action is deliberately unbuilt (see `CLAUDE.md` → grading invariant).
+
+**Why:** the manual path is fine for three questions and unacceptable for thirty. Each correction meant recomputing the verdict from `exam_results.choices`, adjusting `correct`/`incorrect`, and applying that exam's own marking scheme — two of the three exams used 2.5/−0.83 and the third 4/−1.33, so a shared constant would have produced silently wrong totals. That is exactly the kind of arithmetic a human should not repeat under time pressure.
+
+**Do NOT build it yet.** One incident is not a pattern, and the data needed to judge is now being collected: Question Stats reports key conflicts continuously, and its review queue currently lists 122 questions where a distractor outpulls the key. If some of those turn out to be genuine key errors, that is the trigger.
+
+**How to apply, when the trigger comes:**
+- The pure core is `regrade(exam, results, {qno, newKey})` → new `responses`, `correct`, `incorrect`, `total_marks` per row. Everything it needs already exists: `choices` is populated on 100% of rows, and the per-exam `marking` is on the exam. TDD it against the three corrections made on 2026-09-11, whose before/after numbers are in that session's history.
+- **Take the scheme from the exam, never a constant** — the two schemes in play differ by a factor of 1.6.
+- A skip stays a skip: only rows with a non-null choice may change.
+- Surface it where the error is found — the key-conflict panel on Question Stats — not as a general "edit marks" button.
+- **It must be loud.** Marks already sent to parents do not un-send, so the action should state how many students gain and lose before it runs, and record that it ran.
+
 ### ~~Backfill `questionId` onto exams uploaded before the column existed~~ — **DONE 2026-09-11** (the 10 most recent Maths mocks)
 
 `migrate_question_ids.js` matched **1,191 of 1,200** questions to exactly one bank row by exact whitespace-normalised text, across 10 vault-built Maths mocks; **zero unmatched**, and the 9 ambiguous (text duplicated in the bank) were skipped rather than guessed. Verified from the DB: `with_ids == distinct_ids` on every exam, so no two questions claim the same row. NOT done by the `paper_questions` join proposed below — exact text against 33.5k LWS Maths questions proved unambiguous enough to verify directly, and zero misses is itself the evidence these papers came from the bank verbatim. **Older exams (pre-2026-08-29) still have none** — re-run with a larger `LIMIT` to extend. Original entry kept below for the reasoning trail.
