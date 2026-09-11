@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState, Card } from '../../components/ui'
+// Aliased: the renderer is exported as `Math`, which would shadow the global.
+import { Math as MathText } from '../../components/ui/Math'
 import { computeItemStats } from '../../lib/itemStats'
 
 // What the answer sheets say about each BANK question, pooled across every
@@ -22,6 +24,7 @@ const SORTS = [
 
 // Ascending sorts put the worst case first; the rest are descending.
 const ASCENDING = new Set(['pCorrect', 'discrimination'])
+const LABELS = ['A', 'B', 'C', 'D']
 
 const pct = v => (v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`)
 const num = (v, d = 2) => (v === null || v === undefined ? '—' : v.toFixed(d))
@@ -38,18 +41,21 @@ function download(name, text, type) {
 function toCsv(rows) {
   const head = ['questionId', 'subject', 'chapter', 'subtopic', 'keyed', 'seen', 'attempted',
     'skipped', 'correct', 'pCorrect', 'skipRate', 'topDistractor', 'topDistractorN',
-    'distractorRatio', 'discrimination', 'insufficient']
+    'distractorRatio', 'discrimination']
   const esc = v => '"' + String(v ?? '').split('"').join('""') + '"'
   const lines = [head.join(',')]
   for (const r of rows) {
     lines.push([
       r.questionId, r.subject, r.chapter, r.subtopic, r.keyed, r.seen, r.attempted,
       r.skipped, r.correct, r.pCorrect, r.skipRate, r.topDistractor?.label ?? '',
-      r.topDistractor?.n ?? '', r.distractorRatio, r.discrimination, r.insufficient,
+      r.topDistractor?.n ?? '', r.distractorRatio, r.discrimination,
     ].map(esc).join(','))
   }
   return lines.join(String.fromCharCode(10))
 }
+
+const TH = 'text-left font-semibold text-ink-3 text-[11px] uppercase tracking-wide py-2 px-2'
+const TD = 'py-2 px-2 align-top'
 
 export default function ItemStatsPage() {
   const exams = useStore(s => s.exams)
@@ -59,6 +65,10 @@ export default function ItemStatsPage() {
   const [minAttempts, setMinAttempts] = useState(20)
   const [open, setOpen] = useState(null)
 
+  // The threshold is applied INSIDE the calculation only as a flag; the filter
+  // below is what the "Min attempts" control actually promises. A row seen by
+  // three students is not evidence, and letting it sort to the top of a review
+  // queue buries the questions that are.
   const { rows, keyConflicts } = useMemo(
     () => computeItemStats(exams, { minAttempts }), [exams, minAttempts]
   )
@@ -71,20 +81,23 @@ export default function ItemStatsPage() {
       .map(r => r.chapter).filter(Boolean))].sort(), [rows, subject]
   )
 
+  const inScope = useMemo(() => rows.filter(r =>
+    (subject === 'all' || r.subject === subject) &&
+    (chapter === 'all' || r.chapter === chapter)), [rows, subject, chapter])
+
+  const thin = inScope.filter(r => r.insufficient).length
+
   const visible = useMemo(() => {
-    const filtered = rows.filter(r =>
-      (subject === 'all' || r.subject === subject) &&
-      (chapter === 'all' || r.chapter === chapter))
     // A missing value sorts LAST in every mode. "No ratio exists" is not an
     // extreme score, and floating it to the top would bury real evidence.
-    return filtered.slice().sort((a, b) => {
+    return inScope.filter(r => !r.insufficient).slice().sort((a, b) => {
       const av = a[sort]
       const bv = b[sort]
       if (av === null || av === undefined) return 1
       if (bv === null || bv === undefined) return -1
       return ASCENDING.has(sort) ? av - bv : bv - av
     })
-  }, [rows, subject, chapter, sort])
+  }, [inScope, sort])
 
   if (rows.length === 0 && keyConflicts.length === 0) {
     return (
@@ -118,13 +131,16 @@ export default function ItemStatsPage() {
           <ul className="mt-2 space-y-1 text-[12px]">
             {keyConflicts.map(c => (
               <li key={c.questionId} className="border border-border rounded-md px-2 py-1.5">
-                <div className="truncate">{c.question || c.questionId}</div>
-                <span className="text-ink-3">{c.chapter || '—'}</span>
-                {c.keys.map(k => (
-                  <span key={k.examId} className="ml-2">
-                    <strong>{k.answer}</strong> in {k.examName}
-                  </span>
-                ))}
+                <div className="line-clamp-2"><MathText>{c.question || c.questionId}</MathText></div>
+                <div className="mt-0.5">
+                  <span className="text-ink-3">{c.chapter || '—'}</span>
+                  {c.keys.map(k => (
+                    <span key={k.examId} className="ml-3">
+                      <strong className="text-danger">{k.answer}</strong>
+                      <span className="text-ink-3"> in {k.examName}</span>
+                    </span>
+                  ))}
+                </div>
               </li>
             ))}
           </ul>
@@ -152,7 +168,7 @@ export default function ItemStatsPage() {
               aria-label="Chapter"
               value={chapter}
               onChange={e => setChapter(e.target.value)}
-              className="border border-border rounded-md px-2 py-1 bg-surface min-h-[36px]"
+              className="border border-border rounded-md px-2 py-1 bg-surface min-h-[36px] max-w-[240px]"
             >
               <option value="all">All chapters</option>
               {chapters.map(c => <option key={c} value={c}>{c}</option>)}
@@ -197,66 +213,84 @@ export default function ItemStatsPage() {
           </div>
         </div>
         <p className="text-[11px] text-ink-3 mt-3">
-          Counts only — no student names leave this page. A high distractor ratio is a lead to
+          {visible.length} question{visible.length === 1 ? '' : 's'} shown
+          {thin > 0 && <> · {thin} hidden below {minAttempts} attempts</>}
+          {' '}· counts only, no student names leave this page. A high distractor ratio is a lead to
           review, not a verdict: an option outpulls the key when the key is wrong, and also when the
           question is hard and the trap is well built.
         </p>
       </Card>
 
-      <div className="space-y-1.5">
-        {visible.map(r => (
-          <div
-            key={r.questionId}
-            data-testid="item-row"
-            className="border border-border rounded-lg px-3 py-2 bg-surface"
-          >
-            <div className="flex items-start gap-3">
-              <button
+      <Card className="!p-0 overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[860px]">
+          <thead className="border-b border-border">
+            <tr>
+              <th scope="col" className={TH}>Question</th>
+              <th scope="col" className={`${TH} text-right w-[80px]`}>Attempts</th>
+              <th scope="col" className={`${TH} text-right w-[80px]`}>Correct</th>
+              <th scope="col" className={`${TH} text-right w-[80px]`}>Skipped</th>
+              <th scope="col" className={`${TH} text-center w-[56px]`}>Key</th>
+              <th scope="col" className={`${TH} text-right w-[110px]`}>Vs key</th>
+              <th scope="col" className={`${TH} text-right w-[80px]`}>Discrim</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(r => (
+              <tr
+                key={r.questionId}
+                data-testid="item-row"
                 onClick={() => setOpen(open === r.questionId ? null : r.questionId)}
-                className="text-left flex-1 min-w-0"
-                aria-expanded={open === r.questionId}
+                className="border-b border-border last:border-0 hover:bg-bg cursor-pointer align-top"
               >
-                <div className="text-[13px] truncate">{r.question || r.questionId}</div>
-                <div className="text-[11px] text-ink-3 mt-0.5">
-                  {r.subject || '—'} · {r.chapter || '—'}
-                  {r.subtopic ? ` · ${r.subtopic}` : ''}
-                  {r.insufficient && (
-                    <span className="ml-2 text-warning">thin evidence ({r.attempted})</span>
+                <td className={TD}>
+                  <div className={open === r.questionId ? '' : 'line-clamp-2'}>
+                    <MathText>{r.question || r.questionId}</MathText>
+                  </div>
+                  <div className="text-[11px] text-ink-3 mt-0.5">
+                    {r.chapter || '—'}{r.subtopic ? ` · ${r.subtopic}` : ''}
+                  </div>
+                  {open === r.questionId && (
+                    <div className="mt-2 pt-2 border-t border-border space-y-1">
+                      <div className="flex gap-4">
+                        {LABELS.map(l => (
+                          <span key={l} className={l === r.keyed ? 'font-semibold text-accent' : 'text-ink-2'}>
+                            {l}: {r.choiceCounts[l]}{l === r.keyed ? ' (key)' : ''}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-ink-3 text-[11px]">
+                        seen {r.seen} · attempted {r.attempted} · skipped {r.skipped} · in{' '}
+                        {r.exams.map(e => e.name).join(', ')}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </button>
-              <div className="flex gap-4 text-[12px] shrink-0 text-right">
-                <div><div className="text-ink-3 text-[10px]">correct</div>{pct(r.pCorrect)}</div>
-                <div><div className="text-ink-3 text-[10px]">skipped</div>{pct(r.skipRate)}</div>
-                <div><div className="text-ink-3 text-[10px]">key</div>{r.keyed || '—'}</div>
-                <div>
-                  <div className="text-ink-3 text-[10px]">vs key</div>
-                  <span className={r.distractorRatio > 1 ? 'text-danger font-semibold' : ''}>
-                    {r.topDistractor ? `${r.topDistractor.label} ${num(r.distractorRatio, 1)}×` : '—'}
-                  </span>
-                </div>
-                <div><div className="text-ink-3 text-[10px]">discrim</div>{num(r.discrimination)}</div>
-              </div>
-            </div>
-
-            {open === r.questionId && (
-              <div className="mt-2 pt-2 border-t border-border text-[12px] space-y-1">
-                <div className="flex gap-4">
-                  {['A', 'B', 'C', 'D'].map(l => (
-                    <span key={l} className={l === r.keyed ? 'font-semibold text-accent' : 'text-ink-2'}>
-                      {l}: {r.choiceCounts[l]}{l === r.keyed ? ' (key)' : ''}
+                </td>
+                <td className={`${TD} text-right tabular-nums`}>{r.attempted}</td>
+                <td className={`${TD} text-right tabular-nums`}>{pct(r.pCorrect)}</td>
+                <td className={`${TD} text-right tabular-nums text-ink-2`}>{pct(r.skipRate)}</td>
+                <td className={`${TD} text-center font-semibold`}>{r.keyed || '—'}</td>
+                <td className={`${TD} text-right tabular-nums`}>
+                  {r.topDistractor ? (
+                    <span className={r.distractorRatio > 1 ? 'text-danger font-semibold' : 'text-ink-2'}>
+                      {r.topDistractor.label} {num(r.distractorRatio, 1)}×
                     </span>
-                  ))}
-                </div>
-                <div className="text-ink-3">
-                  seen {r.seen} · attempted {r.attempted} · skipped {r.skipped} · in{' '}
-                  {r.exams.map(e => e.name).join(', ')}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                  ) : '—'}
+                </td>
+                <td className={`${TD} text-right tabular-nums ${r.discrimination < 0 ? 'text-danger' : 'text-ink-2'}`}>
+                  {num(r.discrimination)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {visible.length === 0 && (
+          <p className="text-[13px] text-ink-3 px-4 py-6 text-center">
+            Nothing above {minAttempts} attempts in this scope
+            {thin > 0 && <> — {thin} question{thin === 1 ? '' : 's'} below the threshold are hidden</>}.
+          </p>
+        )}
+      </Card>
     </div>
   )
 }
