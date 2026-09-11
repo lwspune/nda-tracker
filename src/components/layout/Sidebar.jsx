@@ -22,6 +22,9 @@ const NAV = [
   // Not adminOnly: a teacher handing their own class its mistakes is the point.
   // Read-only + a local download, so it grants nothing a teacher can't already see.
   { id: 'errorSets', icon: '📕', label: 'Error Sets' },
+  // Faculty + content-team instrumentation: what the answer sheets say about
+  // each bank question. Admin-only — a student can act on none of it.
+  { id: 'itemStats',      icon: '🔬', label: 'Question Stats', adminOnly: true },
   { id: 'insights',       icon: '🧠', label: 'Insights', adminOnly: true },
   { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
   { id: 'costs',          icon: '💰', label: 'API Costs', adminOnly: true },

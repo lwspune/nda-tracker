@@ -20,6 +20,7 @@ import TimetablePage from './pages/Timetable/TimetablePage'
 import SettingsPage from './pages/Settings/SettingsPage'
 import MonthlyReportsPage from './pages/MonthlyReports'
 import ErrorSetsPage from './pages/ErrorSets'
+import ItemStatsPage    from './pages/ItemStats'
 import TeacherFeedbackPage from './pages/TeacherFeedback'
 import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
@@ -153,6 +154,7 @@ export default function App() {
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
     errorSets:  <ErrorSetsPage />,
+    itemStats:       <ItemStatsPage />,
     insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
@@ -240,6 +242,7 @@ function OnlineAdminPortal({ session, onLogout }) {
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage />,
     errorSets:  <ErrorSetsPage />,
+    itemStats:       <ItemStatsPage />,
     insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
     costs:           <CostsPage />,
