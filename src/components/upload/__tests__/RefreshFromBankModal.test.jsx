@@ -54,6 +54,24 @@ describe('RefreshFromBankModal — filling gaps', () => {
   })
 })
 
+describe('RefreshFromBankModal — the count must never stand alone', () => {
+  // A bare "236 fields to fill" is what let 236 empty containers pass for a
+  // find. Naming the fields makes that impossible to miss again.
+  it('names which fields it would fill, not just how many', async () => {
+    mockFetchBank.mockResolvedValue({
+      byId: {
+        [ID1]: { questionId: ID1, imageUrl: 'https://bank/a.png' },
+        [ID2]: { questionId: ID2, imageUrl: 'https://bank/b.png', solution: 'worked' },
+      },
+      missing: [],
+    })
+    render(<RefreshFromBankModal exam={makeExam()} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText(/3 fields/i)).toBeInTheDocument())
+    expect(screen.getByText(/imageUrl/)).toBeInTheDocument()
+    expect(screen.getByText(/solution/)).toBeInTheDocument()
+  })
+})
+
 describe('RefreshFromBankModal — what it refuses to do quietly', () => {
   it('applies the fill but NOT the differing stem, in the same pass', async () => {
     // both at once, so this proves selectivity rather than mere inaction

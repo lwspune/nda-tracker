@@ -49,6 +49,48 @@ describe('hydrateQuestions — filling gaps', () => {
   })
 })
 
+describe('hydrateQuestions — an empty container is not a find', () => {
+  // Found in the wild 2026-09-11: a 120-question mock reported "236 fields to
+  // fill" when the bank held ZERO images for it. 118 x optionImages (an object
+  // of four nulls) + 118 x format ('mcq' for every MCQ ever). A count that
+  // large reads as "we found a lot"; it was pure noise.
+  it('does not count optionImages when the bank has no option images', () => {
+    const out = hydrateQuestions([stored()], {
+      [ID1]: bank({ optionImages: { A: null, B: null, C: null, D: null } }),
+    })
+    expect(out.filled.map(f => f.field)).not.toContain('optionImages')
+    expect(out.questions[0].optionImages).toBeUndefined()
+  })
+
+  it('DOES fill optionImages when at least one option has an image', () => {
+    const images = { A: null, B: 'https://bank/b.png', C: null, D: null }
+    const out = hydrateQuestions([stored()], { [ID1]: bank({ optionImages: images }) })
+    expect(out.filled.map(f => f.field)).toContain('optionImages')
+    expect(out.questions[0].optionImages).toEqual(images)
+  })
+
+  it('does not hydrate format or numericAnswer — nothing here reads them', () => {
+    const out = hydrateQuestions([stored()], {
+      [ID1]: bank({ format: 'mcq', numericAnswer: 3.5 }),
+    })
+    expect(out.questions[0].format).toBeUndefined()
+    expect(out.questions[0].numericAnswer).toBeUndefined()
+    expect(HYDRATABLE_FIELDS).not.toContain('format')
+  })
+
+  it('reports nothing to fill when the bank adds no content', () => {
+    const out = hydrateQuestions([stored()], {
+      [ID1]: bank({
+        imageUrl: null,                                    // the real 2026-09-11 case:
+        solutionImageUrl: null,                            // a mock with no diagrams
+        optionImages: { A: null, B: null, C: null, D: null },
+        format: 'mcq',
+      }),
+    })
+    expect(out.filled).toEqual([])
+  })
+})
+
 describe('hydrateQuestions — protecting what the student sat', () => {
   it('REPORTS a differing stem instead of overwriting it', () => {
     const out = hydrateQuestions([stored()], { [ID1]: bank({ question: 'REPAIRED STEM' }) })

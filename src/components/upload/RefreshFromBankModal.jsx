@@ -43,6 +43,13 @@ export default function RefreshFromBankModal({ exam, onClose }) {
   const fieldsFilled = state.filled?.length ?? 0
   const questionsTouched = new Set((state.filled || []).map(f => f.q)).size
 
+  // A bare count is what let 236 empty containers pass for a find (2026-09-11).
+  // Naming the fields, biggest first, makes "118 x format" unable to read as
+  // "we found diagrams".
+  const byField = Object.entries(
+    (state.filled || []).reduce((acc, f) => ({ ...acc, [f.field]: (acc[f.field] || 0) + 1 }), {})
+  ).sort((a, b) => b[1] - a[1])
+
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center"
@@ -96,9 +103,19 @@ export default function RefreshFromBankModal({ exam, onClose }) {
                     : 'Nothing to fill — this exam already has everything the bank holds.'}
                 </p>
                 {fieldsFilled > 0 && (
-                  <p className="text-[12px] text-ink-3 mt-1">
-                    Only empty fields are filled. Diagrams are the usual find.
-                  </p>
+                  <>
+                    <p className="text-[12px] text-ink-3 mt-1">
+                      Only empty fields are filled. Diagrams are the usual find.
+                    </p>
+                    <ul className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[12px] text-ink-2">
+                      {byField.map(([field, n]) => (
+                        <li key={field}>
+                          <span className="font-mono">{field}</span>
+                          <span className="text-ink-3"> × {n}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </div>
 

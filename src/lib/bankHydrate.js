@@ -21,19 +21,31 @@
 // `exams.questions` jsonb, so without it a payload change upstream could put
 // arbitrary keys into our rows. `q` and `questionId` are deliberately ABSENT —
 // the tracker owns its own numbering, and the id is the join key itself.
+// `format` and `numericAnswer` are deliberately ABSENT: nothing in this app
+// reads a per-question format (the exam-level one is derived by `examFormat`),
+// and NDA papers carry no numeric-answer questions. Hydrating them wrote 'mcq'
+// into all 120 questions of every paper — dead weight in a jsonb that also
+// ships to students. Add them back when something actually reads them.
 export const HYDRATABLE_FIELDS = [
   'subject', 'chapter', 'subtopic',
   'question', 'optionA', 'optionB', 'optionC', 'optionD',
   'answer', 'solution', 'difficulty', 'context',
   'subtopicSlug', 'conceptSlug',
   'imageUrl', 'solutionImageUrl', 'optionImages',
-  'format', 'numericAnswer',
 ]
 
 // Absent = nothing worth protecting. A blank cell in a tags file arrives as
 // null or '', and both mean "never filled in" — not "deliberately empty".
+//
+// A CONTAINER whose every value is absent is absent too. `optionImages` always
+// arrives as {A,B,C,D}, so without this a question with no option images at all
+// still counted as a find: one mock reported "236 fields to fill" while the
+// bank held zero images for it. An empty box is not content.
 function isAbsent(v) {
-  return v === undefined || v === null || v === ''
+  if (v === undefined || v === null || v === '') return true
+  if (Array.isArray(v)) return v.every(isAbsent)
+  if (typeof v === 'object') return Object.values(v).every(isAbsent)
+  return false
 }
 
 function sameValue(a, b) {
