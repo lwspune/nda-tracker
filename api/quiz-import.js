@@ -41,6 +41,17 @@ export default async function handler(req, res) {
     return
   }
 
+  // ── INBOUND: a finished paper pushed FROM PYQ Vault ───────────────────────
+  // Dispatched before the QUIZ_IMPORT_SECRET gate because it authenticates on
+  // VAULT_SYNC_SECRET instead — the SAME per-institute secret we present when
+  // hydrating, used in the opposite direction. One secret per tracker
+  // deployment, both ways, so provisioning an institute is one value not two.
+  // Folded into this file for the same reason as above: 12/12 Hobby functions.
+  if ((req.body || {}).kind === 'paper') {
+    await handlePaperPush(req, res, env)
+    return
+  }
+
   const importSecret = env.QUIZ_IMPORT_SECRET || process.env.QUIZ_IMPORT_SECRET || ''
   if (!importSecret) {
     res.status(500).json({ error: 'Quiz import is not configured on the server' })
@@ -170,4 +181,121 @@ async function handleHydrateQuestions(req, res, env) {
   } catch (e) {
     res.status(502).json({ ok: false, error: 'Could not reach PYQ Vault', detail: e.message })
   }
+}
+
+// ── Paper push: PYQ Vault → a DRAFT exam here ───────────────────────────────
+//
+// The vault builds the paper, we receive it WITH ITS DIAGRAMS — the enrichment
+// the tagged .xlsx cannot carry. This does NOT replace the tags-file flow, which
+// stays live and remains the proven path; a push that fails costs nothing,
+// because the paper is still deliverable as Tags + docx.
+//
+// Contract: CROSS_APP_SYNC.md §2.
+async function handlePaperPush(req, res, env) {
+  // Auth: the per-institute secret, the same value we send when hydrating.
+  const vaultSecret = env.VAULT_SYNC_SECRET || process.env.VAULT_SYNC_SECRET || ''
+  if (!vaultSecret) {
+    res.status(500).json({ ok: false, error: 'Paper push is not configured — set VAULT_SYNC_SECRET.' })
+    return
+  }
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!token || token !== vaultSecret) {
+    res.status(401).json({ ok: false, error: 'Unauthorized' })
+    return
+  }
+
+  const body = req.body || {}
+  const paperId = String(body.paperId || '').trim()
+  const title = String(body.title || '').trim()
+  const questions = Array.isArray(body.questions) ? body.questions : []
+  if (!paperId) { res.status(400).json({ ok: false, error: 'paperId is required' }); return }
+  if (!title) { res.status(400).json({ ok: false, error: 'title is required' }); return }
+  if (questions.length === 0) { res.status(400).json({ ok: false, error: 'questions[] is empty' }); return }
+
+  const url = env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    res.status(500).json({ ok: false, error: 'Supabase is not configured on the server' })
+    return
+  }
+  const supabase = createClient(url, serviceKey)
+
+  // Deterministic + namespaced, so a re-push UPDATES this exam rather than
+  // creating a second one, and a vault exam can never collide with a
+  // hand-made exam_<timestamp>.
+  const examId = `exam_vault_${paperId}`
+
+  // GUARD 1 — never rewrite an exam that already has results.
+  // Students sat those questions; swapping them rewrites history and
+  // invalidates every per-question analytic already computed. Same posture as
+  // the quiz delete, which refuses to remove a published quiz.
+  const { count: resultCount, error: countErr } = await supabase
+    .from('exam_results')
+    .select('exam_id', { count: 'exact', head: true })
+    .eq('exam_id', examId)
+  if (countErr) {
+    res.status(500).json({ ok: false, error: 'Could not check existing results', detail: countErr.message })
+    return
+  }
+  if ((resultCount || 0) > 0) {
+    res.status(409).json({
+      ok: false,
+      error: `"${title}" already has ${resultCount} result row(s) in the tracker — refusing to overwrite a conducted exam. Delete its results first if you really mean to replace it.`,
+      examId,
+    })
+    return
+  }
+
+  // GUARD 2 — a re-push must not wipe what faculty already filled in.
+  // The vault knows nothing about date, batch, branch or marking, so on an
+  // update we PRESERVE whatever is there and replace only what the vault owns
+  // (name + questions + subject). Only a brand-new exam gets defaults.
+  const { data: existing, error: readErr } = await supabase
+    .from('exams')
+    .select('id, date, batch, branch, marking, subject, created_at, created_by, source, max_marks')
+    .eq('id', examId)
+    .maybeSingle()
+  if (readErr) {
+    res.status(500).json({ ok: false, error: 'Could not read the existing exam', detail: readErr.message })
+    return
+  }
+
+  // `date` and `source` are NOT NULL here (measured 2026-09-11), so they cannot
+  // simply be omitted the way the spec assumed. The tracker supplies its own
+  // defaults rather than letting the vault invent an exam date it cannot know —
+  // faculty correct them on the draft.
+  const today = new Date().toISOString().slice(0, 10)
+  const row = {
+    id:         examId,
+    name:       title,
+    date:       existing?.date ?? today,
+    subject:    body.subject || existing?.subject || null,
+    batch:      existing?.batch ?? null,
+    branch:     existing?.branch ?? null,
+    marking:    existing?.marking ?? { correct: 4, wrong: -1 },
+    questions,
+    max_marks:  existing?.max_marks ?? null,
+    created_by: existing?.created_by ?? 'PYQ Vault',
+    // CHECK-constrained to admin|teacher — a vault push is neither, and 'teacher'
+    // drives a parent-facing "Written Quiz" tag a pushed paper must not get.
+    source:     existing?.source ?? 'admin',
+    created_at: existing?.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error: upsertErr } = await supabase.from('exams').upsert(row, { onConflict: 'id' })
+  if (upsertErr) {
+    res.status(500).json({ ok: false, error: 'Could not save the pushed paper', detail: upsertErr.message })
+    return
+  }
+
+  res.status(200).json({
+    ok: true,
+    examId,
+    questionCount: questions.length,
+    updated: !!existing,
+    warning: existing
+      ? 'Updated an existing draft — its date, batch and marking were preserved.'
+      : undefined,
+  })
 }

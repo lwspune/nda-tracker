@@ -15,8 +15,13 @@ export default function ReuploadResultsModal({ exam, onClose }) {
   const [newAnswerKeys, setNewAnswerKeys] = useState({})
   const fileRef = useRef()
 
-  const oldStudentCount  = exam.students.length
-  const oldQuestionCount = exam.questions.length
+  // Defensive `|| []`: an exam pushed from PYQ Vault is created with NO results,
+  // and this modal is exactly where faculty then attach the Evalbee output — so
+  // a crash here would land at the worst possible moment. The Supabase read path
+  // already defaults these (`persist.js` maps `students: resultsByExam[id] ?? []`),
+  // so this guards the paths that don't go through it rather than a known break.
+  const oldStudentCount  = (exam.students  || []).length
+  const oldQuestionCount = (exam.questions || []).length
 
   const questionCountChanged =
     newQuestionCount !== null && newQuestionCount !== oldQuestionCount
