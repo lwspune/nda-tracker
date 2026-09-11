@@ -52,11 +52,18 @@ GET /api/questions/by-ids?ids=<uuid>,<uuid>,…
 → 200 { "questions": [ …shape… ], "missing": ["<uuid>", …] }
 ```
 
-- **Unauthenticated, read-only, PUBLIC-visibility rows only** — exactly what `/browse` already
-  shows an anonymous visitor. No secret: the caller is the tracker's *browser*, and a shared secret
-  in a client bundle is not a secret. Add auth to this one route later if content ever becomes gated.
-- **Send no custom headers.** A bare `GET` stays a CORS "simple request" and skips the preflight;
-  an `Authorization` or custom header forces an `OPTIONS` round trip on every call.
+- **Authenticated and org-scoped. NOT public — this was corrected 2026-09-11.** The first draft of
+  this spec made it anonymous over PUBLIC rows, reasoning that the caller is a browser. That is
+  wrong: the vault's read path is `anon → PUBLIC only`, `authenticated → PUBLIC + the caller's own
+  org's PRIVATE rows`, and a great deal of the bank is PRIVATE (the CDS English corpus, practice
+  content behind entitlements). An anonymous endpoint returns **nothing** for those, with no error —
+  the hydrate would silently do nothing for exactly the papers that matter, the same silent-empty
+  failure as the discarded `.in()` error. It also cannot serve a second institute at all.
+- **Therefore the tracker calls it SERVER-side**, folded into an existing endpoint via a `kind`
+  discriminator (12/12 functions — no new file). The key never reaches a browser bundle, where it
+  would not be a key. CORS stops being a consideration entirely.
+- **The key identifies the INSTITUTE.** The vault resolves key → org and scopes the read to that
+  org's rows plus public ones. One key per tracker deployment; see *Multi-institute* below.
 - **Cap at 100 ids per request**, and answer an over-cap request with a `400`, never a silent
   truncation. The vault's known `.in()` failure was **833 ids ≈ 31 kB of URL**, and a `/guide`
   page still passes **488 ids (~18 kB)** in one call while discarding the error on failure — it
@@ -119,6 +126,18 @@ POST /api/quiz-import     Authorization: Bearer <QUIZ_IMPORT_SECRET>
   `groupBySet` loop, so `q` matches the printed paper and the Evalbee sheet by construction. Keep
   the push on that same loop.
 
+### Two prerequisites on the tracker side
+
+- **The push MUST write `students: []` explicitly.** `ReuploadResultsModal.jsx:18` reads
+  `exam.students.length` unguarded, so an exam created without the key crashes that modal — at
+  precisely the moment faculty are trying to file results. Add the guard there too; do both, not
+  either.
+- **Surface a bank-key vs Evalbee-key disagreement instead of swallowing it.** That modal currently
+  lets the results file's `Q N Key` overwrite the stored answer **silently**, which was fine when the
+  stored answer came from a hand-typed sheet. With a bank-sourced key it is two independent,
+  high-confidence sources disagreeing — a real second opinion, and one of them is wrong. Show it the
+  way `KeyMismatchPanel` already does on the wizard path.
+
 ### To verify before building the push
 
 - How a **zero-result exam** renders on the Exams page and in analytics. The row mapper reads
@@ -136,3 +155,31 @@ POST /api/quiz-import     Authorization: Bearer <QUIZ_IMPORT_SECRET>
 
 Hydrate does not become redundant once push exists: it serves exams already in the tracker,
 refresh-after-correction, and any paper that did not originate in the vault.
+
+---
+
+## Multi-institute
+
+**Decided 2026-09-11: every institute gets its OWN tracker deployment** (one codebase, N Vercel
+projects, N Supabase projects — never a fork). PYQ Vault stays ONE multi-tenant app; only the
+trackers multiply. The shared-DB tracker rebuild is a stated direction but is **not** built — see
+memory `project_multi_tenancy.md` for the estimate and the break-even.
+
+- **The vault holds a per-org sync target** — `(org_id, tracker_url, shared_secret)` — in a
+  service-role-only table (RLS on, no policies: the `platform_admins` pattern). Both directions read
+  from it: pushes route to the org's URL, and an inbound hydrate key resolves back to the org.
+- **Routing NEVER comes from the payload.** A destination chosen by the caller means one wrong value
+  delivers institute B's paper into institute A's tracker. Config only.
+- **The shared secret IS the tenant boundary**, in both directions. One per tracker deployment.
+- **The Push button is enabled IF AND ONLY IF the org has a sync target configured** — so it is
+  **inactive for every other institute** until one is provisioned, and it lights up by itself the day
+  one is. Deliberately NOT an allow-list of institute names: the vault already carries a hardcoded
+  `DESTINATION_ORG_NAME = "LWS Pune"` in its sync route, and that is the wart this avoids repeating.
+  A disabled button must say *why* ("no tracker configured for this institute"), never just sit dead.
+- **Org scoping is what keeps LWS's bank private.** Another institute's tracker can only ever hydrate
+  its own org's questions plus public ones. That protection already exists in the vault — the job
+  here is not to undo it, which an anonymous endpoint would have.
+
+Because the shared-DB rebuild is the eventual direction, prefer choices that survive it: a config
+**table** keyed by org rather than env vars, and a secret **per org** rather than one global one.
+Both are what a multi-tenant vault would need anyway.
