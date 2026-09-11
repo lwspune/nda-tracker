@@ -1,0 +1,91 @@
+// Merging PYQ Vault question content into an exam's stored questions[].
+//
+// The tracker's copy of a question is the record of what the student ACTUALLY
+// SAT. The bank's copy is live and keeps improving — stems get repaired, keys
+// get corrected, diagrams get attached. Those are two different things, and
+// conflating them is how a past paper silently changes under a student months
+// after the fact (the same class of bug as retiming a timetable slot and
+// rewriting every absence filed against it).
+//
+// So this core does exactly two things:
+//   • FILLS what the stored question doesn't have — above all images, which the
+//     text-only Tags sheet drops entirely, so they are absent by construction.
+//   • REPORTS what disagrees, and changes nothing. Applying a correction is a
+//     faculty decision made against a visible diff, not a side effect of
+//     opening a page.
+//
+// Pure: no fetch, no store, no DOM. The caller supplies `bankById`, however it
+// obtained it (see CROSS_APP_SYNC.md for the read API this pairs with).
+
+// The allow-list is a boundary, not documentation: hydration writes into the
+// `exams.questions` jsonb, so without it a payload change upstream could put
+// arbitrary keys into our rows. `q` and `questionId` are deliberately ABSENT —
+// the tracker owns its own numbering, and the id is the join key itself.
+export const HYDRATABLE_FIELDS = [
+  'subject', 'chapter', 'subtopic',
+  'question', 'optionA', 'optionB', 'optionC', 'optionD',
+  'answer', 'solution', 'difficulty', 'context',
+  'subtopicSlug', 'conceptSlug',
+  'imageUrl', 'solutionImageUrl', 'optionImages',
+  'format', 'numericAnswer',
+]
+
+// Absent = nothing worth protecting. A blank cell in a tags file arrives as
+// null or '', and both mean "never filled in" — not "deliberately empty".
+function isAbsent(v) {
+  return v === undefined || v === null || v === ''
+}
+
+function sameValue(a, b) {
+  if (a === b) return true
+  // optionImages is a small flat object; compare by value so an equal map
+  // doesn't read as a conflict on every hydrate.
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    return JSON.stringify(a) === JSON.stringify(b)
+  }
+  return false
+}
+
+/**
+ * @param {Array} questions  an exam's stored questions[]
+ * @param {Object} bankById  { [questionId]: bankQuestion } — whatever the bank returned
+ * @returns {{questions: Array, filled: Array, differs: Array, missing: Array, unlinked: number}}
+ *   `questions` is a new array (inputs are never mutated); `filled` and
+ *   `differs` name the question by its printed number so a reviewer can find it;
+ *   `missing` lists ids the bank had nothing for — usually a question repaired
+ *   since the exam, because a stem repair there is a delete-and-re-commit that
+ *   mints a NEW uuid. That is signal, not noise: never drop it silently.
+ */
+export function hydrateQuestions(questions, bankById) {
+  const filled = []
+  const differs = []
+  const missing = []
+  let unlinked = 0
+
+  const out = (questions || []).map(q => {
+    if (!q || !q.questionId) {
+      if (q) unlinked += 1
+      return q
+    }
+    const bank = (bankById || {})[q.questionId]
+    if (!bank) {
+      missing.push(q.questionId)
+      return q
+    }
+
+    const next = { ...q }
+    for (const field of HYDRATABLE_FIELDS) {
+      const bankValue = bank[field]
+      if (isAbsent(bankValue)) continue
+      if (isAbsent(next[field])) {
+        next[field] = bankValue
+        filled.push({ q: q.q, field })
+      } else if (!sameValue(next[field], bankValue)) {
+        differs.push({ q: q.q, field, stored: next[field], bank: bankValue })
+      }
+    }
+    return next
+  })
+
+  return { questions: out, filled, differs, missing, unlinked }
+}
