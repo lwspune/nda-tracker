@@ -286,27 +286,3 @@ export function ProfileCard({ name, profile, loginStats = null }) {
     </Card>
   )
 }
-
-// ── Improvement Plan Card ─────────────────────────────────────
-export function ImprovementPlan({ savedPlan }) {
-  return (
-    <Card>
-      <CardTitle>Improvement Plan</CardTitle>
-      {savedPlan ? (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <Badge variant="green">✅ Saved {new Date(savedPlan.generatedAt).toLocaleDateString('en-IN')}</Badge>
-          </div>
-          <div className="bg-surface-2 border border-border rounded-xl p-4 text-[13px]
-                          leading-relaxed text-ink whitespace-pre-wrap font-sans max-h-[500px] overflow-y-auto">
-            {savedPlan.text}
-          </div>
-        </div>
-      ) : (
-        <p className="text-[12px] text-ink-3">
-          No plan saved yet. Export your data, upload to Claude, and import the enriched JSON.
-        </p>
-      )}
-    </Card>
-  )
-}

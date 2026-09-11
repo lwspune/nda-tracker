@@ -40,7 +40,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 
 **Stripped from `data`:** `exams` (Phase 5), `savedInsights` (Phase 6). Re-introducing either field would double-write and drift from the normalised tables.
 
-**Inside `data`:** `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `costLog`, `whatsappSendHistory`, `studentProfiles` (cached — overwritten on load by `loadStudentsFromSupabase()`), `ndaFreqBySubject`, `ndaMarksBySubject`, `lastDeployedAt`.
+**Inside `data`:** `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `whatsappSendHistory`, `studentProfiles` (cached — overwritten on load by `loadStudentsFromSupabase()`), `ndaFreqBySubject`, `ndaMarksBySubject`, `lastDeployedAt`.
 
 ---
 

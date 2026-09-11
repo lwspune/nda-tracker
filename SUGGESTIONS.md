@@ -1300,3 +1300,13 @@ Phase 0 (the link) shipped 2026-09-11. The column is inert until something reads
 - **Phase 2 must REPORT unmatched ids, never silently drop them.** Vault ids are not permanently stable: a stem repair there deletes and re-commits the row (because `content_hash` covers the stem), minting a **new uuid** — see the vault's `ARCHITECTURE.md` account of exactly that happening. So a tracker exam can legitimately hold an id the bank no longer has, through nobody's error. An unmatched id usually means *"this question was repaired since the exam"*, which is itself worth seeing; discarding it silently hides that ([[feedback_silent_fallback_hides_edge_errors]]). Same reasoning applies to any reconciliation built on `questionId`.
 - **Phase 3 — exposure control.** Export the id set a batch has already sat, for the vault's paper builder (`papers`/`batches` already model per-batch non-repetition).
 - **Phase 2+ needs the images question answered:** the Tags sheet is text-only, so a question with a figure loses it. Fetching by id is the fix, but it must be a *display* enrichment — the stored text stays the record of what the student sat.
+
+## 2026-09-12 — Orphaned insights plumbing (after the Insights tab removal)
+
+Removing the Insights page + the `ImprovementPlan` card left **`savedInsights` with zero renderers**. Still wired, doing nothing:
+
+- `loadInsightsFromSupabase` runs on every admin mount — 2 Supabase queries (`class_reports`, `student_plans`) hydrating a store key nothing reads.
+- `insightsSlice.js` (`saveClassReport` / `saveStudentPlan` / `clearClassReport` / `clearStudentPlan`) + `insightsSupabase.js` — all four actions now have zero callers.
+- `savedInsights` in `DEFAULTS`, the `saveToStorage` allow-list, `loadRemoteData`, and `loadStudentData`'s reset.
+
+**Kept on purpose**, not an oversight: the Supabase tables and `migrate_insights_to_supabase.js` are untouched, so the single surviving plan (LWS-129) and the ability to resurrect the feature by re-adding a page both survive. Remove the plumbing only if the decision is that AI-written plans are not coming back — otherwise the cost is 2 idle queries per admin page load.

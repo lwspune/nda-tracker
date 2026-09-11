@@ -25,9 +25,7 @@ const NAV = [
   // Faculty + content-team instrumentation: what the answer sheets say about
   // each bank question. Admin-only — a student can act on none of it.
   { id: 'itemStats',      icon: '🔬', label: 'Question Stats', adminOnly: true },
-  { id: 'insights',       icon: '🧠', label: 'Insights', adminOnly: true },
   { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
-  { id: 'costs',          icon: '💰', label: 'API Costs', adminOnly: true },
   { id: 'settings',       icon: '⚙', label: 'Settings', adminOnly: true },
   { id: 'teacherFeedback', icon: '🗣', label: 'Feedback', superadminOnly: true },
 ]

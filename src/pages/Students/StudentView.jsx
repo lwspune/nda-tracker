@@ -23,14 +23,13 @@ import ChapterAccordion from './ChapterAccordion'
 import ProjectedScoreCard from './ProjectedScoreCard'
 import WrongAnswerAudit from './WrongAnswerAudit'
 import UnattemptedAudit from './UnattemptedAudit'
-import { ProfileCard, ImprovementPlan } from './studentViewComponents'
+import { ProfileCard } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
 
 
 export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null, homeworkPendingProp = null, integrityIncidentsProp = null }) {
   const exams              = useStore(s => s.exams)
   const studentProfiles    = useStore(s => s.studentProfiles)
-  const savedInsights      = useStore(s => s.savedInsights)
   const ndaFreqBySubject   = useStore(s => s.ndaFreqBySubject)
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
   const isSuperadmin       = useStore(s => s.isSuperadmin)
@@ -273,8 +272,6 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
     return { ch, avg, trend: dominant, subs }
   }).sort((a, b) => a.avg - b.avg)
 
-  const savedPlan = savedInsights.studentPlans?.[name]
-
   // All valid exams excluded (e.g. student registered after all exams were held)
   if (!validExamData.length) {
     return (
@@ -490,9 +487,6 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       {skippedAudit.length > 0 && (
         <UnattemptedAudit skippedAudit={skippedAudit} name={name} exams={filteredExams} />
       )}
-
-      {/* Improvement plan */}
-      <ImprovementPlan savedPlan={savedPlan} />
     </div>
   )
 }

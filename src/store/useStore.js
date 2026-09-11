@@ -193,7 +193,6 @@ const useStore = create((set, get) => ({
       studentProfiles:         data.studentProfiles || {},
       savedInsights:           data.savedInsights || DEFAULTS.savedInsights,
       ndaFreqBySubject:        migrateFreq(data),
-      costLog:                 data.costLog || [],
       syllabusPrograms:        data.syllabusPrograms || [],
       syllabusBatches:         data.syllabusBatches?.length
                                  ? data.syllabusBatches

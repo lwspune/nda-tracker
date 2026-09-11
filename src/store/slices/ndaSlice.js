@@ -19,14 +19,4 @@ export const createNdaSlice = (set, get) => ({
     set(s => ({ ndaMarksBySubject: { ...s.ndaMarksBySubject, [subject]: marks } }))
     get()._save()
   },
-
-  recordCost(entry) {
-    set(s => ({ costLog: [...s.costLog, entry] }))
-    get()._save()
-  },
-
-  clearCostLog() {
-    set({ costLog: [] })
-    get()._save()
-  },
 })

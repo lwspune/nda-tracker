@@ -11,7 +11,6 @@ export const DEFAULTS = {
   savedInsights: { classReport: null, studentPlans: {} },
   ndaFreqBySubject:  buildDefaultFreqBySubject(),
   ndaMarksBySubject: buildDefaultMarksBySubject(),
-  costLog: [],
   apiKey: '',
   lastDeployedAt: null,
   hydrated: IS_READ_ONLY,

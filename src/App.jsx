@@ -13,8 +13,6 @@ import QuizzesPage from './pages/Quizzes'
 import DashboardPage from './pages/Dashboard'
 import StudentsPage from './pages/Students'
 import ToppersPage from './pages/Toppers'
-import InsightsPage from './pages/Insights'
-import CostsPage from './pages/Costs'
 import SyllabusPage from './pages/Syllabus/SyllabusPage'
 import TimetablePage from './pages/Timetable/TimetablePage'
 import SettingsPage from './pages/Settings/SettingsPage'
@@ -155,9 +153,7 @@ export default function App() {
     timetable:  <TimetablePage />,
     errorSets:  <ErrorSetsPage />,
     itemStats:       <ItemStatsPage />,
-    insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
-    costs:           <CostsPage />,
     settings:        <SettingsPage />,
     teacherFeedback: <TeacherFeedbackPage />,
   }
@@ -243,9 +239,7 @@ function OnlineAdminPortal({ session, onLogout }) {
     timetable:  <TimetablePage />,
     errorSets:  <ErrorSetsPage />,
     itemStats:       <ItemStatsPage />,
-    insights:        <InsightsPage />,
     monthlyReports:  <MonthlyReportsPage />,
-    costs:           <CostsPage />,
     settings:        <SettingsPage />,
     teacherFeedback: <TeacherFeedbackPage />,
   }

@@ -581,3 +581,22 @@ describe('StudentView — projected card visibility', () => {
     expect(screen.queryByTestId('projected-score')).not.toBeInTheDocument()
   })
 })
+
+// ── Improvement Plan card removed (2026-09-12) ────────────────────────────────
+// The export→Claude→import flow that wrote these plans has no caller left, so
+// the card was a permanent "No plan saved yet" placeholder on 325 of 326 student
+// pages — and on every student-portal login, where loadStudentData resets
+// savedInsights to empty regardless. Removed with the Insights page.
+
+describe('StudentView — no Improvement Plan card', () => {
+  it('renders no plan card even when a saved plan exists in the store', () => {
+    setExams([makeExam({ subject: 'Maths' })])
+    mockStore.savedInsights = {
+      classReport: null,
+      studentPlans: { Alice: { text: 'Alice — your Maths game plan', generatedAt: '2026-05-20T05:27:45Z' } },
+    }
+    renderView()
+    expect(screen.queryByText(/improvement plan/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/your Maths game plan/i)).not.toBeInTheDocument()
+  })
+})

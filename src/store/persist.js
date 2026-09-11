@@ -242,7 +242,7 @@ export async function loadFromDisk() {
 // apiKey is intentionally excluded — kept in memory only.
 export function saveToStorage(state) {
   const {
-    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, lastDeployedAt,
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
@@ -250,7 +250,7 @@ export function saveToStorage(state) {
     monitorMobiles, hostelAlertMobiles,
   } = state
   const data = {
-    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, costLog, lastDeployedAt,
+    exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, lastDeployedAt,
     syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,

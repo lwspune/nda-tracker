@@ -147,7 +147,7 @@ src/
     slices/                → One slice per domain (exams, students, insights, ...)
       examSupabase.js      → Supabase write helpers for the exams slice
       insightsSupabase.js  → Same pattern for insights
-  pages/                   → Page components (Dashboard, Exams, Students, Insights, ...)
+  pages/                   → Page components (Dashboard, Exams, Students, Toppers, ...)
   components/              → Shared UI (ui/, layout/, upload/, auth/)
 api/                       → Vercel serverless functions
   student-login.js         → Student auth + payload assembly
@@ -284,7 +284,6 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |
 | Syllabus Tracker (view) | ✓ | ✓ | — |
-| Insights / API Costs pages | ✓ | — | — |
 | Monthly Reports page (generate PDFs + ZIP) | ✓ | — | — |
 | Settings page (Branches / Batches / Teachers / NDA Weightage / Monitoring / Mentorship) | ✓ | — | — |
 | Mentorship nudge — dry-run preview / test send (Settings → Mentorship) | ✓ | — | — |
