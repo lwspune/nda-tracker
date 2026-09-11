@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Math } from './Math'
+import { RichText } from './RichText'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import QuestionCardEditor from './QuestionCardEditor'
@@ -140,13 +140,13 @@ function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
           <div className="text-[9px] font-bold uppercase tracking-wide text-ink-3 mb-1.5">
             Passage
           </div>
-          <Math>{q.context}</Math>
+          <RichText>{q.context}</RichText>
         </div>
       )}
 
       {q.question && (
         <div className="text-[13.5px] leading-relaxed text-ink mb-4 font-medium">
-          <Math>{q.question}</Math>
+          <RichText>{q.question}</RichText>
         </div>
       )}
 
@@ -159,7 +159,7 @@ function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
             >
               <span className="font-mono font-bold text-[12px] w-5 flex-shrink-0">{letter}</span>
               <div className="flex-1 text-[12px] md:text-[13px] leading-snug">
-                <Math>{optionText[letter]}</Math>
+                <RichText>{optionText[letter]}</RichText>
               </div>
               {optionIcon(letter) && (
                 <span className="text-[12px] flex-shrink-0">{optionIcon(letter)}</span>
@@ -192,7 +192,7 @@ function ViewMode({ q, optionText, OPTIONS, optionStyle, optionIcon,
           {showSolution && (
             <div className="mt-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg
                             text-[12.5px] leading-relaxed text-ink">
-              <Math>{q.solution}</Math>
+              <RichText>{q.solution}</RichText>
             </div>
           )}
         </div>

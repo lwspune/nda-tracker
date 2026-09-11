@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { PageHeader, EmptyState, Card } from '../../components/ui'
-// Aliased: the renderer is exported as `Math`, which would shadow the global.
-import { Math as MathText } from '../../components/ui/Math'
+import { RichText } from '../../components/ui/RichText'
 import { computeItemStats } from '../../lib/itemStats'
 
 // What the answer sheets say about each BANK question, pooled across every
@@ -131,7 +130,7 @@ export default function ItemStatsPage() {
           <ul className="mt-2 space-y-1 text-[12px]">
             {keyConflicts.map(c => (
               <li key={c.questionId} className="border border-border rounded-md px-2 py-1.5">
-                <div className="line-clamp-2"><MathText>{c.question || c.questionId}</MathText></div>
+                <div className="line-clamp-2"><RichText>{c.question || c.questionId}</RichText></div>
                 <div className="mt-0.5">
                   <span className="text-ink-3">{c.chapter || '—'}</span>
                   {c.keys.map(k => (
@@ -244,7 +243,7 @@ export default function ItemStatsPage() {
               >
                 <td className={TD}>
                   <div className={open === r.questionId ? '' : 'line-clamp-2'}>
-                    <MathText>{r.question || r.questionId}</MathText>
+                    <RichText>{r.question || r.questionId}</RichText>
                   </div>
                   <div className="text-[11px] text-ink-3 mt-0.5">
                     {r.chapter || '—'}{r.subtopic ? ` · ${r.subtopic}` : ''}
