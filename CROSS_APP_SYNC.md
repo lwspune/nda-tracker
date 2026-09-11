@@ -68,10 +68,17 @@ GET /api/questions/by-ids?ids=<uuid>,<uuid>,…
   truncation. The vault's known `.in()` failure was **833 ids ≈ 31 kB of URL**, and a `/guide`
   page still passes **488 ids (~18 kB)** in one call while discarding the error on failure — it
   renders an empty stats map with no signal. Cap it here rather than inherit that.
-- **`missing` is REQUIRED and must never be silently dropped.** A stem repair in the vault is a
-  delete-and-re-commit (`content_hash` covers the stem), which **mints a new uuid** — so a tracker
-  exam can hold a dead id through nobody's error. An unmatched id means *"this question was repaired
-  since the exam"*, which is exactly the thing worth surfacing.
+- **`missing` is REQUIRED and must never be silently dropped.** It carries **TWO causes, and they
+  are indistinguishable on purpose** (sharpened by the vault session, 2026-09-11):
+  1. **The id names no row.** A stem repair in the vault is a delete-and-re-commit (`content_hash`
+     covers the stem), which **mints a new uuid** — so a tracker exam can hold a dead id through
+     nobody's error.
+  2. **The id names another institute's PRIVATE row.** Same reason an unknown secret returns the
+     same `401` as no secret: the response must not confirm that a question exists but isn't yours.
+
+  Inert while one org owns the bank; live at institute #2. **So no tracker-side message may claim a
+  question was repaired** — an operator would hunt for a repair that never happened. Say "not
+  available from the bank" and show the id.
 - Reuse `queryQuestionsByIds` — it already applies RLS with the same client.
 
 ### Tracker-side rules for hydration

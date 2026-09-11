@@ -52,9 +52,13 @@ function sameValue(a, b) {
  * @returns {{questions: Array, filled: Array, differs: Array, missing: Array, unlinked: number}}
  *   `questions` is a new array (inputs are never mutated); `filled` and
  *   `differs` name the question by its printed number so a reviewer can find it;
- *   `missing` lists ids the bank had nothing for — usually a question repaired
- *   since the exam, because a stem repair there is a delete-and-re-commit that
- *   mints a NEW uuid. That is signal, not noise: never drop it silently.
+ *   `missing` lists ids the bank returned nothing for. TWO causes, and the bank
+ *   makes them indistinguishable on purpose: the id names no row (a stem repair
+ *   there is a delete-and-re-commit that mints a NEW uuid), OR it names another
+ *   institute's PRIVATE row — the same reason an unknown secret gets the same
+ *   401 as no secret. So report these as "not available from the bank" and show
+ *   the id; do NOT tell anyone the question was repaired. Signal, never noise:
+ *   don't drop them silently.
  */
 export function hydrateQuestions(questions, bankById) {
   const filled = []
