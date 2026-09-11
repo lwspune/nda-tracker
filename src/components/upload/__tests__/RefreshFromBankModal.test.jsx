@@ -91,13 +91,17 @@ describe('RefreshFromBankModal — what it refuses to do quietly', () => {
     expect(saved.questions[0].question).toBe('stem 1')              // what the student sat
   })
 
-  it('disables Apply when there is nothing to fill', async () => {
+  it('offers Close, not a dead Apply, when there is nothing to fill', async () => {
+    // A greyed-out "Apply" next to "33 fields differs" reads as a broken
+    // button. Nothing is appliable here by design — conflicts are decided by
+    // hand — so the modal must not pretend otherwise.
     mockFetchBank.mockResolvedValue({
       byId: { [ID1]: { questionId: ID1, question: 'REPAIRED STEM' } }, missing: [],
     })
     render(<RefreshFromBankModal exam={makeExam()} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText(/differs/i)).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /apply/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /apply/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 
   it('never says a missing question was REPAIRED — two causes, indistinguishable', async () => {

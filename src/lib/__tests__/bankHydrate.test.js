@@ -126,6 +126,37 @@ describe('hydrateQuestions — protecting what the student sat', () => {
   })
 })
 
+describe('hydrateQuestions — whitespace is not a change', () => {
+  // Found on the second real click (2026-09-11): a mock reported 33 differing
+  // solutions. ALL 33 were LF here vs CRLF in the bank — the xlsx round-trip
+  // normalises line endings. Zero were genuine. Faculty would otherwise have
+  // hand-"fixed" 33 identical solutions.
+  const LF = String.fromCharCode(10)
+  const CRLF = String.fromCharCode(13) + String.fromCharCode(10)
+
+  it('does not flag a solution that differs only in line endings', () => {
+    const here = ['line one', 'line two', 'line three'].join(LF)
+    const there = ['line one', 'line two', 'line three'].join(CRLF)
+    const out = hydrateQuestions([stored({ solution: here })], { [ID1]: bank({ solution: there }) })
+    expect(out.differs).toEqual([])
+    expect(out.questions[0].solution).toBe(here)   // stored text untouched
+  })
+
+  it('does not flag trailing whitespace on a line', () => {
+    const here = ['what is x?   ', '  then y?'].join(LF)
+    const there = ['what is x?', '  then y?'].join(LF)
+    const out = hydrateQuestions([stored({ question: here })], { [ID1]: bank({ question: there }) })
+    expect(out.differs).toEqual([])
+  })
+
+  it('STILL flags a real change that happens to span lines', () => {
+    const here = ['step one', 'step two'].join(LF)
+    const there = ['step one', 'step TWO REWRITTEN'].join(CRLF)
+    const out = hydrateQuestions([stored({ solution: here })], { [ID1]: bank({ solution: there }) })
+    expect(out.differs.map(d => d.field)).toContain('solution')
+  })
+})
+
 describe('hydrateQuestions — what it cannot resolve', () => {
   it('leaves a question with no bank id completely untouched', () => {
     const q = stored({ questionId: null })

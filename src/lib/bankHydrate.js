@@ -48,8 +48,28 @@ function isAbsent(v) {
   return false
 }
 
+// Line endings and trailing spaces are NOT a change.
+//
+// The Tags xlsx round-trip normalises CRLF to LF while the bank stores CRLF, so
+// byte equality reported EVERY multi-line solution as a conflict: one mock
+// showed 33 differing solutions of which precisely zero were real (2026-09-11).
+// A conflict list that cries wolf is worse than none — faculty would have
+// hand-"corrected" 33 identical solutions.
+//
+// Only the COMPARISON is normalised. What gets stored is never touched.
+function comparable(v) {
+  if (typeof v !== 'string') return v
+  return v
+    .replace(/\r\n?/g, '\n')      // CRLF / CR -> LF
+    .replace(/[ \t]+$/gm, '')     // trailing spaces on any line
+    .trim()
+}
+
 function sameValue(a, b) {
   if (a === b) return true
+  if (typeof a === 'string' && typeof b === 'string') {
+    return comparable(a) === comparable(b)
+  }
   // optionImages is a small flat object; compare by value so an equal map
   // doesn't read as a conflict on every hydrate.
   if (a && b && typeof a === 'object' && typeof b === 'object') {

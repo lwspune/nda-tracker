@@ -67,7 +67,7 @@ export default function RefreshFromBankModal({ exam, onClose }) {
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Close dialog"
             className="text-ink-3 hover:text-ink text-[20px] leading-none transition-colors"
           >×</button>
         </div>
@@ -125,8 +125,9 @@ export default function RefreshFromBankModal({ exam, onClose }) {
                     {state.differs.length} field{state.differs.length === 1 ? '' : 's'} differs — not applied
                   </p>
                   <p className="text-[12px] text-ink-3 mt-0.5 mb-2">
-                    The bank has changed since this paper was sat. What students saw is kept; fix
-                    these by hand if the bank is right.
+                    The bank has changed since this paper was sat. What students saw is kept — these
+                    are for your information, and nothing here is applied either way. Differences of
+                    spacing or line breaks alone are not shown.
                   </p>
                   <ul className="space-y-1.5 max-h-[180px] overflow-y-auto">
                     {state.differs.map((d, i) => (
@@ -159,15 +160,20 @@ export default function RefreshFromBankModal({ exam, onClose }) {
                 </div>
               )}
 
+              {/* Nothing appliable is the COMMON case on a text-only paper, and a
+                  greyed-out Apply beside a long conflict list reads as a broken
+                  button rather than a finished job. Offer the honest action. */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-                <button
-                  onClick={handleApply}
-                  disabled={fieldsFilled === 0}
-                  className="btn btn-primary disabled:opacity-50"
-                >
-                  ✓ Apply {fieldsFilled > 0 ? `${fieldsFilled} fill${fieldsFilled === 1 ? '' : 's'}` : ''}
-                </button>
+                {fieldsFilled > 0 ? (
+                  <>
+                    <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+                    <button onClick={handleApply} className="btn btn-primary">
+                      ✓ Apply {fieldsFilled} fill{fieldsFilled === 1 ? '' : 's'}
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={onClose} className="btn btn-primary">Close</button>
+                )}
               </div>
             </div>
           )}
