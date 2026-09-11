@@ -45,6 +45,7 @@ export default function MonthlyReportsPage() {
   // Raw store references (referentially stable from Zustand) — coalesce nullish
   // at point of use so they stay stable useMemo/useState deps.
   const syllabusBatches        = useStore(s => s.syllabusBatches)
+  const archivedBatches        = useStore(s => s.archivedBatches)
   const syllabusBatchBranches  = useStore(s => s.syllabusBatchBranches)
   const branches               = useStore(s => s.branches)
   const syllabusPrograms       = useStore(s => s.syllabusPrograms)
@@ -56,12 +57,24 @@ export default function MonthlyReportsPage() {
   const [to, setTo] = useState(defaultRange.to)
   const [branch, setBranch] = useState('')          // '' = all branches
   // Batches visible in the dropdown, narrowed by the selected branch.
+  // A LENS, not an offer list: archived batches stay selectable — a final report for
+  // a cohort that has just finished is exactly when this page is used — but are
+  // grouped separately so they read as retired. See BATCH_RETIREMENT.md §2.
   const batchOptions = useMemo(() => {
     const all = syllabusBatches || []
     const map = syllabusBatchBranches || {}
-    return branch ? all.filter(b => map[b] === branch) : all
-  }, [syllabusBatches, syllabusBatchBranches, branch])
-  const [batch, setBatch] = useState((syllabusBatches || [])[0] || '')
+    const inBranch = branch ? all.filter(b => map[b] === branch) : all
+    const archived = new Set(archivedBatches || [])
+    return {
+      active:   inBranch.filter(b => !archived.has(b)),
+      archived: inBranch.filter(b =>  archived.has(b)),
+    }
+  }, [syllabusBatches, archivedBatches, syllabusBatchBranches, branch])
+  // Seed from the first NON-archived batch — auto-selecting a retired cohort would
+  // silently scope the default report to a batch nobody teaches any more.
+  const [batch, setBatch] = useState(
+    () => (syllabusBatches || []).find(b => !(archivedBatches || []).includes(b)) || ''
+  )
   const [generated, setGenerated] = useState(null)   // { dataByLwsId } | null
   const [generating, setGenerating] = useState(false)
   const [remarks, setRemarks] = useState({})        // { [lwsId]: string }, transient
@@ -232,9 +245,16 @@ export default function MonthlyReportsPage() {
               className="form-input text-[13px]"
             >
               <option value="">— select —</option>
-              {batchOptions.map(b => (
+              {batchOptions.active.map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
+              {batchOptions.archived.length > 0 && (
+                <optgroup label="Archived">
+                  {batchOptions.archived.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <button

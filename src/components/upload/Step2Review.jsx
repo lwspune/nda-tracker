@@ -3,6 +3,7 @@ import { Alert } from '../ui'
 import { SUBJECTS } from '../../lib/ndaFreq'
 import { getExamBatches } from '../../lib/analytics'
 import { dominantBranch } from '../../lib/students/dominantBranch'
+import { visibleBatchOptions, isArchivedBatch } from '../../lib/batchVisibility'
 import useStore from '../../store/useStore'
 
 export default function Step2Review({ state, onChange, onNext, onBack }) {
@@ -25,6 +26,7 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
 
   const studentProfiles  = useStore(s => s.studentProfiles)
   const syllabusBatches  = useStore(s => s.syllabusBatches) || []
+  const archivedBatches  = useStore(s => s.archivedBatches) || []
   const hasProfiles      = Object.keys(studentProfiles).length > 0
   const hasCentralBatches = syllabusBatches.length > 0
 
@@ -44,6 +46,11 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
   const initialBatch  = batch !== undefined ? batch : (detectedBatch || '')
   const selectedSet   = new Set(getExamBatches({ batch: initialBatch }))
   const currentBranch = branch || ''
+
+  // Archived batches are hidden from the picker unless already selected — but the
+  // JOIN below keeps using the full syllabusBatches list, or toggling any batch
+  // would silently drop an archived tag. See BATCH_RETIREMENT.md §2.
+  const visibleBatches = visibleBatchOptions(syllabusBatches, archivedBatches, selectedSet)
 
   function toggleBatch(name) {
     const next = new Set(selectedSet)
@@ -160,17 +167,21 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
           </span>
         </label>
 
-        {hasCentralBatches ? (
+        {visibleBatches.length > 0 ? (
           <div
             role="group"
             aria-labelledby="batch-label"
             className="flex flex-wrap gap-2 p-2 border border-border rounded-lg bg-surface-2"
           >
-            {syllabusBatches.map(b => {
-              const checked = selectedSet.has(b)
+            {visibleBatches.map(b => {
+              const checked  = selectedSet.has(b)
+              // Only ever true for an already-selected batch (visibleBatchOptions
+              // hides the rest). Flagged so it reads as deliberate, not a mistake.
+              const archived = isArchivedBatch(archivedBatches, b)
               return (
                 <label
                   key={b}
+                  title={archived ? 'Archived batch — shown because this exam is already tagged with it' : undefined}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-mono border cursor-pointer transition-colors min-h-[36px]
                     ${checked
                       ? 'bg-accent text-white border-accent'
@@ -181,16 +192,24 @@ export default function Step2Review({ state, onChange, onNext, onBack }) {
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleBatch(b)}
+                    aria-label={archived ? `${b} (archived)` : undefined}
                     className="accent-current"
                   />
                   <span>{b}</span>
+                  {archived && (
+                    <span aria-hidden="true" className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-50 text-amber-700">
+                      archived
+                    </span>
+                  )}
                 </label>
               )
             })}
           </div>
         ) : (
           <div className="text-[12px] text-ink-3 italic px-3 py-2 border border-dashed border-border rounded-lg">
-            No central batches yet. Add one in Settings → Batches.
+            {hasCentralBatches
+              ? 'Every batch is archived. Unarchive one in Settings → Batches.'
+              : 'No central batches yet. Add one in Settings → Batches.'}
           </div>
         )}
       </div>

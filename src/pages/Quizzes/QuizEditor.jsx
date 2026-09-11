@@ -2,6 +2,7 @@ import { useState } from 'react'
 import useStore from '../../store/useStore'
 import { Card, Alert } from '../../components/ui'
 import { Math } from '../../components/ui/Math'
+import { visibleBatchOptions } from '../../lib/batchVisibility'
 import {
   LETTERS, DIFFICULTIES, DEFAULT_MARKING,
   blankQuestion, quizQuestionComplete, validateQuizForPublish,
@@ -62,6 +63,7 @@ export default function QuizEditor({ quiz, onDone }) {
   const addQuiz    = useStore(s => s.addQuiz)
   const updateQuiz = useStore(s => s.updateQuiz)
   const syllabusBatches = useStore(s => s.syllabusBatches)
+  const archivedBatches = useStore(s => s.archivedBatches) || []
   const isNew = !quiz
 
   const [draft, setDraft] = useState(() => initDraft(quiz))
@@ -87,6 +89,10 @@ export default function QuizEditor({ quiz, onDone }) {
       return { ...d, questions: questions.length ? questions : [blankQuestion(1)] }
     })
   }
+
+  // Hidden unless already selected; toggleBatch below keeps joining on the full
+  // syllabusBatches order. See BATCH_RETIREMENT.md §2.
+  const visibleBatches = visibleBatchOptions(syllabusBatches, archivedBatches, selectedBatches)
 
   function toggleBatch(name) {
     const next = selectedBatches.includes(name)
@@ -195,11 +201,15 @@ export default function QuizEditor({ quiz, onDone }) {
 
           <div>
             <label className="text-[11px] font-semibold text-ink-2 block mb-1">Batches (who can take it)</label>
-            {syllabusBatches.length === 0 ? (
-              <p className="text-[12px] text-amber-600 italic">No batches yet — add one in Settings → Batches.</p>
+            {visibleBatches.length === 0 ? (
+              <p className="text-[12px] text-amber-600 italic">
+                {syllabusBatches.length
+                  ? 'Every batch is archived — unarchive one in Settings → Batches.'
+                  : 'No batches yet — add one in Settings → Batches.'}
+              </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {syllabusBatches.map(b => {
+                {visibleBatches.map(b => {
                   const on = selectedBatches.includes(b)
                   return (
                     <button

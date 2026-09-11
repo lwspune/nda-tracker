@@ -18,6 +18,7 @@ export default function SyllabusPage() {
   const batchProgramAssignments = useStore(s => s.batchProgramAssignments)
   const syllabusBatches         = useStore(s => s.syllabusBatches)
   const syllabusBatchBranches   = useStore(s => s.syllabusBatchBranches)
+  const archivedBatches         = useStore(s => s.archivedBatches)
   const branches                = useStore(s => s.branches)
 
   const [selectedBranch, setSelectedBranch]         = useState(null) // null = All
@@ -26,11 +27,18 @@ export default function SyllabusPage() {
   const [manageProgramId, setManageProgramId]       = useState(null)
   const [manageSubject, setManageSubject]           = useState(null)
   const [assignOpen, setAssignOpen]                 = useState(false)
+  const [showArchived, setShowArchived]              = useState(false)
 
-  // Batches visible under the current branch filter
-  const visibleBatches = selectedBranch
+  // Batches visible under the current branch filter. Archived batches are hidden
+  // behind a toggle rather than dropped: this page IS the teaching-progress record
+  // for a retired batch, and nothing else renders it. See BATCH_RETIREMENT.md §3.
+  const inBranch = selectedBranch
     ? syllabusBatches.filter(b => syllabusBatchBranches[b] === selectedBranch)
     : syllabusBatches
+  const archivedInBranch = inBranch.filter(b => (archivedBatches ?? []).includes(b))
+  const visibleBatches = showArchived
+    ? inBranch
+    : inBranch.filter(b => !(archivedBatches ?? []).includes(b))
 
   // Auto-select first visible batch when filter changes and current selection disappears
   useEffect(() => {
@@ -98,6 +106,18 @@ export default function SyllabusPage() {
       {/* Batch selector — view only. CRUD lives in Settings → Batches. */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <label className="text-[12px] text-ink-3 font-semibold uppercase tracking-wide">Batch</label>
+
+        {archivedInBranch.length > 0 && (
+          <label className="flex items-center gap-1.5 text-[11px] text-ink-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={e => setShowArchived(e.target.checked)}
+              className="accent-current"
+            />
+            Show archived ({archivedInBranch.length})
+          </label>
+        )}
 
         {visibleBatches.length === 0 ? (
           <span className="text-[12px] text-ink-3 italic">

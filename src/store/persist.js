@@ -243,7 +243,7 @@ export async function loadFromDisk() {
 export function saveToStorage(state) {
   const {
     exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, lastDeployedAt,
-    syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
+    syllabusPrograms, syllabusBatches, archivedBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
     whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
@@ -251,7 +251,7 @@ export function saveToStorage(state) {
   } = state
   const data = {
     exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, lastDeployedAt,
-    syllabusPrograms, syllabusBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
+    syllabusPrograms, syllabusBatches, archivedBatches, syllabusBatchBranches, batchProgramAssignments, batchSyllabusProgress,
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
     whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,

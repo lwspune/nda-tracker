@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Badge } from '../../components/ui'
 import StudentRowEditor from './StudentRowEditor'
+import { visibleBatchOptions } from '../../lib/batchVisibility'
 
 const PAGE_SIZE = 25
 
@@ -39,6 +40,11 @@ export default function StudentsTable({
   isAdmin = false,
   centralBranches = [],
   centralBatches = [],
+  // Retired batches. A DISPLAY filter only: `centralBatches` above stays the full
+  // list, because it is also the alignment RECORD — filtering archived names out of
+  // it would flag every member of a retired cohort as "Needs review", which is the
+  // exact bug archiving exists to prevent. See BATCH_RETIREMENT.md §2.
+  archivedBatches = [],
   batchBranchMap = {},
 }) {
   const [search, setSearch]         = useState('')
@@ -77,6 +83,13 @@ export default function StudentsTable({
   const batchOptions = useMemo(
     () => (centralBatches.length > 0 ? [...centralBatches].sort() : allBatches),
     [centralBatches, allBatches]
+  )
+
+  // Batches a student may be newly ASSIGNED to — archived ones are withheld here
+  // (an offer list) while staying in isAligned and in the batch filter below.
+  const assignableBatches = useMemo(
+    () => visibleBatchOptions(centralBatches, archivedBatches),
+    [centralBatches, archivedBatches]
   )
 
   // Activity counts
@@ -286,7 +299,7 @@ export default function StudentsTable({
                           branch={s.branch || ''}
                           batches={s.batches || []}
                           availableBranches={centralBranches.length ? centralBranches : allBranches}
-                          availableBatches={centralBatches.length ? centralBatches : allBatches}
+                          availableBatches={assignableBatches.length ? assignableBatches : allBatches}
                           batchBranches={Object.keys(batchBranchMap).length ? batchBranchMap : null}
                           accountStatus={s.accountStatus || ''}
                           onSetStatus={onSetStatus}

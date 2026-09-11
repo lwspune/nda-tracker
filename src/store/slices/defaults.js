@@ -22,6 +22,12 @@ export const DEFAULTS = {
 
   syllabusPrograms: [],
   syllabusBatches: [],
+  // Batches retired from active teaching. A purely PRESENTATIONAL flag: it hides a
+  // batch from the pickers that assign NEW work (uploads, quizzes, timetables) while
+  // leaving membership, exams and every analytics surface untouched — an archived
+  // batch stays fully filterable on Dashboard / Exams / Item Stats. Nothing that
+  // computes a number or validates a value may read it. See BATCH_RETIREMENT.md.
+  archivedBatches: [],
   syllabusBatchBranches: {},
   batchProgramAssignments: {},
   batchSyllabusProgress: {},
@@ -61,6 +67,7 @@ export function hydrate() {
     syllabusBatches:         saved.syllabusBatches?.length
                                ? saved.syllabusBatches
                                : Object.keys(saved.batchProgramAssignments || {}),
+    archivedBatches:         saved.archivedBatches || [],
     syllabusBatchBranches:   saved.syllabusBatchBranches || {},
     batchProgramAssignments: saved.batchProgramAssignments || {},
     batchSyllabusProgress:   saved.batchSyllabusProgress || {},

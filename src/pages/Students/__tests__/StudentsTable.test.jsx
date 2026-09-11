@@ -351,3 +351,35 @@ describe('StudentsTable — active row', () => {
     expect(activeRow).toHaveAttribute('aria-current', 'true')
   })
 })
+
+// ── Archived batches (BATCH_RETIREMENT.md trap B) ────────────────────────────
+// `centralBatches` is the alignment RECORD, not an offer list: it must keep
+// carrying archived names. Filtering them out here would flag every member of a
+// retired cohort as "Needs review" — the exact bug archiving exists to avoid —
+// and would drop the batch from the filter that finds those students.
+describe('StudentsTable — archived batches', () => {
+  const props = () => makeProps({
+    students: [makeStudent({ lwsId: 'LWS-001', name: 'Aarav Sharma', batches: ['B2'] })],
+    centralBatches: ['B1', 'B2'],
+    archivedBatches: ['B2'],
+  })
+
+  it('a student whose only batch is archived is still Aligned', () => {
+    render(<StudentsTable {...props()} />)
+    expect(screen.getByLabelText('Aligned')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Needs review')).not.toBeInTheDocument()
+  })
+
+  it('keeps an archived batch in the batch filter so its members stay findable', () => {
+    render(<StudentsTable {...props()} />)
+    const filter = screen.getByLabelText(/batch/i)
+    expect(within(filter).getByRole('option', { name: /B2/ })).toBeInTheDocument()
+  })
+
+  it('does not offer an archived batch to the row editor', async () => {
+    render(<StudentsTable {...props()} />)
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }))
+    const editor = screen.getByTestId('row-editor')
+    expect(editor.getAttribute('data-available-batches')).toBe('B1')
+  })
+})

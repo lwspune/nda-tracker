@@ -4,6 +4,7 @@ import useStore from '../../store/useStore'
 import { parseOfflineResults, buildOfflineTemplateRows } from '../../lib/excel'
 import { buildOfflineRoster, buildOfflineStudentRows, parseMarksPaste } from '../../lib/offlineRoster'
 import { getExamBatches } from '../../lib/analytics'
+import { visibleBatchOptions } from '../../lib/batchVisibility'
 import { SUBJECTS } from '../../lib/ndaFreq'
 import { Alert, Spinner, DropZone } from '../ui'
 
@@ -27,6 +28,7 @@ export default function OfflineExamModal({ exam = null, onClose }) {
   const replaceExam      = useStore(s => s.replaceExam)
   const studentProfiles  = useStore(s => s.studentProfiles)
   const syllabusBatches  = useStore(s => s.syllabusBatches) || []
+  const archivedBatches  = useStore(s => s.archivedBatches) || []
 
   const today = new Date().toISOString().split('T')[0]
   const [source, setSource]     = useState('manual')   // 'manual' | 'file'
@@ -121,6 +123,10 @@ export default function OfflineExamModal({ exam = null, onClose }) {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  // Hidden from the picker unless already selected; the JOIN below keeps using the
+  // full syllabusBatches list. See BATCH_RETIREMENT.md §2.
+  const visibleBatches = visibleBatchOptions(syllabusBatches, archivedBatches, selectedBatches)
 
   function toggleBatch(b) {
     const next = new Set(selectedBatches)
@@ -239,9 +245,9 @@ export default function OfflineExamModal({ exam = null, onClose }) {
           {/* Batches — also the source of the marks grid's roster */}
           <div>
             <label className="form-label" id="off-batch-label">Batches</label>
-            {syllabusBatches.length ? (
+            {visibleBatches.length ? (
               <div role="group" aria-labelledby="off-batch-label" className="flex flex-wrap gap-2 p-2 border border-border rounded-lg bg-surface-2">
-                {syllabusBatches.map(b => {
+                {visibleBatches.map(b => {
                   const checked = selectedBatches.has(b)
                   return (
                     <label key={b} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-mono border cursor-pointer min-h-[36px]
@@ -254,7 +260,9 @@ export default function OfflineExamModal({ exam = null, onClose }) {
               </div>
             ) : (
               <div className="text-[12px] text-ink-3 italic px-3 py-2 border border-dashed border-border rounded-lg">
-                No central batches yet. Add one in Settings → Batches.
+                {syllabusBatches.length
+                  ? 'Every batch is archived. Unarchive one in Settings → Batches.'
+                  : 'No central batches yet. Add one in Settings → Batches.'}
               </div>
             )}
           </div>

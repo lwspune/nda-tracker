@@ -197,6 +197,7 @@ const useStore = create((set, get) => ({
       syllabusBatches:         data.syllabusBatches?.length
                                  ? data.syllabusBatches
                                  : Object.keys(data.batchProgramAssignments || {}),
+      archivedBatches:         data.archivedBatches || [],
       syllabusBatchBranches:   data.syllabusBatchBranches || {},
       batchProgramAssignments: data.batchProgramAssignments || {},
       batchSyllabusProgress:   data.batchSyllabusProgress || {},

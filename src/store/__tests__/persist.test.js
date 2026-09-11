@@ -312,6 +312,14 @@ describe('saveToStorage allow-list (dev path)', () => {
     expect(saved.whatsappSendHistory).toEqual(state.whatsappSendHistory)
     expect(saved.examAbsenceSendHistory).toEqual(state.examAbsenceSendHistory)
   })
+
+  it('persists archivedBatches (a missed allow-list entry vanishes silently on reload)', () => {
+    const saved = captureSavedPayload({
+      syllabusBatches: ['LWS_NDA_6M_(Sep26)', 'LWS_NDA_2Y_(26-28)_A'],
+      archivedBatches: ['LWS_NDA_6M_(Sep26)'],
+    })
+    expect(saved.archivedBatches).toEqual(['LWS_NDA_6M_(Sep26)'])
+  })
 })
 
 // ── loadExamsFromSupabase ─────────────────────────────────────────────────────

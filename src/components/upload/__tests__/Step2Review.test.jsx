@@ -13,7 +13,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-let mockStoreState = { studentProfiles: {}, syllabusBatches: [] }
+let mockStoreState = { studentProfiles: {}, syllabusBatches: [], archivedBatches: [] }
 vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStoreState),
 }))
@@ -30,7 +30,7 @@ const baseState = {
 }
 
 function renderWith(stateOverrides, storeOverrides = {}) {
-  mockStoreState = { studentProfiles: {}, syllabusBatches: [], ...storeOverrides }
+  mockStoreState = { studentProfiles: {}, syllabusBatches: [], archivedBatches: [], ...storeOverrides }
   const onChange = vi.fn()
   render(
     <Step2Review
@@ -203,5 +203,51 @@ describe('Step2Review — batch multi-select', () => {
     renderWith({}, { syllabusBatches: [] })
     expect(screen.queryByRole('group', { name: /batch/i })).not.toBeInTheDocument()
     expect(screen.getByText(/Settings → Batches/i)).toBeInTheDocument()
+  })
+})
+
+// ── Archived batches (BATCH_RETIREMENT.md trap A) ────────────────────────────
+// An archived batch is hidden from the picker, but the picker builds the exam's
+// comma-joined `batch` tag from the FULL syllabusBatches order. If the filtered
+// list fed that join, re-editing an exam tagged with an archived batch would
+// silently DROP the archived tag the moment any other batch was toggled.
+describe('Step2Review — archived batches', () => {
+  const STORE = {
+    syllabusBatches: ['Alpha', 'Retired', 'Beta'],
+    archivedBatches: ['Retired'],
+  }
+
+  function batchGroup() {
+    return within(screen.getByRole('group', { name: /batches/i }))
+  }
+
+  it('does not offer an archived batch that is not already selected', () => {
+    renderWith({ batch: '' }, STORE)
+    expect(batchGroup().getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument()
+    expect(batchGroup().getByRole('checkbox', { name: 'Beta' })).toBeInTheDocument()
+    expect(batchGroup().queryByRole('checkbox', { name: /Retired/ })).not.toBeInTheDocument()
+  })
+
+  it('still renders an archived batch that IS already selected', () => {
+    renderWith({ batch: 'Retired' }, STORE)
+    expect(batchGroup().getByRole('checkbox', { name: 'Retired (archived)' })).toBeChecked()
+  })
+
+  it('preserves the archived tag when another batch is toggled on', async () => {
+    const { onChange } = renderWith({ batch: 'Retired' }, STORE)
+    await userEvent.click(batchGroup().getByRole('checkbox', { name: 'Beta' }))
+    expect(onChange).toHaveBeenCalledWith({ batch: 'Retired, Beta' })
+  })
+
+  it('preserves the archived tag when another batch is toggled off', async () => {
+    const { onChange } = renderWith({ batch: 'Alpha, Retired' }, STORE)
+    await userEvent.click(batchGroup().getByRole('checkbox', { name: 'Alpha' }))
+    expect(onChange).toHaveBeenCalledWith({ batch: 'Retired' })
+  })
+
+  it('lets an archived batch be deselected', async () => {
+    const { onChange } = renderWith({ batch: 'Retired' }, STORE)
+    await userEvent.click(batchGroup().getByRole('checkbox', { name: 'Retired (archived)' }))
+    expect(onChange).toHaveBeenCalledWith({ batch: '' })
   })
 })

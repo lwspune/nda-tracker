@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import ModalShell from './ModalShell'
+import { visibleBatchOptions } from '../../lib/batchVisibility'
 
 // CRUD for branches and batches lives in Settings. This modal SELECTS from
 // those central lists when creating or editing a timetable shell. Free-text
@@ -10,6 +11,7 @@ import ModalShell from './ModalShell'
 export default function AddTimetableModal({ timetable, onClose }) {
   const branches              = useStore(s => s.branches)
   const syllabusBatches       = useStore(s => s.syllabusBatches)
+  const archivedBatches       = useStore(s => s.archivedBatches)
   const syllabusBatchBranches = useStore(s => s.syllabusBatchBranches)
   const timetables            = useStore(s => s.timetables)
   const addTimetable          = useStore(s => s.addTimetable)
@@ -37,12 +39,15 @@ export default function AddTimetableModal({ timetable, onClose }) {
   // its batch's branch must agree. Defensive: if the current batch is on a
   // different branch (legacy data), include it so editing can finish.
   const batchOptions = useMemo(() => {
-    const matching = syllabusBatches.filter(b => syllabusBatchBranches[b] === branch)
+    // Archived batches are not offered a new timetable; the `timetable?.batchName`
+    // guard below still keeps the one being edited visible. BATCH_RETIREMENT.md §2.
+    const offerable = visibleBatchOptions(syllabusBatches, archivedBatches ?? [])
+    const matching = offerable.filter(b => syllabusBatchBranches[b] === branch)
     if (timetable?.batchName && !matching.includes(timetable.batchName)) {
       return [timetable.batchName, ...matching]
     }
     return matching
-  }, [syllabusBatches, syllabusBatchBranches, branch, timetable?.batchName])
+  }, [syllabusBatches, archivedBatches, syllabusBatchBranches, branch, timetable?.batchName])
 
   // If branch changed and current batch no longer matches it, blank out the batch.
   function handleBranchChange(next) {
