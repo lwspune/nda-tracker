@@ -63,6 +63,7 @@ node migrate_absence_times.js --dry-run   # freeze historical lecture_absences c
 # one-off (applied 2026-08-19): node migrate_timetable_routine.js — APJ 9th/10th/11th A+B routine from TT_Prototype_1
 # one-off (applied 2026-08-29): node migrate_pranali_split.js — split Pranali Sarpale (LWS-560) out of LWS-493's name_variants
 # one-off (applied 2026-08-29): node migrate_unit_test_1.js — APJ Unit Test 1 (10–14 Aug 2026) as 24 offline exams (--dry-run first)
+# one-off (applied 2026-09-11): node migrate_question_ids.js — attach PYQ Vault questionIds to the 10 most recent Maths mocks by EXACT text match (dry-run by default; --apply writes). 1,191 of 1,200 matched uniquely; the 9 ambiguous were skipped, never guessed. Reload open admin tabs after running.
 ```
 
 ## Slash commands

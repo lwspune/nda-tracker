@@ -1259,7 +1259,9 @@ The stale-chunk fix (2026-09-10) makes the *symptom* legible at three download s
 
 ## 2026-09-11
 
-### Backfill `questionId` onto exams uploaded before the column existed
+### ~~Backfill `questionId` onto exams uploaded before the column existed~~ — **DONE 2026-09-11** (the 10 most recent Maths mocks)
+
+`migrate_question_ids.js` matched **1,191 of 1,200** questions to exactly one bank row by exact whitespace-normalised text, across 10 vault-built Maths mocks; **zero unmatched**, and the 9 ambiguous (text duplicated in the bank) were skipped rather than guessed. Verified from the DB: `with_ids == distinct_ids` on every exam, so no two questions claim the same row. NOT done by the `paper_questions` join proposed below — exact text against 33.5k LWS Maths questions proved unambiguous enough to verify directly, and zero misses is itself the evidence these papers came from the bank verbatim. **Older exams (pre-2026-08-29) still have none** — re-run with a larger `LIMIT` to extend. Original entry kept below for the reasoning trail.
 
 The PYQ Vault Tags export now emits `QuestionId` and `parseTagsFile` stores it, but **forward-only** — every exam already in the bank has no bank provenance. Logged as a backfill candidate, **not** to be run without an explicit decision (it edits shipped exam rows).
 
