@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { quizQuestionComplete } from '../src/lib/quiz.js'
 import { buildQuizRow } from '../src/store/slices/quizSupabase.js'
+import { isTeacherUser } from './_authRole.js'
 
 function readEnvLocal() {
   try {
@@ -27,6 +28,19 @@ export default async function handler(req, res) {
   }
 
   const env = readEnvLocal()
+
+  // ── OUTBOUND: pull question content FROM PYQ Vault ────────────────────────
+  // Dispatched before the shared-secret gate below because the auth model is
+  // the OPPOSITE way round: the quiz path is the vault calling US with the
+  // shared secret; this is our own admin calling us with their Supabase
+  // session, and the secret never leaves the server. Folded into this file
+  // because Vercel's Hobby plan hard-fails the build above 12 api/*.js and we
+  // are at 12 — see project_vercel_function_cap.
+  if ((req.body || {}).kind === 'hydrate-questions') {
+    await handleHydrateQuestions(req, res, env)
+    return
+  }
+
   const importSecret = env.QUIZ_IMPORT_SECRET || process.env.QUIZ_IMPORT_SECRET || ''
   if (!importSecret) {
     res.status(500).json({ error: 'Quiz import is not configured on the server' })
@@ -96,4 +110,64 @@ export default async function handler(req, res) {
   }
 
   res.status(200).json({ ok: true, id: row.id, title: row.title, questionCount: complete.length })
+}
+
+// Fetch full question content from PYQ Vault by bank id — the questions the
+// text-only Tags sheet could never carry, above all the DIAGRAMS.
+//
+// Returns the vault's `missing[]` UNTOUCHED. A stem repair there is a
+// delete-and-re-commit that mints a new uuid, so an exam can hold a dead id
+// through nobody's error; collapsing that into "no content" would hide a
+// repaired question. Likewise a vault failure is a 502, never an empty result —
+// "the bank is unreachable" and "the bank has nothing" must not look alike.
+async function handleHydrateQuestions(req, res, env) {
+  const supabaseUrl = env.VITE_SUPABASE_URL      || process.env.VITE_SUPABASE_URL      || ''
+  const anonKey     = env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+  if (!supabaseUrl || !anonKey) {
+    res.status(500).json({ ok: false, error: 'Supabase is not configured on the server' })
+    return
+  }
+
+  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
+  const anonClient = createClient(supabaseUrl, anonKey)
+  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Teachers hold real sessions for /school-attendance capture, so a valid
+  // session does not imply admin (mirrors the send endpoints).
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+  const ids = (req.body || {}).ids
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ ok: false, error: 'ids[] is required' })
+    return
+  }
+
+  const vaultUrl = (env.VAULT_API_URL || process.env.VAULT_API_URL || '').replace(/\/$/, '')
+  const vaultSecret = env.VAULT_SYNC_SECRET || process.env.VAULT_SYNC_SECRET || ''
+  if (!vaultUrl || !vaultSecret) {
+    res.status(500).json({ ok: false, error: 'PYQ Vault sync is not configured. Set VAULT_API_URL and VAULT_SYNC_SECRET in Vercel env.' })
+    return
+  }
+
+  const query = ids.map(id => encodeURIComponent(String(id))).join(',')
+  try {
+    const r = await fetch(`${vaultUrl}/api/questions/by-ids?ids=${query}`, {
+      headers: { Authorization: `Bearer ${vaultSecret}` },
+    })
+    if (!r.ok) {
+      let detail = ''
+      try { detail = (await r.json())?.error || '' } catch { /* non-JSON body */ }
+      res.status(502).json({ ok: false, error: `PYQ Vault returned ${r.status}`, detail })
+      return
+    }
+    const data = await r.json()
+    res.status(200).json({
+      ok: true,
+      questions: Array.isArray(data.questions) ? data.questions : [],
+      missing: Array.isArray(data.missing) ? data.missing : [],
+    })
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Could not reach PYQ Vault', detail: e.message })
+  }
 }
