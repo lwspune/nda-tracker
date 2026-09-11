@@ -177,6 +177,15 @@ export function computeItemStats(exams, { minAttempts = 20, validNames = null } 
       discrimination: row.upperSeen && row.lowerSeen
         ? row.upperCorrect / row.upperSeen - row.lowerCorrect / row.lowerSeen
         : null,
+      // The raw split, additionally, because a CONSUMER THAT POOLS MUST POOL
+      // COUNTS, never average the ratio above: a 10-student sitting would then
+      // outweigh a 100-student one. PYQ Vault pools these across its own /mock
+      // responses (item_stats.js -> question_item_stats). Purely additive; the
+      // Question Stats page reads `discrimination` and ignores these.
+      upperSeen: row.upperSeen,
+      upperCorrect: row.upperCorrect,
+      lowerSeen: row.lowerSeen,
+      lowerCorrect: row.lowerCorrect,
       exams: [...row.exams.values()],
       insufficient: row.attempted < minAttempts,
     })

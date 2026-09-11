@@ -1,7 +1,67 @@
 # Item statistics — spec
 
-**Status:** spec, nothing built. 2026-09-11. Phase 2 of the cross-app question link
-(`CROSS_APP_SYNC.md`); depends on `questionId`, which 35 exams now carry.
+**Status: BUILT.** The Question Stats page (`src/pages/ItemStats/`) and the pure core
+(`src/lib/itemStats.js`, 19 tests) shipped first; the **PYQ Vault export** (`item_stats.js`)
+followed on 2026-09-11. Phase 2 of the cross-app question link (`CROSS_APP_SYNC.md`); depends
+on `questionId`, which 35 exams now carry.
+
+> The header of this file said "spec, nothing built" for some time AFTER the page shipped, and
+> that staleness cost real work: a session took it at face value and overwrote the pure core
+> and its tests with a fresh implementation before noticing the files were tracked. Restored
+> from git. **Update this line when the thing it describes changes.**
+
+## The export (2026-09-11)
+
+**IT DOES NOT RE-IMPLEMENT THE ANALYSIS.** `item_stats.js` calls the SAME `computeItemStats`
+the page uses, once per exam record. Two implementations of "how hard is this question" would
+drift, and the scoring rule is subtle enough that a second copy got it wrong on the first
+attempt: it scored correctness from Evalbee's verdict, when this core deliberately scores
+**against the KEY** — difficulty asks *did they pick the right option*, the verdict answers
+*what mark did they get*, and they diverge exactly when a paper was mis-keyed or a question
+dropped. The core's reading of the CLAUDE.md invariant is the right one: `questions[].answer`
+drives per-question ANALYTICS, and only MARKS are Evalbee's.
+
+The core gained the raw `upperSeen/upperCorrect/lowerSeen/lowerCorrect` alongside the derived
+`discrimination` — purely additive, ignored by the page. **A consumer that POOLS must pool
+counts**, never average the per-sitting ratio, or a 10-student sitting outweighs a 100-student
+one.
+
+**THE EXPORT EMITS ONE ROW PER (question, exam RECORD) — it does NOT pool.** The pooling rule
+below is still right and still mandatory; it MOVES to PYQ Vault, where these rows meet the
+vault's own `/mock` responses. Reasons, in order of weight: a pooled figure cannot be
+un-pooled when one sitting turns out to be bad, an institute leaves, or a key is found wrong;
+the 3-keyed-differently case needs the records storable separately; exposure ("has my batch
+sat this?") needs batch grain; and the per-record counts already exist here, since the
+discrimination rule computes them. It costs this file nothing — it emits the intermediate
+rather than collapsing it. The bank's counterpart spec of the same name carries the full
+argument.
+
+**THE `1,259` FIGURE BELOW IS A `seen` COUNT, NOT `attempted`, and that resolves the
+inconsistency in this document.** Measured by the built export against the live corpus:
+pooling by SEEN gives **1,259** at n>=20 (and 1,435 at n>=10 — the same number this file
+reports as "distinct questions with response data"), while pooling by ATTEMPTED gives
+**555**. The `122 of 553` denominator below is the ATTEMPTED one, which is why the two never
+reconciled. **Attempted is the basis that matters**, for exactly the reason this file already
+gives for `pValue`: an item the weaker half avoids must not read as better-evidenced than it
+is. Treat 555, not 1,259, as the usable count.
+
+**Two further measurements from the first real run:** `444 questions in more than one record`
+reproduces exactly. **Key conflicts are `0` today**, not 3 — the three questions CLAUDE.md
+records as found wrongly keyed on 2026-09-11 each now carry a single key. Whether the earlier
+`3` measured the same thing is unresolved. Also: `87` attempted responses carry no recorded
+letter (0.28% of 31,038), and `0` choices fall outside A-D — so the 100% `choices` coverage
+claim holds to within a rounding of a percent, and the export reports both rather than
+dropping them silently.
+
+**`verdictMismatch` is carried in the export and is the strongest signal in it** — attempts
+where Evalbee's mark disagrees with the key, i.e. a mis-keyed or dropped question, and unlike
+a winning distractor it is unambiguous. Live: **14 attempts over 2 rows**. The bank does not
+store it yet (no column); the JSON carries it so no re-export is needed when it does.
+
+**Consumed by:** `Question_Bank/scripts/itemstats/ingest-tracker.ts`, which **refuses** a
+payload not declaring `grain: "question-per-exam-record"` (proven to refuse one). First
+ingest: 1,884 rows, 1,435 distinct questions, **0 dangling ids** — every `questionId` this
+repo has stamped resolves to a live bank row.
 
 ## What it is
 
