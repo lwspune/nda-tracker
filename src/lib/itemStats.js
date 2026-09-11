@@ -77,6 +77,7 @@ export function computeItemStats(exams, { minAttempts = 20, validNames = null } 
           seen: 0, attempted: 0, skipped: 0, correct: 0, wrong: 0,
           choiceCounts: emptyCounts(),
           upperSeen: 0, upperCorrect: 0, lowerSeen: 0, lowerCorrect: 0,
+          verdictMismatch: 0,
           exams: new Map(),
         })
       }
@@ -96,8 +97,6 @@ export function computeItemStats(exams, { minAttempts = 20, validNames = null } 
         if (verdict === 0) { row.skipped += 1; continue }
 
         row.attempted += 1
-        if (verdict === 1) row.correct += 1
-        else row.wrong += 1
 
         // The chosen letter is meaningful only for an attempt: a skip says
         // nothing about which option pulls.
@@ -105,8 +104,21 @@ export function computeItemStats(exams, { minAttempts = 20, validNames = null } 
         const label = chose ? String(chose).toUpperCase() : null
         if (label && LABELS.includes(label)) row.choiceCounts[label] += 1
 
-        if (upper.has(s)) { row.upperSeen += 1; if (verdict === 1) row.upperCorrect += 1 }
-        else if (lower.has(s)) { row.lowerSeen += 1; if (verdict === 1) row.lowerCorrect += 1 }
+        // Correctness is decided by the KEY, not by Evalbee's verdict.
+        // Difficulty asks "did they pick the right option"; the verdict answers
+        // "what mark did they get", and the two diverge exactly when a paper was
+        // mis-keyed or a question was dropped and awarded to all — which is when
+        // this number matters most. CLAUDE.md: questions[].answer drives
+        // per-question ANALYTICS; only MARKS are Evalbee's, and nothing here
+        // touches marks. Falls back to the verdict when no letter was recorded
+        // (rows predating choice capture) or the question carries no key.
+        const scored = answer && label ? (label === answer ? 1 : -1) : verdict
+        if (scored === 1) row.correct += 1
+        else row.wrong += 1
+        if (answer && label && scored !== verdict) row.verdictMismatch += 1
+
+        if (upper.has(s)) { row.upperSeen += 1; if (scored === 1) row.upperCorrect += 1 }
+        else if (lower.has(s)) { row.lowerSeen += 1; if (scored === 1) row.lowerCorrect += 1 }
       }
     }
   }
@@ -149,6 +161,10 @@ export function computeItemStats(exams, { minAttempts = 20, validNames = null } 
       skipped: row.skipped,
       correct: row.correct,
       wrong: row.wrong,
+      // Attempts where Evalbee's mark disagrees with the key. Non-zero means
+      // the paper was mis-keyed or the question was dropped — the strongest
+      // signal on this page, and unlike a winning distractor, unambiguous.
+      verdictMismatch: row.verdictMismatch,
       // Over ATTEMPTED, never over seen: mixing in skips makes an easy but
       // widely-avoided question read as a hard one. Skipping gets its own number.
       pCorrect: row.attempted ? row.correct / row.attempted : null,

@@ -44,14 +44,14 @@ function download(name, text, type) {
 function toCsv(rows) {
   const head = ['questionId', 'subject', 'chapter', 'subtopic', 'keyed', 'seen', 'attempted',
     'skipped', 'correct', 'pCorrect', 'skipRate', 'topDistractor', 'topDistractorN',
-    'distractorRatio', 'discrimination']
+    'distractorRatio', 'discrimination', 'verdictMismatch']
   const esc = v => '"' + String(v ?? '').split('"').join('""') + '"'
   const lines = [head.join(',')]
   for (const r of rows) {
     lines.push([
       r.questionId, r.subject, r.chapter, r.subtopic, r.keyed, r.seen, r.attempted,
       r.skipped, r.correct, r.pCorrect, r.skipRate, r.topDistractor?.label ?? '',
-      r.topDistractor?.n ?? '', r.distractorRatio, r.discrimination,
+      r.topDistractor?.n ?? '', r.distractorRatio, r.discrimination, r.verdictMismatch,
     ].map(esc).join(','))
   }
   return lines.join(String.fromCharCode(10))
@@ -273,7 +273,8 @@ export default function ItemStatsPage() {
           {thin > 0 && <> · {thin} hidden below {minAttempts} attempts</>}
           {' '}· counts only, no student names leave this page. A high distractor ratio is a lead to
           review, not a verdict: an option outpulls the key when the key is wrong, and also when the
-          question is hard and the trap is well built.
+          question is hard and the trap is well built. Correct % counts who chose the KEY, which
+          differs from the recorded mark only where a sitting was mis-keyed.
         </p>
       </Card>
 
@@ -304,6 +305,13 @@ export default function ItemStatsPage() {
                   </div>
                   <div className="text-[11px] text-ink-3 mt-0.5">
                     {r.chapter || '—'}{r.subtopic ? ` · ${r.subtopic}` : ''}
+                    {r.verdictMismatch > 0 && (
+                      // Unambiguous, unlike a winning distractor: that sitting was
+                      // mis-keyed, or the question was dropped and credited to all.
+                      <span className="ml-2 text-danger font-semibold">
+                        {`${r.verdictMismatch} marked against the key`}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className={`${TD} text-right tabular-nums`}>{r.attempted}</td>
@@ -338,6 +346,11 @@ export default function ItemStatsPage() {
                         seen {r.seen} · attempted {r.attempted} · skipped {r.skipped} · in{' '}
                         {r.exams.map(e => e.name).join(', ')}
                       </span>
+                      {r.verdictMismatch > 0 && (
+                        <span className="text-danger">
+                          {`${r.verdictMismatch} attempt(s) were marked against this key — that sitting was mis-keyed, or the question was dropped and credited to everyone. Correct % counts the KEY, not the mark.`}
+                        </span>
+                      )}
                     </div>
                     {/* No examId on purpose: editing writes to ONE exam record,
                         and a pooled question lives in several — fixing the key in

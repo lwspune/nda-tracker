@@ -207,6 +207,16 @@ describe('ItemStatsPage — reviewing a row', () => {
 })
 
 describe('ItemStatsPage — findings and empty states', () => {
+  it('flags a sitting whose marks disagree with the key', () => {
+    // the real case: a dropped question credited every attempter
+    setExams([exam('m1', 'Maths',
+      [{ q: 1, questionId: Q(1), chapter: 'Definite Integration', answer: 'B', question: 'integral' }],
+      [[10, 1, 'C'], [9, 1, 'C'], [8, 1, 'D'], [7, 1, 'B']])])
+    render(<ItemStatsPage />)
+    showEverything()
+    expect(screen.getByText(/3 marked against the key/i)).toBeInTheDocument()
+  })
+
   it('surfaces a question keyed differently in two sittings', () => {
     setExams([
       exam('a', 'Maths', [{ q: 1, questionId: Q(3), chapter: 'Algebra', answer: 'B', question: 'conflicted' }], [[10, 1, 'B']]),

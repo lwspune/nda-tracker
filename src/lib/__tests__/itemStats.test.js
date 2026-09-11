@@ -52,6 +52,48 @@ describe('computeItemStats — counting', () => {
   })
 })
 
+describe('computeItemStats — correctness comes from the KEY', () => {
+  // Difficulty asks "did they pick the right option", not "what mark did they
+  // get". Those differ exactly when a paper was mis-keyed or a question dropped,
+  // which is when the number matters most. CLAUDE.md's invariant says per-
+  // question ANALYTICS are driven by questions[].answer; only MARKS are
+  // Evalbee's, and nothing here touches marks.
+  it('scores against the key even when the verdict disagrees', () => {
+    // the real case: a dropped question credited every attempter
+    const out = computeItemStats([exam('e1', q1(), [
+      [10, 1, 'C'], [10, 1, 'C'], [10, 1, 'D'], [10, 1, 'B'],
+    ])], { minAttempts: 1 })
+    expect(out.rows[0].correct).toBe(1)            // only the one who chose B
+    expect(out.rows[0].pCorrect).toBeCloseTo(0.25) // not 1.0
+  })
+
+  it('counts a student denied despite choosing the key', () => {
+    const out = computeItemStats([exam('e1', q1(), [[10, -1, 'B'], [10, -1, 'A']])], { minAttempts: 1 })
+    expect(out.rows[0].correct).toBe(1)
+  })
+
+  it('reports how many verdicts disagree with the key', () => {
+    const out = computeItemStats([exam('e1', q1(), [
+      [10, 1, 'C'], [10, -1, 'B'], [10, 1, 'B'], [10, -1, 'A'],
+    ])], { minAttempts: 1 })
+    expect(out.rows[0].verdictMismatch).toBe(2)    // one each way
+  })
+
+  it('falls back to the verdict when no letter was recorded', () => {
+    // 87 attempted rows predate choice capture; they still carry a verdict
+    const e = exam('e1', q1(), [[10, 1, null], [10, -1, null]])
+    const out = computeItemStats([e], { minAttempts: 1 })
+    expect(out.rows[0].correct).toBe(1)
+    expect(out.rows[0].verdictMismatch).toBe(0)    // nothing to disagree with
+  })
+
+  it('falls back to the verdict when the question has no key at all', () => {
+    const out = computeItemStats([exam('e1', q1({ answer: null }), [[10, 1, 'C'], [10, -1, 'A']])],
+      { minAttempts: 1 })
+    expect(out.rows[0].correct).toBe(1)
+  })
+})
+
 describe('computeItemStats — pooling across sittings', () => {
   // The same paper is deliberately run for several batches, each its own record.
   it('pools one question across the records it appears in', () => {
