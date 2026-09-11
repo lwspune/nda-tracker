@@ -14,6 +14,7 @@ import BatchComparison from './BatchComparison'
 import AttendanceRollup from './AttendanceRollup'
 import AttendanceLeaders from './AttendanceLeaders'
 import IntegrityLeaders from './IntegrityLeaders'
+import NeverLoggedIn from './NeverLoggedIn'
 
 export default function DashboardPage() {
   const exams              = useStore(s => s.exams)
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const fetchDailyAttendance = useStore(s => s.fetchDailyAttendance)
   const fetchAttendanceLeadersData = useStore(s => s.fetchAttendanceLeadersData)
   const getAllIntegrityIncidents   = useStore(s => s.getAllIntegrityIncidents)
+  const fetchStudentLoginIds       = useStore(s => s.fetchStudentLoginIds)
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -191,6 +193,13 @@ export default function DashboardPage() {
       <IntegrityLeaders
         studentProfiles={studentProfiles}
         getAllIntegrityIncidents={getAllIntegrityIncidents}
+        setActiveStudent={setActiveStudent}
+      />
+
+      {/* Student-portal adoption — active students who have never logged in */}
+      <NeverLoggedIn
+        studentProfiles={studentProfiles}
+        fetchStudentLoginIds={fetchStudentLoginIds}
         setActiveStudent={setActiveStudent}
       />
 
