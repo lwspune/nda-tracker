@@ -161,3 +161,71 @@ describe('send-homework-pending', () => {
     expect(res.body.skipped).toBe(1)
   })
 })
+
+// ── server-side blocked-contact gate (2026-09-12) ────────────────────────────
+// Before this the handler looped straight over req.body.students[] and never
+// read the students table. Fixtures here carry `lwsId`; the older cases above
+// do not, which is why they never reach the gate.
+
+function setAuthWithStudents(rows, { error = null } = {}) {
+  createClient.mockImplementation((_url, _key, opts) => ({
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: error ? null : rows, error }),
+      })),
+    })),
+    _opts: opts,
+  }))
+}
+
+const HW = [{ subject: 'Maths', chapter: 'Integration', type: 'homework' }]
+
+describe('blocked-contact gate (server-side)', () => {
+  it('does not message a Block / Quit / Inactive student even when the client asks', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([
+      { lws_id: 'LWS-1', account_status: 'Active' },
+      { lws_id: 'LWS-2', account_status: 'Inactive' },
+    ])
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [
+        { lwsId: 'LWS-1', name: 'Asha', mobile: '9876543210', parentMobiles: [], items: HW },
+        { lwsId: 'LWS-2', name: 'Inactive One', mobile: '9876543211', parentMobiles: [], items: HW },
+      ],
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.blocked).toBe(1)
+    const transcript = res.body.lines.join('\n')
+    expect(transcript).toContain('Asha')
+    expect(transcript).not.toContain('Inactive One')
+  })
+
+  it('still messages a student with a blank status or no profile row (fails open)', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([{ lws_id: 'LWS-1', account_status: '' }])
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [
+        { lwsId: 'LWS-1', name: 'Legacy', mobile: '9876543210', parentMobiles: [], items: HW },
+        { lwsId: 'LWS-GHOST', name: 'Ghost', mobile: '9876543211', parentMobiles: [], items: HW },
+      ],
+    })
+    expect(res.body.blocked).toBe(0)
+    expect(res.body.lines.join('\n')).toContain('Legacy')
+    expect(res.body.lines.join('\n')).toContain('Ghost')
+  })
+
+  it('refuses the whole send when the status read fails', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents(null, { error: { message: 'permission denied for table students' } })
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [{ lwsId: 'LWS-1', name: 'Asha', mobile: '9876543210', parentMobiles: [], items: HW }],
+    })
+    expect(res.statusCode).toBe(500)
+    expect(res.body.error).toMatch(/verify account status/i)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+})

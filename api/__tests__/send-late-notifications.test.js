@@ -156,3 +156,100 @@ describe('send-late-notifications', () => {
     expect(res.body.skipped).toBe(1)
   })
 })
+
+// ── server-side blocked-contact gate (2026-09-12) ────────────────────────────
+//
+// Before this, the handler looped straight over req.body.students[] and never
+// read the students table, so the preview modal's filter was the ONLY thing
+// between a Block/Quit/Inactive family and a message. These pin the floor.
+//
+// Note the fixtures below carry `lwsId`. The pre-existing cases in this file do
+// not, which is why they never reached the gate at all — a payload with no ids
+// short-circuits before any query.
+
+function setAuthWithStudents(rows, { error = null } = {}) {
+  createClient.mockImplementation((_url, _key, opts) => ({
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: error ? null : rows, error }),
+      })),
+    })),
+    _opts: opts,
+  }))
+}
+
+describe('blocked-contact gate (server-side)', () => {
+  it('does not message a Block / Quit / Inactive student even when the client asks', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([
+      { lws_id: 'LWS-1', account_status: 'Active' },
+      { lws_id: 'LWS-2', account_status: 'Block' },
+      { lws_id: 'LWS-3', account_status: 'Quit' },
+    ])
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [
+        { lwsId: 'LWS-1', name: 'Asha',  mobile: '9876543210', parentMobiles: [] },
+        { lwsId: 'LWS-2', name: 'Blocked One', mobile: '9876543211', parentMobiles: [] },
+        { lwsId: 'LWS-3', name: 'Quit One',    mobile: '9876543212', parentMobiles: [] },
+      ],
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.blocked).toBe(2)
+    const transcript = res.body.lines.join('\n')
+    expect(transcript).toContain('Asha')
+    expect(transcript).not.toContain('Blocked One')
+    expect(transcript).not.toContain('Quit One')
+    expect(transcript).toContain('Excluded 2 blocked/inactive student(s).')
+  })
+
+  it('still messages a student whose status is blank or legacy (fails open)', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([{ lws_id: 'LWS-1', account_status: '' }])
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [{ lwsId: 'LWS-1', name: 'Legacy', mobile: '9876543210', parentMobiles: [] }],
+    })
+    expect(res.body.blocked).toBe(0)
+    expect(res.body.lines.join('\n')).toContain('Legacy')
+  })
+
+  it('still messages a student with no profile row (fails open)', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([])
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [{ lwsId: 'LWS-GHOST', name: 'Ghost', mobile: '9876543210', parentMobiles: [] }],
+    })
+    expect(res.body.blocked).toBe(0)
+    expect(res.body.lines.join('\n')).toContain('Ghost')
+  })
+
+  // Fails CLOSED. A guard that evaporates on a database error is not a guard —
+  // this is the defect that was found in send-whatsapp.js while writing this.
+  it('refuses the whole send when the status read fails', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents(null, { error: { message: 'permission denied for table students' } })
+    const { res } = await call({
+      date: '2026-09-12',
+      students: [{ lwsId: 'LWS-1', name: 'Asha', mobile: '9876543210', parentMobiles: [] }],
+    })
+    expect(res.statusCode).toBe(500)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error).toMatch(/verify account status/i)
+    expect(globalThis.fetch).not.toHaveBeenCalled()   // nothing went out
+  })
+
+  it('reads the status through a JWT-scoped client so RLS still applies', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthWithStudents([{ lws_id: 'LWS-1', account_status: 'Active' }])
+    await call({
+      date: '2026-09-12',
+      students: [{ lwsId: 'LWS-1', name: 'Asha', mobile: '9876543210', parentMobiles: [] }],
+    })
+    const scoped = createClient.mock.calls.find(c => c[2]?.global?.headers?.Authorization)
+    expect(scoped).toBeTruthy()
+    expect(scoped[2].global.headers.Authorization).toBe('Bearer valid-jwt')
+  })
+})

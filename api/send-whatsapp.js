@@ -89,9 +89,22 @@ export default async function handler(req, res) {
 
   // ── Load student contact info ──────────────────────────────────────────────
 
-  const { data: studentRows } = await supabase
+  // This read carries the blocked-contact gate, so its error must be inspected,
+  // not destructured away (2026-09-12). A failed read used to yield `null`,
+  // leaving `blockedKeys` empty and passing EVERY blocked student — the guard
+  // disappeared at exactly the moment it was needed. Fail closed, matching
+  // api/_blockGate.js.
+  const { data: studentRows, error: studentsErr } = await supabase
     .from('students')
     .select('canonical_name, mobile, parent_mobiles, name_variants, account_status')
+
+  if (studentsErr || !Array.isArray(studentRows)) {
+    res.status(500).json({
+      ok: false,
+      error: `Could not verify account status: ${studentsErr?.message ?? 'no rows returned'}`,
+    })
+    return
+  }
 
   const mobileMap = {}
   const parentMap = {}

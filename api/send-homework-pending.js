@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
+import { partitionBlocked } from './_blockGate.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge } from './_wabridge.js'
@@ -64,7 +65,23 @@ export default async function handler(req, res) {
   const lines = []
   let sent = 0, skipped = 0
 
-  for (const row of students) {
+  // Server-side floor: never message a Block / Quit / Inactive contact. The
+  // preview modal filters too, but it is the client — this endpoint previously
+  // sent to whatever list it was handed. Read through a JWT-scoped client so
+  // RLS still applies. A read failure refuses the whole send (see _blockGate).
+  const db = createClient(supabaseUrl, supabaseAnon, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  })
+  let recipients, blockedRows
+  try {
+    ({ allowed: recipients, blocked: blockedRows } = await partitionBlocked(db, students))
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+    return
+  }
+  if (blockedRows.length) lines.push(`Excluded ${blockedRows.length} blocked/inactive student(s).`)
+
+  for (const row of recipients) {
     const name = (row.name || '').trim()
     if (!name) continue
 
@@ -99,5 +116,5 @@ export default async function handler(req, res) {
   }
 
   lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
-  res.status(200).json({ ok: true, sent, skipped, lines })
+  res.status(200).json({ ok: true, sent, skipped, blocked: blockedRows.length, lines })
 }

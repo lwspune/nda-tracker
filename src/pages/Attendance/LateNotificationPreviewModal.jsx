@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
-import { isBlockedStatus } from '../../lib/accountStatus'
+import { buildRecipientRows } from '../../lib/recipientRows'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -10,24 +10,8 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function buildRows(lateLwsIds, studentProfiles) {
-  const byLwsId = {}
-  for (const p of Object.values(studentProfiles)) {
-    if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
-  }
-  const out = []
-  for (const id of lateLwsIds) {
-    const p = byLwsId[id]
-    if (p && isBlockedStatus(p.accountStatus)) continue  // never message a blocked contact
-    out.push({
-      lwsId:         id,
-      name:          p?.name ?? id,
-      mobile:        p?.mobile ?? '',
-      parentMobiles: (p?.parentMobiles ?? []).join(', '),
-    })
-  }
-  return out
-}
+const buildRows = (lateLwsIds, studentProfiles) =>
+  buildRecipientRows(lateLwsIds, studentProfiles)
 
 // notifiedLwsIds: string[] of already-notified students from prior sends; null = first send.
 export default function LateNotificationPreviewModal({

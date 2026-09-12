@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
-import { isBlockedStatus } from '../../lib/accountStatus'
+import { buildRecipientRows } from '../../lib/recipientRows'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -27,25 +27,12 @@ function formatSubjectWithTime(entry) {
   return `${subject} ${startTime} to ${endTime}`
 }
 
-function buildRows(absencesByLwsId, studentProfiles) {
-  const byLwsId = {}
-  for (const p of Object.values(studentProfiles)) {
-    if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
-  }
-  const out = []
-  for (const [lwsId, items] of Object.entries(absencesByLwsId)) {
-    const p = byLwsId[lwsId]
-    if (p && isBlockedStatus(p.accountStatus)) continue  // never message a blocked contact
-    out.push({
-      lwsId,
-      name:          p?.name ?? lwsId,
-      mobile:        p?.mobile ?? '',
-      parentMobiles: (p?.parentMobiles ?? []).join(', '),
-      subjects:      items.map(normaliseEntry),
-    })
-  }
-  return out
-}
+const buildRows = (absencesByLwsId, studentProfiles) =>
+  buildRecipientRows(
+    Object.keys(absencesByLwsId ?? {}),
+    studentProfiles,
+    lwsId => ({ subjects: (absencesByLwsId[lwsId] ?? []).map(normaliseEntry) }),
+  )
 
 // notifiedLwsIds: string[] of already-notified students from prior sends; null = first send.
 export default function LectureMissPreviewModal({

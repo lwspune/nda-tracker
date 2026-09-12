@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { formatHomeworkItem, homeworkNotifyKey } from '../../lib/homework'
-import { isBlockedStatus } from '../../lib/accountStatus'
+import { buildRecipientRows } from '../../lib/recipientRows'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -11,25 +11,12 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function buildRows(itemsByLwsId, studentProfiles) {
-  const byLwsId = {}
-  for (const p of Object.values(studentProfiles)) {
-    if (p?.lwsId && !byLwsId[p.lwsId]) byLwsId[p.lwsId] = p
-  }
-  const out = []
-  for (const [lwsId, items] of Object.entries(itemsByLwsId)) {
-    const p = byLwsId[lwsId]
-    if (p && isBlockedStatus(p.accountStatus)) continue  // never message a blocked contact
-    out.push({
-      lwsId,
-      name:          p?.name ?? lwsId,
-      mobile:        p?.mobile ?? '',
-      parentMobiles: (p?.parentMobiles ?? []).join(', '),
-      items:         items || [],
-    })
-  }
-  return out
-}
+const buildRows = (itemsByLwsId, studentProfiles) =>
+  buildRecipientRows(
+    Object.keys(itemsByLwsId ?? {}),
+    studentProfiles,
+    lwsId => ({ items: itemsByLwsId[lwsId] ?? [] }),
+  )
 
 // Pre-send review for homework/notes pending alerts. Mirrors LectureMissPreviewModal,
 // but pending is computed at ITEM granularity (one message per student per item):

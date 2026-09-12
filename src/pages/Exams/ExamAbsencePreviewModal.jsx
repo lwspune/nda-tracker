@@ -7,6 +7,16 @@ import useStore from '../../store/useStore'
 // Rows whose profile is missing OR whose accountStatus is not 'Active' are
 // dropped — we never send absence alerts to non-EIS or non-Active students,
 // even when historical absence rows exist for them.
+//
+// This deliberately does NOT use src/lib/recipientRows.js, which the late /
+// lecture-miss / homework previews share (2026-09-12). That helper fails OPEN
+// on a blank status and on a missing profile, mirroring the login gate; the
+// rule above is stricter on both counts, on purpose. Routing this through the
+// shared builder would silently relax it.
+//
+// The server floor still applies underneath either rule — api/_blockGate.js
+// refuses Block/Quit/Inactive in send-exam-absence.js regardless of what the
+// client sends.
 function joinRows(absenceRows, studentProfiles) {
   // Build lwsId → profile lookup once. studentProfiles is keyed by name (and
   // every name_variant); collapse by lwsId so we don't hit a profile twice.

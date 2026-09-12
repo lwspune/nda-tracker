@@ -179,25 +179,6 @@ is covered on both sides.
 
 ---
 
-### 5. The blocked-contact gate is re-implemented in three preview modals
-
-[`LateNotificationPreviewModal.jsx:13`](src/pages/Attendance/LateNotificationPreviewModal.jsx#L13),
-[`LectureMissPreviewModal.jsx`](src/pages/Attendance/LectureMissPreviewModal.jsx) and
-[`HomeworkPreviewModal.jsx:14`](src/pages/Attendance/HomeworkPreviewModal.jsx#L14) each build the
-same `byLwsId` index, apply the same `isBlockedStatus` skip, and emit the same
-`{ lwsId, name, mobile, parentMobiles }` row.
-
-**Why:** the gate is a guardrail — no send may reach a `Block`/`Quit`/`Inactive` contact — and it
-currently lives in the UI layer three times over, where a fourth flow can simply forget it. Three of
-the five endpoints still trust the client `students[]`, so the component *is* the enforcement point.
-
-**How to apply:** a tested `src/lib/recipientRows.js` `buildRecipientRows(idsOrMap, studentProfiles,
-mapExtra?)`. All three modals have tests that pin the blocked-contact behaviour, so the swap is
-verifiable. Fold the `ExamAbsencePreviewModal` `!== 'Active'` variant in only after deciding whether
-its stricter predicate is deliberate — it currently differs from `isBlockedStatus`.
-
----
-
 ### 6. Mechanical sweep: helpers that exist 7–15 times with no variation
 
 - **`safeFilename`** (`[^A-Za-z0-9_-]+` -> `_`), **7 copies** —

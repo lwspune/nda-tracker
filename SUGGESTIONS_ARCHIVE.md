@@ -16,6 +16,47 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~The blocked-contact gate: three UI copies + three unguarded endpoints~~ — **DONE 2026-09-12**
+
+Refactor-ledger items 5 and 5b, closed together because doing 5 alone would have produced tidier
+code and **exactly the same exposure**. 87 of 329 students are `Block` (queried 2026-09-12), so this
+gate fires on more than a quarter of the roster on every send.
+
+**5b — the real fix (server-side).** `send-late-notifications`, `send-homework-pending` and
+`send-exam-absence` looped straight over `req.body.students[]` and **never read the `students` table
+at all**, so the browser's preview filter was the only thing between a blocked family and a WhatsApp
+message. New `api/_blockGate.js` (`loadBlockedLwsIds` / `partitionBlocked`), keyed on `lws_id` —
+all four flows already post `lwsId`, verified at each call site before building on it, so no
+name-variant matching is involved. Each endpoint now reads through a **JWT-scoped** client (RLS still
+applies) and returns a `blocked` count plus an `Excluded N blocked/inactive student(s).` line.
+
+Two rules, deliberately different from each other:
+- **not found / blank status → send** (fail OPEN), mirroring `isBlockedStatus` and the login gate.
+  A missing profile must not silently mute a real student.
+- **read error → refuse the whole send** (fail CLOSED, 500, nothing dispatched), mirroring the
+  lecture-miss alert's leaves-read behaviour. A gate that vanishes on a database blip is not a gate.
+
+**A live defect found while writing it:** [`send-whatsapp.js:92`](api/send-whatsapp.js#L92)
+destructured only `{ data: studentRows }` and never inspected the error. A failed read yielded
+`null`, `blockedKeys` came out empty, and the guard passed **every** blocked student — the guard
+disappeared at exactly the moment it was needed. Now fails closed like the rest.
+
+**5 — the de-duplication.** `src/lib/recipientRows.js` (`buildRecipientRows` +
+`indexProfilesByLwsId`) replaces three copies of the same index-skip-shape logic in the late,
+lecture-miss and homework previews.
+
+**`ExamAbsencePreviewModal` was deliberately left out**, and that is recorded in the component. Its
+`=== 'Active'` test and its dropping of profile-less rows are a **stricter policy stated in the
+function's own header** — not drift. The shared builder fails open on both counts, so folding it in
+would have quietly relaxed a decision someone made on purpose. The server floor applies underneath
+either rule.
+
+**Testing note worth keeping.** The three endpoints' existing tests passed the moment the gate was
+added — because their fixtures carry no `lwsId`, so the gate short-circuited before any query and was
+never exercised. New fixtures that do carry one were added, and each was **verified to fail against
+the pre-gate handler** before being kept. A test that passes both with and without the code under
+test proves nothing.
+
 ### ~~`parseTimeToMinutes` exists four times under two different contracts~~ — **DONE 2026-09-12**
 
 Refactor-ledger item 4. One helper — clock time to minutes past midnight — written out four times:
