@@ -231,33 +231,8 @@ describe('buildPracticeSetDocx — onProgress', () => {
   }, 30000)
 })
 
-import { prettifyMath } from '../practiceSetDocx'
-
-describe('prettifyMath — the last-resort renderer', () => {
-  it('renders a fraction readably instead of leaking the macro name', () => {
-    expect(prettifyMath(String.raw`\dfrac{1}{16}`)).toBe('(1)/(16)')
-    expect(prettifyMath(String.raw`\frac{3}{4}`)).toBe('(3)/(4)')
-    expect(prettifyMath(String.raw`\tfrac{1}{2}`)).toBe('(1)/(2)')
-  })
-
-  it('never emits a bare macro name — the "dfrac 1 16" leak', () => {
-    for (const src of [String.raw`\dfrac{1}{16}`, String.raw`\sqrt{2}`,
-                       String.raw`\pi`, String.raw`\times`]) {
-      expect(prettifyMath(src)).not.toMatch(/frac|sqrt|pi\b|times/)
-    }
-  })
-
-  it('maps the common symbols', () => {
-    expect(prettifyMath(String.raw`\sqrt{2}`)).toBe('√(2)')
-    expect(prettifyMath(String.raw`\pi`)).toBe('π')
-    expect(prettifyMath(String.raw`a \times b`)).toBe('a × b')
-    expect(prettifyMath(String.raw`x \leq y`)).toBe('x ≤ y')
-  })
-
-  it('leaves plain text alone', () => {
-    expect(prettifyMath('n + 1')).toBe('n + 1')
-  })
-})
+// prettifyMath moved to docxMath.js with the rest of the pipeline; its tests
+// moved with it, to docxMath.test.js.
 
 // ── formatting parity with PYQ Vault's exporter ─────────────────────────────
 // Each block below is a defect that reached a downloaded practice set: the file
@@ -420,50 +395,3 @@ describe('buildPracticeSetDocx — the structural guard', () => {
   }, 30000)
 })
 
-// prettifyMath only fires when conversion FAILS, which on the live bank is ~77
-// macro occurrences (all data-entry typos). The cost of a thin map is that the
-// surrounding, perfectly good maths gets mangled with it — so the map covers
-// what the bank actually uses.
-describe('prettifyMath — set notation and accents survive the fallback', () => {
-  it('maps set operators instead of dropping them', () => {
-    expect(prettifyMath(String.raw`A \cup B`)).toBe('A ∪ B')
-    expect(prettifyMath(String.raw`A \cap B`)).toBe('A ∩ B')
-    expect(prettifyMath(String.raw`x \in A`)).toBe('x ∈ A')
-    expect(prettifyMath(String.raw`x \notin A`)).toBe('x ∉ A')
-    expect(prettifyMath(String.raw`A \subseteq B`)).toBe('A ⊆ B')
-    expect(prettifyMath(String.raw`A \setminus B`)).toBe('A ∖ B')
-  })
-
-  // \cap\bar used to become "∩bar": a plain \b word boundary breaks when the
-  // next character is a letter, so the macro must be matched as a whole
-  // control word instead.
-  it('matches a whole control word, not a prefix', () => {
-    expect(prettifyMath(String.raw`\cup`)).toBe('∪')
-    expect(prettifyMath(String.raw`A \cap \bar{B}`)).not.toMatch(/bar|cap/)
-    // \in must not fire inside \infty
-    expect(prettifyMath(String.raw`x \to \infty`)).toBe('x → ∞')
-  })
-
-  it('keeps an overline as an overline', () => {
-    expect(prettifyMath(String.raw`\overline{AB}`)).toBe('A̅B̅')
-    expect(prettifyMath(String.raw`\bar{x}`)).toBe('x̅')
-  })
-
-  it('renders a complement superscript', () => {
-    expect(prettifyMath(String.raw`(A \cup B)^c`)).toBe('(A ∪ B)ᶜ')
-  })
-
-  it('maps the greek and relation macros the bank uses', () => {
-    expect(prettifyMath(String.raw`\alpha + \beta`)).toBe('α + β')
-    expect(prettifyMath(String.raw`\triangle ABC`)).toBe('△ ABC')
-    expect(prettifyMath(String.raw`x \geq y`)).toBe('x ≥ y')
-  })
-
-  it('keeps a function name as a word', () => {
-    expect(prettifyMath(String.raw`\sin x + \cos y`)).toBe('sin x + cos y')
-  })
-
-  it('renders degrees', () => {
-    expect(prettifyMath(String.raw`90^\circ`)).toBe('90°')
-  })
-})

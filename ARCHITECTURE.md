@@ -142,6 +142,8 @@ src/
     students/              → loadExistingStudents — dual-path (Supabase / dev fetch) baseline for the import flow
     examPdf.js             → jsPDF exam reports (WinAnsi-safe; question cards typeset via KaTeX + html2canvas)
     examCardHtml.js        → The PDF's question card, as HTML — built, typeset offscreen, captured
+    examReportDocx.js      → The class exam report as .docx (MCQ-only) — editable equations + solutions
+    docxMath.js            → Shared LaTeX → Word-equation pipeline for all three .docx exports
     mathHtml.js            → Question text → HTML with KaTeX; the string half of <Math>, shared with the PDF
   store/
     useStore.js            → Zustand store assembler

@@ -470,18 +470,49 @@ describe('Exams page — written exams offer Edit marks, not re-upload', () => {
     expect(screen.queryByRole('button', { name: /insights/i })).not.toBeInTheDocument()
   })
 
-  it('offers the class PDF on a written exam', () => {
+  // The downloads moved into an Export menu (EXAM_REPORT_DOCX.md D5). What each
+  // exam can be exported as is unchanged; only where you click is.
+  async function openExportMenu() {
+    await userEvent.click(screen.getByRole('button', { name: /export/i }))
+  }
+
+  it('offers the class PDF on a written exam', async () => {
     setExams([makeWrittenExam({ name: 'Sets' })])
     renderExams()
-    expect(screen.getByRole('button', { name: /pdf/i })).toBeInTheDocument()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /pdf/i })).toBeInTheDocument()
   })
 
   // The per-student report is entirely a per-question chapter breakdown; a
   // written paper would print a one-line page per student.
-  it('hides the per-student Reports PDF on a written exam', () => {
+  it('hides the per-student Reports PDF on a written exam', async () => {
     setExams([makeWrittenExam({ name: 'Sets' })])
     renderExams()
-    expect(screen.queryByRole('button', { name: /reports/i })).not.toBeInTheDocument()
+    await openExportMenu()
+    expect(screen.queryByRole('menuitem', { name: /reports/i })).not.toBeInTheDocument()
+  })
+
+  // D2: Word is MCQ-only. Pin the ABSENCE of the item, not a disabled one —
+  // that distinction is the whole ruling.
+  it('offers the Word export on an MCQ exam', async () => {
+    setExams([makeExam({ name: 'Mock 1' })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /word/i })).toBeInTheDocument()
+  })
+
+  it('does not offer Word on a written exam, disabled or otherwise', async () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.queryByRole('menuitem', { name: /word/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/word/i)).not.toBeInTheDocument()
+  })
+
+  it('offers no export menu at all before any results are in', () => {
+    setExams([makeWrittenExam({ name: 'Sets', students: [] })])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /export/i })).not.toBeInTheDocument()
   })
 
   it('hides Edit marks outside admin mode', () => {

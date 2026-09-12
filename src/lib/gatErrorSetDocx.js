@@ -21,13 +21,13 @@
 //    (gatTaxonomy.js) but no weightage table, so "marks at stake" — the axis the
 //    Maths set ranks on — does not exist here. Volume is the axis instead.
 //
-// prettifyMath is imported from practiceSetDocx rather than copied: it is a
-// pure exported function and the two papers should degrade identically when a
-// stem carries a malformed macro.
+// The maths pipeline comes from `src/lib/docxMath.js`. It used to be a verbatim
+// copy of practiceSetDocx's, which is how the single-pass marker-swap fix had to
+// be applied twice by hand; both papers now degrade identically by construction
+// rather than by diligence.
 
-import { parseRichSegments, parseTableBlocks } from './richText'
-import { repairOmml } from './ommlRepair'
-import { prettifyMath } from './practiceSetDocx'
+import { parseTableBlocks } from './richText'
+import { createMathRenderer, applyOmml } from './docxMath'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -35,19 +35,16 @@ const SIZE = 20                  // 10pt, in half-points
 const SMALL = 18                 // 9pt
 const TITLE_SIZE = 28            // 14pt
 const SUB_SIZE = 24              // 12pt
-const MARKER = 'OMML_'
 
-const MATH_PR_BLOCK =
-  '<m:mathPr>' +
-  '<m:mathFont m:val="Cambria Math"/><m:brkBin m:val="before"/><m:brkBinSub m:val="--"/>' +
-  '<m:smallFrac m:val="0"/><m:dispDef/><m:lMargin m:val="0"/><m:rMargin m:val="0"/>' +
-  '<m:defJc m:val="left"/><m:wrapIndent m:val="0"/><m:intLim m:val="subSup"/>' +
-  '<m:naryLim m:val="undOvr"/></m:mathPr>'
+
+
+// Local: used by stripAnswerPrefix below, which is unrelated to the maths
+// pipeline that moved to docxMath.js.
+const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const TAG_COLOR = { wrong: 'B00020', skipped: '8A6D00' }
 const LABELS = ['a', 'b', 'c', 'd']
 
-const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Solutions in the bank routinely open with "Answer: B." — the letter is
 // already printed on its own line, so strip the duplicate rather than say it
@@ -71,100 +68,27 @@ export async function buildGatErrorSetDocx({
     : () => {}
 
   await report(0, 'Loading the builder…')
-  const [
-    { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-      AlignmentType, BorderStyle, WidthType, PageOrientation },
-    JSZipMod, katexMod, mml2ommlMod,
-  ] = await Promise.all([
+  const [docxMod, JSZipMod] = await Promise.all([
     import('docx'),
     import('jszip'),
-    import('katex'),
-    import('mathml2omml'),
   ])
+  const {
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    AlignmentType, BorderStyle, WidthType, PageOrientation,
+  } = docxMod
   const JSZip = JSZipMod.default
   await report(P.deps, 'Loading the builder…')
 
-  // Resolve to the actual FUNCTION whatever the interop shape, and THROW if
-  // there isn't one. mathml2omml exports a named mml2omml and no default, so a
-  // plain `.default || mod` chain yields the namespace OBJECT — not callable,
-  // and every equation then degrades to stripped text with nothing thrown.
-  const pickFn = (mod, name) => {
-    const found = [mod?.[name], mod?.default?.[name], mod?.default, mod]
-      .find(c => typeof c === 'function')
-    if (!found) throw new Error(`gatErrorSetDocx: could not resolve ${name}() from its module`)
-    return found
-  }
-  const renderToString = pickFn(katexMod, 'renderToString')
-  const mml2omml = pickFn(mml2ommlMod, 'mml2omml')
+  // One renderer per document: the OMML it collects is positional, so
+  // ommlByIndex must be the renderer's own array, not a fresh one.
+  const { mathRuns, contentTable, TABLE_BORDERS, ommlByIndex } = await createMathRenderer(docxMod)
 
-  const ommlByIndex = []
-
-  const latexToOmml = (latex, displayMode = false) => {
-    try {
-      const html = renderToString(latex, { output: 'mathml', throwOnError: true, displayMode })
-      const math = String(html || '').match(/<math[\s\S]*?<\/math>/)
-      if (!math) return null
-      const omml = mml2omml(math[0])
-      if (!omml || typeof omml !== 'string' || !omml.includes('m:oMath')) return null
-      // repairOmml REFUSES markup Word would reject. That refusal is the point:
-      // malformed OMML makes Word decline to open the whole file, so one bad
-      // zone must degrade to text rather than cost the student the document.
-      return repairOmml(omml)
-    } catch { return null }
-  }
-
-  const mathRuns = (text, extra = {}) => {
-    const out = []
-    for (const seg of parseRichSegments(text)) {
-      const props = { bold: seg.bold || undefined, ...extra }
-      if (seg.type === 'text') {
-        seg.content.split('\n').forEach((line, i) => {
-          if (i > 0) out.push(new TextRun({ break: 1 }))
-          if (line) out.push(new TextRun({ text: line, ...props }))
-        })
-        continue
-      }
-      const omml = latexToOmml(seg.content, seg.type === 'block')
-      if (omml) {
-        ommlByIndex.push(omml)
-        // The marker run carries NO properties — the whole run is replaced by
-        // OMML after packing and the swap regex has to recognise its shape.
-        out.push(new TextRun({ text: `${MARKER}${ommlByIndex.length - 1}` }))
-        continue
-      }
-      out.push(new TextRun({ text: prettifyMath(seg.content), ...props }))
-    }
-    return out.length ? out : [new TextRun({ text: '', ...extra })]
-  }
-
-  const EDGE = { style: BorderStyle.SINGLE, size: 4, color: '999999' }
-  const TABLE_BORDERS = {
-    top: EDGE, bottom: EDGE, left: EDGE, right: EDGE,
-    insideHorizontal: EDGE, insideVertical: EDGE,
-  }
   const blank = () => new Paragraph({ children: [] })
   const cell = (text, header = false, width) => new TableCell({
     width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
     shading: header ? { fill: 'EEEEEE' } : undefined,
     children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: header, size: SIZE })] })],
   })
-
-  const contentTable = (block) => {
-    const colPct = Math.floor(100 / Math.max(1, block.headers.length))
-    const tcell = (content, header) => new TableCell({
-      width: { size: colPct, type: WidthType.PERCENTAGE },
-      shading: header ? { fill: 'EEEEEE' } : undefined,
-      children: [new Paragraph({ children: mathRuns(content) })],
-    })
-    return new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: TABLE_BORDERS,
-      rows: [
-        new TableRow({ tableHeader: true, children: block.headers.map(h => tcell(h, true)) }),
-        ...block.rows.map(row => new TableRow({ children: row.map(c => tcell(c, false)) })),
-      ],
-    })
-  }
 
   // Prose that may carry a GFM pipe-table, as paragraphs + real Word tables.
   const proseBlocks = (text, extra = {}) => {
@@ -371,27 +295,7 @@ export async function buildGatErrorSetDocx({
   const blob = await Packer.toBlob(doc)
   const zip = await JSZip.loadAsync(blob)
   await report(P.equations, 'Placing equations…')
-  const docFile = zip.file('word/document.xml')
-  if (docFile && ommlByIndex.length) {
-    // ONE pass over the document, not one per equation — the per-equation loop
-    // is O(equations × document size) on a document that GROWS as OMML is
-    // spliced in, and was ~90% of the build on a large set. An unknown marker
-    // is left untouched rather than deleted.
-    const xml = (await docFile.async('text')).replace(
-      new RegExp(
-        `<w:r>(?:<w:rPr>[\\s\\S]*?</w:rPr>)?<w:t[^>]*>${escapeRegex(MARKER)}(\\d+)</w:t></w:r>`, 'g'),
-      (whole, i) => ommlByIndex[Number(i)] ?? whole)
-    zip.file('word/document.xml', xml)
-  }
-  const settings = zip.file('word/settings.xml')
-  if (settings) {
-    const s = await settings.async('text')
-    // Without <m:mathPr> Word gives every fraction about an inch of phantom
-    // left indent. It is not optional.
-    if (!s.includes('<m:mathPr')) {
-      zip.file('word/settings.xml', s.replace('</w:settings>', `${MATH_PR_BLOCK}</w:settings>`))
-    }
-  }
+  await applyOmml(zip, ommlByIndex)
   await report(P.zip, 'Finishing the file…')
   const out = await zip.generateAsync({
     type: 'blob',

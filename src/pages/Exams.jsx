@@ -16,6 +16,8 @@ import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
 import ExamAbsencePreviewModal from './Exams/ExamAbsencePreviewModal'
 import { downloadExamPdf }         from '../lib/examPdf'
 import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
+import ExportMenu from './Exams/ExportMenu'
+import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../lib/chunkError'
 
 export default function ExamsPage() {
   const exams = useStore(s => s.exams)
@@ -59,12 +61,72 @@ export default function ExamsPage() {
   const [integrityExamId, setIntegrityExamId]         = useState(null)
   const [pdfGenerating, setPdfGenerating]             = useState(null)
   const [reportsGenerating, setReportsGenerating]     = useState(null)
+  const [wordGenerating, setWordGenerating]           = useState(null)
+  const [wordSolutions, setWordSolutions]             = useState(true)
+  const [exportError, setExportError]                 = useState('')
   const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
   const [whatsappSending, setWhatsappSending]         = useState(false)
   const [whatsappResult, setWhatsappResult]           = useState(null)
   const [examAbsencePreviewExam, setExamAbsencePreviewExam] = useState(null)
   const [examAbsenceSending, setExamAbsenceSending]         = useState(false)
   const [examAbsenceResult, setExamAbsenceResult]           = useState(null)
+
+  // What this exam can actually be exported as. An export it cannot support is
+  // left OUT of the list rather than shown disabled (EXAM_REPORT_DOCX.md D5).
+  //
+  // Word is MCQ-only (D2): a written paper records a total and nothing else, so
+  // the document would carry nothing its PDF does not already carry well. Gated
+  // on `examFormat`, the same predicate Update Results / Update Tags / Integrity
+  // / Reports already use — not on `source`, which tags who entered the marks.
+  function buildExportItems(exam) {
+    if (!exam.students.length) return []
+    const mcq = examFormat(exam) === 'mcq'
+    const items = [{
+      key: 'pdf',
+      label: '📄 PDF',
+      hint: 'class report · fixed layout',
+      busy: pdfGenerating === exam.id,
+      onSelect: () => runExport(setPdfGenerating, exam.id, () => downloadExamPdf(exam)),
+    }]
+    if (mcq) {
+      items.push({
+        key: 'word',
+        label: '📝 Word',
+        hint: 'class report · editable equations',
+        busy: wordGenerating === exam.id,
+        onSelect: () => runExport(setWordGenerating, exam.id, async () => {
+          // Lazy: docx + jszip are large, and only a click should pay for them.
+          const { downloadExamReportDocx } = await import('../lib/examReportDocx')
+          await downloadExamReportDocx({ exam, includeSolutions: wordSolutions })
+        }),
+      })
+      items.push({
+        key: 'reports',
+        label: '📋 Student Reports',
+        hint: 'one per-question breakdown per student',
+        busy: reportsGenerating === exam.id,
+        onSelect: () => runExport(setReportsGenerating, exam.id,
+          () => downloadStudentReportsPdf(exam)),
+      })
+    }
+    return items
+  }
+
+  // The 50ms yield is what lets the busy label paint before the build seizes
+  // the main thread; the finally is what stops a throw leaving it spinning.
+  async function runExport(setBusy, id, run) {
+    setBusy(id)
+    setExportError('')
+    await new Promise(r => setTimeout(r, 50))
+    try {
+      await run()
+    } catch (e) {
+      console.error('[exams] export failed:', e)
+      setExportError(isStaleChunkError(e) ? STALE_CHUNK_MESSAGE : 'Could not build the file. Try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   function toggleInsights(id) {
     setExpandedExamId(prev => prev === id ? null : id)
@@ -291,6 +353,14 @@ export default function ExamsPage() {
         )}
       />
 
+      {/* A download that silently does nothing is indistinguishable from a slow
+          one, so a failed build says so rather than just resetting the label. */}
+      {exportError && (
+        <div role="alert" className="mb-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-[12px] text-danger">
+          {exportError}
+        </div>
+      )}
+
       {exams.length === 0 ? (
         <EmptyState icon="📝" title="No exams yet" sub="Upload your first results Excel to get started" />
       ) : (
@@ -406,52 +476,23 @@ export default function ExamsPage() {
                       </button>
                     )}
 
-                    {/* PDF download — the class report degrades to the
-                        question-free sections for a written paper. (The
-                        per-student Reports PDF below does not: it is entirely a
-                        per-question breakdown, so it stays MCQ-only.) */}
-                    {exam.students.length > 0 && (
-                      <button
-                        onClick={async () => {
-                          setPdfGenerating(exam.id)
-                          await new Promise(r => setTimeout(r, 50))
-                          // Awaited: the question cards are typeset offscreen
-                          // and captured one at a time, so generation now takes
-                          // seconds. Unawaited, the spinner cleared instantly
-                          // and the file arrived long after the button reset.
-                          try { await downloadExamPdf(exam) }
-                          finally { setPdfGenerating(null) }
-                        }}
-                        disabled={pdfGenerating === exam.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
-                                   font-semibold border transition-all flex-shrink-0
-                                   bg-surface-2 text-ink-2 border-border
-                                   hover:bg-green-50 hover:text-green-700 hover:border-green-300
-                                   disabled:opacity-50 disabled:cursor-wait"
-                      >
-                        {pdfGenerating === exam.id ? '⏳ Generating…' : '📄 PDF'}
-                      </button>
-                    )}
-
-                    {/* Student reports PDF */}
-                    {exam.students.length > 0 && exam.questions.length > 0 && (
-                      <button
-                        onClick={async () => {
-                          setReportsGenerating(exam.id)
-                          await new Promise(r => setTimeout(r, 50))
-                          await downloadStudentReportsPdf(exam)
-                          setReportsGenerating(null)
-                        }}
-                        disabled={reportsGenerating === exam.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
-                                   font-semibold border transition-all flex-shrink-0
-                                   bg-surface-2 text-ink-2 border-border
-                                   hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300
-                                   disabled:opacity-50 disabled:cursor-wait"
-                      >
-                        {reportsGenerating === exam.id ? '⏳ Generating…' : '📋 Reports'}
-                      </button>
-                    )}
+                    {/* Downloads. A menu rather than three buttons — the card
+                        was already carrying nine. An export the exam cannot
+                        support is ABSENT from the list, never disabled. */}
+                    <ExportMenu
+                      items={buildExportItems(exam)}
+                      footer={exam.students.length > 0 && exam.questions.length > 0 ? (
+                        <label className="flex items-center gap-2 px-3 py-2 text-[11px] text-ink-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={wordSolutions}
+                            onChange={e => setWordSolutions(e.target.checked)}
+                            className="accent-accent"
+                          />
+                          Include worked solutions in Word
+                        </label>
+                      ) : null}
+                    />
 
                     {mode === 'admin' && (
                       <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
