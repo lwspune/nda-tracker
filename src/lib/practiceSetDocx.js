@@ -13,11 +13,7 @@
 // live in this same lazy chunk.
 
 import { parseTableBlocks } from './richText'
-import { createMathRenderer, applyOmml, prettifyMath } from './docxMath'
-
-// Re-exported for `gatErrorSetDocx`, which still imports it from here. Drop this
-// line when that file moves onto docxMath too.
-export { prettifyMath }
+import { createMathRenderer, applyOmml } from './docxMath'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
