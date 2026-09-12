@@ -249,15 +249,28 @@ finishes. Rationale, blast radius and the traps behind each step: [`BATCH_RETIRE
    ```
 2. **Archive the batch** (Settings → Batches). It leaves every picker that assigns new work —
    uploads, quizzes, new timetables, the student row editor. Nothing is deleted. The archived row
-   now lists what is **still live** on the batch; work that list down.
+   then lists what is **still live** on the batch; work that list down.
+
+   Archiving a batch that has students who can still log in asks whether to **block them too**,
+   ticked by default — that is step 6, done here in one action instead of ~3 interactions per
+   student. Untick it only if they should keep portal access to their own results (plausible while
+   an attempt's results are pending). Students already `Block` / `Quit` / `Inactive` are left
+   alone.
 3. **Delete the batch's timetable** (Timetable page). Until this is done teachers still see the
    class on `/school-attendance` and it still appears on the Lecture-log filing board.
 4. **Run calendar sync** — releases the teachers' recurring Google Calendar events. There is no
    other trigger; skip it and the class sits on their calendar indefinitely.
 5. **Clear its exam schedules**, and untick it in any quiz's batch targeting.
-6. **Block the departing students** (Students page → Block). Login 403s on
-   `account_status ∈ {Block, Quit, Inactive}` and every WhatsApp flow is gated by
+6. **Block the departing students** — normally already done by the tick-box in step 2. Login
+   403s on `account_status ∈ {Block, Quit, Inactive}` and every WhatsApp flow is gated by
    `isBlockedStatus`. Reversible, and it keeps their history — unlike delete.
+
+   **You will not know at archive time who is rejoining.** Block the whole batch and unblock the
+   returners individually as they turn up (Students → the row's Unblock) — unblocking three people
+   later is trivial; blocking seventy by hand is what never gets done. **Unarchiving does NOT
+   unblock**, deliberately: it is rare, and silently restoring access to students blocked for
+   unrelated reasons would be worse than one explicit step. The batch row shows `(N blocked)` so
+   the count stays visible.
 7. **Verify.** The archived row should show no residue warning, and:
    ```sql
    -- membership intact (this is correct — do NOT clear it)

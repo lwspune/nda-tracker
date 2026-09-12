@@ -233,3 +233,46 @@ describe('setAccountStatus', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
+
+// ── bulkSetAccountStatus ─────────────────────────────────────────────────────
+// Blocking a retired batch one student at a time is ~3 interactions each; at 77
+// members that step of the retirement procedure simply would not get done.
+describe('bulkSetAccountStatus', () => {
+  it('sets the status on every listed student', async () => {
+    const { slice } = makeStore()
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-1', canonical_name: 'Aarav', account_status: 'Active' }),
+      makeStudent({ lws_id: 'LWS-2', canonical_name: 'Bina',  account_status: 'Active' }),
+    ])
+    await slice.bulkSetAccountStatus(['LWS-1', 'LWS-2'], 'Block')
+    const body = JSON.parse(fetch.mock.calls.find(c => c[1]?.method === 'POST')[1].body)
+    expect(body.students.map(s => s.account_status)).toEqual(['Block', 'Block'])
+  })
+
+  it('leaves students outside the list untouched', async () => {
+    const { slice } = makeStore()
+    mockFetch([
+      makeStudent({ lws_id: 'LWS-1', canonical_name: 'Aarav', account_status: 'Active' }),
+      makeStudent({ lws_id: 'LWS-2', canonical_name: 'Bina',  account_status: 'Active' }),
+    ])
+    await slice.bulkSetAccountStatus(['LWS-1'], 'Block')
+    const body = JSON.parse(fetch.mock.calls.find(c => c[1]?.method === 'POST')[1].body)
+    expect(body.students.find(s => s.lws_id === 'LWS-2').account_status).toBe('Active')
+  })
+
+  it('unblocks too — the action is not one-directional', async () => {
+    const { slice } = makeStore()
+    mockFetch([makeStudent({ lws_id: 'LWS-1', canonical_name: 'Aarav', account_status: 'Block' })])
+    await slice.bulkSetAccountStatus(['LWS-1'], 'Active')
+    const body = JSON.parse(fetch.mock.calls.find(c => c[1]?.method === 'POST')[1].body)
+    expect(body.students[0].account_status).toBe('Active')
+  })
+
+  it('is a no-op for an empty list or a missing status', async () => {
+    const { slice } = makeStore()
+    mockFetch([makeStudent({ lws_id: 'LWS-1' })])
+    await slice.bulkSetAccountStatus([], 'Block')
+    await slice.bulkSetAccountStatus(['LWS-1'], '')
+    expect(fetch.mock.calls.filter(c => c[1]?.method === 'POST')).toHaveLength(0)
+  })
+})

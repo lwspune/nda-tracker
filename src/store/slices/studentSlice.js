@@ -211,6 +211,35 @@ export const createStudentSlice = (set, get) => ({
     }
   },
 
+  // Set account_status on many students at once — the bulk counterpart of
+  // setAccountStatus, and what makes "block the departing batch" a single action
+  // instead of ~3 interactions per student (see BATCH_RETIREMENT.md / OPERATIONS.md).
+  // Not one-directional: the same call unblocks, which is how a student who
+  // rejoins after their old batch was retired is restored.
+  async bulkSetAccountStatus(lwsIds, status) {
+    if (!lwsIds?.length || !status) return
+
+    const session = await getSession()
+    if (session) {
+      try {
+        await supabase.from('students')
+          .update({ account_status: status, updated_at: new Date().toISOString() })
+          .in('lws_id', lwsIds)
+        await refreshStudents(get)
+      } catch (_) { /* no-op */ }
+    } else {
+      try {
+        const lwsSet = new Set(lwsIds)
+        const existing = await fetch('/api/students-db').then(r => r.json()).catch(() => null)
+        if (!existing?.students) return
+        const students = existing.students.map(s =>
+          lwsSet.has(s.lws_id) ? { ...s, account_status: status } : s
+        )
+        await persistStudentsDB(get, existing, students)
+      } catch (_) { /* no-op */ }
+    }
+  },
+
   async updateStudentParentMobiles(lwsId, name, parentMobiles) {
     const session = await getSession()
     if (session) {

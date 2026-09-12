@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { Card } from '../../components/ui'
+import { getBlockableMembers } from '../../lib/batchMembers'
+import { isBlockedStatus } from '../../lib/accountStatus'
 
 const REASON_LABELS = {
   name_required:   'Name is required.',
@@ -21,6 +23,8 @@ export default function BatchesTab() {
   const renameBatch           = useStore(s => s.renameBatch)
   const deleteBatch           = useStore(s => s.deleteBatch)
   const setBatchArchived      = useStore(s => s.setBatchArchived)
+  const bulkSetAccountStatus  = useStore(s => s.bulkSetAccountStatus)
+  const studentProfiles       = useStore(s => s.studentProfiles)
   const batchInUseBy          = useStore(s => s.batchInUseBy)
   const setSyllabusBatchBranch = useStore(s => s.setSyllabusBatchBranch)
 
@@ -28,6 +32,8 @@ export default function BatchesTab() {
   const [newBranch, setNewBranch] = useState(branches[0] ?? '')
   const [editing, setEditing] = useState(null)
   const [error, setError]     = useState('')
+  // { name, members: [{lwsId,name}], block: bool } while the archive confirm is open.
+  const [archiving, setArchiving] = useState(null)
 
   // Union of names from both stores so drift is visible to the admin.
   const allBatches = useMemo(() => {
@@ -79,6 +85,25 @@ export default function BatchesTab() {
     }
   }
 
+  // Archiving asks whether to block the batch's students in the same action —
+  // per-student blocking is ~3 interactions each, so at batch scale that step of
+  // the retirement procedure never gets done. Nothing to block means nothing to
+  // ask, so an empty batch archives straight away. Unarchive never asks and never
+  // unblocks: it is rare, and silently restoring access to students blocked for
+  // unrelated reasons would be worse than one explicit extra step.
+  function handleArchive(name) {
+    const members = getBlockableMembers(studentProfiles, name)
+    if (members.length === 0) { setBatchArchived(name, true); return }
+    setArchiving({ name, members, block: true })
+  }
+
+  function confirmArchive() {
+    const { name, members, block } = archiving
+    setBatchArchived(name, true)
+    if (block && members.length) bulkSetAccountStatus(members.map(m => m.lwsId), 'Block')
+    setArchiving(null)
+  }
+
   function handleSetBranch(name, branch) {
     setSyllabusBatchBranch(name, branch || null)
   }
@@ -88,7 +113,15 @@ export default function BatchesTab() {
     const ttCount      = timetables.filter(t => t.batchName === name).length
     const branch       = syllabusBatchBranches[name] ?? null
     const programCount = (batchProgramAssignments[name] ?? []).length
-    return { inSyllabus, ttCount, branch, programCount }
+    // Shown because unarchive deliberately does NOT unblock — the count is how
+    // that stays visible instead of relying on the operator's memory.
+    let blockedCount = 0
+    for (const [key, p] of Object.entries(studentProfiles ?? {})) {
+      if (!p || p.name !== key) continue
+      if (!(p.batches ?? []).includes(name)) continue
+      if (isBlockedStatus(p.accountStatus)) blockedCount++
+    }
+    return { inSyllabus, ttCount, branch, programCount, blockedCount }
   }
 
   // What is STILL live on an archived batch. An archived batch with a timetable is
@@ -127,6 +160,33 @@ export default function BatchesTab() {
             <button className="text-[11px] px-2 py-1 rounded bg-accent text-white" onClick={handleSave}>✓ Save</button>
             <button className="text-[11px] px-2 py-1 rounded border border-border text-ink-3" onClick={() => { setEditing(null); setError('') }}>✕ Cancel</button>
           </>
+        ) : archiving?.name === b ? (
+          <div data-testid="archive-confirm" className="flex-1 min-w-0">
+            <div className="text-[13px] font-medium mb-1">Archive {b}?</div>
+            <p className="text-[11px] text-ink-3 mb-2">
+              Retires the batch from uploads, quizzes and timetables. Nothing is deleted — all
+              history stays visible.
+            </p>
+            <label className="flex items-start gap-2 text-[12px] cursor-pointer mb-2">
+              <input
+                type="checkbox"
+                checked={archiving.block}
+                onChange={e => setArchiving({ ...archiving, block: e.target.checked })}
+                className="accent-current mt-0.5"
+              />
+              <span>
+                Also block portal access for the {archiving.members.length} active
+                student{archiving.members.length !== 1 ? 's' : ''} in this batch
+                <span className="block text-[11px] text-ink-3">
+                  Reversible per student from the Students page. Unarchiving does not undo it.
+                </span>
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <button className="text-[11px] px-3 py-1 rounded bg-accent text-white" onClick={confirmArchive}>Archive</button>
+              <button className="text-[11px] px-3 py-1 rounded border border-border text-ink-3" onClick={() => setArchiving(null)}>Cancel</button>
+            </div>
+          </div>
         ) : (
           <>
             <div className="flex-1 min-w-0">
@@ -147,6 +207,7 @@ export default function BatchesTab() {
                 {meta.programCount} program{meta.programCount !== 1 ? 's' : ''}
                 {' · '}
                 {usage.memberCount} student{usage.memberCount !== 1 ? 's' : ''}
+                {meta.blockedCount > 0 && ` (${meta.blockedCount} blocked)`}
               </div>
               {warnings.length > 0 && (
                 <div data-testid="batch-residue" className="text-[11px] text-amber-700 mt-0.5">⚠ {warnings.join(' · ')}</div>
@@ -169,7 +230,7 @@ export default function BatchesTab() {
             >Rename</button>
             <button
               className="text-[12px] text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-1 rounded hover:bg-surface-2"
-              onClick={() => setBatchArchived(b, !archived)}
+              onClick={() => archived ? setBatchArchived(b, false) : handleArchive(b)}
               aria-label={archived ? `Unarchive ${b}` : `Archive ${b}`}
               title={archived
                 ? 'Bring this batch back into the pickers'

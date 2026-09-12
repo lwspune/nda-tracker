@@ -327,3 +327,38 @@ Two judgement calls made in this spec, both cheap to reverse before implementati
   authoring surfaces.
 - **The Syllabus tab bar hides them behind a toggle** rather than dropping them, because the
   syllabus progress record has no other reader.
+
+---
+
+# Bulk block on archive (2026-09-12)
+
+Blocking was per-student (`setAccountStatus`, ~3 interactions each) with no multi-select, so
+step 6 of the procedure was impractical at batch scale — 77 students in
+`APJ_NDA_11th_(26-27)_A` — and a procedure with an impractical step gets abandoned.
+
+Archiving now offers to block the batch's students in the same action, ticked by default.
+
+**Why offered rather than automatic, and why the tick-box survives.** Two objections were
+considered and dropped as unsupported: *"it would block someone still active in another batch"* —
+all 307 students hold exactly one batch, so this is not a live risk; and *"you would untick the
+students who are rejoining"* — **you do not know at archive time who is rejoining**, which makes a
+review list theatre. The asymmetry decides the default: unblocking three returners later is
+trivial, blocking seventy by hand is what never happens. So the box is ticked by default and the
+list is not shown for review. It remains a box, not an automatic consequence, only for the case
+where a finished batch's students should keep access to their own results — plausible while an
+attempt's results are pending.
+
+**Unarchive does not unblock.** The alternative is recording each student's prior status so it can
+be restored, because 86 students are already blocked for unrelated reasons and blanket-unblocking
+would silently restore access to them. Unarchiving is rare, so one honest extra step beats
+invisible bookkeeping that is wrong when it breaks. The batch row carries `(N blocked)` so the
+state is visible rather than remembered.
+
+**Who gets blocked:** `getBlockableMembers` (`src/lib/batchMembers.js`) uses the shared
+`isBlockedStatus` block-set, **not** analytics' stricter `=== 'Active'`. `api/student-login` fails
+**open** on a blank status, so a legacy row that was never stamped `Active` can still sign in and
+must be included. Already `Block` / `Quit` / `Inactive` rows are skipped — blocking them gains
+nothing and would overwrite a more specific status with a vaguer one.
+
+`bulkSetAccountStatus(lwsIds, status)` (`studentSlice`) is not one-directional — the same action
+unblocks, which is how a returner is restored.

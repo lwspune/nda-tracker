@@ -18,6 +18,8 @@ const mockStore = {
   renameBatch: vi.fn(),
   deleteBatch: vi.fn(() => ({ ok: true })),
   setBatchArchived: vi.fn(() => ({ ok: true })),
+  bulkSetAccountStatus: vi.fn(),
+  studentProfiles: {},
   batchInUseBy: vi.fn(() => ({ inSyllabus: true, timetableCount: 0, examScheduleCount: 0, memberCount: 0 })),
   setSyllabusBatchBranch: vi.fn(),
 }
@@ -37,6 +39,7 @@ beforeEach(() => {
     batchProgramAssignments: {},
     timetables: [],
     batchInUseBy: vi.fn(() => ({ inSyllabus: true, timetableCount: 0, examScheduleCount: 0, memberCount: 0 })),
+    studentProfiles: {},
   })
 })
 
@@ -132,5 +135,85 @@ describe('BatchesTab — delete is blocked while students hold the batch', () =>
     expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/8 students/i))
     expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/archive/i))
     alertSpy.mockRestore()
+  })
+})
+
+// Archiving offers to block the batch's students in the same action. Doing it
+// per-student is ~3 interactions each, so at batch scale that step of the
+// retirement procedure would simply not get done. BATCH_RETIREMENT.md.
+describe('BatchesTab — archive offers to block the students', () => {
+  function withMembers(n, over = {}) {
+    const profiles = {}
+    for (let i = 0; i < n; i++) {
+      const name = 'Student ' + i
+      profiles[name] = { lwsId: 'LWS-' + i, name, batches: ['Alpha'], accountStatus: 'Active', nameVariants: [], ...over }
+    }
+    mockStore.studentProfiles = profiles
+  }
+
+  it('asks before archiving when the batch has students who can log in', () => {
+    withMembers(3)
+    render(<BatchesTab />)
+    fireEvent.click(within(activeSection()).getByRole('button', { name: /archive Alpha/i }))
+    expect(screen.getByTestId('archive-confirm')).toHaveTextContent(/3 active students/i)
+    expect(mockStore.setBatchArchived).not.toHaveBeenCalled()
+  })
+
+  it('blocks by default when confirmed', () => {
+    withMembers(2)
+    render(<BatchesTab />)
+    fireEvent.click(within(activeSection()).getByRole('button', { name: /archive Alpha/i }))
+    fireEvent.click(within(screen.getByTestId('archive-confirm')).getByRole('button', { name: /^archive$/i }))
+    expect(mockStore.setBatchArchived).toHaveBeenCalledWith('Alpha', true)
+    expect(mockStore.bulkSetAccountStatus).toHaveBeenCalledWith(['LWS-0', 'LWS-1'], 'Block')
+  })
+
+  it('archives without blocking when the box is unticked', () => {
+    withMembers(2)
+    render(<BatchesTab />)
+    fireEvent.click(within(activeSection()).getByRole('button', { name: /archive Alpha/i }))
+    fireEvent.click(screen.getByLabelText(/also block portal access/i))
+    fireEvent.click(within(screen.getByTestId('archive-confirm')).getByRole('button', { name: /^archive$/i }))
+    expect(mockStore.setBatchArchived).toHaveBeenCalledWith('Alpha', true)
+    expect(mockStore.bulkSetAccountStatus).not.toHaveBeenCalled()
+  })
+
+  it('cancels cleanly', () => {
+    withMembers(2)
+    render(<BatchesTab />)
+    fireEvent.click(within(activeSection()).getByRole('button', { name: /archive Alpha/i }))
+    fireEvent.click(within(screen.getByTestId('archive-confirm')).getByRole('button', { name: /cancel/i }))
+    expect(mockStore.setBatchArchived).not.toHaveBeenCalled()
+    expect(mockStore.bulkSetAccountStatus).not.toHaveBeenCalled()
+  })
+
+  // Nothing to decide, so nothing to ask.
+  it('archives immediately when nobody in the batch can log in', () => {
+    mockStore.studentProfiles = {}
+    render(<BatchesTab />)
+    fireEvent.click(within(activeSection()).getByRole('button', { name: /archive Alpha/i }))
+    expect(screen.queryByTestId('archive-confirm')).not.toBeInTheDocument()
+    expect(mockStore.setBatchArchived).toHaveBeenCalledWith('Alpha', true)
+  })
+
+  it('never asks on unarchive, and does not unblock', () => {
+    mockStore.studentProfiles = {
+      'Student 0': { lwsId: 'LWS-0', name: 'Student 0', batches: ['Retired'], accountStatus: 'Block', nameVariants: [] },
+    }
+    render(<BatchesTab />)
+    fireEvent.click(within(archivedSection()).getByRole('button', { name: /unarchive Retired/i }))
+    expect(mockStore.setBatchArchived).toHaveBeenCalledWith('Retired', false)
+    expect(mockStore.bulkSetAccountStatus).not.toHaveBeenCalled()
+  })
+
+  // Because unarchive does not unblock, the count has to stay visible.
+  it('shows how many of a batch are blocked', () => {
+    mockStore.studentProfiles = {
+      'A': { lwsId: 'LWS-0', name: 'A', batches: ['Alpha'], accountStatus: 'Block',  nameVariants: [] },
+      'B': { lwsId: 'LWS-1', name: 'B', batches: ['Alpha'], accountStatus: 'Active', nameVariants: [] },
+    }
+    mockStore.batchInUseBy = vi.fn(() => ({ inSyllabus: true, timetableCount: 0, examScheduleCount: 0, memberCount: 2 }))
+    render(<BatchesTab />)
+    expect(within(activeSection()).getByText(/1 blocked/i)).toBeInTheDocument()
   })
 })
