@@ -5,6 +5,8 @@ import { EmptyState, Spinner, Alert, CopyLinkBar } from '../../components/ui'
 import { buildCaptureUrl, HOSTEL_ATTENDANCE_PATH } from '../../lib/routing'
 import { buildDailyChain, resolveOnLeave, CHECKPOINT_ORDER, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
+import { buildOpenLeaveList, STALE_LEAVE_DAYS } from '../../lib/hostelLeave'
+import { STATUS_CYCLE, AWAY_STATUSES } from '../../lib/hostelStatus'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 import { buildBoarderRoster, HOSTEL_BRANCHES } from '../../lib/hostelRoster'
 import { downloadHostelLeaveReportPdf } from '../../lib/hostelLeaveReportPdf'
@@ -14,8 +16,10 @@ import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
 // scoped to branch='APJ'. Phase 1 — see FLOWS.md "Hostel & Mess".
 
-// Exception status cycle on tap: present → absent → sick → outpass → present.
-const STATUS_CYCLE = { undefined: 'absent', absent: 'sick', sick: 'outpass', outpass: undefined }
+// STATUS_META stays local: this board also renders `leave` and `late`, which
+// the daily chain DERIVES rather than captures, and it colours `present` green
+// where the warden's capture page greys it out. The tap cycle and the "away"
+// set — which are behavioural, not presentational — come from lib/hostelStatus.
 const STATUS_META = {
   present: { label: 'Present', cls: 'text-green-500' },
   absent:  { label: 'Absent',  cls: 'text-red-400 bg-red-400/10 border-red-400/30' },
@@ -24,14 +28,6 @@ const STATUS_META = {
   leave:   { label: 'Leave',   cls: 'text-purple-400' },
   late:    { label: 'Late',    cls: 'text-yellow-400' },
 }
-// For a roll reconciliation, "away" = physically not in the dorm.
-const AWAY_STATUSES = new Set(['absent', 'outpass'])
-// An open leave out this many days or more is flagged for review — the guard
-// against a persist-until-return leave silently masking a boarder forever.
-const STALE_LEAVE_DAYS = 3
-const DAY_MS = 86_400_000
-// A leave at/after this instant is treated as open-ended (the 2099 sentinel).
-const OPEN_LEAVE_MS = Date.parse(OPEN_LEAVE_TO_TS)
 
 function todayDmy() {
   const d = new Date()
@@ -363,26 +359,25 @@ export default function HostelTab() {
   }, [leaveRows, nameByLwsId])
 
   // Boarders currently on leave for `date`, longest-out first so stale rise to
-  // the top. Scoped to the roster (APJ boarders). `daysOut` counts whole days
-  // from the leave's start to the board day.
+  // the top. Scoped to the roster (APJ boarders).
+  //
+  // Derived by the SHARED buildOpenLeaveList, the same call the warden's capture
+  // page makes (2026-09-12). This board used to re-implement it inline with its
+  // own copy of STALE_LEAVE_DAYS and the 2099 sentinel — and both screens can
+  // open AND close a leave, so a threshold that drifted between them would make
+  // one silently stop flagging a boarder the other flags. That flag is the only
+  // guard against a persist-until-return leave excusing someone indefinitely.
+  //
+  // The lib returns `fromIso`; this board displays DD-MM-YYYY like the rest of
+  // the hostel subsystem, so the conversion happens here at the render boundary
+  // rather than forking the helper.
   const onLeaveList = useMemo(() => {
-    const dayStartMs = dayBoundsMs(date).startMs
-    return leaveRows
-      .filter(r => nameByLwsId.has(r.lws_id))
-      .map(r => {
-        const fromMs = new Date(r.from_ts).getTime()
-        const daysOut = Math.max(0, Math.floor((dayStartMs - fromMs) / DAY_MS))
-        return {
-          id: r.id,
-          lwsId: r.lws_id,
-          name: nameByLwsId.get(r.lws_id),
-          fromDmy: isoToDmy(r.from_ts.slice(0, 10)),
-          openEnded: r.to_ts == null || Date.parse(r.to_ts) >= OPEN_LEAVE_MS,
-          daysOut,
-          stale: daysOut >= STALE_LEAVE_DAYS,
-        }
-      })
-      .sort((a, b) => b.daysOut - a.daysOut || a.name.localeCompare(b.name))
+    const rows = buildOpenLeaveList({
+      rows: leaveRows,
+      nameByLwsId,
+      dayStartMs: dayBoundsMs(date).startMs,
+    })
+    return rows.map(l => ({ ...l, fromDmy: isoToDmy(l.fromIso) }))
   }, [leaveRows, nameByLwsId, date])
   const staleCount = onLeaveList.filter(l => l.stale).length
 

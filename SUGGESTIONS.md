@@ -156,29 +156,6 @@ and the 403 separately, before touching any of them.
 
 ---
 
-### 3. `lib/hostelLeave.js` claims to be shared and is not
-
-The module header reads *"shared by the admin Hostel board and the warden's own capture page."* Only
-the warden page imports it ([`HostelAttendance/index.jsx:7`](src/pages/HostelAttendance/index.jsx#L7)).
-The admin board hand-rolls the same derivation inline at
-[`HostelTab.jsx:368-387`](src/pages/Attendance/HostelTab.jsx#L368-L387), with its own
-`STALE_LEAVE_DAYS = 3` ([`:31`](src/pages/Attendance/HostelTab.jsx#L31)) and its own `OPEN_LEAVE_MS`
-([`:34`](src/pages/Attendance/HostelTab.jsx#L34)). `STATUS_CYCLE` / `AWAY_STATUSES` / `STATUS_META`
-are duplicated too ([`HostelTab:18-28`](src/pages/Attendance/HostelTab.jsx#L18-L28) vs
-[`HostelAttendance:27-35`](src/pages/HostelAttendance/index.jsx#L27-L35)), under a comment that
-reads "Mirrors HostelTab."
-
-**Why:** **both** surfaces can open and close leaves, and an unclosed open-ended leave excuses a
-boarder at every checkpoint indefinitely. A stale threshold that drifts between the two is precisely
-the failure the flag exists to catch. `buildOpenLeaveList` is tested; the admin copy is not.
-
-**How to apply:** the logic is currently identical apart from `fromDmy` vs `fromIso` — reconcile
-with `isoToDmy(l.fromIso)` at the render site. Move the status maps to a shared module next to
-`hostelRoster.js`. `HostelTab.test.jsx` and `HostelAttendancePage.test.jsx` both exist, so the swap
-is covered on both sides.
-
----
-
 ### 6. Mechanical sweep: helpers that exist 7–15 times with no variation
 
 - **`safeFilename`** (`[^A-Za-z0-9_-]+` -> `_`), **7 copies** —

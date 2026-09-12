@@ -5,6 +5,7 @@ import { hasHostelAccess, findTeacherByEmail } from '../../lib/teacherDay'
 import { buildBoarderRoster } from '../../lib/hostelRoster'
 import { resolveOnLeave, CHECKPOINT_LABEL } from '../../lib/analytics/chain'
 import { buildOpenLeaveList, STALE_LEAVE_DAYS } from '../../lib/hostelLeave'
+import { STATUS_CYCLE, AWAY_STATUSES } from '../../lib/hostelStatus'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 import ModalShell from '../Timetable/ModalShell'
@@ -23,16 +24,19 @@ import ModalShell from '../Timetable/ModalShell'
 // Settings → Teachers. Reusing role='teacher' rather than minting a new auth
 // role is deliberate — see lib/teacherDay.js hasHostelAccess.
 
-// Tap cycle: present → absent → sick → out-pass → present. Mirrors HostelTab.
-const STATUS_CYCLE = { undefined: 'absent', absent: 'sick', sick: 'outpass', outpass: undefined }
+// The tap cycle and the "away" set come from lib/hostelStatus — shared with the
+// admin board, because both screens write the same checkpoint_absences rows.
+//
+// STATUS_META stays local and is deliberately NOT the admin board's: this page
+// only ever captures the four states below, while the board additionally renders
+// `leave` and `late` (derived by the daily chain, never captured here) and
+// colours `present` green where this greys it out. Presentational, per screen.
 const STATUS_META = {
   present: { label: 'Present',  cls: 'text-ink-3 border-border' },
   absent:  { label: 'Absent',   cls: 'text-red-400 bg-red-400/10 border-red-400/30' },
   sick:    { label: 'Sick',     cls: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
   outpass: { label: 'Out-pass', cls: 'text-sky-400 bg-sky-400/10 border-sky-400/30' },
 }
-// "Away" for a roll headcount = physically not in the dorm.
-const AWAY_STATUSES = new Set(['absent', 'outpass'])
 
 function todayDmy() {
   const d = new Date()

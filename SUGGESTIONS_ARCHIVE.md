@@ -16,6 +16,42 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~`lib/hostelLeave.js` claims to be shared and is not~~ — **DONE 2026-09-12**
+
+Refactor-ledger item 3. The module's own header said it was *"shared by the admin Hostel board and
+the warden's own capture page"*, but only the warden page imported it. The admin board re-derived the
+identical open-leave list inline at `HostelTab.jsx:363-381`, with private copies of
+`STALE_LEAVE_DAYS` and the 2099 open-ended sentinel.
+
+**Why it mattered.** **Both** screens can open AND close a leave, and an open leave excuses a boarder
+at every one of the five daily checkpoints until someone closes it. The stale flag (open ≥ 3 days) is
+the only guard against that running forever. A threshold that drifted between the two screens would
+make one silently stop flagging a boarder the other flags — no error, no visible breakage. Latent,
+not live: the two implementations were identical apart from date formatting when this was done.
+
+**Shipped:** `HostelTab` now calls the shared `buildOpenLeaveList`, converting `fromIso` →
+`DD-MM-YYYY` at the render boundary rather than forking the helper. New `src/lib/hostelStatus.js`
+carries the tap cycle and the "away" set, which were also duplicated, under a comment that read
+*"Mirrors HostelTab."* The lib's header is now true.
+
+**`STATUS_META` was deliberately NOT merged** — same ruling as the exam-absence preview in item 5.
+The two screens render genuinely different sets: the admin board also shows `leave` and `late`, which
+the daily chain **derives** rather than captures, and colours `present` green where the capture page
+greys it out. Those are presentational differences owned by each screen; merging them would force one
+look on two different jobs. Each copy now says so.
+
+**A test caught a real gap while writing it:** `nextStatus(null)` fell through instead of advancing.
+`null` and `undefined` both mean "no exception stored", but a bare object lookup coerces them to the
+different keys `'null'` and `'undefined'`, so a null would have skipped the first step of the cycle.
+Normalised with `?? undefined`; the implementation was fixed rather than the test.
+
+**Verification note.** The Hostel board **cannot be rendered on localhost** — dev's
+`data/faculty-data.json` has no Active APJ residential students, so the tab shows "No APJ boarders"
+and the On Leave panel never mounts. Covered instead by the existing `HostelTab.test.jsx` on-leave
+cases plus a **module probe through the browser's own graph** (37 days out / stale for the real
+2026-08-06 outlier, 3 days = stale at the threshold, 0 days = not stale, off-roster row dropped,
+DD-MM-YYYY conversion correct). Added to `reference_browser_verify_portals`.
+
 ### ~~The blocked-contact gate: three UI copies + three unguarded endpoints~~ — **DONE 2026-09-12**
 
 Refactor-ledger items 5 and 5b, closed together because doing 5 alone would have produced tidier
