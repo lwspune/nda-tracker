@@ -18,6 +18,7 @@ export default function StudentsPage() {
   const setAccountStatus       = useStore(s => s.setAccountStatus)
   const branches               = useStore(s => s.branches)
   const syllabusBatches        = useStore(s => s.syllabusBatches)
+  const archivedBatches        = useStore(s => s.archivedBatches)
   const syllabusBatchBranches  = useStore(s => s.syllabusBatchBranches)
 
   const mode = useMode()
@@ -111,6 +112,7 @@ export default function StudentsPage() {
           isAdmin={isAdmin}
           centralBranches={branches}
           centralBatches={syllabusBatches}
+          archivedBatches={archivedBatches}
           batchBranchMap={syllabusBatchBranches}
         />
       )}

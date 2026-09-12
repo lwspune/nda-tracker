@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   getExamBatches, getExamAbsentees,
   getBatchMemberNames, getBranchMemberNames, getExamsForBranch,
+  getBatchOptions, getExamsForBatch,
 } from '../filters'
 
 describe('getExamBatches', () => {
@@ -257,5 +258,35 @@ describe('getExamsForBranch', () => {
     // an attendee WITH a profile of a different branch suppresses the exam.branch fallback
     const exams2 = [{ id: 'y', branch: 'APJ', students: [{ name: 'Namit' }] }]
     expect(getExamsForBranch(exams2, profiles, 'APJ')).toEqual([])
+  })
+})
+
+// ── Archiving must not reach analytics (BATCH_RETIREMENT.md) ─────────────────
+// `archivedBatches` is a presentational flag on the CONFIG list. These functions
+// derive from profile.batches[], never from syllabusBatches, so an archived batch
+// stays fully filterable on Dashboard / Exams / Item Stats. That is the whole point
+// of archiving instead of deleting: the cohort's history remains reachable.
+describe('analytics batch selectors ignore archiving', () => {
+  const profiles = {
+    'Aarav Sharma': { name: 'Aarav Sharma', batches: ['LWS_NDA_6M_(Sep26)'], nameVariants: [] },
+    'Bina Patil':   { name: 'Bina Patil',   batches: ['LWS_NDA_2Y_(26-28)_A'], nameVariants: [] },
+  }
+  const exams = [
+    { batch: 'LWS_NDA_6M_(Sep26)',   students: [{ name: 'Aarav Sharma' }] },
+    { batch: 'LWS_NDA_2Y_(26-28)_A', students: [{ name: 'Bina Patil' }] },
+  ]
+
+  it('still offers a retired batch as an analytics option', () => {
+    expect(getBatchOptions(exams, profiles)).toEqual([
+      'LWS_NDA_2Y_(26-28)_A', 'LWS_NDA_6M_(Sep26)',
+    ])
+  })
+
+  it('still resolves the retired batch to its exams', () => {
+    expect(getExamsForBatch(exams, profiles, 'LWS_NDA_6M_(Sep26)')).toHaveLength(1)
+  })
+
+  it('still resolves the retired batch to its current members', () => {
+    expect([...getBatchMemberNames(profiles, 'LWS_NDA_6M_(Sep26)')]).toEqual(['Aarav Sharma'])
   })
 })

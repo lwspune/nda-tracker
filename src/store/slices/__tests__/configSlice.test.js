@@ -21,6 +21,8 @@ function makeStore(initial = {}) {
     timetables: [],
     examSchedules: [],
     syllabusBatches: [],
+    archivedBatches: [],
+    studentProfiles: {},
     syllabusBatchBranches: {},
     batchProgramAssignments: {},
     batchSyllabusProgress: {},
@@ -319,6 +321,15 @@ describe('addBatch', () => {
     expect(slice.addBatch('A,B', 'APJ').reason).toBe('comma_in_name')
     expect(slice.addBatch(' ,X', 'APJ').reason).toBe('comma_in_name')
   })
+
+  it('a name re-used after archive + delete starts unarchived', () => {
+    const { get, slice } = makeStore({ branches: ['APJ'] })
+    slice.addBatch('X', 'APJ')
+    slice.setBatchArchived('X', true)
+    slice.deleteBatch('X')
+    expect(slice.addBatch('X', 'APJ').ok).toBe(true)
+    expect(get().archivedBatches).toEqual([])
+  })
 })
 
 describe('renameBatch', () => {
@@ -389,6 +400,32 @@ describe('renameBatch', () => {
     slice.renameBatch('A', 'B')   // both already in syllabusBatches → rename is rejected
     expect(mockCascade).not.toHaveBeenCalled()
   })
+
+  // A rename that dropped the flag would silently un-archive the batch, putting a
+  // retired cohort back into every authoring picker with no visible cause.
+  it('carries the archived flag to the new name', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['OldName'], archivedBatches: ['OldName'] })
+    slice.renameBatch('OldName', 'NewName')
+    expect(get().archivedBatches).toEqual(['NewName'])
+  })
+
+  it('leaves other batches archived state untouched on rename', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['OldName', 'Other'],
+      archivedBatches: ['Other'],
+    })
+    slice.renameBatch('OldName', 'NewName')
+    expect(get().archivedBatches).toEqual(['Other'])
+  })
+
+  it('does NOT carry the flag when the rename is rejected', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['A', 'B'],
+      archivedBatches: ['A'],
+    })
+    slice.renameBatch('A', 'B')   // rejected — B already exists
+    expect(get().archivedBatches).toEqual(['A'])
+  })
 })
 
 describe('batchInUseBy', () => {
@@ -397,7 +434,32 @@ describe('batchInUseBy', () => {
     slice.addSyllabusBatch('X')
     slice.addTimetable('APJ', 'X')
     slice.addExamSchedule({ date: '2026-06-01', startTime: '9:00 AM', endTime: '11:00 AM', subject: 'Maths', chapter: 'Sets', branch: 'APJ', batchName: 'X', teacherId: null })
-    expect(slice.batchInUseBy('X')).toEqual({ inSyllabus: true, timetableCount: 1, examScheduleCount: 1 })
+    expect(slice.batchInUseBy('X')).toEqual({ inSyllabus: true, timetableCount: 1, examScheduleCount: 1, memberCount: 0 })
+  })
+
+  it('counts students currently holding the batch', () => {
+    const { slice } = makeStore({
+      syllabusBatches: ['X'],
+      studentProfiles: {
+        'Aarav Sharma': { name: 'Aarav Sharma', batches: ['X'], nameVariants: [] },
+        'Bina Patil':   { name: 'Bina Patil',   batches: ['X', 'Y'], nameVariants: [] },
+        'Chetan K':     { name: 'Chetan K',     batches: ['Y'], nameVariants: [] },
+      },
+    })
+    expect(slice.batchInUseBy('X').memberCount).toBe(2)
+  })
+
+  // studentProfiles is indexed by canonical name AND every name variant, so a
+  // variant entry would double-count its student (same guard as getBatchMemberNames).
+  it('does not double-count a student reached through a name variant', () => {
+    const { slice } = makeStore({
+      syllabusBatches: ['X'],
+      studentProfiles: {
+        'Aarav Sharma': { name: 'Aarav Sharma', batches: ['X'], nameVariants: ['A Sharma'] },
+        'A Sharma':     { name: 'Aarav Sharma', batches: ['X'], nameVariants: ['A Sharma'] },
+      },
+    })
+    expect(slice.batchInUseBy('X').memberCount).toBe(1)
   })
 })
 
@@ -427,5 +489,125 @@ describe('deleteBatch', () => {
     const result = slice.deleteBatch('SyllabusOnly')
     expect(result.ok).toBe(true)
     expect(get().syllabusBatches).toEqual([])
+  })
+
+  // Deleting a batch students still hold orphans every student_batches row: the name
+  // leaves syllabusBatches (so Settings, which lists syllabus ∪ timetables, can no
+  // longer see it) while the membership rows survive and keep it in every analytics
+  // dropdown forever — unreachable and unfixable. Archive instead.
+  it('blocks deletion when students still hold the batch', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['X'],
+      studentProfiles: {
+        'Aarav Sharma': { name: 'Aarav Sharma', batches: ['X'], nameVariants: [] },
+      },
+    })
+    const result = slice.deleteBatch('X')
+    expect(result.ok).toBe(false)
+    expect(result.usage.memberCount).toBe(1)
+    expect(get().syllabusBatches).toEqual(['X'])
+  })
+
+  it('does NOT prune the archived entry when blocked by members', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['X'],
+      archivedBatches: ['X'],
+      studentProfiles: { 'Aarav Sharma': { name: 'Aarav Sharma', batches: ['X'], nameVariants: [] } },
+    })
+    expect(slice.deleteBatch('X').ok).toBe(false)
+    expect(get().archivedBatches).toEqual(['X'])
+  })
+
+  it('deletes when no student holds the batch', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['X'],
+      studentProfiles: { 'Aarav Sharma': { name: 'Aarav Sharma', batches: ['Other'], nameVariants: [] } },
+    })
+    expect(slice.deleteBatch('X').ok).toBe(true)
+    expect(get().syllabusBatches).toEqual([])
+  })
+
+  // A stale archivedBatches entry would shadow a future batch of the same name:
+  // it would be created unarchived but read as archived by every picker.
+  it('prunes the archived entry when the batch is deleted', () => {
+    const { get, slice } = makeStore({
+      syllabusBatches: ['X'],
+      archivedBatches: ['X', 'Other'],
+    })
+    expect(slice.deleteBatch('X').ok).toBe(true)
+    expect(get().archivedBatches).toEqual(['Other'])
+  })
+
+  it('does NOT prune the archived entry when deletion is blocked', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'], archivedBatches: ['X'] })
+    slice.addTimetable('APJ', 'X')
+    expect(slice.deleteBatch('X').ok).toBe(false)
+    expect(get().archivedBatches).toEqual(['X'])
+  })
+})
+
+// ── Archived batches ─────────────────────────────────────────────────────────
+// A purely presentational flag: it hides a batch from the pickers that assign NEW
+// work, and is read by nothing that computes a number or validates a value.
+describe('setBatchArchived', () => {
+  it('archives a batch that exists in syllabusBatches', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'] })
+    expect(slice.setBatchArchived('X', true)).toEqual({ ok: true })
+    expect(get().archivedBatches).toEqual(['X'])
+  })
+
+  it('archives a batch that exists only in timetables', () => {
+    const { get, slice } = makeStore()
+    slice.addTimetable('APJ', 'TimetableOnly')
+    expect(slice.setBatchArchived('TimetableOnly', true).ok).toBe(true)
+    expect(get().archivedBatches).toEqual(['TimetableOnly'])
+  })
+
+  it('unarchives', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'], archivedBatches: ['X'] })
+    expect(slice.setBatchArchived('X', false)).toEqual({ ok: true })
+    expect(get().archivedBatches).toEqual([])
+  })
+
+  it('is idempotent — re-archiving does not duplicate the entry', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'] })
+    slice.setBatchArchived('X', true)
+    slice.setBatchArchived('X', true)
+    expect(get().archivedBatches).toEqual(['X'])
+  })
+
+  it('unarchiving a batch that is not archived is a no-op', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'], archivedBatches: ['Y'] })
+    expect(slice.setBatchArchived('X', false).ok).toBe(true)
+    expect(get().archivedBatches).toEqual(['Y'])
+  })
+
+  it('rejects an unknown batch name', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'] })
+    expect(slice.setBatchArchived('Nope', true)).toEqual({ ok: false, reason: 'unknown_batch' })
+    expect(get().archivedBatches).toEqual([])
+  })
+
+  it('rejects an empty name', () => {
+    const { slice } = makeStore({ syllabusBatches: ['X'] })
+    expect(slice.setBatchArchived('  ', true).reason).toBe('unknown_batch')
+  })
+
+  it('trims the name before matching', () => {
+    const { get, slice } = makeStore({ syllabusBatches: ['X'] })
+    expect(slice.setBatchArchived('  X  ', true).ok).toBe(true)
+    expect(get().archivedBatches).toEqual(['X'])
+  })
+
+  it('persists the change', () => {
+    const { slice, saves } = makeStore({ syllabusBatches: ['X'] })
+    slice.setBatchArchived('X', true)
+    expect(saves.length).toBeGreaterThan(0)
+  })
+
+  it('does not persist a rejected call', () => {
+    const { slice, saves } = makeStore({ syllabusBatches: ['X'] })
+    slice.setBatchArchived('Nope', true)
+    expect(saves).toHaveLength(0)
   })
 })

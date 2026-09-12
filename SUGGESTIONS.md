@@ -1326,3 +1326,24 @@ Two exports now have **zero app consumers** (tests only):
 **Why kept:** both are pure, cheap, tested, and the root-cause idea still ships to students through `focusAreas`. Removing them is a doc-touching change (a GUARDRAILS bullet) for no runtime gain.
 
 **How to apply** (only if the call is that neither widget is coming back): delete the two exports, their test blocks, the `GUARDRAILS.md` priority-formula bullet, and the moot 2026-07-14 alignment suggestion above. Otherwise leave as is — this entry is the record that it's intentional, not drift.
+
+---
+
+## ~~2026-09-12 — No way to retire a batch~~ — **DONE 2026-09-12** (all three tiers)
+
+`BATCH_RETIREMENT.md` (spec, nothing built). A batch's lifecycle is create → rename → hard
+delete; `deleteBatch` is a cleanup for a batch created in error, and using it to retire a
+finished cohort deletes teaching history and orphans `student_batches`. The Sept-2026 attempt
+batches need this now and `LWS_NDA_2Y_(25-27)_A/B` (67 students) hits it in 2027.
+
+The spec covers a **Tier 1 zero-code runbook** (usable today, order matters — freeze absence
+times before touching the timetable, and run calendar sync after), **Tier 2 `archivedBatches[]`**
+(the real fix: a visibility flag, ~10 call sites, half a day), and **Tier 3** (tighten
+`deleteBatch` to refuse while `student_batches` rows exist).
+
+**Shipped:** Tier 2 (`archivedBatches[]` + `src/lib/batchVisibility.js` + Settings UI), Tier 3
+(`deleteBatch` refuses while `memberCount > 0`), Tier 1 (procedure in `OPERATIONS.md` →
+*Retiring a finished batch*). The three "Record"-class sites — `isAligned` and the three
+`syllabusBatches.filter(...).join(', ')` join-order expressions — keep reading the *unfiltered*
+list, each pinned by a named regression test. **Still to do: actually retire the Sep26 batches** —
+the procedure has not been run against production.

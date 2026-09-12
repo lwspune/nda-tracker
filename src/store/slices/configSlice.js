@@ -155,28 +155,97 @@ export const createConfigSlice = (set, get) => ({
     get().renameSyllabusBatch(oldTrim, newTrim)
     get().renameTimetableBatch(oldTrim, newTrim)
 
+    // Carry the archived flag across. Dropping it here would silently un-archive a
+    // retired batch, putting it back into every authoring picker with no visible cause.
+    set(s => (s.archivedBatches ?? []).includes(oldTrim)
+      ? { archivedBatches: s.archivedBatches.map(b => b === oldTrim ? newTrim : b) }
+      : s
+    )
+
     cascadeBatchRenameToSupabase(supabase, oldTrim, newTrim)
       .catch(e => console.error('[configSlice] cascadeBatchRenameToSupabase failed:', e))
   },
 
   batchInUseBy(name) {
     const s = get()
+    // Students currently holding the batch. Read from the in-memory profiles, not
+    // Supabase: the same source `StudentsTable.isAligned` uses, so the two can't
+    // disagree, and it works on the dev disk path where there is no Supabase at all.
+    // `p.name === key` skips variant-keyed entries — studentProfiles is indexed by
+    // canonical name AND every name variant, so a variant would double-count its
+    // student (same guard as `getBatchMemberNames`).
+    let memberCount = 0
+    for (const [key, p] of Object.entries(s.studentProfiles ?? {})) {
+      if (!p || p.name !== key) continue
+      if ((p.batches ?? []).includes(name)) memberCount++
+    }
     return {
       inSyllabus:         s.syllabusBatches.includes(name),
       timetableCount:     s.timetables.filter(t => t.batchName === name).length,
       examScheduleCount:  s.examSchedules.filter(e => e.batchName === name).length,
+      memberCount,
     }
   },
 
-  // Deletes the batch from the syllabus side only when no timetable / exam
-  // schedule references it. Deleting a batch with an active timetable would
-  // destroy grid + slot data; the user has to delete those first.
+  // ── Archive / unarchive ─────────────────────────────────────
+  // Retires a batch from active teaching WITHOUT deleting anything. Reversible,
+  // and deliberately shaped like setAccountStatus (one action, both directions)
+  // rather than an irreversible verb.
+  //
+  // `archivedBatches` is PRESENTATIONAL ONLY — it hides the batch from pickers that
+  // assign new work. It must never be read by anything that computes a number,
+  // validates a value, or determines a stored string's content. In particular the
+  // exam/quiz batch pickers must keep building their comma-joined tag from the FULL
+  // syllabusBatches order, or re-editing an exam tagged with an archived batch would
+  // silently drop that tag. See BATCH_RETIREMENT.md §2.
+  //
+  // Returns { ok: true } | { ok: false, reason: 'unknown_batch' }.
+  setBatchArchived(name, archived) {
+    const trimmed = (name ?? '').trim()
+    if (!trimmed) return { ok: false, reason: 'unknown_batch' }
+    const s = get()
+    const known =
+      s.syllabusBatches.includes(trimmed) ||
+      s.timetables.some(t => t.batchName === trimmed)
+    if (!known) return { ok: false, reason: 'unknown_batch' }
+
+    const current = s.archivedBatches ?? []
+    const isArchived = current.includes(trimmed)
+    if (archived === isArchived) return { ok: true }   // already in the requested state
+
+    set(st => ({
+      archivedBatches: archived
+        ? [...(st.archivedBatches ?? []), trimmed]
+        : (st.archivedBatches ?? []).filter(b => b !== trimmed),
+    }))
+    get()._save()
+    return { ok: true }
+  },
+
+  // Deletes the batch from the syllabus side only when nothing still references it.
+  // Deleting a batch with an active timetable would destroy grid + slot data.
+  //
+  // The `memberCount` guard exists because delete is NOT how a finished batch is
+  // retired — archiving is. This action never touches Supabase, so deleting a batch
+  // students still hold leaves every `student_batches` row orphaned: the name leaves
+  // `syllabusBatches`, Settings (which lists syllabus ∪ timetables) can no longer see
+  // it, and it goes on appearing in every analytics dropdown forever with no way to
+  // reach it. Delete stays correct only for a batch created in error.
   deleteBatch(name) {
     const usage = get().batchInUseBy(name)
-    if (usage.timetableCount > 0 || usage.examScheduleCount > 0) {
+    if (usage.timetableCount > 0 || usage.examScheduleCount > 0 || usage.memberCount > 0) {
       return { ok: false, usage }
     }
     if (usage.inSyllabus) get().deleteSyllabusBatch(name)
+    // Prune the archived entry too. A stale one would shadow a future batch of the
+    // same name — created unarchived, but read as archived by every picker.
+    let pruned = false
+    set(s => {
+      if (!(s.archivedBatches ?? []).includes(name)) return s
+      pruned = true
+      return { archivedBatches: s.archivedBatches.filter(b => b !== name) }
+    })
+    if (pruned) get()._save()
     return { ok: true, usage }
   },
 })
