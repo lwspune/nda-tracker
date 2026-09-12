@@ -121,12 +121,47 @@ POST /api/quiz-import     Authorization: Bearer <QUIZ_IMPORT_SECRET>
 - **Deliberately NOT sent:** batch, date, marking scheme. Those are tracker-side facts the vault
   does not know. The paper lands as a **draft exam** faculty complete by hand — the same model the
   quiz push already uses, and the reason nothing goes live through this endpoint.
-- **`paperId` is the idempotency key.** Re-pushing an edited paper UPDATES that exam rather than
-  duplicating it (the quiz push already works this way via a stable id).
+- **`(paperId, sittingNo)` is the idempotency key** — NOT `paperId` alone, which was the original
+  spec and is superseded. Re-pushing an edited paper UPDATES that sitting's exam rather than
+  duplicating it; a second CONDUCT is a new sitting and therefore a new exam.
+- **`sittingNo` is absent or 1 for the first conduct, and SITTING 1 KEEPS THE UNSUFFIXED ID**
+  (`exam_vault_<paperId>`); sitting N>1 is `exam_vault_<paperId>_s<N>`. Nine drafts were live on the
+  old scheme when this landed — suffixing them would have orphaned every one.
 - **A re-push MUST NOT rewrite an exam that already has results.** Refuse it (`409`) with the exam
   named. Students sat those questions; silently swapping them rewrites history and invalidates every
   per-question analytic already computed. Same guard as the quiz delete, which refuses to remove a
-  published quiz because attempts may exist.
+  published quiz because attempts may exist. The refusal now carries **`code: 'has_results'`** so the
+  vault can offer a new sitting instead of presenting a dead end.
+
+### Why sittings exist — one paper is regularly conducted more than once
+
+Batch A on Monday, batch B on Thursday. Each conduct owns its own date, batch and result set, and
+none of those can be shared, so each needs its own exam. Under the original `paperId` key the second
+conduct was unreachable: it upserted the first exam and, once that had results, was refused outright.
+
+**The vault's storage already assumed the opposite.** `question_item_stats` is grained per
+(question, source, `source_ref` = *this* exam id) precisely so two sittings stay separable, and
+`cohort_label` is comma-separated because one sitting often runs for several batches at once. Only
+the push key disagreed.
+
+**Pooling two conducts into one exam is not an acceptable workaround.** It collapses them into a
+single statistics row that can never be separated again — and that has already mattered: on one
+integration question the two batches read *0 correct of 10* against *2 of 20 with no mismatches*,
+which is what revealed one sitting had been graded against the wrong key. Pooled it would have read
+as one merely difficult question.
+
+**The vault must distinguish sittings in the TITLE, because nothing here can.** `ReuploadResultsModal`
+edits date, marking, subject, batch and branch — **not `name`** — and every push overwrites `name`
+from the vault. Two sittings would otherwise be two rows with the same name, the same (push-date)
+date and both `batch` null, indistinguishable at exactly the moment faculty must pick one to file
+results into. The vault sends either a teacher-typed label (`NDA Mock 7 — Batch B`) or the fallback
+`NDA Mock 7 (sitting 2)`.
+
+**The vault asks whenever a sitting EXISTS, not when one has results** — and that is forced rather
+than chosen. This app cannot know a conduct happened until the Evalbee sheet arrives days later:
+`date` defaults to the push date and `batch` is only set at results upload. Results are therefore
+the sole real signal and they LAG the conduct, so keying on them would leave a window in which a
+push silently overwrites an exam students had already sat.
 - **Deleting a paper in the vault must not delete a tracker exam that has results** — mirror the
   quiz-delete status filter (a no-op rather than a destructive cascade).
 - Q-number parity is already guaranteed: `buildTagRows` and the docx builder walk the same
