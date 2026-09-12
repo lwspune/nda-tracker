@@ -49,6 +49,55 @@ already exists to show the merge, so the panel slots in above it.
 
 ---
 
+### Attach Evalbee results to the nine PYQ Vault drafts sitting in production
+
+The nine papers pushed from PYQ Vault on 2026-09-11 (`exam_vault_*`) are all still
+**dated 2026-09-12, marked `+4/-1`, with `batch: null` and zero results.** Their real
+conduct dates span February to August — `NDA Geography — Cloud Test 1` was sat on
+**2026-02-05**, seven months from its stored date — and three carry the true date in
+their own title (`(30 Q, 24-7-26)`, `(20 Q, 6-6-26)`, `(30 Q, 31-7-26)`).
+
+**Why:** this is operational, not code — the tooling to fix it shipped 2026-09-12, but
+nothing backfills. Until each is completed the drafts sort to the top of every
+date-ordered view under wrong dates, show a marking scheme that is almost certainly
+wrong (`+4/-1` occurred in **zero** of 210 real exports), and — because `batch` is null
+— can never flag an absentee, since `getExamAbsentees` returns `[]` without one.
+
+**How to apply:** for each draft, open **📊 Update Results** and attach its original
+Evalbee `.xlsx`. Date and marking prefill from the file, batch/branch/subject are
+editable in the same block. Matching sheets exist in `~/Downloads` for at least
+`Cloud Test 1_2026-02-05.xlsx`, `Chemistry-Basic Concept l_2026-07-24.xlsx`,
+`Chem - Basic concept ll_2026-07-25.xlsx` and `Atmosphere Test P1_2026-06-11.xlsx`.
+A draft with no sheet (never conducted) is better **deleted** than left mis-dated.
+Note `NDA GAT — Atmosphere & Parts of Speech P1` was pushed as `subject: 'English'`
+though it spans Geography and English — fix that in the same pass.
+
+---
+
+### Stop the vault pushing a marking scheme it cannot know
+
+`api/quiz-import.js` `handlePaperPush` writes `marking: {correct: 4, wrong: -1}` for a
+new draft because `exams.marking` needs a value. Measured over **210 real Evalbee
+exports, `+4/-1` never once occurred** — the real schemes are `+4/0`, `+4/-1.33`,
+`+4/-0.83`, `+2.5/-0.83`, `+2/0`, `+1/0`, `+1/-0.33`. So the placeholder is not a
+neutral default; it is a wrong answer that renders on the exam card as fact.
+
+**Why:** the same reasoning the push already applies to `date` — the vault does not
+know it, so it should not assert it. A draft that has never had results attached still
+displays a confidently wrong scheme, and `examMaxMarks` uses `marking.correct` as the
+%-of-max denominator, so anything reading the draft before completion is wrong too.
+
+**How to apply:** options, in rough order of preference — (1) make `exams.marking`
+nullable and have the card render "marking not set" for a draft, which is honest and
+matches how `batch: null` already reads; (2) keep the column but have the push write
+the scheme only when the vault actually knows it (a paper built with a marking scheme
+attached), else leave the existing value; (3) leave as-is and rely on the re-upload to
+correct it — acceptable only if drafts are always completed promptly, which the nine
+above show is not the case. Whichever is chosen, the vault side should stop sending a
+default it has no basis for.
+
+---
+
 ### Extract the batch-chip picker — it is now a 4th copy
 
 `Step2Review`, `OfflineExamModal`, `QuizEditor` and now `ReuploadResultsModal` each hand-roll the
@@ -434,6 +483,8 @@ The Exam Integrity panel (shipped 2026-06-20) can only analyze the **8 exams** u
 **Why:** the detector is built, tested, and live, but its coverage is a thin recent slice. The full back-catalogue of mocks (the exams most worth auditing for patterns) is invisible to it. The fix is pure data entry, not code.
 
 **How to apply:** re-upload each older exam's original **Evalbee results XLS** (it still carries the `Q N Options` column) via Update Results — `parseExcelFull` repopulates `choices` on save, no migration needed. Prioritise the large full-syllabus mocks. Carry-forward: this is the same backfill the [re-grade entry](#build-the-re-grade-action-if-key-corrections-recur) (2026-09-11) lists as its precondition — doing it once unblocks **both** features (re-grade + integrity coverage).
+
+**Changed 2026-09-12 — that re-upload now edits the exam, so do this pass deliberately.** `ReuploadResultsModal` gained an Exam-details block: the **date prefills from the filename** and the **marking from the sheet**, so a bulk backfill can quietly restamp a historical exam if its file was ever renamed or its stored scheme differs. Two mitigations are already in place — a marking change on an exam that has results requires an explicit tick, and every change is listed `old → new` before Save — so **read the changes box on each exam rather than clicking through**. Untick **Flag absentees** during this pass: the goal is `choices`, and re-syncing absences on a historical exam is a side effect nobody asked for. A key conflict between the sheet and the stored answer will now also surface a resolver; for a pure backfill, leave the default (the Evalbee key), which reproduces the old behaviour exactly.
 
 ### Cross-exam integrity rollup — flavour 2 (statistical re-detection across exams)
 
