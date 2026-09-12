@@ -1,6 +1,7 @@
 # Exam report as Word (.docx) — design spec
 
-> Status: **SPEC, not built — all five decisions ruled 2026-09-12, ready to implement.**
+> Status: **BUILT and verified 2026-09-12.** All five decisions ruled; see §12 for what the
+> implementation changed about this spec.
 > Companion to the class PDF (`src/lib/examPdf.js`), which shipped KaTeX-typeset question cards on
 > 2026-09-12. Rulings and their knock-on effects are in §11.
 
@@ -335,3 +336,66 @@ Worth reading as a set, because one "no" moved four things:
   `SUGGESTIONS.md` is now the only remedy for those 10 exams**, not one of two.
 - §7 — the non-Latin hint is dropped; it could never fire.
 - §8 — a new page-suite test pins that a written exam's menu has **no** Word item.
+
+---
+
+## 12. What the implementation changed about this spec
+
+Written after the build, 2026-09-12. Everything above is as-specified unless listed here.
+
+### The menu had to be PORTALLED — the spec's §7 was wrong about where it could live
+
+The exam card is `overflow-hidden` (it clips its inner rows' rounded corners), so a menu rendered
+inside the card is **cut off at the card edge**. In the browser the Word item was literally
+unreachable, on every card, while all eleven `ExportMenu` unit tests passed and so did the page
+suite. Reading the CSS was not enough: `.card` in `index.css` has no `overflow` rule, and the
+`overflow-hidden` is on the JSX at `Exams.jsx`. A screenshot found it; nothing else would have.
+
+`ExportMenu` now `createPortal`s the menu to `document.body` with fixed positioning. That also
+disposes of two follow-on problems — an upward menu being painted under the previous card
+(sibling stacking), and the menu detaching from its trigger on scroll (it closes instead). A test
+pins that the menu is **not** a descendant of the component's own container.
+
+It also **opens upward when there is no room below**: an absolutely-positioned menu adds nothing to
+the document height, so on the last card a downward menu hangs below anything the user can scroll
+to.
+
+### The solutions checkbox went inside the menu
+
+§7 left this open. On the card it would be clutter on all 37 exam rows; inside the menu it sits
+beside the export it changes. `ExportMenu` takes a `footer` node for exactly this, and the
+outside-click handler had to learn about the portal — without it, ticking the box closed the menu.
+
+### `escapeRegex` did not move with the pipeline
+
+It has a second caller in `gatErrorSetDocx` — `stripAnswerPrefix`, which strips a duplicated
+"Answer: C." off the front of a solution and has nothing to do with maths. It stays a local
+one-liner there rather than becoming a shared export implying a relationship that does not exist.
+The test suite caught this; the browser would have caught it later and louder.
+
+### Verification: ask Word, not the zip
+
+The spec said "open both in Word". What that turned into, and what should be reused for any future
+docx work: build the file in a **real browser** (Vite's CJS interop is where `pickFn`'s trap lives —
+Node and vitest resolve those packages differently), then drive Word over COM and read
+`Document.OMaths.Count`. That is the number of equations **Word itself** parsed out of the OMML.
+
+| Document | Opened | Equations | Expected | Tables |
+|---|---|---|---|---|
+| Practice set (fixture) | ✅ | 9 | 9 | 2 |
+| GAT error set (fixture) | ✅ | 6 | 6 | 1 |
+| Class report — real 50-student, 50-question paper | ✅ | 264 | — | 28 |
+
+A repair prompt and a zero-equation document are both invisible to vitest, and `LeftoverMarker` /
+`RawLatex` / `PrettyLeak` come back False on all three. The scripts are throwaway but the recipe is
+not: `checkword.ps1` is four lines of COM around `Documents.Open` + `ComputeStatistics`.
+
+The conversion path in §6 was also run end to end — Word's own Save-as-PDF on the generated report
+produced a 7-page PDF with typeset maths and worked solutions throughout, against the PDF export's
+8 pages **without** solutions.
+
+### Still true, and still the kill criterion
+
+Nobody has used this yet. It is worth keeping if faculty are currently retyping questions into
+worksheets by hand. If that turns out not to be the need, delete it — the shared `docxMath.js`
+earns its keep either way.
