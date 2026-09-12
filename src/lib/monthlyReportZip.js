@@ -1,5 +1,7 @@
 import { buildMonthlyReportPdfBlob } from './monthlyReportPdf'
 import { buildMonthlyReportDocxBlob } from './monthlyReportDocx'
+import { downloadBlob } from './download'
+import { safeFilename } from './download'
 
 // Bulk-download all monthly report cards for a cohort as a single ZIP archive.
 // Items are processed sequentially — each render is ~50–200 ms and we don't
@@ -24,24 +26,13 @@ export async function buildMonthlyReportsZipBlob(items, { format = 'pdf' } = {})
 export async function downloadMonthlyReportsZip(items, zipName, { save = true, format = 'pdf' } = {}) {
   const blob = await buildMonthlyReportsZipBlob(items, { format })
   if (save) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = zipName
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, zipName)
   }
   return zipName
 }
 
-// Sanitises a string for use as a path segment. Same rule as the per-student
-// PDF filename helper — keep [A-Za-z0-9_-], collapse runs of other chars to _.
-function safeFile(s) {
-  return (s || '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')   // replace unsafe runs with single _
-    .replace(/_+/g, '_')                // collapse adjacent underscores
-    .replace(/^_+|_+$/g, '')            // trim leading/trailing _
-}
+// Path segment for a file inside the ZIP.
+const safeFile = s => safeFilename(s, '')
 
 export function zipFilename(batch, rangeLabel) {
   return `${safeFile(batch)}_${safeFile(rangeLabel)}_Reports.zip`

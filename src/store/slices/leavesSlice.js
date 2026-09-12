@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 // A leave/out-pass is the honesty mechanism behind default-present: an active
 // leave explains a boarder's absence at EVERY checkpoint inside its window, so

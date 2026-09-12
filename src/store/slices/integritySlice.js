@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getSession } from './session'
 
 // Academic-integrity incidents — a hand-recorded disciplinary event log. Created
 // from the Exam Integrity panel after a teacher confronts a flagged student and
@@ -8,12 +9,6 @@ import { supabase } from '../../lib/supabase'
 // the exam is later re-uploaded or deleted. Surfaces in StudentView (and the
 // student/parent portal via api/student-login). Session-gated like the other
 // event-log slices; `integrity_incidents` RLS is authenticated-only.
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
 
 export const createIntegritySlice = (_set, _get) => ({
   // Upsert on (lws_id, exam_id) so re-logging the same student/exam updates

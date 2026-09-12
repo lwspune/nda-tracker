@@ -126,34 +126,6 @@ or a fix has already had to be applied by hand twice. Items are independent and 
 
 ---
 
-### 6. Mechanical sweep: helpers that exist 7–15 times with no variation
-
-- **`safeFilename`** (`[^A-Za-z0-9_-]+` -> `_`), **7 copies** —
-  [`errorSetZip.js:65`](src/lib/errorSetZip.js#L65),
-  [`examReportDocx.js:411`](src/lib/examReportDocx.js#L411),
-  [`gatErrorSetDocx.js:314`](src/lib/gatErrorSetDocx.js#L314),
-  [`monthlyReportDocx.js:70`](src/lib/monthlyReportDocx.js#L70),
-  [`monthlyReportPdf.js:29`](src/lib/monthlyReportPdf.js#L29),
-  [`monthlyReportZip.js:41`](src/lib/monthlyReportZip.js#L41),
-  [`MonthlyReports/index.jsx:142`](src/pages/MonthlyReports/index.jsx#L142). Three of the comments
-  already say "same rule as" another copy.
-- **`downloadBlob`** (object-URL / anchor / revoke), **10 files**.
-- **`fmtDate`**, **11 copies in `src/` across 3 shapes** — four byte-identical `day-month-year`, two
-  `day-month`, five one-offs. Plus the hostel `DD-MM-YYYY` converters (`dmyToIso` / `isoToDmy` /
-  `todayDmy`) **three times** — the same helper whose absence at two call sites silently made the
-  chain's derived `class` checkpoint read `present` for every boarder on every date.
-- **`getSession()`**, **15 identical copies**, one at the top of every store slice.
-
-**Why:** individually trivial; collectively this is the substrate the other five entries grew out
-of. The `dmyToIso` case already caused a production bug.
-
-**How to apply:** `src/lib/dates.js` (`fmtDayMon`, `fmtFull`, `dmyToIso`, `isoToDmy`, `todayIso`,
-`todayDmy`, `dayBoundsMs`), `src/lib/download.js` (`downloadBlob`, `safeFilename`),
-`src/store/slices/session.js`. Do it as one sweep per helper, not one commit for all four — each is
-individually trivial to review and impossible to review together.
-
----
-
 ### 7. Layering and size — decide, don't assume
 
 Filed for a decision rather than as agreed work; **none of these is justified on line count alone.**

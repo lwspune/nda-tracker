@@ -2,18 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { formatHomeworkItem, homeworkTypeLabel, homeworkItemKey, homeworkNotifyKey } from '../../lib/homework'
 import MarkDefaultersModal from './MarkDefaultersModal'
+import { fmtDateShort as fmtDate } from '../../lib/dates'
 
 function todayIso() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-}
-
-function fmtDate(iso) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return iso
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
 function deriveType(hw, notes) {

@@ -3,13 +3,7 @@ import useStore from '../../store/useStore'
 import { FEEDBACK_DIMENSIONS, aggregateFeedback, feedbackTrend } from '../../lib/teacherFeedback'
 import { PageHeader, EmptyState, Spinner, Card, CardTitle } from '../../components/ui'
 import ImportFeedbackModal from './ImportFeedbackModal'
-
-function fmtDate(iso) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return ''
-  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+import { fmtDate } from '../../lib/dates'
 
 // "2026-04-30…" → "Apr 2026"
 function monthLabel(iso) {

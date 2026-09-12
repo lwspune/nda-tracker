@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 export const createLectureAbsenceSlice = (_set, _get) => ({
   // Replace the absentee set for a single (date, slotId) "period card".

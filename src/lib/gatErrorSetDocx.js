@@ -28,6 +28,7 @@
 
 import { parseTableBlocks } from './richText'
 import { createMathRenderer, applyOmml } from './docxMath'
+import { safeFilename } from './download'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -310,9 +311,6 @@ export async function buildGatErrorSetDocx({
 // single underscore — so a name with an apostrophe or a slash can't produce a
 // path the ZIP writer rejects.
 export function errorSetFilename(studentName, rangeLabel) {
-  const safe = s => String(s || '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
+  const safe = s => safeFilename(s, '')
   return `${safe(studentName)}_${safe(rangeLabel)}_Errors.docx`
 }

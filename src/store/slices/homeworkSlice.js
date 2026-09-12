@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 const TABLE = 'homework_pending'
 const VALID_TYPES = ['homework', 'notes', 'both']

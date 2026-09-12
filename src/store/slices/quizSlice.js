@@ -1,11 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import { upsertQuiz, deleteQuizById } from './quizSupabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 // Quiz CRUD. Dual-path, but deliberately different from examsSlice in one way:
 // it calls `_save()` ONLY in the no-session (dev/local) branch. Quizzes live in

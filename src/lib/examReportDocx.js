@@ -28,6 +28,8 @@ import {
 import { buildStatBoxes, buildAllStudentsTable, examPdfSchemeLabel } from './examPdf'
 import { parseTableBlocks } from './richText'
 import { createMathRenderer, applyOmml } from './docxMath'
+import { downloadBlob } from './download'
+import { safeFilename } from './download'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -407,21 +409,10 @@ export async function buildExamReportDocx({ exam, includeSolutions = true, onPro
  * name the browser rejects.
  */
 export function examReportDocxFilename(examName) {
-  const safe = String(examName || '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  return `${safe || 'exam'}_insights.docx`
+  return `${safeFilename(examName, 'exam')}_insights.docx`
 }
 
 export async function downloadExamReportDocx(args) {
   const blob = await buildExamReportDocx(args)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = examReportDocxFilename(args.exam?.name)
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, examReportDocxFilename(args.exam?.name))
 }

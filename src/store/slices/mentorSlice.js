@@ -1,15 +1,10 @@
 import { supabase } from '../../lib/supabase'
+import { getSession } from './session'
 
 // Admin-only CRUD for the mentorship teacher↔mentee map (`mentor_assignments`).
 // One mentor per student (lws_id is PK → assigning is an upsert). Reads/writes
 // are session-gated; RLS (authenticated) is the real guard. The daily nudge
 // rotation reads this table server-side in api/send-mentor-nudges.js.
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
 
 export const createMentorSlice = (_set, _get) => ({
   // Returns [{ lwsId, teacherId }] for every assignment (admin only).

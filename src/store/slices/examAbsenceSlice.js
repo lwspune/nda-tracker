@@ -1,11 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import { getExamAbsentees } from '../../lib/analytics'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 export const createExamAbsenceSlice = (_set, get) => ({
   // Recomputes the absentee set for an exam from in-memory state and reconciles

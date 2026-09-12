@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 const TABLE = 'teacher_feedback'
 const COLS = 'id, cycle, branch, submitted_at, teacher_name, clarity, engagement, support, feedback, pace, respect, organization, availability, comment'

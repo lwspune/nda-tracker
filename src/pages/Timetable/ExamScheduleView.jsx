@@ -3,18 +3,12 @@ import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import AddExamScheduleModal from './AddExamScheduleModal'
 import SendScheduleModal from './SendScheduleModal'
+import { fmtDate } from '../../lib/dates'
 
 const STATUS_COLOUR = {
   Planned:   'bg-indigo-100 text-indigo-700',
   Completed: 'bg-green-100 text-green-700',
   Cancelled: 'bg-red-100 text-red-500',
-}
-
-function fmtDate(iso) {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${+d} ${months[+m - 1]} ${y}`
 }
 
 export default function ExamScheduleView() {

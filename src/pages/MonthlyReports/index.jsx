@@ -6,6 +6,7 @@ import { downloadMonthlyReportsZip, zipFilename } from '../../lib/monthlyReportZ
 import { downloadMonthlyReportDocx, docxFilename, hasNonLatinExamTitle } from '../../lib/monthlyReportDocx'
 import ReportRow from './ReportRow'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
+import { safeFilename } from '../../lib/download'
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -139,7 +140,7 @@ export default function MonthlyReportsPage() {
   }
 
   function safeFile(s) {
-    return (s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+    return safeFilename(s, '')
   }
 
   async function handleBulkZip(format = 'pdf') {

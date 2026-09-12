@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import { downloadBlob } from '../../lib/download'
 import * as XLSX from 'xlsx'
 import useStore from '../../store/useStore'
 import { parseOfflineResults, buildOfflineTemplateRows } from '../../lib/excel'
@@ -117,11 +118,8 @@ export default function OfflineExamModal({ exam = null, onClose }) {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Marks')
     const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
-    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-    const a = document.createElement('a')
-    a.href = url; a.download = 'offline-marks-template.xlsx'
-    a.click()
-    URL.revokeObjectURL(url)
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    downloadBlob(blob, 'offline-marks-template.xlsx')
   }
 
   // Hidden from the picker unless already selected; the JOIN below keeps using the

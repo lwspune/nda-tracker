@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 // Normalise to bare 10-digit form for comparison.
 // Handles: 10-digit, 0-prefixed 11-digit, 91-prefixed 12-digit.

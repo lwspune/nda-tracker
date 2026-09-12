@@ -4,6 +4,7 @@ import { PageHeader, EmptyState, Card } from '../../components/ui'
 import { RichText } from '../../components/ui/RichText'
 import QuestionCard from '../../components/ui/QuestionCard'
 import { computeItemStats } from '../../lib/itemStats'
+import { downloadBlob } from '../../lib/download'
 import {
   getBatchOptions, getExamsForBranch, getBatchMemberNames, getBranchMemberNames,
 } from '../../lib/analytics'
@@ -33,12 +34,7 @@ const pct = v => (v === null || v === undefined ? '—' : `${Math.round(v * 100)
 const num = (v, d = 2) => (v === null || v === undefined ? '—' : v.toFixed(d))
 
 function download(name, text, type) {
-  const url = URL.createObjectURL(new Blob([text], { type }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([text], { type }), name)
 }
 
 function toCsv(rows) {

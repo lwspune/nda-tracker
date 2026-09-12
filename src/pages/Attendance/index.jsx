@@ -14,6 +14,7 @@ import HostelTab from './HostelTab'
 import LateNotificationPreviewModal from './LateNotificationPreviewModal'
 import LectureMissPreviewModal from './LectureMissPreviewModal'
 import HomeworkPreviewModal from './HomeworkPreviewModal'
+import { fmtDateShort as fmtDate } from '../../lib/dates'
 
 function todayIso() {
   const d = new Date()
@@ -53,11 +54,6 @@ function buildStudentStats(records, lwsIdToName) {
       }
     })
     .sort((a, b) => a.pct - b.pct || a.name.localeCompare(b.name))
-}
-
-function fmtDate(iso) {
-  const [y, m, d] = iso.split('-')
-  return new Date(+y, +m - 1, +d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
 // ── page ─────────────────────────────────────────────────────

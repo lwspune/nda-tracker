@@ -17,6 +17,8 @@
 
 import { conductBlocks, pctColor, prettyDate } from './monthlyReportPdf'
 import { isWinAnsiSafe } from './pdfSafeText'
+import { downloadBlob } from './download'
+import { safeFilename } from './download'
 
 const INK = '0F172A'
 const INK2 = '475569'
@@ -66,9 +68,7 @@ export function hasNonLatinExamTitle(report) {
   return (report?.examTable || []).some(r => !isWinAnsiSafe(r.examName))
 }
 
-function safeFile(s) {
-  return (s || 'student').replace(/[^A-Za-z0-9_-]+/g, '_')
-}
+const safeFile = s => safeFilename(s, 'student')
 
 export function docxFilename(name, rangeLabel) {
   return `${safeFile(name)}_${safeFile(rangeLabel)}_Report.docx`
@@ -191,11 +191,6 @@ export async function buildMonthlyReportDocxBlob(report, { remark = '' } = {}) {
 export async function downloadMonthlyReportDocx(report, { remark = '' } = {}) {
   const blob = await buildMonthlyReportDocxBlob(report, { remark })
   const filename = docxFilename(report?.meta?.name, report?.meta?.rangeLabel)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, filename)
   return filename
 }

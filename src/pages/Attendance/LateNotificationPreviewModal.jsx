@@ -1,14 +1,7 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { buildRecipientRows } from '../../lib/recipientRows'
-
-function fmtDate(iso) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return iso
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+import { fmtDate } from '../../lib/dates'
 
 const buildRows = (lateLwsIds, studentProfiles) =>
   buildRecipientRows(lateLwsIds, studentProfiles)

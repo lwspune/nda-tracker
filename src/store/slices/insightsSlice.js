@@ -1,16 +1,11 @@
 import { supabase } from '../../lib/supabase'
+import { getSession } from './session'
 import {
   insertClassReport,
   insertStudentPlan,
   deleteAllClassReports,
   deleteStudentPlansByName,
 } from './insightsSupabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
 
 export const createInsightsSlice = (set, get) => ({
   // opts: { examId?, generatedBy? } — extras for the new chat-driven flow.

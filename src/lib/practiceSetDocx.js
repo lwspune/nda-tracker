@@ -14,6 +14,7 @@
 
 import { parseTableBlocks } from './richText'
 import { createMathRenderer, applyOmml } from './docxMath'
+import { downloadBlob } from './download'
 
 const MARGIN = 720               // 0.5" in twips
 const FONT = 'Cambria'
@@ -251,12 +252,5 @@ export async function buildPracticeSetDocx({ studentName, subject = 'Maths', row
 
 export async function downloadPracticeSet(args, filename) {
   const blob = await buildPracticeSetDocx(args)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, filename)
 }

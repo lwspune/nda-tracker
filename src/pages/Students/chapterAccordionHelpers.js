@@ -1,13 +1,16 @@
+import { fmtDate as fmtFullDate, fmtDateShort } from '../../lib/dates'
 // ── Pure helpers for ChapterAccordion ────────────────────────
 
-// Format date from YYYY-MM-DD to "Mar 21" or "Mar 21, 2026"
+// Re-export of the app-wide formatters, keeping this module's existing
+// `fmtDate(date, includeYear)` signature so its six call sites across
+// ChapterAccordion, WrongAnswerAudit, UnattemptedAudit and ProjectedScoreCard
+// need no change.
+//
+// Until 2026-09-12 this rendered US-order "Mar 21" / "Mar 21, 2026" — the only
+// surface in the app that did, including on the student-facing projected-score
+// card. It now reads "21 Mar" / "21 Mar 2026" like everywhere else.
 export function fmtDate(dateStr, includeYear = false) {
-  try {
-    const d = new Date(dateStr + 'T00:00:00')
-    const mon = d.toLocaleString('en-IN', { month: 'short' })
-    const day = d.getDate()
-    return includeYear ? `${mon} ${day}, ${d.getFullYear()}` : `${mon} ${day}`
-  } catch { return dateStr }
+  return includeYear ? fmtFullDate(dateStr) : fmtDateShort(dateStr)
 }
 
 // Returns { correct, wrong, skipped } — each an array of

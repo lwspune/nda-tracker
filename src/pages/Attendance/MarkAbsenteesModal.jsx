@@ -1,14 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import ModalShell from '../Timetable/ModalShell'
 import { computeAbsentees } from '../../lib/lectureRoster'
-
-function fmtDate(iso) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!m) return iso
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+import { fmtDate } from '../../lib/dates'
 
 // Marks who missed a single lecture (date+subject) for a (possibly pooled) roster.
 // Two input modes — teachers share EITHER a short absent list OR a short present

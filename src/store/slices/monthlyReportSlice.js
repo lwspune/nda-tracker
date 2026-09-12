@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getSession } from './session'
 
 // Bulk-fetches the three tables the monthly report builder needs:
 // `student_attendance` (date-bound), `lecture_absences` (date-bound), and
@@ -9,12 +10,6 @@ import { supabase } from '../../lib/supabase'
 // Returns null when there's no session or any query errored.
 // Returns { attendanceByLwsId, lectureAbsencesByLwsId, examAbsencesByLwsId }
 // where each value is the rows grouped by lws_id.
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
 
 function groupBy(rows, key) {
   const out = {}

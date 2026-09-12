@@ -16,6 +16,56 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~Mechanical sweep: helpers that exist 7–15 times~~ — **DONE 2026-09-12** (incl. a date-format standard)
+
+Refactor-ledger item 6, the tail of the review. Unlike items 1–5 this one hid **no defect** — these
+helpers encode a *format* or a *mechanic* rather than a rule, so a wrong copy fails loudly (a visibly
+wrong date, a download that does not fire) instead of silently. That is why 44 copies accumulated
+without an incident, and why it was last.
+
+**One date format, decided rather than inferred.** `src/lib/dates.js`:
+
+- `fmtDate('2026-09-12')` → **`12 Sep 2026`** — day-first, short month, numeric day.
+- `fmtDateShort(...)` → **`12 Sep`**, kept for dense lists that only ever show recent dates
+  (attendance log, homework log, recent incidents).
+- `fmtTimestamp(...)` for `created_at`-style values.
+
+Twelve hand-written copies existed in three formats: seven rendered `12 Sep 2026`, three `12 Sep`,
+one rendered `04 Sep 2026` (zero-padded), and `chapterAccordionHelpers` rendered **US-order
+`Sep 12, 2026`** — the only surface in the app that did, including on the **student-facing**
+ProjectedScoreCard. Empty input gave `''`, `'—'`, `null`, or the raw input echoed back depending
+which copy you hit; it is now uniformly `''`, so a caller wanting a placeholder writes
+`fmtDate(x) || '—'`.
+
+Three decisions worth keeping:
+1. **Not `toLocaleDateString`.** Its output depends on the runtime's ICU data, so the same date can
+   render differently in a browser, in jsdom and under Node. `api/_wabridge.js` already hand-rolls
+   its month names so the parent's message is byte-stable; screen and message now agree by
+   construction rather than by coincidence.
+2. **The digits are read, not parsed into a `Date`.** `new Date('2026-09-12')` is UTC midnight, which
+   renders as the 11th west of Greenwich.
+3. **`fmtTimestamp` is a different operation and is not interchangeable.** An instant must be shifted
+   into IST *before* its digits are read — an incident logged 20:00 UTC on the 12th happened 01:30
+   IST on the 13th. IST is hardcoded (+05:30, no DST), matching the existing `istToday()` pattern.
+
+**The hostel subsystem is deliberately excluded** — it displays DD-MM-YYYY to match its own storage
+format and the date picker above the list.
+
+**Also consolidated:** `src/lib/download.js` — `downloadBlob` (10 copies of the object-URL dance; the
+revoke now sits in a `finally`, since an object URL pins a whole PDF/.docx/ZIP in memory until
+released) and `safeFilename` (7 copies, three of which carried a "same rule as" comment). The seven
+had drifted: two skipped the collapse/trim step and two applied their fallback *before* sanitising,
+so `'_Asha '` used to yield `'_Asha_'` and now yields `'Asha'` — cosmetic, in filenames only.
+`TimetablePage` keeps its **own** rule deliberately: it preserves the dot so `.xlsx` survives, which
+`safeFilename` would strip. **Never pass a name that already carries its extension.**
+
+**And** `src/store/slices/session.js` — `getSession()`, extracted from 15 identical copies.
+
+**Verified in a real browser**, since this one changes what people see: a student page renders
+`8 Dec 2008` / `14 May 2025` — day-first, unpadded, with **zero** US-order and **zero** zero-padded
+dates remaining. That view previously showed `08 Dec 2008`. No test asserted the old US-order format,
+which is why the full suite stayed green through the change; `dates.test.js` pins it now.
+
 ### ~~`api/` repeats its bearer-JWT auth preamble nine times~~ — **DONE 2026-09-12** (two unlocked doors found)
 
 Refactor-ledger item 1, the remainder left open when the leaf helpers shipped. It was left open on

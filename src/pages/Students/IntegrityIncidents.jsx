@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtTimestamp } from '../../lib/dates'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { Card, CardTitle, Badge } from '../../components/ui'
@@ -9,13 +10,6 @@ import { Card, CardTitle, Badge } from '../../components/ui'
 //   - admin / teacher: fetched via `getIntegrityIncidentsForStudent(lwsId)`
 //   - student portal:  supplied via `integrityIncidentsProp` (no Supabase session)
 // Delete is admin-only (a teacher can log but only an admin can void a record).
-function fmtDateTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d)) return ''
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
 export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = null }) {
   const getIntegrityIncidentsForStudent = useStore(s => s.getIntegrityIncidentsForStudent)
   const deleteIntegrityIncident         = useStore(s => s.deleteIntegrityIncident)
@@ -81,7 +75,7 @@ export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = nul
                     : '—'}
                 </td>
                 <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
-                  {fmtDateTime(r.created_at)}
+                  {fmtTimestamp(r.created_at)}
                   {r.created_by && <div className="text-[10px]">{r.created_by}</div>}
                 </td>
                 {canDelete && (

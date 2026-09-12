@@ -1,10 +1,5 @@
 import { supabase } from '../../lib/supabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 // The five capturable hostel/mess checkpoints (the `class` checkpoint in the
 // chain view is derived from student_attendance, never captured here).

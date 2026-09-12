@@ -2,14 +2,9 @@ import { supabase } from '../../lib/supabase'
 import { mergeStudentRecords } from '../../lib/mergeStudents'
 import { loadExistingStudents } from '../../lib/students/loadExistingStudents'
 import { cleanStaleAbsencesForVariant } from './absenceCleanup'
+import { getSession } from './session'
 
 // ── Supabase helpers (online admin mode only) ──────────────────
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
 
 async function refreshStudents(get) {
   const arr = await loadExistingStudents()

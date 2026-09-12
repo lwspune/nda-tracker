@@ -1,11 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import { upsertExam, deleteExamById, updateExamQuestions } from './examSupabase'
-
-async function getSession() {
-  if (!supabase) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+import { getSession } from './session'
 
 export const createExamsSlice = (set, get) => ({
   // opts.syncAbsences (default true): flag rostered no-shows as absent + enable

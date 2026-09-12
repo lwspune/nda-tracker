@@ -4,6 +4,8 @@
 // (smaller initial bundle).
 
 import { pdfSafeExamLabel } from './pdfSafeText'
+import { downloadBlob } from './download'
+import { safeFilename } from './download'
 
 const C = {
   accent:   [37,  99, 235],
@@ -25,9 +27,7 @@ const M = { left: 18, right: 18, top: 16 }   // page margins (mm)
 // embedded. The builder + drawNextMonthFocus stay intact behind this flag.
 const SHOW_NEXT_MONTH_FOCUS = false
 
-function safeFile(s) {
-  return (s || 'student').replace(/[^A-Za-z0-9_-]+/g, '_')
-}
+const safeFile = s => safeFilename(s, 'student')
 
 export function pctColor(p) {
   if (p == null) return C.ink2
@@ -285,12 +285,7 @@ export async function downloadMonthlyReportPdf(report, { remark = '', save = tru
   const blob = await buildMonthlyReportPdfBlob(report, { remark })
   const filename = `${safeFile(report.meta.name)}_${safeFile(report.meta.rangeLabel)}_Report.pdf`
   if (save) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, filename)
   }
   return filename
 }

@@ -2,16 +2,11 @@ import { useState } from 'react'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { Card, CardTitle, Badge } from '../../components/ui'
+import { fmtDate } from '../../lib/dates'
 
 // ── Helpers ───────────────────────────────────────────────────
 
 /** Format 'YYYY-MM-DD' → 'DD MMM YYYY' (e.g. '15 Jun 2024'). Returns raw string on failure. */
-function fmtDate(dateStr) {
-  if (!dateStr) return null
-  const d = new Date(dateStr + 'T00:00:00')
-  if (isNaN(d)) return dateStr
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 /** Formats a UTC ISO timestamp as a relative human-readable string. */
 function relativeDate(isoString) {

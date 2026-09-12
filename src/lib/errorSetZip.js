@@ -11,6 +11,8 @@
 // main thread rather than finish sooner.
 
 import { buildGatErrorSetDocx } from './gatErrorSetDocx'
+import { downloadBlob } from './download'
+import { safeFilename } from './download'
 
 // items: [{ studentName, subject, subjects, totals, meta, filename }]
 export async function buildErrorSetsZipBlob(items, { includeSolutions = true, onProgress } = {}) {
@@ -48,24 +50,12 @@ export async function downloadErrorSetsZip(items, zipName, {
 } = {}) {
   const blob = await buildErrorSetsZipBlob(items, { includeSolutions, onProgress })
   if (save) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = zipName
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, zipName)
   }
   return zipName
 }
 
-// Same sanitising rule as the monthly-report helpers — keep [A-Za-z0-9_-] and
-// collapse every other run to one underscore.
-function safeFile(s) {
-  return (s || '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-}
+const safeFile = s => safeFilename(s, '')
 
 export function errorSetsZipFilename(batch, rangeLabel) {
   return `${safeFile(batch)}_${safeFile(rangeLabel)}_ErrorSets.zip`

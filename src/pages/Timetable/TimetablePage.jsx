@@ -13,6 +13,7 @@ import AddSlotModal from './AddSlotModal'
 import SendScheduleModal from './SendScheduleModal'
 import SyncCalendarModal from './SyncCalendarModal'
 import ExamScheduleView from './ExamScheduleView'
+import { downloadBlob } from '../../lib/download'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -222,15 +223,11 @@ function downloadTimetableExcel(timetable, mappings, teachers = [], weekDates = 
   // .writeFileSync in client code").
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([wbout], { type: 'application/octet-stream' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${timetable.branch}-${timetable.batchName}-timetable.xlsx`
+  // Its own filename rule, deliberately: it keeps the dot so the .xlsx
+  // extension survives, which safeFilename() would strip.
+  const name = `${timetable.branch}-${timetable.batchName}-timetable.xlsx`
     .replace(/[^a-z0-9.]+/gi, '-').toLowerCase()
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, name)
 }
 
 // ── Component ─────────────────────────────────────────────

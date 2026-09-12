@@ -24,6 +24,7 @@ import { buildGatErrorSetDocx, errorSetFilename } from '../../lib/gatErrorSetDoc
 import { downloadErrorSetsZip, errorSetsZipFilename } from '../../lib/errorSetZip'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
 import ErrorSetRow from './ErrorSetRow'
+import { downloadBlob } from '../../lib/download'
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -174,12 +175,7 @@ export default function ErrorSetsPage() {
     try {
       const item = itemFor(row)
       const blob = await buildGatErrorSetDocx({ ...item, includeSolutions })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = item.filename
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, item.filename)
     } catch (e) {
       console.error(e)
       setError(isStaleChunkError(e) ? STALE_CHUNK_MESSAGE : 'Failed to build the document. Try again.')
