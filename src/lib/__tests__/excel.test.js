@@ -4,22 +4,31 @@ import { detectSubjectFromName, parseExcelFull, parseTagsFile } from '../excel'
 
 // Build a synthetic results xlsx as a File, mirroring the Evalbee export shape.
 // `keys` is { qNum: 'A'|'B'|... } for the Q N Key column. Pass null to omit Key columns.
-function buildResultsFile({ examName = 'Test Exam', totalQs = 3, keys = {}, opts = {}, marks = {}, includeKeyColumns = true, fileName = 'Test Exam_2026-05-09.xlsx' } = {}) {
+// `students` (optional) builds multiple rows: [{ name, total, opts, marks }].
+// Omitted, it keeps the original single "Alice" row so existing tests are unchanged.
+function buildResultsFile({ examName = 'Test Exam', totalQs = 3, keys = {}, opts = {}, marks = {}, includeKeyColumns = true, fileName = 'Test Exam_2026-05-09.xlsx', students = null } = {}) {
   const headers = ['Exam', 'Roll No', 'Name', 'Total Marks', 'Correct Answers', 'Incorrect Answers', 'Not attempted']
   for (let q = 1; q <= totalQs; q++) {
     headers.push(`Q ${q} Options`)
     if (includeKeyColumns) headers.push(`Q ${q} Key`)
     headers.push(`Q ${q} Marks`)
   }
-  const row1 = [examName, '00001', 'Alice', 10, 2, 1, 0]
-  for (let q = 1; q <= totalQs; q++) {
-    row1.push(opts[q] ?? 'A')
-    if (includeKeyColumns) row1.push(keys[q] ?? '')
-    row1.push(marks[q] ?? 2.5)
+  const buildRow = (name, roll, total, rowOpts, rowMarks) => {
+    const row = [examName, roll, name, total, 2, 1, 0]
+    for (let q = 1; q <= totalQs; q++) {
+      row.push(rowOpts[q] ?? 'A')
+      if (includeKeyColumns) row.push(keys[q] ?? '')
+      row.push(rowMarks[q] ?? 2.5)
+    }
+    return row
   }
+  const dataRows = students
+    ? students.map((s, i) =>
+        buildRow(s.name, String(i + 1).padStart(5, '0'), s.total, s.opts ?? opts, s.marks ?? marks))
+    : [buildRow('Alice', '00001', 10, opts, marks)]
   // Pad first row (titled header) to match width — mirrors real export.
   const titleRow = headers.map((_, i) => String(i))
-  const aoa = [titleRow, headers, row1]
+  const aoa = [titleRow, headers, ...dataRows]
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
@@ -123,6 +132,109 @@ describe('parseExcelFull — choice capture (for re-gradeability)', () => {
     const out = await parseExcelFull(file)
     expect(out.students[0].responses).toEqual({ 1: 1, 2: -1 })   // by Evalbee mark sign
     expect(out.students[0].choices).toEqual({ 1: 'A', 2: 'B' })
+  })
+})
+
+// An Evalbee export carries NO date column and no workbook properties — the only
+// date it ships is in the FILENAME (`<Exam Name>_YYYY-MM-DD.xlsx`), and that is the
+// conduct date. `examDateFromFile` reports it as a fact, distinguishing "the name
+// carries no date" from a real answer; `examDate` keeps its today-fallback so the
+// upload wizard is untouched. See RESULTS_REUPLOAD.md §2.1.
+describe('parseExcelFull — examDateFromFile', () => {
+  it('reports the filename date, and examDate still carries the same value', async () => {
+    const file = buildResultsFile({ fileName: 'Cloud Test 1_2026-02-05.xlsx' })
+    const out = await parseExcelFull(file)
+    expect(out.examDateFromFile).toBe('2026-02-05')
+    expect(out.examDate).toBe('2026-02-05')
+  })
+
+  it('reports null when the filename carries no date — never today', async () => {
+    const file = buildResultsFile({ fileName: 'results.xlsx' })
+    const out = await parseExcelFull(file)
+    expect(out.examDateFromFile).toBeNull()
+    // examDate is deliberately unchanged: it still falls back to today so the
+    // wizard behaves exactly as before. The distinction lives in the new field.
+    expect(out.examDate).toBe(new Date().toISOString().split('T')[0])
+  })
+})
+
+// The marking scheme is READ OFF the sheet, not inferred: across 210 real exports
+// every one used exactly one positive and at most one negative per-question mark
+// value. `markValues` reports them so a consumer can verify that, rather than
+// trusting max/min blindly. See RESULTS_REUPLOAD.md §2.2.
+describe('parseExcelFull — markValues', () => {
+  it('returns the distinct per-question mark values, ascending', async () => {
+    const file = buildResultsFile({ totalQs: 3, marks: { 1: 4, 2: -0.83, 3: 0 } })
+    const out = await parseExcelFull(file)
+    expect(out.markValues).toEqual([-0.83, 0, 4])
+  })
+
+  it('dedupes across students and questions', async () => {
+    const file = buildResultsFile({
+      totalQs: 2,
+      students: [
+        { name: 'Alice', total: 8, marks: { 1: 4, 2: 4 } },
+        { name: 'Bob',   total: 4, marks: { 1: 4, 2: 0 } },
+      ],
+    })
+    const out = await parseExcelFull(file)
+    expect(out.markValues).toEqual([0, 4])
+  })
+})
+
+// Sum identity: across all 210 real exports, the per-question marks summed to the
+// Total Marks column for EVERY student, without exception. A failure therefore
+// means a genuinely broken sheet. Note this deliberately does NOT use the
+// Correct/Incorrect count columns, which are unreliable — see RESULTS_REUPLOAD.md §2.3.
+describe('parseExcelFull — totalsReconcile', () => {
+  it('reports every student reconciling when Σ(Q N Marks) equals Total Marks', async () => {
+    const file = buildResultsFile({
+      totalQs: 2,
+      students: [
+        { name: 'Alice', total: 8,    marks: { 1: 4, 2: 4 } },
+        { name: 'Bob',   total: 3.17, marks: { 1: 4, 2: -0.83 } },
+      ],
+    })
+    const out = await parseExcelFull(file)
+    expect(out.totalsReconcile.checked).toBe(2)
+    expect(out.totalsReconcile.ok).toBe(2)
+    expect(out.totalsReconcile.failed).toEqual([])
+  })
+
+  it('names a student whose Total Marks disagrees, with both numbers', async () => {
+    const file = buildResultsFile({
+      totalQs: 2,
+      students: [
+        { name: 'Alice', total: 8,  marks: { 1: 4, 2: 4 } },
+        { name: 'Bob',   total: 99, marks: { 1: 4, 2: 0 } },
+      ],
+    })
+    const out = await parseExcelFull(file)
+    expect(out.totalsReconcile.ok).toBe(1)
+    expect(out.totalsReconcile.failed).toEqual([
+      { name: 'Bob', sheetTotal: 99, sumOfMarks: 4 },
+    ])
+  })
+
+  it('tolerates floating-point noise rather than reporting a false mismatch', async () => {
+    // 3 × -0.83 = -2.4899999999999998 in IEEE754; the sheet rounds to -2.49.
+    const file = buildResultsFile({
+      totalQs: 3,
+      students: [{ name: 'Alice', total: -2.49, marks: { 1: -0.83, 2: -0.83, 3: -0.83 } }],
+    })
+    const out = await parseExcelFull(file)
+    expect(out.totalsReconcile.ok).toBe(1)
+  })
+
+  it('caps the failed list so a wholly broken sheet cannot flood the UI', async () => {
+    const students = Array.from({ length: 9 }, (_, i) => ({
+      name: `S${i}`, total: 99, marks: { 1: 4, 2: 4 },
+    }))
+    const file = buildResultsFile({ totalQs: 2, students })
+    const out = await parseExcelFull(file)
+    expect(out.totalsReconcile.checked).toBe(9)
+    expect(out.totalsReconcile.ok).toBe(0)
+    expect(out.totalsReconcile.failed).toHaveLength(5)
   })
 })
 
