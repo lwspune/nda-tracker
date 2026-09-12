@@ -3,9 +3,16 @@ import {
   getExamWrongQuestions, getExamSkippedQuestions,
   getExamToppers, getExamScoreSummary, examMaxMarks, examFormat,
 } from './analytics'
+import { buildQuestionCardHtml } from './examCardHtml'
 
-// ── LaTeX → plain ASCII (jsPDF Helvetica is WinAnsi-encoded;
-//    every Unicode symbol above U+00FF renders as garbage) ─────
+// ── LaTeX → plain ASCII ───────────────────────────────────────
+//
+// THE FALLBACK, not the main path. Question cards are typeset with KaTeX and
+// placed as images (see `questionDetailCards`); this runs only for a card whose
+// capture failed, and for the one-line card header. jsPDF's Helvetica is
+// WinAnsi-encoded — every symbol above U+00FF renders as garbage — and it has
+// no layout engine, so this is the best a natively-drawn card can do:
+// `\int_0^1 x^2\,dx` comes out as "int_0^1 x^2 dx". Readable, not typeset.
 function stripLatex(text) {
   if (!text) return ''
   return text
@@ -331,15 +338,96 @@ function questionsTable(doc, autoTable, items, startY, title, type) {
 }
 
 // ── Question detail cards (question text + options + answer) ─
-function questionDetailCards(doc, items, startY, type) {
+//
+// The one place in this report where the content is maths rather than numbers,
+// and the one place jsPDF cannot draw. Each card is built as HTML, typeset with
+// the same KaTeX the app uses on screen, captured offscreen and placed as an
+// image — see `examCardHtml.js` for why.
+//
+// Failure is per-card and degrades to the native ASCII card below rather than
+// dropping the section: a missing capture must cost the reader one card's
+// typesetting, never the question.
+const CAPTURE_SCALE = 2   // 8 px/mm ≈ 203 DPI at the printed card width
+
+let html2canvasPromise = null
+function loadHtml2Canvas() {
+  // Lazy, matching the jsPDF import — nobody who does not click PDF pays for it.
+  html2canvasPromise ??= import('html2canvas').then(m => m.default || m)
+  return html2canvasPromise
+}
+
+async function captureCardImage(item, type) {
+  const html2canvas = await loadHtml2Canvas()
+
+  // html2canvas paints from the live DOM, so the node has to be attached. Off
+  // to the left rather than `display:none` — a hidden node has no layout, and
+  // an unlaid-out node captures as nothing.
+  const host = document.createElement('div')
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1;pointer-events:none'
+  host.innerHTML = buildQuestionCardHtml(item, type)
+  document.body.appendChild(host)
+
+  try {
+    // KaTeX's webfonts are fetched on first use. On a cold page the capture
+    // would otherwise paint the maths in whatever fallback face was resolved
+    // at that instant — which looks like a rendering bug, not a missing font.
+    if (document.fonts?.ready) await document.fonts.ready
+
+    const canvas = await html2canvas(host.firstElementChild, {
+      scale: CAPTURE_SCALE,
+      backgroundColor: '#ffffff',
+      logging: false,
+    })
+    if (!canvas.width || !canvas.height) return null
+    return { dataUrl: canvas.toDataURL('image/png'), ratio: canvas.height / canvas.width }
+  } finally {
+    document.body.removeChild(host)
+  }
+}
+
+async function questionDetailCards(doc, items, startY, type) {
+  const withText = items.filter(item => item.q?.question)
+  if (!withText.length) return startY
+
+  const margin = 14
+  const cardW  = doc.internal.pageSize.getWidth() - margin * 2
+  const usableH = doc.internal.pageSize.getHeight() - 36   // 18mm top + 18mm bottom
+  let y = startY
+
+  for (const item of withText) {
+    let img = null
+    try {
+      img = await captureCardImage(item, type)
+    } catch (e) {
+      console.error('[examPdf] question card capture failed, falling back to text:', e)
+    }
+
+    if (!img) {
+      y = drawAsciiCard(doc, item, y, type)
+      continue
+    }
+
+    // A card taller than a whole page gets its own page, scaled down to fit
+    // rather than silently cropped at the page break.
+    let w = cardW
+    let h = cardW * img.ratio
+    if (h > usableH) { h = usableH; w = usableH / img.ratio }
+
+    y = ensureSpace(doc, y, h + 4)
+    doc.addImage(img.dataUrl, 'PNG', margin, y, w, h, undefined, 'FAST')
+    y += h + 4
+  }
+
+  return y
+}
+
+// ── The fallback card: drawn natively, maths flattened to ASCII ─
+function drawAsciiCard(doc, item, startY, type) {
   const isWrong  = type === 'wrong'
   const countKey = isWrong ? 'wrong'     : 'skipped'
   const rateKey  = isWrong ? 'wrongRate' : 'skipRate'
   const accentBg = isWrong ? [254, 226, 226] : [254, 243, 199]
   const accentFg = isWrong ? C.danger : C.warning
-
-  const withText = items.filter(item => item.q?.question)
-  if (!withText.length) return startY
 
   const W      = doc.internal.pageSize.getWidth()
   const margin = 14
@@ -347,112 +435,110 @@ function questionDetailCards(doc, items, startY, type) {
   const half   = (cardW - 12) / 2
   let y = startY
 
-  for (const item of withText) {
-    const q = item.q
+  const q = item.q
 
-    // Pre-measure lines at their render sizes
-    doc.setFontSize(8.5)
-    const qLines = doc.splitTextToSize(stripLatex(q.question || ''), cardW - 8)
+  // Pre-measure lines at their render sizes
+  doc.setFontSize(8.5)
+  const qLines = doc.splitTextToSize(stripLatex(q.question || ''), cardW - 8)
 
-    doc.setFontSize(8)
-    const oA = q.optionA ? doc.splitTextToSize(`A)  ${stripLatex(q.optionA)}`, half) : []
-    const oB = q.optionB ? doc.splitTextToSize(`B)  ${stripLatex(q.optionB)}`, half) : []
-    const oC = q.optionC ? doc.splitTextToSize(`C)  ${stripLatex(q.optionC)}`, half) : []
-    const oD = q.optionD ? doc.splitTextToSize(`D)  ${stripLatex(q.optionD)}`, half) : []
+  doc.setFontSize(8)
+  const oA = q.optionA ? doc.splitTextToSize(`A)  ${stripLatex(q.optionA)}`, half) : []
+  const oB = q.optionB ? doc.splitTextToSize(`B)  ${stripLatex(q.optionB)}`, half) : []
+  const oC = q.optionC ? doc.splitTextToSize(`C)  ${stripLatex(q.optionC)}`, half) : []
+  const oD = q.optionD ? doc.splitTextToSize(`D)  ${stripLatex(q.optionD)}`, half) : []
 
-    const hasOpts   = oA.length || oB.length || oC.length || oD.length
-    const row1H     = hasOpts ? Math.max(oA.length, oB.length) * 4.5 + 1 : 0
-    const row2H     = hasOpts ? Math.max(oC.length, oD.length) * 4.5 + 1 : 0
-    const hasAnswer = !!(q.answer || q.difficulty)
+  const hasOpts   = oA.length || oB.length || oC.length || oD.length
+  const row1H     = hasOpts ? Math.max(oA.length, oB.length) * 4.5 + 1 : 0
+  const row2H     = hasOpts ? Math.max(oC.length, oD.length) * 4.5 + 1 : 0
+  const hasAnswer = !!(q.answer || q.difficulty)
 
-    const cardH = 8 +
-      qLines.length * 4.5 + 5 +
-      (hasOpts   ? row1H + row2H + 8 : 0) +
-      (hasAnswer ? 7 : 0) +
-      4
+  const cardH = 8 +
+    qLines.length * 4.5 + 5 +
+    (hasOpts   ? row1H + row2H + 8 : 0) +
+    (hasAnswer ? 7 : 0) +
+    4
 
-    y = ensureSpace(doc, y, cardH + 4)
+  y = ensureSpace(doc, y, cardH + 4)
 
-    // Card background + border
-    doc.setFillColor(248, 250, 252)
-    doc.roundedRect(margin, y, cardW, cardH, 2, 2, 'F')
+  // Card background + border
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(margin, y, cardW, cardH, 2, 2, 'F')
+  doc.setDrawColor(...C.border)
+  doc.setLineWidth(0.3)
+  doc.roundedRect(margin, y, cardW, cardH, 2, 2, 'S')
+
+  // Header strip
+  doc.setFillColor(...accentBg)
+  doc.roundedRect(margin, y, cardW, 8, 2, 2, 'F')
+  doc.setFillColor(248, 250, 252)
+  doc.rect(margin, y + 4, cardW, 4, 'F')
+
+  // Header text — left: Q# · chapter · subtopic
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...accentFg)
+  const hdrL = `Q${q.q}  ·  ${q.chapter || ''}${q.subtopic ? '  ·  ' + q.subtopic : ''}`
+  doc.text(hdrL, margin + 4, y + 5.5)
+
+  // Header text — right: count + rate
+  doc.setTextColor(...C.ink2)
+  doc.setFont('helvetica', 'normal')
+  const hdrR = `${isWrong ? 'Wrong' : 'Skipped'}: ${item[countKey]} (${fmtPct(item[rateKey] * 100)})`
+  doc.text(hdrR, margin + cardW - 4, y + 5.5, { align: 'right' })
+
+  let cy = y + 11
+
+  // Question text
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...C.ink)
+  doc.text(qLines, margin + 4, cy)
+  cy += qLines.length * 4.5 + 4
+
+  // Options
+  if (hasOpts) {
     doc.setDrawColor(...C.border)
-    doc.setLineWidth(0.3)
-    doc.roundedRect(margin, y, cardW, cardH, 2, 2, 'S')
+    doc.setLineWidth(0.2)
+    doc.line(margin + 4, cy, margin + cardW - 4, cy)
+    cy += 4
 
-    // Header strip
-    doc.setFillColor(...accentBg)
-    doc.roundedRect(margin, y, cardW, 8, 2, 2, 'F')
-    doc.setFillColor(248, 250, 252)
-    doc.rect(margin, y + 4, cardW, 4, 'F')
-
-    // Header text — left: Q# · chapter · subtopic
     doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...accentFg)
-    const hdrL = `Q${q.q}  ·  ${q.chapter || ''}${q.subtopic ? '  ·  ' + q.subtopic : ''}`
-    doc.text(hdrL, margin + 4, y + 5.5)
+    const ans = (q.answer || '').toUpperCase()
 
-    // Header text — right: count + rate
-    doc.setTextColor(...C.ink2)
-    doc.setFont('helvetica', 'normal')
-    const hdrR = `${isWrong ? 'Wrong' : 'Skipped'}: ${item[countKey]} (${fmtPct(item[rateKey] * 100)})`
-    doc.text(hdrR, margin + cardW - 4, y + 5.5, { align: 'right' })
-
-    let cy = y + 11
-
-    // Question text
-    doc.setFontSize(8.5)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...C.ink)
-    doc.text(qLines, margin + 4, cy)
-    cy += qLines.length * 4.5 + 4
-
-    // Options
-    if (hasOpts) {
-      doc.setDrawColor(...C.border)
-      doc.setLineWidth(0.2)
-      doc.line(margin + 4, cy, margin + cardW - 4, cy)
-      cy += 4
-
-      doc.setFontSize(8)
-      const ans = (q.answer || '').toUpperCase()
-
-      function drawOpt(lines, letter, x) {
-        if (!lines.length) return
-        const isCorrect = ans === letter
-        doc.setFont('helvetica', isCorrect ? 'bold' : 'normal')
-        doc.setTextColor(...(isCorrect ? C.success : C.ink2))
-        doc.text(lines, x, cy)
-      }
-
-      drawOpt(oA, 'A', margin + 4)
-      drawOpt(oB, 'B', margin + 4 + half + 6)
-      cy += Math.max(oA.length, oB.length, 1) * 4.5 + 1
-
-      drawOpt(oC, 'C', margin + 4)
-      drawOpt(oD, 'D', margin + 4 + half + 6)
-      cy += Math.max(oC.length, oD.length, 1) * 4.5 + 2
+    function drawOpt(lines, letter, x) {
+      if (!lines.length) return
+      const isCorrect = ans === letter
+      doc.setFont('helvetica', isCorrect ? 'bold' : 'normal')
+      doc.setTextColor(...(isCorrect ? C.success : C.ink2))
+      doc.text(lines, x, cy)
     }
 
-    // Answer + difficulty footer
-    if (hasAnswer) {
-      cy += 1
-      doc.setFontSize(8)
-      if (q.answer) {
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(...C.success)
-        doc.text(`Answer: ${q.answer}`, margin + 4, cy)
-      }
-      if (q.difficulty) {
-        doc.setFont('helvetica', 'normal')
-        doc.setTextColor(...C.ink3)
-        doc.text(`Difficulty: ${q.difficulty}`, margin + cardW - 4, cy, { align: 'right' })
-      }
-    }
+    drawOpt(oA, 'A', margin + 4)
+    drawOpt(oB, 'B', margin + 4 + half + 6)
+    cy += Math.max(oA.length, oB.length, 1) * 4.5 + 1
 
-    y += cardH + 4
+    drawOpt(oC, 'C', margin + 4)
+    drawOpt(oD, 'D', margin + 4 + half + 6)
+    cy += Math.max(oC.length, oD.length, 1) * 4.5 + 2
   }
+
+  // Answer + difficulty footer
+  if (hasAnswer) {
+    cy += 1
+    doc.setFontSize(8)
+    if (q.answer) {
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...C.success)
+      doc.text(`Answer: ${q.answer}`, margin + 4, cy)
+    }
+    if (q.difficulty) {
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...C.ink3)
+      doc.text(`Difficulty: ${q.difficulty}`, margin + cardW - 4, cy, { align: 'right' })
+    }
+  }
+
+  y += cardH + 4
 
   return y
 }
@@ -575,14 +661,14 @@ export async function downloadExamPdf(exam) {
     y = ensureSpace(doc, y, 50)
     y = sectionLabel(doc, y, 'Most Challenging Questions — All Students')
     y = questionsTable(doc, autoTable, wrong, y, 'Top 5 Most Wrong Questions', 'wrong') + 6
-    y = questionDetailCards(doc, wrong, y, 'wrong') + 4
+    y = await questionDetailCards(doc, wrong, y, 'wrong') + 4
   }
 
   if (skipped.length) {
     y = ensureSpace(doc, y, 50)
     if (!wrong.length) y = sectionLabel(doc, y, 'Most Challenging Questions — All Students')
     y = questionsTable(doc, autoTable, skipped, y, 'Top 5 Most Skipped Questions', 'skipped') + 6
-    y = questionDetailCards(doc, skipped, y, 'skipped') + 4
+    y = await questionDetailCards(doc, skipped, y, 'skipped') + 4
   }
 
   // ── Toppers section (questions only, no list) ─────────────
@@ -597,12 +683,12 @@ export async function downloadExamPdf(exam) {
 
     if (tWrong.length) {
       y = questionsTable(doc, autoTable, tWrong, y, 'Wrong Questions Among Toppers', 'wrong') + 6
-      y = questionDetailCards(doc, tWrong, y, 'wrong') + 4
+      y = await questionDetailCards(doc, tWrong, y, 'wrong') + 4
     }
     if (tSkipped.length) {
       y = ensureSpace(doc, y, 45)
       y = questionsTable(doc, autoTable, tSkipped, y, 'Skipped Questions Among Toppers', 'skipped') + 6
-      y = questionDetailCards(doc, tSkipped, y, 'skipped') + 4
+      y = await questionDetailCards(doc, tSkipped, y, 'skipped') + 4
     }
   }
 

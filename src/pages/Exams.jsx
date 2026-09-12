@@ -415,8 +415,12 @@ export default function ExamsPage() {
                         onClick={async () => {
                           setPdfGenerating(exam.id)
                           await new Promise(r => setTimeout(r, 50))
-                          downloadExamPdf(exam)
-                          setPdfGenerating(null)
+                          // Awaited: the question cards are typeset offscreen
+                          // and captured one at a time, so generation now takes
+                          // seconds. Unawaited, the spinner cleared instantly
+                          // and the file arrived long after the button reset.
+                          try { await downloadExamPdf(exam) }
+                          finally { setPdfGenerating(null) }
                         }}
                         disabled={pdfGenerating === exam.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-[12px]
