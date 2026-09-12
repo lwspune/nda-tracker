@@ -6,6 +6,67 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-09-12
+
+### `students[].correct/incorrect/notAttempted` can contradict `responses`
+
+`parseExcelFull` takes those three straight from the Evalbee sheet's `Correct Answers` /
+`Incorrect Answers` / `Not attempted` columns. **Those columns are wrong in the wild.** In
+`Chemistry-Basic Concept l_2026-07-24.xlsx` Purva Jagdale's row says `Correct Answers = 10`, but
+her per-question marks sum to `88.68`, which at `+4/−0.83` is only reachable at **23** correct — and
+`Σ(Q N Marks) == Total Marks` holds exactly. All 21 students in that file are affected, and all 17
+in `Chemistry - Mole Concept _2026-07-04.xlsx`. Measured over 210 exports, the sum identity held for
+every student in every file; the count columns did not.
+
+**Why:** those values persist to `exam_results.correct/incorrect/not_attempted`, so the stored
+counts disagree with the stored `responses` on at least those exams. Anything reading the columns
+rather than re-deriving from `responses` inherits the error. It is also why the marking check built
+for the re-upload path (`src/lib/markingCheck.js`) deliberately uses the sum identity instead — a
+count-based check rejected **9 of 210 good files**, one of them outright.
+
+**How to apply:** derive all three from `responses` in `parseExcelFull` (`1` → correct, `-1` →
+incorrect, `0` → not attempted) rather than reading the columns, then decide separately whether to
+re-derive the affected `exam_results` rows. Check first whether any consumer *wants* Evalbee's own
+count — nothing obviously does, since `responses` is the authority everywhere else.
+
+---
+
+### `ReuploadTagsModal` still overwrites a stored answer key silently
+
+[`ReuploadTagsModal.jsx:83`](src/components/upload/ReuploadTagsModal.jsx#L83) merges
+`answer: newTag.answer ?? q.answer`, so a fresh tags file silently replaces a key that may have come
+from PYQ Vault — or that faculty explicitly chose in `KeyMismatchPanel` at the original upload. This
+is the same hole just closed on the results re-upload path (2026-09-12), in the other direction, and
+the third instance overall.
+
+**Why:** it quietly reverts a deliberate human decision, and with bank-sourced keys now in play the
+two sides are both high-confidence — exactly the case worth surfacing rather than swallowing.
+
+**How to apply:** reuse `findKeyMismatches(exam.questions, tagAnswerKeysFromFile)` and the
+`KeyMismatchPanel` + `applyKeyChoices` pair. Both already take an exam's `questions[]` unchanged;
+`storedLabel` would be `'Bank'`/`'Stored'` and the incoming side `'Tags'`. The Step 2 review grid
+already exists to show the merge, so the panel slots in above it.
+
+---
+
+### Extract the batch-chip picker — it is now a 4th copy
+
+`Step2Review`, `OfflineExamModal`, `QuizEditor` and now `ReuploadResultsModal` each hand-roll the
+same chip group plus the same `syllabusBatches.filter(x => next.has(x)).join(', ')` rebuild.
+`batchVisibility.js`'s own header comment records the footgun that duplication already caused once.
+
+**Why:** the copies have already diverged — `Step2Review` flags archived batches, `OfflineExamModal`
+does not, and only `ReuploadResultsModal` handles a **selected batch that is absent from the central
+list** (live data holds `LWS_NDA_2Y_ (26-28)` against a list offering `LWS_NDA_2Y_(26-28)_A`; the
+other three would silently drop it the moment any chip is toggled, since they rebuild the tag from
+`syllabusBatches` alone). That is a real data-loss path in three places.
+
+**How to apply:** extract a `BatchChips` component taking `{ value, onChange }` and owning the
+universe/visibility/join rules, then convert the four call sites one at a time — as its own
+reviewable change, since three of them are working surfaces with their own tests.
+
+---
+
 ## 2026-05-25
 
 ### Decide how monthly report PDFs reach parents
