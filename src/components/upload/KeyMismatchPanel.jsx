@@ -1,12 +1,18 @@
-// Highlights answer-key disagreements between the tags file and the results Excel,
-// letting faculty pick the correct key per question. Non-blocking — mirrors the
-// amber warning style of ValidationIssuesPanel.
+// Highlights answer-key disagreements between the exam's STORED key and the results
+// Excel, letting faculty pick the correct key per question. Non-blocking — mirrors
+// the amber warning style of ValidationIssuesPanel.
+//
+// Two callers, two provenances for the stored side: the upload wizard compares a
+// tags file, while the results re-upload compares the exam's own questions[], whose
+// key may have come from PYQ Vault. `storedLabel` names it; the default keeps the
+// wizard rendering exactly as before.
 //
 // Props:
-//   mismatches — [{ q, tagsAnswer, resultsAnswer }]
-//   choices    — { [q]: 'results' | 'tags' }
-//   onPick     — (q, source) => void   // source ∈ 'results' | 'tags'
-export default function KeyMismatchPanel({ mismatches, choices, onPick }) {
+//   mismatches  — [{ q, storedAnswer, resultsAnswer }]
+//   choices     — { [q]: 'results' | 'stored' }
+//   onPick      — (q, source) => void   // source ∈ 'results' | 'stored'
+//   storedLabel — what to call the non-Evalbee key (default 'Tags')
+export default function KeyMismatchPanel({ mismatches, choices, onPick, storedLabel = 'Tags' }) {
   if (!mismatches.length) return null
 
   return (
@@ -14,7 +20,9 @@ export default function KeyMismatchPanel({ mismatches, choices, onPick }) {
       {/* Header */}
       <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
         <span className="text-amber-700 font-bold text-[13px]">
-          ⚠️ {mismatches.length} answer-key mismatch{mismatches.length > 1 ? 'es' : ''} between the tags file and the results Excel — pick the correct key
+          ⚠️ {mismatches.length} answer-key mismatch{mismatches.length > 1 ? 'es' : ''} between
+          {' '}{storedLabel === 'Tags' ? 'the tags file' : `the ${storedLabel.toLowerCase()} key`}
+          {' '}and the results Excel — pick the correct key
         </span>
         <div className="text-[10.5px] text-amber-700/80 mt-0.5">
           This sets the displayed correct answer, solution &amp; per-question analytics. Student marks are unaffected.
@@ -36,8 +44,8 @@ export default function KeyMismatchPanel({ mismatches, choices, onPick }) {
                 selected={picked === 'results'} onPick={onPick}
               />
               <KeyChip
-                q={m.q} source="tags" label="Tags" letter={m.tagsAnswer}
-                selected={picked === 'tags'} onPick={onPick}
+                q={m.q} source="stored" label={storedLabel} letter={m.storedAnswer}
+                selected={picked === 'stored'} onPick={onPick}
               />
             </div>
           )

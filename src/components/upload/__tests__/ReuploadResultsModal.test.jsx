@@ -9,6 +9,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
   replaceExam: vi.fn(),
+  // The Exam-details block reads these: batch chips, branch options, batch detection.
+  studentProfiles: {},
+  syllabusBatches: [],
+  archivedBatches: [],
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -47,10 +51,15 @@ function makeExam(overrides = {}) {
   }
 }
 
+// Defaults deliberately AGREE with makeExam() — same date, same +4/−1 scheme — so
+// the baseline case produces no diff rows and the pre-existing tests are unaffected.
 function makeParsedResult(overrides = {}) {
   return {
     examName:    'NDA Mock 1',
     examDate:    '2024-03-01',
+    examDateFromFile: '2024-03-01',
+    markValues:  [-1, 0, 4],
+    totalsReconcile: { checked: 3, ok: 3, failed: [] },
     subject:     'Maths',
     markCorrect: 4,
     markWrong:   -1,
@@ -274,5 +283,370 @@ describe('ReuploadResultsModal — save', () => {
     const { container } = renderModal(makeExam(), onClose)
     await uploadAndSave(container, user)
     expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+// ── Exam details: date, marking, batch, branch, subject ───────────────────────
+//
+// An Evalbee sheet carries facts no other surface can supply for an exam that
+// already exists — above all for a paper PUSHED from PYQ Vault, which is created
+// with today's date, a placeholder +4/-1 and no batch, and which nothing else in
+// the app can correct. See RESULTS_REUPLOAD.md.
+
+async function uploadFile(container, user, file = makeFakeFile()) {
+  await user.upload(getFileInput(container), file)
+  await waitFor(() => expect(mockParseExcelFull).toHaveBeenCalled())
+}
+
+const saveBtn = () => screen.getByRole('button', { name: /replace results/i })
+
+describe('ReuploadResultsModal — date', () => {
+  it('prefills the date from the filename', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ examDateFromFile: '2026-02-05' }))
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ date: '2026-09-12' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/^date$/i)).toHaveValue('2026-02-05'))
+  })
+
+  // The parser's `examDate` still falls back to today. Using it here would stamp
+  // today's date on a historical exam and look exactly like a real answer.
+  it('falls back to the exam stored date — never today — when the filename has none', async () => {
+    const today = new Date().toISOString().split('T')[0]
+    // The exam's own date must NOT be today, or the assertion cannot distinguish
+    // "held the stored date" from "stamped today".
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ examDateFromFile: null, examDate: today }))
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ date: '2024-03-01' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/^date$/i)).toHaveValue('2024-03-01'))
+    expect(screen.getByLabelText(/^date$/i)).not.toHaveValue(today)
+  })
+
+  it('says so when the file carries no date, rather than silently holding the old one', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ examDateFromFile: null }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByText(/name carries no date/i)).toBeInTheDocument())
+  })
+
+  it('lists a changed date in the changes summary', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ examDateFromFile: '2026-02-05' }))
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ date: '2026-09-12' }))
+    await uploadFile(container, user)
+    await waitFor(() => {
+      const changes = screen.getByTestId('exam-changes')
+      expect(changes).toHaveTextContent('2026-09-12')
+      expect(changes).toHaveTextContent('2026-02-05')
+    })
+  })
+})
+
+describe('ReuploadResultsModal — marking', () => {
+  it('prefills the marking scheme read off the sheet', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({
+      markValues: [-0.83, 0, 4],
+      totalsReconcile: { checked: 3, ok: 3, failed: [] },
+    }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/marks — correct/i)).toHaveValue(4))
+    expect(screen.getByLabelText(/marks — wrong/i)).toHaveValue(-0.83)
+  })
+
+  it('shows the verification line naming how many students confirm the scheme', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({
+      markValues: [0, 4], totalsReconcile: { checked: 26, ok: 26, failed: [] },
+    }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByText(/26 of 26 students/i)).toBeInTheDocument())
+  })
+
+  it('disables Save when the scheme cannot be expressed as one correct/wrong pair', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ markValues: [0, 2, 4] }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).toBeDisabled())
+    expect(screen.getByText(/positive mark values/i)).toBeInTheDocument()
+  })
+
+  it('disables Save when no student marks add up to their total', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({
+      markValues: [0, 4],
+      totalsReconcile: { checked: 17, ok: 0, failed: [{ name: 'Z', sheetTotal: 99, sumOfMarks: 8 }] },
+    }))
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).toBeDisabled())
+  })
+
+  it('leaves the stored marking in the fields when the sheet is refused — never a guess', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({ markValues: [0, 2, 4] }))
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ marking: { correct: 4, wrong: -1 } }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/marks — correct/i)).toHaveValue(4))
+    expect(screen.getByLabelText(/marks — wrong/i)).toHaveValue(-1)
+  })
+})
+
+describe('ReuploadResultsModal — the marking acknowledgement', () => {
+  const differing = () => makeParsedResult({
+    markValues: [-0.83, 0, 4], totalsReconcile: { checked: 3, ok: 3, failed: [] },
+  })
+
+  it('blocks Save until the consequence is acknowledged, when the exam already has results', async () => {
+    mockParseExcelFull.mockResolvedValue(differing())
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam())           // 2 existing students
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/every percentage/i)).toBeInTheDocument())
+    expect(saveBtn()).toBeDisabled()
+    await user.click(screen.getByLabelText(/every percentage/i))
+    expect(saveBtn()).not.toBeDisabled()
+  })
+
+  // A pushed draft has no results, so nothing moves and the tick would be noise.
+  it('never asks on an exam with no results yet', async () => {
+    mockParseExcelFull.mockResolvedValue(differing())
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ students: [] }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).not.toBeDisabled())
+    expect(screen.queryByLabelText(/every percentage/i)).not.toBeInTheDocument()
+  })
+
+  it('never asks when the marking is unchanged', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam())
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).not.toBeDisabled())
+    expect(screen.queryByLabelText(/every percentage/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('ReuploadResultsModal — answer-key conflicts', () => {
+  const conflicting = () => makeParsedResult({ answerKeys: { 1: 'A' } })
+  const examWithKey = () => makeExam({
+    questions: [
+      { q: 1, chapter: 'Atmosphere', answer: 'B', questionId: 'vault-1' },
+      { q: 2, chapter: 'Atmosphere', answer: 'C', questionId: 'vault-2' },
+    ],
+  })
+
+  it('surfaces the disagreement instead of silently overwriting', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(examWithKey())
+    await uploadFile(container, user)
+    // Specific: the panel also carries an sr-only legend mentioning "answer-key mismatches".
+    await waitFor(() =>
+      expect(screen.getByText(/answer-key mismatch between/i)).toBeInTheDocument())
+  })
+
+  it('labels the stored side Bank when the exam carries PYQ Vault ids', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(examWithKey())
+    await uploadFile(container, user)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Use Bank answer B for question 1')).toBeInTheDocument())
+  })
+
+  it('labels it Stored when no question carries a bank id', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({
+      questions: [{ q: 1, chapter: 'Algebra', answer: 'B' }, { q: 2, chapter: 'Algebra', answer: 'C' }],
+    }))
+    await uploadFile(container, user)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Use Stored answer B for question 1')).toBeInTheDocument())
+  })
+
+  it('preselects the Evalbee key, matching the upload wizard', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(examWithKey())
+    await uploadFile(container, user)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Use Results answer A for question 1')).toBeChecked())
+  })
+
+  it('keeps the stored letter when the stored key is chosen', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(examWithKey())
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByLabelText('Use Bank answer B for question 1'))
+    await user.click(screen.getByLabelText('Use Bank answer B for question 1'))
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.questions[0].answer).toBe('B')
+  })
+
+  it('warns that choosing the stored key does not re-grade the marks', async () => {
+    mockParseExcelFull.mockResolvedValue(conflicting())
+    const user = userEvent.setup()
+    const { container } = renderModal(examWithKey())
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByLabelText('Use Bank answer B for question 1'))
+    await user.click(screen.getByLabelText('Use Bank answer B for question 1'))
+    expect(screen.getByText(/not corrected/i)).toBeInTheDocument()
+  })
+})
+
+describe('ReuploadResultsModal — subject, batch, branch', () => {
+  it('saves the edited subject', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ subject: 'English' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/^subject$/i)).toHaveValue('English'))
+    await user.selectOptions(screen.getByLabelText(/^subject$/i), 'GAT')
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.subject).toBe('GAT')
+  })
+
+  // A <select> cannot display a value absent from its options — it renders the
+  // first one, so a wrong value reads as correct and gets saved.
+  it('shows a subject outside the canonical list rather than silently swapping it', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ subject: 'Astrophysics' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/^subject$/i)).toHaveValue('Astrophysics'))
+  })
+
+  it('offers the central batches and saves the picked set', async () => {
+    mockStore.syllabusBatches = ['LWS 25-27', 'APJ 11th A']
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ batch: null }))
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    await user.click(screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.batch).toBe('LWS 25-27')
+    mockStore.syllabusBatches = []
+  })
+
+  // Historical exams carry batch tags that predate the central namespace — dev
+  // data has "LWS_NDA_2Y_ (26-28)" against a list holding "LWS_NDA_2Y_(26-28)_A".
+  // A picker that cannot show that value destroys it the moment any chip is
+  // toggled, because the tag is rebuilt from the central list alone.
+  it('shows a batch that is not in the central list, rather than dropping it', async () => {
+    mockStore.syllabusBatches = ['LWS 25-27']
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ batch: 'Legacy Batch X' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /Legacy Batch X/ })).toBeChecked())
+    mockStore.syllabusBatches = []
+  })
+
+  it('keeps an off-list batch when another batch is toggled', async () => {
+    mockStore.syllabusBatches = ['LWS 25-27']
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ batch: 'Legacy Batch X' }))
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    await user.click(screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.batch).toContain('Legacy Batch X')
+    expect(calledExam.batch).toContain('LWS 25-27')
+    mockStore.syllabusBatches = []
+  })
+
+  it('can deselect an off-list batch, since it is visible', async () => {
+    mockStore.syllabusBatches = ['LWS 25-27']
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ batch: 'Legacy Batch X' }))
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByRole('checkbox', { name: /Legacy Batch X/ }))
+    await user.click(screen.getByRole('checkbox', { name: /Legacy Batch X/ }))
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.batch).toBeNull()
+    mockStore.syllabusBatches = []
+  })
+
+  it('warns that absence rows filed under the previous batch are not removed', async () => {
+    mockStore.syllabusBatches = ['LWS 25-27', 'APJ 11th A']
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ batch: 'APJ 11th A' }))
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    await user.click(screen.getByRole('checkbox', { name: 'LWS 25-27' }))
+    expect(screen.getByText(/not removed/i)).toBeInTheDocument()
+    mockStore.syllabusBatches = []
+  })
+})
+
+describe('ReuploadResultsModal — absence sync', () => {
+  it('is on by default, preserving the previous unconditional behaviour', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(screen.getByLabelText(/flag absentees/i)).toBeChecked())
+    await user.click(saveBtn())
+    const [, , opts] = mockStore.replaceExam.mock.calls[0]
+    expect(opts).toEqual({ syncAbsences: true })
+  })
+
+  it('passes syncAbsences false when unticked', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => screen.getByLabelText(/flag absentees/i))
+    await user.click(screen.getByLabelText(/flag absentees/i))
+    await user.click(saveBtn())
+    const [, , opts] = mockStore.replaceExam.mock.calls[0]
+    expect(opts).toEqual({ syncAbsences: false })
+  })
+})
+
+describe('ReuploadResultsModal — round-trip safety', () => {
+  it('preserves fields this modal does not edit, so a badge or author cannot be stripped', async () => {
+    const user = userEvent.setup()
+    const exam = makeExam({ source: 'teacher', createdBy: 'someone@lws', maxMarks: 80 })
+    const { container } = renderModal(exam)
+    await uploadFile(container, user)
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.source).toBe('teacher')
+    expect(calledExam.createdBy).toBe('someone@lws')
+    expect(calledExam.maxMarks).toBe(80)
+  })
+
+  it('writes date, marking, batch, branch and subject through to replaceExam', async () => {
+    mockParseExcelFull.mockResolvedValue(makeParsedResult({
+      examDateFromFile: '2026-02-05',
+      markValues: [0, 4], totalsReconcile: { checked: 3, ok: 3, failed: [] },
+    }))
+    const user = userEvent.setup()
+    const { container } = renderModal(makeExam({ date: '2026-09-12', students: [], branch: 'APJ' }))
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).not.toBeDisabled())
+    await user.click(saveBtn())
+    const [, calledExam] = mockStore.replaceExam.mock.calls[0]
+    expect(calledExam.date).toBe('2026-02-05')
+    expect(calledExam.marking).toEqual({ correct: 4, wrong: 0 })
+    expect(calledExam.branch).toBe('APJ')
+    expect(calledExam.subject).toBe('Maths')
+  })
+
+  it('shows no changes summary when nothing differs', async () => {
+    const user = userEvent.setup()
+    const { container } = renderModal()
+    await uploadFile(container, user)
+    await waitFor(() => expect(saveBtn()).not.toBeDisabled())
+    expect(screen.queryByTestId('exam-changes')).not.toBeInTheDocument()
   })
 })

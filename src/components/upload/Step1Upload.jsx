@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { parseExcelFull, parseTagsFile } from '../../lib/excel'
 import { validateTags, validateGatSubjects } from '../../lib/validateTags'
-import { findKeyMismatches } from '../../lib/answerKeyCheck'
+import { findKeyMismatches, applyKeyChoices } from '../../lib/answerKeyCheck'
 import { detectBatch } from '../../lib/matchStudents'
 import { Alert, Spinner, DropZone } from '../ui'
 import ValidationIssuesPanel from './ValidationIssuesPanel'
@@ -28,7 +28,7 @@ export default function Step1Upload({ onNext, onCancel }) {
   // Answer-key cross-check (tags "Answer" vs results "Q N Key"). Populated on the
   // first "Extract Details" click; the user resolves each conflict before proceeding.
   const [keyMismatches, setKeyMismatches] = useState([])
-  const [keyChoices, setKeyChoices]       = useState({}) // { [q]: 'results' | 'tags' }
+  const [keyChoices, setKeyChoices]       = useState({}) // { [q]: 'results' | 'stored' }
   const [keyCheckShown, setKeyCheckShown] = useState(false)
 
   const xlsxRef = useRef()
@@ -176,17 +176,8 @@ export default function Step1Upload({ onNext, onCancel }) {
           return
         }
 
-        const mismatchByQ = {}
-        keyMismatchList.forEach(m => { mismatchByQ[m.q] = m })
-        tags = tags.map(t => {
-          const mm = mismatchByQ[t.q]
-          if (mm) {
-            const src = keyChoices[t.q] || 'results'
-            return { ...t, answer: src === 'tags' ? mm.tagsAnswer : mm.resultsAnswer }
-          }
-          // No conflict: the results key fills a blank / confirms the tags answer.
-          return answerKeys[t.q] ? { ...t, answer: answerKeys[t.q] } : t
-        })
+        // Shared with the results re-upload path — one rule, one implementation.
+        tags = applyKeyChoices(tags, keyMismatchList, keyChoices, answerKeys)
       }
 
       // Re-validate with the resolved subject so the warning panel reflects the final

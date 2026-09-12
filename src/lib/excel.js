@@ -1,5 +1,11 @@
 import * as XLSX from 'xlsx'
 
+// How many non-reconciling students to NAME. A wholly broken sheet would otherwise
+// list the whole class; the count is always exact, only the sample is capped.
+const RECONCILE_SAMPLE = 5
+
+const round2 = v => Math.round(v * 100) / 100
+
 // Detect exam-level subject by *presence* of a known keyword in the name.
 // Returns a value guaranteed to be in the canonical SUBJECTS list.
 export function detectSubjectFromName(name) {
@@ -73,9 +79,15 @@ export async function parseExcelFull(file) {
   const markWrong   = Math.min(...vals, 0)
   const hasNegative = vals.some(v => v < 0)
 
-  // Date from filename
+  // Date from filename — an Evalbee export carries NO date column and no workbook
+  // properties, so the name (`<Exam Name>_YYYY-MM-DD.xlsx`) is the only date it
+  // ships, and it is the conduct date. `examDate` keeps its today-fallback for the
+  // upload wizard; `examDateFromFile` reports the FACT, so a consumer can tell
+  // "the name carries no date" from a real answer instead of silently stamping
+  // today ([[feedback_silent_fallback_hides_edge_errors]]). RESULTS_REUPLOAD.md §2.1.
   const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/)
-  const examDate = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0]
+  const examDateFromFile = dateMatch ? dateMatch[1] : null
+  const examDate = examDateFromFile ?? new Date().toISOString().split('T')[0]
 
   // Detect subject by presence of a known keyword.
   // (Old logic stripped the keywords and kept the leftover, which produced
@@ -94,13 +106,22 @@ export async function parseExcelFull(file) {
 
   // Parse students
   const students = []
+  // Sum identity: Σ(Q N Marks) vs the Total Marks column. Across 210 real exports
+  // it held for EVERY student without exception, so a failure means a genuinely
+  // broken sheet. Deliberately NOT built on the Correct/Incorrect count columns,
+  // which are unreliable in the wild — see RESULTS_REUPLOAD.md §2.3.
+  const reconcileFailed = []
+  let reconcileChecked = 0
+  let reconcileOk = 0
   for (let r = hi + 1; r < raw.length; r++) {
     const row = raw[r]; if (!row || !row[ni]) continue
     const tm = row[ti]; if (tm === null || tm === undefined || tm === '') continue
     const responses = {}
     const choices = {}
+    let marksSum = 0
     Object.entries(qm).forEach(([qn, ci2]) => {
       const mk = parseFloat(row[ci2])
+      if (!isNaN(mk)) marksSum += mk
       const op = row[qo[qn]]
       responses[qn] = (!op || op === '' || op === null) ? 0 : (mk > 0 ? 1 : -1)
       // Capture the student's chosen letter (additive — enables re-grading
@@ -109,10 +130,19 @@ export async function parseExcelFull(file) {
       const letter = String(op ?? '').trim().toUpperCase()
       choices[qn] = /^[A-Z]$/.test(letter) ? letter : null
     })
+    const name = String(row[ni]).trim()
+    const sheetTotal = parseFloat(tm) || 0
+    reconcileChecked += 1
+    // Round both sides: 3 × -0.83 is -2.4899999999999998 in IEEE754 while the
+    // sheet holds -2.49. A bare equality would report that as a mismatch.
+    if (Math.abs(marksSum - sheetTotal) < 0.005) reconcileOk += 1
+    else if (reconcileFailed.length < RECONCILE_SAMPLE)
+      reconcileFailed.push({ name, sheetTotal, sumOfMarks: round2(marksSum) })
+
     students.push({
-      name:         String(row[ni]).trim(),
+      name,
       rollNo:       ri >= 0 ? String(row[ri] || '').trim() : '',
-      totalMarks:   parseFloat(tm) || 0,
+      totalMarks:   sheetTotal,
       correct:      parseInt(row[ci])  || 0,
       incorrect:    parseInt(row[ii])  || 0,
       notAttempted: parseInt(row[nai]) || 0,
@@ -122,9 +152,17 @@ export async function parseExcelFull(file) {
   }
 
   return {
-    examName: rawExamName, examDate, subject,
+    examName: rawExamName, examDate, examDateFromFile, subject,
     markCorrect, markWrong: hasNegative ? markWrong : 0,
     hasNegative, totalQs, students, answerKeys,
+    // The distinct per-question mark values, ascending — the marking scheme as the
+    // sheet states it, so a consumer can VERIFY max/min rather than trust it.
+    markValues: vals,
+    totalsReconcile: {
+      checked: reconcileChecked,
+      ok: reconcileOk,
+      failed: reconcileFailed,
+    },
   }
 }
 

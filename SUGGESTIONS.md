@@ -1,34 +1,69 @@
 # Suggestions
 
-A running list of actionable improvements surfaced during `/update-docs` runs and other sessions. Each item is **outside the scope of the work that surfaced it** — i.e. the suggesting session deliberately didn't implement it. Strike through when done; delete after archiving the context elsewhere.
+A running list of actionable improvements surfaced during `/update-docs` runs and other sessions. Each item is **outside the scope of the work that surfaced it** — i.e. the suggesting session deliberately didn't implement it.
+
+**Closing an entry:** strike the heading with a one-line note saying what shipped, then move it to [`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md) — everything here should be live work. **If part of it is still open, split it**: a struck heading hides its remainder from anyone scanning, which is how six live items went missing until the 2026-09-12 review. Don't file the same item twice either — a duplicate is how the file ended up telling you both to build and not to build the same feature (see the re-grade entry).
 
 ---
 
-## 2026-05-21
+## 2026-09-12
 
-### ~~Soft-archive pre-Vercel-migration decisions out of CLAUDE.md~~ — **DONE 2026-06-09** (already satisfied; verified)
+### `students[].correct/incorrect/notAttempted` can contradict `responses`
 
-Closed after a full re-read of both surfaces — the work this suggestion asked for had already happened in two steps that postdate it:
-- **Decisions log:** extracted wholesale into `DECISIONS.md` (CLAUDE.md "## Decisions log" is now a one-line pointer, ~line 513). It's read on-demand, not auto-loaded, so it no longer adds to per-session context — the original "both load on every read" premise is moot.
-- **"What not to change":** the genuinely pre-Vercel bullets were already moved on 2026-05-21 into `memory/project_completed_archive.md` → "Archived decisions (pre-Vercel)" table (db.json, `teacher_password.txt`, the old subject-keyed `lecture_absences` UNIQUE, batch-name spacing).
+`parseExcelFull` takes those three straight from the Evalbee sheet's `Correct Answers` /
+`Incorrect Answers` / `Not attempted` columns. **Those columns are wrong in the wild.** In
+`Chemistry-Basic Concept l_2026-07-24.xlsx` Purva Jagdale's row says `Correct Answers = 10`, but
+her per-question marks sum to `88.68`, which at `+4/−0.83` is only reachable at **23** correct — and
+`Σ(Q N Marks) == Total Marks` holds exactly. All 21 students in that file are affected, and all 17
+in `Chemistry - Mole Concept _2026-07-04.xlsx`. Measured over 210 exports, the sum identity held for
+every student in every file; the count columns did not.
 
-2026-06-09 verification: read all ~170 current "What not to change" bullets + all 115 DECISIONS.md rows. Every remaining guardrail is post-Vercel and load-bearing — the few that name deleted files (`ManageTeachersModal.jsx`, `KpiStrip.jsx`, `html-to-image`) are live "do not re-introduce" rules, not dead weight. No further safe *content* trim exists under the "pre-Vercel / file-or-feature replaced" criterion; removing any guardrail would strip a real regression guard. **Instead, the whole "What not to change" section (171 bullets) was extracted to a new [`GUARDRAILS.md`](./GUARDRAILS.md) on 2026-06-09** (same lossless pattern as the DECISIONS.md split — content preserved, CLAUDE.md left a one-line pointer). CLAUDE.md dropped 693 → 521 lines; all cross-doc pointers (README/ARCHITECTURE/OPERATIONS/SECURITY/FLOWS/DECISIONS) repointed to GUARDRAILS.md. New guardrails now go in GUARDRAILS.md, not CLAUDE.md. If size becomes a problem again, the next lever is *consolidating verbose bullets within GUARDRAILS.md* — a separate (riskier) editing task.
+**Why:** those values persist to `exam_results.correct/incorrect/not_attempted`, so the stored
+counts disagree with the stored `responses` on at least those exams. Anything reading the columns
+rather than re-deriving from `responses` inherits the error. It is also why the marking check built
+for the re-upload path (`src/lib/markingCheck.js`) deliberately uses the sum identity instead — a
+count-based check rejected **9 of 210 good files**, one of them outright.
+
+**How to apply:** derive all three from `responses` in `parseExcelFull` (`1` → correct, `-1` →
+incorrect, `0` → not attempted) rather than reading the columns, then decide separately whether to
+re-derive the affected `exam_results` rows. Check first whether any consumer *wants* Evalbee's own
+count — nothing obviously does, since `responses` is the authority everywhere else.
 
 ---
 
-### Decide AI insights cadence (manual / post-test / calendar)
+### `ReuploadTagsModal` still overwrites a stored answer key silently
 
-The trigger question for AI-generated student plans has been pending since 2026-05-20. Underlying tables (`class_reports`, `student_plans`) are already in production with one row written by hand. See `memory/project_ai_insights_cadence.md`.
+[`ReuploadTagsModal.jsx:83`](src/components/upload/ReuploadTagsModal.jsx#L83) merges
+`answer: newTag.answer ?? q.answer`, so a fresh tags file silently replaces a key that may have come
+from PYQ Vault — or that faculty explicitly chose in `KeyMismatchPanel` at the original upload. This
+is the same hole just closed on the results re-upload path (2026-09-12), in the other direction, and
+the third instance overall.
 
-**Why:** without a chosen cadence, the supporting code drifts without a target use-case. A 5-minute decision unblocks a small but real feature. Deferring indefinitely risks the insights tables becoming dead schema.
+**Why:** it quietly reverts a deliberate human decision, and with bank-sourced keys now in play the
+two sides are both high-confidence — exactly the case worth surfacing rather than swallowing.
 
-**How to apply:**
-- Pick one of:
-  1. **Manual** — admin clicks "generate plan" per student. Zero automation needed; existing flow works today.
-  2. **Post-test** — a meaningful subject test finishing triggers an auto-plan refresh for that student. Needs a server hook + Claude API call.
-  3. **Calendar** — weekly/fortnightly cron-driven refresh. Needs at-risk filtering to keep volume sane.
-- Lock the choice in `memory/project_ai_insights_cadence.md` (mark it DECIDED with the date) before talking about stratification or two-row-types.
-- If the answer is "Manual," nothing further to build — close the file.
+**How to apply:** reuse `findKeyMismatches(exam.questions, tagAnswerKeysFromFile)` and the
+`KeyMismatchPanel` + `applyKeyChoices` pair. Both already take an exam's `questions[]` unchanged;
+`storedLabel` would be `'Bank'`/`'Stored'` and the incoming side `'Tags'`. The Step 2 review grid
+already exists to show the merge, so the panel slots in above it.
+
+---
+
+### Extract the batch-chip picker — it is now a 4th copy
+
+`Step2Review`, `OfflineExamModal`, `QuizEditor` and now `ReuploadResultsModal` each hand-roll the
+same chip group plus the same `syllabusBatches.filter(x => next.has(x)).join(', ')` rebuild.
+`batchVisibility.js`'s own header comment records the footgun that duplication already caused once.
+
+**Why:** the copies have already diverged — `Step2Review` flags archived batches, `OfflineExamModal`
+does not, and only `ReuploadResultsModal` handles a **selected batch that is absent from the central
+list** (live data holds `LWS_NDA_2Y_ (26-28)` against a list offering `LWS_NDA_2Y_(26-28)_A`; the
+other three would silently drop it the moment any chip is toggled, since they rebuild the tag from
+`syllabusBatches` alone). That is a real data-loss path in three places.
+
+**How to apply:** extract a `BatchChips` component taking `{ value, onChange }` and owning the
+universe/visibility/join rules, then convert the four call sites one at a time — as its own
+reviewable change, since three of them are working surfaces with their own tests.
 
 ---
 
@@ -47,25 +82,6 @@ The Monthly Reports page (shipped 2026-05-24) downloads PDFs to the admin's mach
   3. **WhatsApp link to a live web report** — cheapest to build (no PDF lib in the path, no Meta document workflow). Reuses `StudentPortal` infrastructure. Snapshot-in-time concern: the report changes if data is later corrected, which can either be a feature (corrections propagate) or a confusion (parent sees different numbers than admin "sent"). Mitigate by serving a snapshot rather than live data.
   4. **Print + hand-deliver** — for parents without smartphones / WhatsApp; the bulk ZIP already covers this.
 - Lock the choice in a new `memory/project_monthly_report_delivery.md` once decided.
-
----
-
-### ~~Decide Jaccard threshold for `findExamNameCandidates`~~ — **DONE 2026-05-25**
-
-Picked Shape A (token-level signals, threshold unchanged). Shipped in two commits: `17d9079` (`name_token_edit` + `name_token_prefix`) and `03f3698` (`name_initial_match` for the middle-initial collapse). Decision rationale captured in `memory/project_dedup_threshold_decision.md`.
-
----
-
-### Pick AI-insights cadence trigger (carry-forward, still pending)
-
-Same shape as the 2026-05-21 entry above — manual / post-test / calendar. Carried into 2026-05-25 because the teacher auth account loop just shipped, which closes the last piece of admin scaffolding the post-test auto-flow would need (admin-gated endpoint pattern + service-role client setup are now both proven in `api/teacher-account.js`).
-
-**Why now:** the supporting infrastructure (insights tables in production since 2026-05-20, Saurabh's plan written by hand, admin-gated endpoint pattern proven, Claude API SDK available) is all in place. The blocker is purely the trigger decision — once locked, the build is small (post-test = one server hook + Claude API call; manual = nothing to build).
-
-**How to apply:**
-- One question, three options — do not lead with stratification, schema, or two-row-types. Memory `project_ai_insights_cadence.md` documents why the earlier conversation overwhelmed (and the "manual / post-test / calendar" framing that worked).
-- Lock the choice in `project_ai_insights_cadence.md` with a DECIDED date before opening any secondary design.
-- If Manual: close the question — nothing to build.
 
 ---
 
@@ -105,36 +121,6 @@ The Feedback page (`src/pages/TeacherFeedback/index.jsx`) now has cycle + teache
 
 ## 2026-06-07
 
-### Decide `getClassProjectedAvg`'s fate (now unused-but-tested)
-
-The KPI strip was removed on 2026-06-07 (`KpiStrip.jsx` deleted, commit `4cae24f`). `getClassProjectedAvg` in `src/lib/analytics/dashboard.js` was the projection feeding that strip; it's still exported and still has its 16-test block, but **nothing on the dashboard calls it anymore**.
-
-**Why:** dead-but-tested code drifts silently — the tests keep passing so it never surfaces as a problem, but it's maintenance weight with no live consumer. Either it earns its place by being surfaced again, or it should go.
-
-**How to apply:**
-- Pick one of:
-  1. **Surface it** — add a small "Avg Projected NDA" stat somewhere it's genuinely useful (e.g. the `BatchComparison` card already shows per-batch projected; a class-wide figure could sit there or on Toppers). Keep the function + tests.
-  2. **Remove it** — delete `getClassProjectedAvg` from `dashboard.js`, drop its `getClassProjectedAvg` describe block from `dashboard.test.js`, and confirm nothing else imports it (`grep getClassProjectedAvg src/`). Net test count drops by that block.
-- It reuses `getToppers(…, 0, …)` for regDate scoping, so removal is self-contained — no shared helper to worry about.
-
----
-
-### ~~Persist each student's chosen option on results upload~~ — **capture DONE 2026-06-10** (re-grade UI deferred → see 2026-06-10 entry)
-
-**Shipped (capture):** `parseExcelFull` now also builds `choices[qn] = 'A'|null`; persisted via `buildResultRows` → new additive `exam_results.choices` JSONB column; loaded by `loadExamsFromSupabase`. `responses` (1/-1/0 verdict) unchanged. NULL for pre-2026-06-10 rows (re-upload the Evalbee XLS to backfill). +5 tests. The **re-grade action that consumes `choices`** was deferred — tracked as its own entry below.
-
-Original context (kept for the why): `parseExcelFull` used to collapse each answer to a `1/-1/0` verdict and discard the chosen option (`Q N Options`); a later key fix couldn't re-grade from the DB. See `memory/reference_exam_grading_data_model.md`.
-
-**Why:** answer-key errors are not rare (this session's audit found ~32 defects across 270 questions — ~12%, incl. ~12 outright wrong keys). Each correction currently fixes only the *displayed* answer + solution, never the scores/rankings. Storing the raw choice once makes every future key fix a one-query re-grade.
-
-**How to apply:**
-- In `parseExcelFull` ([src/lib/excel.js](src/lib/excel.js) ~L104), persist the chosen letter alongside (or instead of) the verdict — e.g. `responses[qn] = { opt: <A-D|null>, v: 1|-1|0 }`, or a parallel `choices` map.
-- Add a pure `gradeResults(exam, choices)` that derives `correct/incorrect/not_attempted/total_marks/responses` from choices × `questions[].answer` × `marking`. Use it at upload AND expose a "re-grade from stored choices" admin action.
-- Migration is forward-only (old rows have no stored choice); document that pre-change exams remain Evalbee-graded and un-re-gradeable.
-- Note the trade-off: this moves grading authority from Evalbee to the app key — only worth it if `questions[].answer` is trusted (it now has an audit path).
-
----
-
 ### Sweep older exams for key/solution defects
 
 The correctness audit only covered the latest GAT + Maths mocks. The same failure mode (hand-entered keys + AI-generated solutions, never cross-verified) likely affects other recent exams. The method that worked: independent re-derivation via fanned-out subagents, NOT a key-vs-solution consistency check (which is blind to shared errors). See `memory/feedback_rederive_over_consistency_check.md`.
@@ -162,21 +148,6 @@ Beyond the 12 keys already corrected, the audit left open: **7 defective questio
 
 ---
 
-## 2026-06-09
-
-### ~~Manually verify the offline-exam golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
-
-The offline-exam feature (totals-only, template upload — commit `b4f49fd`) shipped with full test + lint coverage (1429 Vitest passing) but the **golden-path browser check was not done** (the global Definition of Done requires it). The DB column + code are deployed, so it goes live on the next Vercel build.
-
-**Why:** the integration seam (template parse → modal → `addExam` with `maxMarks` → Supabase round-trip → exam appears in trends/Toppers/history with correct %) is only unit-covered. A 5-minute manual pass on `nda-tracker.vercel.app` confirms the end-to-end flow before faculty relies on it for real marks.
-
-**How to apply:**
-- On the Exams page, click **"+ Offline marks"** → Download template → fill 2-3 names + marks → upload → set max marks + batch → Save.
-- Confirm: the exam shows an "Offline" badge with the right %-of-max on the card; it appears in the Dashboard performance trend and the student's Exam History; per-question surfaces show the "Offline" notice (not zeros); Insights/PDF buttons are absent.
-- Optionally tick the absentee opt-in once and confirm it flags/notifies as expected (leave off otherwise).
-
----
-
 ## 2026-06-10
 
 ### Finish the teacher-calendar-sync production rollout
@@ -191,25 +162,6 @@ The Google Calendar sync feature shipped (commit `48f37c3`) and was verified loc
 - Add to Vercel → Settings → Environment Variables: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `FACULTY_CALENDAR_ID` (values are in local `.env.local`; `SUPABASE_SERVICE_ROLE_KEY` is already set).
 - In the app (local dev works now), open Sync calendars → Scope = **All teachers** → dry-run → Apply (~300–360 events, silent, ~bounded concurrency 6; idempotent if it times out — re-run or chunk by teacher).
 - Decide the notification mode (currently default: no invite emails via `sendUpdates:'none'`, but teachers' default per-occurrence reminders fire). To go fully silent add `reminders:{useDefault:false,overrides:[]}` to `toGCalEvent`; to actively notify on change switch `sendUpdates` to `'all'`.
-
-### ~~Add `teacher_calendar_blocks` to DATABASE_SCHEMA.md~~ — **DONE 2026-06-10**
-
-Added as `DATABASE_SCHEMA.md` §9 "Calendar sync" (full column table) + FK-graph "no FKs" note + RLS row (service-role-only). Verified present.
-
-### ~~Calendar sync: bound the recurrence (no more "recurs forever")~~ — **DONE 2026-06-10**
-
-Replaced infinite weekly recurrence with a **bounded 2-week window** (`computeWindow` → `UNTIL=<next week's Saturday>`, first occurrence anchored to the next weekday on/after the sync day = remaining current week + next week) + folded the window into the block signature so weekly re-syncs roll it forward, + rate-limit backoff for the ~165-event weekly patch. Shipped this session; all 165 live events migrated to bounded. See `reference_google_calendar_sync.md`.
-
-### Build the re-grade-from-stored-choices action (now that choices are captured)
-
-`exam_results.choices` is now populated on every Evalbee upload (2026-06-10), so a corrected answer key can be re-graded deterministically — but the action that does it isn't built. User-chosen model when this is built: **full recompute + preview**.
-
-**Why:** the whole point of capturing choices is to make key corrections fix the marks/ranks, not just the displayed answer. Until the re-grade action exists, a corrected `questions[].answer` still leaves `total_marks`/`responses` frozen at Evalbee's original grading.
-
-**How to apply:**
-- Pure `regradeFromChoices(exam)`: per student, per question → if the question has a valid key AND a captured choice, verdict = `choice === key ? +1 : (choice ? −1 : 0)`; else keep Evalbee's original `responses[q]` (never blind-zero a question we can't re-grade — protects bonus/dropped/multi-key items). Recompute `correct/incorrect/notAttempted` + `total_marks` from `exam.marking`.
-- Admin action on the Exams row / Update-Tags flow, **enabled only when `choices` exist** for that exam. Run a **preview/diff first** (N students change, Δ marks, rank shifts), snapshot prior values, write back to `exam_results` (+ store) only on confirm.
-- ⚠️ It shifts grading authority Evalbee→app-key — keep it explicit/opt-in/preview-gated, never automatic. Backfill old exams first by re-uploading their Evalbee XLS so `choices` exist.
 
 ### Calendar sync: automate the weekly window roll + holiday EXDATEs
 
@@ -257,17 +209,6 @@ Chapter-name validation was just downgraded to a non-blocking warning (DECISIONS
 
 ## 2026-06-16
 
-### ~~Manually verify the WhatsApp result-monitoring golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
-
-The monitoring-copy feature (commit `81761ce`) shipped with full unit/lint coverage (1512 Vitest passing) but the **end-to-end browser check was not done** (the global Definition of Done requires it). The Settings → Monitoring tab + the `monitorMobiles[]` body param + the `api/send-whatsapp.js` random-pick path are all deployed and go live on the next Vercel build; the seam (Settings edit → persist round-trip → real send → MONITOR message actually arrives on `9021869427`) is only unit-covered.
-
-**Why:** monitoring is *itself* the verification mechanism for the result blast — if it silently doesn't fire (e.g. a Wabridge quirk on the extra send, or `monitorMobiles` not reaching the endpoint in prod), the faculty loses the observability they asked for without knowing. A 2-minute live pass confirms it.
-
-**How to apply:**
-- On `nda-tracker.vercel.app`: Settings → Monitoring → confirm `9021869427` is listed (add a test number you control if preferred).
-- Send a real result blast for a small/old exam (or use a redirect-to test FIRST to confirm the monitor copy is correctly **suppressed** on test sends), then a real send and confirm exactly one `👁 MONITOR → … (sample: <name>)` line appears in the results modal and the message lands on the monitor phone.
-- Confirm removing all numbers (empty list) cleanly disables it (no monitor line, `monitor: 0`).
-
 ### Decide whether to strip the deep-link mobile from monitoring copies
 
 The monitoring copy reuses the sampled student's exact message, including the tracker deep-link with that student's mobile pre-filled (`?mobile=<student>&exam=<id>`) — i.e. a one-tap login into that student's portal lands on the monitor phone. Acceptable today (the monitor number is the faculty owner's own phone), flagged during the build but left as-is.
@@ -309,69 +250,15 @@ The remediation links show on EVERY wrong/skipped question. But not every miss i
 
 ---
 
-## 2026-06-18
-
-### ~~Manually verify the remediation links resolve on PYQ Vault (cross-app golden path)~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
-
-The wrong-answer "Learn this / Practice" feature (commits `d278e65` + `5a303f1`, 2026-06-17) shipped with full unit/lint coverage (~30 tests) but the **cross-app golden path was not confirmed in this log** — the links deep-link out to the sister **PYQ Vault** app's `/go/learn` + `/go/practice` redirects, and `remediation.js` builds them name-based / notes-slug-based. The unit tests assert the *URL we construct*, not that PYQ Vault actually resolves those slugs/names to a real page.
-
-**Why:** the seam crosses two apps. A URL that's well-formed on the nda-tracker side can still 404 on PYQ Vault if a subtopic/concept name (or `subtopicSlug`/`conceptSlug`) doesn't match a Vault route — and that failure is invisible to nda-tracker's tests. A student clicking "Learn this" and landing on a Vault 404 is worse than no link. Cheap to confirm; the feature is now live on every exam/quiz review surface.
-
-**How to apply:**
-- On `nda-tracker.vercel.app`, open a wrong-answer surface (a quiz `QuizReview`, or an exam `WrongAnswerAudit` / `FocusedExamResult`) and click both **Learn this** and **Practice** on a Maths question (Practice is Maths-gated via `PRACTICE_SUBJECTS`).
-- Confirm each lands on a real PYQ Vault page for the right subtopic/concept — test one question whose tags carry `SubtopicSlug`/`ConceptSlug` (slug path) AND one that falls back to name-based, since `remediation.js` prefers the slug when present.
-- Spot-check a non-Maths (GAT) question shows **Learn this** but not **Practice** (the Maths gate), and that a question with no resolvable concept degrades gracefully (no broken button).
-
----
-
 ## 2026-06-19
 
-### ~~Finish the mentorship-nudge production rollout (env + mobiles + live var-order check)~~ — **DONE 2026-06-19**
+### Component test for `MenteeAssignments` (promoted 2026-09-12 from the struck entry above)
 
-Rollout completed by the user: Vercel env (`WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID` + `CRON_SECRET`) set, teacher mobiles entered, and the live test-send confirmed the `[date, students]` variable order. The daily cron is now live (07:30 IST, Mon–Fri).
+Promoted out of a struck heading. The browser pass is done; the **component test is not written**. `MenteeAssignments` still has slice-only coverage (`mentorSlice`, 9 tests) — fetch-on-mount, reassign-moves-the-row, remove, the "active students with no mentor" list and the search filter are all untested.
 
-The daily mentor nudge shipped (commit `728ddf1`, pushed to main) with full unit/lint coverage (1568 Vitest) and a verified live dry-run against real data, but three user-side steps remain before the cron can fire for real. The cron is already in `vercel.json` but is **fail-closed** — without `CRON_SECRET` set in Vercel it rejects the daily call, so nothing sends until the rollout is finished.
+**Why:** it is admin-only data-mutating UI, and the wiring (slice ↔ store ↔ Supabase ↔ re-fetch after mutation) is exactly where a regression hides with no user-visible warning until a mentee silently falls out of rotation.
 
-**Why:** the feature is half-live — code deployed, but the autonomous send is inert until the env vars exist and teacher mobiles are entered. And the Wabridge template's positional variable order (`[date, students]`) is a guess until a real message confirms it (per the project's template-param rules, order isn't knowable from the template ID).
-
-**How to apply:**
-- Vercel → Settings → Environment Variables: `WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID=1563510878524516` and a random `CRON_SECRET` (the shared `WABRIDGE_*` + `SUPABASE_SERVICE_ROLE_KEY` already exist). Redeploy (env changes need a fresh deploy).
-- Settings → Teachers: enter each mentor's WhatsApp `mobile` (at least your own first).
-- Settings → Mentorship: **Preview today's picks** (sanity), then **Send test to** your own number and confirm the message renders `Date: …` / `Students: …` correctly — if the date/students are swapped, flip the `variables` order in `api/send-mentor-nudges.js` (the `[dateLabel, namesList]` line) and the `reference_whatsapp_templates` row.
-
-### ~~Decide mentor-nudge name style: canonical vs familiar short names~~ — **CLOSED 2026-06-19 (not needed — canonical names kept)**
-
-Decided: keep full canonical names in the message. No change to `api/send-mentor-nudges.js`.
-
-The nudge message lists mentees by **full `canonical_name`** (e.g. "Pooja Harishchandra Gaikwad", "Himanshu Suvarna Kutal") rather than the short familiar names mentors used on their own sheets ("Pooja Gaikwad", "Himanshu Kutal"). Canonical is unambiguous and always present; short names read more naturally to the teacher.
-
-**Why:** purely cosmetic, but a mentor scanning 3 names daily may prefer the form they already use. Cheap to change; flagged at build time, left as canonical (the safe default).
-
-**How to apply:** in `api/send-mentor-nudges.js`, when building `namesList`, prefer a shorter display form — e.g. the first `name_variants` entry, or first+last token of the canonical — falling back to canonical. Decide whether "familiar" should be a stored per-student display field or a derived first+last (deriving is zero-schema but can mis-shorten some names).
-
-### ~~Mentor-assignment management UI (currently SQL-seeded only)~~ — **DONE 2026-06-19**
-
-Shipped same session it was filed: `mentorSlice.js` (`fetchMentorAssignments`/`setMentorAssignment`/`removeMentorAssignment`, 9 tests) + `MenteeAssignments` section in `MentorshipTab` — reassign/remove a mentee's mentor and a highlighted "active students with no mentor" list. Docs in CLAUDE.md / DATABASE_SCHEMA §10 / FLOWS.
-
-<details><summary>original</summary>
-
-`mentor_assignments` was seeded once by SQL from the user's mapping images. There's no UI to add/remove a mentee, reassign one to a different mentor, or onboard a new mentor — any change needs a manual SQL edit.
-
-**Why:** rosters drift (new admissions, mentor changes). Without a UI, every change is a developer task and the map silently goes stale — mentees who join after the seed never get nudged, and reassignments require hand-written SQL. Low urgency now (just seeded), rising as the cohort changes.
-
-**How to apply:** a Mentors panel (likely a Settings sub-view or an extension of the Mentorship tab) — list mentors with their mentee counts, let admin reassign a student's mentor (writes `mentor_assignments`, `lws_id` PK = upsert), and surface **unassigned active students** (a `students` left-join `mentor_assignments` where null) so nobody silently falls out of rotation. Reuse the student-search pattern from the existing assignment modals.
-
-</details>
-
-### ~~Verify the Mentee-assignments UI golden path~~ — **DONE 2026-06-29** (browser pass; the optional component test remains open)
-
-The `MenteeAssignments` panel (commit `f778897`) shipped with **slice-only** coverage (`mentorSlice` 9 tests). The component itself — fetch-on-mount, reassign-moves-the-row, remove, the "active students with no mentor" list, the search filter — is untested and the browser golden path wasn't run (global Definition of Done requires it).
-
-**Why:** the wiring (slice ↔ store ↔ Supabase ↔ re-fetch after mutation) is exactly where a regression would hide, and it's admin-only data-mutating UI. A 2-minute manual pass + a small render test would lock it.
-
-**How to apply:**
-- Manual: Settings → Mentorship → reassign a mentee (row moves to the new mentor group), remove one (drops + reappears in "no mentor" if Active), confirm counts + search filter.
-- Test: a `MentorshipTab`/`MenteeAssignments` render test mocking the store (`timetableTeachers`, `studentProfiles`, and the three `mentor*` actions) — assert unassigned-active detection and that `setMentorAssignment`/`removeMentorAssignment` fire with the right args. Mirror the store-mock pattern in `MonitoringTab.test.jsx`.
+**How to apply:** a render test mocking the store (`timetableTeachers`, `studentProfiles`, and the three `mentor*` actions) — assert unassigned-active detection and that `setMentorAssignment` / `removeMentorAssignment` fire with the right args. Mirror the store-mock pattern in `MonitoringTab.test.jsx`.
 
 ---
 
@@ -383,11 +270,7 @@ The Exam Integrity panel (shipped 2026-06-20) can only analyze the **8 exams** u
 
 **Why:** the detector is built, tested, and live, but its coverage is a thin recent slice. The full back-catalogue of mocks (the exams most worth auditing for patterns) is invisible to it. The fix is pure data entry, not code.
 
-**How to apply:** re-upload each older exam's original **Evalbee results XLS** (it still carries the `Q N Options` column) via Update Results — `parseExcelFull` repopulates `choices` on save, no migration needed. Prioritise the large full-syllabus mocks. Carry-forward: this is the same backfill the [2026-06-09 re-grade-from-stored-choices entry](#build-the-re-grade-from-stored-choices-action-now-that-choices-are-captured) lists as its precondition — doing it once unblocks **both** features (re-grade + integrity coverage).
-
-### ~~Cross-exam "repeat offender" integrity rollup — flavour 1 (incident-log aggregation)~~ — **DONE 2026-06-21**
-
-Shipped the incident-log flavour: pure `buildIntegrityLeaders(rows, studentProfiles)` ([src/lib/analytics/integrityLeaders.js](src/lib/analytics/integrityLeaders.js)) + `getAllIntegrityIncidents()` slice reader + `IntegrityLeaders.jsx` Dashboard widget (hide-when-empty, ranked repeat-first, expandable exam list, click-through). +9 tests; 1618 green. Empty until incidents accrue. **Flavour 2 (below) remains open.**
+**How to apply:** re-upload each older exam's original **Evalbee results XLS** (it still carries the `Q N Options` column) via Update Results — `parseExcelFull` repopulates `choices` on save, no migration needed. Prioritise the large full-syllabus mocks. Carry-forward: this is the same backfill the [re-grade entry](#build-the-re-grade-action-if-key-corrections-recur) (2026-09-11) lists as its precondition — doing it once unblocks **both** features (re-grade + integrity coverage).
 
 ### Cross-exam integrity rollup — flavour 2 (statistical re-detection across exams)
 
@@ -400,14 +283,6 @@ The shipped flavour 1 only counts **admitted** incidents you logged by hand — 
 **How to apply (when data exists):**
 - Aggregate `buildExamIntegrityReport` per student across exams, but **do NOT naively count "flagged in N exams"** — that treats correlated evidence as independent. A student with an idiosyncratic-but-honest distractor style + a genuine study partner who shares a method will co-flag repeatedly on the *same* innocent confound, manufacturing a fake serial cheater. Weight **same-partner recurrence** (genuinely strong) very differently from scattered low-z co-flags (likely the same hub/confound repeating). See `memory/reference_collusion_detection.md`.
 - Keep the "leads, not proof" framing — cross-exam aggregation amplifies apparent confidence, so the false-positive cost is higher than a single-exam flag. Validate the weighting against real recurrence before surfacing accusations.
-
-### ~~Manually verify the Exam Integrity golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
-
-The integrity feature (detection panel + admitted-incident logging) shipped with tests + lint green (1609 passing) but the end-to-end browser pass wasn't run — same gap noted for offline exams (2026-06-08), monitoring (2026-06-16), remediation (2026-06-18), and mentee-assignments (2026-06-19).
-
-**Why:** the wiring spans panel → `studentProfiles` name→lwsId resolution → `logIntegrityIncident` upsert → StudentView card → student/parent portal (`api/student-login` return). That's a lot of seams a unit test can't fully exercise; the global Definition of Done requires the manual pass.
-
-**How to apply:** as admin/teacher on a choice-bearing exam (e.g. the APJ 11th Maths mock), open 🕵 Integrity → confirm a flagged pair (Manas↔Saarth should be Tier B) → click "[name] admitted" → confirm the "✓ logged" badge → open that student in StudentView → see the red "⚠ Academic Integrity" card → log in to the student/parent portal for that student and confirm the card shows there too → finally test admin-only delete (× present for admin, absent for teacher).
 
 ### Resolve the 3 APJ teacher scheduling clashes
 
@@ -427,35 +302,19 @@ The in-app clash detector (`detectClashes` in `TimetablePage.jsx`) only runs for
 
 ---
 
-## 2026-06-29
-
-### ~~Manually verify the timetable week-of-dates golden path in the browser~~ — **DONE 2026-06-29** (cleared in the batch browser-verification pass)
-
-The "Week of" date feature (commit `b3118d9`) shipped with full unit/lint coverage (helper + grid-render tests, 43 green in the timetable area, prod build ✓) but the **end-to-end browser pass was not run** (global Definition of Done requires it). The picker → `weekDates` → grid header → PNG/Excel export seams are only unit-covered. Same gap noted for offline exams (2026-06-09), monitoring (2026-06-16), remediation (2026-06-18), mentee-assignments (2026-06-19), and integrity (2026-06-21).
-
-**Why:** the export seams in particular are unit-blind — the PNG path relies on the cloned `<table>` carrying the new header `<div>` along (plus a dark-header contrast tint applied only in the clone), and the Excel path emits `Mon\n29 Jun` into a styled `xlsx-js-style` cell with a taller header row. A wrong wrap/clip or a low-contrast date line wouldn't fail a test. A 2-minute pass confirms it before faculty prints a dated timetable.
-
-**How to apply:**
-- On the Timetable page (Student View), confirm the "Week of" picker defaults to the current week's Monday and each Mon–Sat header shows the right date beneath the day name; change the week and confirm the dates shift; click **Clear dates** and confirm the plain recurring grid returns.
-- Click **⬇ PNG** — confirm the dates appear under each day in the image and are legible on the dark indigo header (the indigo-300 tint).
-- Click **⬇ Excel** — open the file and confirm each day header cell shows the day name with the date on a second line, not clipped.
-- Edge: pick a Sunday in the picker and confirm the grid anchors to the *preceding* Mon–Sat week (ISO behaviour), not the next one.
-
----
-
 ## 2026-07-08
 
-### ~~Verify the hostel golden path in the browser~~ — **DONE 2026-07-29** · finish the warden-alert rollout (STILL OPEN)
+### Finish the warden-alert rollout (promoted 2026-09-12 from the struck entry above)
 
-> Browser pass confirmed by the owner 2026-07-29. **The warden-alert rollout below is still outstanding** — the endpoint stays fail-closed until `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` is set in Vercel and the variable order is confirmed with a live `redirectTo` test.
+Promoted to its own entry because it was the live remainder of a struck heading — invisible to anyone scanning headings. The hostel browser pass is done (2026-07-29); **the warden alert is still inert.** `api/send-attendance-alerts.js` (`kind:'hostel'`) fails closed until its template ID exists, so today nothing sends and no warden is told about an unexplained boarder.
 
-The hostel & mess feature (Phases 1+2, commits `5821163`/`f9a5760`/`b5bcdc5`) shipped with full unit/lint coverage (chain aggregator, both slices, endpoint, HostelTab) and a **DB-contract smoke test** (sentinel insert/read/delete of all three tables), but the **end-to-end browser pass was not run** — the session was non-interactive and the board needs a live Supabase **admin session** (only exists on Vercel). The warden alert is also inert until its env is set. Same manual-verify gap noted for offline exams / monitoring / remediation / mentee-assignments / integrity / week-of-dates.
-
-**Why:** the seams that unit tests can't reach — the marking→save round-trip, the reconciliation gate writing `checkpoint_confirmations`, the chain board flagging a real unexplained boarder, and (critically) the **filter-as-display-lens** guarantee that a filtered save doesn't drop hidden rows — are exactly where a regression hides. And the alert is half-live: code deployed, but nothing sends until the template + a warden number exist.
+**Why:** it is the safety half of the hostel subsystem — the board shows who fell off the chain, but nobody is *told*. The code has been deployed since 2026-07-08; only configuration is missing, which is the worst kind of half-live (looks shipped, does nothing).
 
 **How to apply:**
-- On `nda-tracker.vercel.app` (admin): Attendance → **Hostel & Mess**. Mark a Night Roll exception → Save → filter to Boys/Girls, mark one, Save → **reopen and confirm the other wing's marks survived** (the display-lens guarantee). Enter a headcount → **Reconcile & close** (tie = ✓; mismatch = OPEN incident). Switch to **Chain** → confirm a real unexplained boarder is flagged with the right first-break.
-- Warden alert rollout: get the Meta/Wabridge template approved → set `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` in Vercel (`SUPABASE_SERVICE_ROLE_KEY` already set) → add a warden number in the Hostel tab → **Send test via `redirectTo` to your own number to confirm the `[date, listText]` variable order** (order isn't knowable from the template ID — per the template-param rules) → flip the `variables` order in `api/send-attendance-alerts.js` + the `reference_whatsapp_templates` row if swapped.
+- Get the Meta/Wabridge template approved (~3-day lead time), then set `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` in Vercel (`SUPABASE_SERVICE_ROLE_KEY` is already set) and redeploy.
+- Add a warden number in the Hostel tab (`hostelAlertMobiles[]`).
+- **Confirm the `[date, listText]` variable order with a `redirectTo` test send to your own number** — order is not knowable from the template ID ([[feedback_whatsapp_template_param_rules]]). If swapped, flip the `variables` order in `api/send-attendance-alerts.js` and the `reference_whatsapp_templates` row.
+- Then the durability follow-ups in the next entry (cron + a "did we alert?" log) become worth doing; a stateless manual button is not a safety net.
 
 ### Hostel Phase 3 — alert durability: nightly cron + a "did we alert?" log + parent notify
 
@@ -487,14 +346,6 @@ The Batch A↔B section split + day-scholar tagging (2026-07-08) surfaced anomal
 - **Zishan Shaikh (Batch B list roll 52)** — no profile anywhere in the DB (searched phonetic variants); not tagged. Import via the Students flow if a real 11th-B student. (Anvay Sawant, the other original not-found, was since imported → LWS-554.)
 - **Blocked students on live batch lists** — Kartik Shinde (LWS-473) + Ganesh Mane (LWS-505) are `account_status=Block` yet appear on the handwritten Batch B list and are tagged B. If the block is stale, reactivate; else leave (blocked students keep historical tags).
 
-### Push the day-scholar filter deploy (pending)
-
-The day-scholar wiring (studentSlice + HostelTab + tests + DATABASE_SCHEMA/FLOWS) is committed-ready in the working tree but **not yet committed/pushed**, so it isn't live on Vercel. Anvay Sawant is flagged `residential=false` in the DB but still shows on the prod board until this deploys.
-
-**Why:** the data change is live but the code that acts on it isn't — a half-applied state.
-
-**How to apply:** commit the working-tree changes (`feat(hostel): exclude day-scholars from the boarder board`) and push to `main`; verify on `nda-tracker.vercel.app` that Anvay Sawant no longer appears on the Hostel & Mess board.
-
 ---
 
 ## 2026-07-11
@@ -507,14 +358,6 @@ The lecture-miss alert now skips students on an active hostel leave (commit `84a
 
 **How to apply:** mirror the lecture fix — load the day's leaves with the null-safe query (`.lte('from_ts',endIso).or('to_ts.is.null,to_ts.gte.'+startIso)` via an authed user client), build an `onLeaveIds` Set, and skip any student whose `lwsId` is in it (report an `onLeaveSkipped` count; fail closed on a leaves-read error). Reuse `computeAbsentees`/`resolveOnLeave` semantics. Add a test per endpoint (on-leave suppressed; fail-closed). Note the late flow keys students differently — confirm it carries `lwsId` before matching.
 
-### ~~Browser golden-path verify the leave lifecycle + present/absent lecture marking~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
-
-This session shipped a lot of leave-aware UI (On Leave tab: Put on leave / Mark returned / stale flag; lecture `MarkAbsenteesModal` present/absent toggle + leave-lock; `LectureLogTab` "Also attending" pooled roster) — all **test-verified but not click-verified** (sessions are non-interactive; the board needs a live Supabase admin session that only exists on Vercel). Same manual-verify gap logged for every prior feature.
-
-**Why:** the seams unit tests can't reach — `addLeave`→board round-trip, the present-mode derivation writing the right absentee set, the pooled-roster union actually pulling 6M students into a 12th period, the `endLeave` "returned?" closing a leave and unlocking the row — are where a regression hides. And the whole point (stop hand-entering leaves via SQL) only pays off if the UI works end-to-end.
-
-**How to apply:** on `nda-tracker.vercel.app` (admin, hard-refresh first): Hostel & Mess → **On Leave** → **+ Put on leave** → select 2 boarders → confirm they appear on the list open-ended, then **Mark returned** on one and confirm it closes. Attendance → **Lecture log** → pick the APJ 12th batch → **Also attending** = the 6M batch → open a period → toggle **Present list** → tap the present students → confirm the preview "will log absent N" matches roster−present−leave and an on-leave student shows locked with a "returned?" link.
-
 ### Auto-close a leave when the student returns (class-attendance `P` signal)
 
 Deferred by design this session: "persist-until-return" leaves are closed **manually** (Mark returned). True auto-close ("mark present at a roll → leave ends") turned out ill-defined under exception-capture — default-present means "present" = *no row*, indistinguishable from "on leave, unmarked", so saving a roll can't safely close leaves. The one real positive present signal is the imported class attendance `P` (`student_attendance`).
@@ -526,18 +369,6 @@ Deferred by design this session: "persist-until-return" leaves are closed **manu
 ---
 
 ## 2026-07-14
-
-### ~~Align (or deliberately keep divergent) `getPriorityChapters` accuracy vs the pooled projection~~ — **MOOT 2026-09-12**
-
-The Priority Chapters widget was removed from the Dashboard (2026-09-12), so there is no longer a second surface for faculty to cross-read against the Projected card — the credibility gap this described cannot be seen. `getPriorityChapters` itself is untouched and still tested; if the widget is ever re-wired, decide (a) or (b) below *before* shipping it.
-
-The projected-score accuracy was reworked (2026-07-14) to **pool a chapter's questions** (`Σ score×weight / Σ weight`) instead of averaging per-subtopic ratios — see `computeProjectedScore` in [src/lib/analytics/projection.js](src/lib/analytics/projection.js) and the DECISIONS.md entry. The Dashboard's **Priority Chapters** widget (`getPriorityChapters` in `src/lib/analytics/dashboard.js`) still computes chapter accuracy its own way (`priority = weightPct × (1 − accuracy)`), so the two surfaces can now disagree slightly on a chapter's accuracy for the same student/cohort. This divergence was **deliberately deferred** to keep the projection change's blast radius small.
-
-**Why:** two Dashboard/Toppers surfaces showing different "accuracy" for the same chapter is a subtle credibility gap — a teacher comparing the Projected card's Functions accuracy against the Priority Chapters list may see mismatched numbers. Low urgency (numbers are close and priority is a *ranking*, not an absolute), rising if faculty start cross-reading the two.
-
-**How to apply:**
-- Decide: (a) **align** `getPriorityChapters` to the same pooled `Σ score×weight / Σ weight` method (extract a shared `chapterAccuracy(subs)` helper both call, so they can't drift), or (b) **keep divergent on purpose** and document why (priority is class-level weightage×gap, projection is per-student potential — arguably different questions).
-- If aligning: it's class-level (uses `computeChapterStats`, not the per-student `computeStudentChapterStats`), so the pooled helper needs a counts-based variant or the raw weighted sums exposed there too. TDD against `dashboard.test.js`'s existing `getPriorityChapters` block.
 
 ### Reconsider the Toppers default projected-marks floor (currently a flat 60)
 
@@ -587,25 +418,6 @@ The blocked-contact gate shipped 2026-07-17 ([[project_whatsapp_block_gate]]) is
 
 ## 2026-07-20
 
-### Feed the upload key-resolver into the re-grade action (carry-forward)
-
-The answer-key cross-check shipped this session (`KeyMismatchPanel` + `findKeyMismatches`, commit `d9ae77c`) lets faculty override the Evalbee `Q N Key` with the tags-file `Answer` at Step 1 of upload. Picking "Tags" is an explicit assertion that **Evalbee's key — and therefore Evalbee's grading of that question — is wrong**. But the cross-check only sets the *displayed* answer/solution/analytics (`questions[].answer`); `total_marks`/`responses` stay at Evalbee's original (now-known-wrong) grading. This is a **new, at-upload trigger** for the already-open **"Build the re-grade-from-stored-choices action"** entry (2026-06-09 above) — not a separate feature.
-
-**Why:** an upload-time key override is the moment faculty is *most certain* a key is wrong, yet today it silently leaves scores/ranks wrong for exactly those questions. The two features compose: the resolver already threads the chosen keys into wizard state (`keyMismatches[]` with `chosen`, passed at `onNext`), so `regradeFromChoices` has its input ready.
-
-**How to apply:**
-- Do the re-grade entry first (it's the prerequisite; this is just a new entry point into it).
-- When built, after an upload where the user overrode ≥1 conflict to the Tags key, offer (or auto-open) the re-grade **preview** for that exam — corrected `questions[].answer` × captured `exam_results.choices` × `marking` makes it deterministic.
-- Keep it preview-gated/opt-in like the parent entry — overriding display ≠ auto-shifting grading authority Evalbee→app.
-
-### ~~Browser golden-path verify the Monthly Reports date-range + branch + conduct-block PDF~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
-
-The Monthly Reports rework this session (custom From→To range + branch-narrows-batch, commit `4fecd00`; exception-only stacked conduct blocks in the PDF, commit `13b422c`) shipped **test-verified but not click-verified** — sessions are non-interactive, no browser driver is available, and the Generate→download flow needs a live Supabase **admin session** (only on Vercel). A sample PDF *was* rendered headlessly end-to-end (valid, all four conduct blocks), but the real UI seams weren't driven. Same manual-verify gap logged for every prior feature.
-
-**Why:** the unit tests cover `conductBlocks`/`rangeLabel`/cohort exactly and the fetch signature, but not: the date pickers → `fetchMonthlyReportData(from,to,ids)` round-trip, the Branch dropdown actually narrowing the Batch list, the invalid-range Generate-disable, and — the one thing no headless check can confirm — the **visual layout/spacing** of the stacked blocks and the "Period:" header on a real multi-student batch. FLOWS.md notes PDF layout is "reviewed out of band."
-
-**How to apply:** on `nda-tracker.vercel.app` (admin): Sidebar → Monthly Reports → pick a Branch (confirm the Batch list narrows to that branch's batches) → pick a Batch → confirm the default range = previous month and cohort count → set a custom From→To that spans part of a month (confirm the header reads e.g. "5 Jun - 20 Jun 2026", a whole month reads "Jun 2026") → Generate → download one PDF and eyeball the stacked conduct blocks (Attendance line present; Late/Missed/Homework blocks appear only when non-empty; a clean student shows just Attendance or none) → download the ZIP and confirm the filename carries the range label. Edge: set From > To and confirm Generate is disabled with the inline hint.
-
 ### Align the on-screen ReportRow preview with the PDF's conduct signals
 
 The Monthly Reports **preview card** (`src/pages/MonthlyReports/ReportRow.jsx`) still shows its original 4 stat tiles (Exams taken · Missed exams · Attendance **%** · Late days) and was left unchanged when the **PDF** conduct section was redesigned (2026-07-20). So the admin preview and the downloadable PDF now diverge: the preview shows attendance as a bare `%` (not "10 / 12 days present"), and it surfaces neither **missed lectures** nor **homework-incomplete**, both of which now appear in the PDF. Flagged to the user at build time and deliberately deferred (scope was the downloadable report).
@@ -613,22 +425,6 @@ The Monthly Reports **preview card** (`src/pages/MonthlyReports/ReportRow.jsx`) 
 **Why:** low-stakes cosmetic/consistency — an admin scanning the preview gets a different picture than the parent gets in the PDF. Not wrong, just inconsistent; worth aligning if faculty find the mismatch confusing, or when the preview is next touched.
 
 **How to apply:** either (a) reuse the pure `conductBlocks(report)` from `monthlyReportPdf.js` to drive a compact preview strip (single source of truth for the omit rules + "X/Y days present" wording), or (b) minimally change the preview's Attendance tile to "X / Y" + add missed-lecture / homework-incomplete tiles. Option (a) keeps preview and PDF from drifting. `conductBlocks` is already exported and pure, so no new logic — just a render mapping. Keep it a preview *summary* (counts), not the full detail lists the PDF shows.
-
----
-
-## 2026-07-21
-
-### ~~Ship + browser-verify the chapter-level Learn/Practice links on "Where to focus" (deploy PYQ Vault FIRST)~~ — **DONE 2026-07-29** (browser pass confirmed by the owner on 2026-07-29, which implies both repos shipped — reopen if PYQ Vault is not actually deployed)
-
-This session fixed the student **"Where to focus"** card's Practice link (it fell through to the generic `/browse?kind=practice` bank because it sent bare subtopic *names* with no subject/chapter) and added a **Learn →** link, both now **chapter-level**. Two repos changed, both green + lint-clean via TDD, but **nothing is committed or deployed yet**. nda-tracker: `chapterLearnUrl`/`chapterPracticeUrl` in `src/lib/remediation.js`, `src/lib/focusAreas.js` emits `learnUrl`+`practiceUrl`, `FocusAreas.jsx` renders Learn (primary) + Practice. PYQ Vault (`Question_Bank`): `goLinks.ts` `BY_CHAPTER`/`getChapterByName`/`buildChapterLearnPath`, `/go/learn` chapter fallback, `/go/practice` NAME mode fires on `subject && chapter` alone. See [[reference_remediation_links]] point 3.
-
-**Why:** the links are the user-visible fix that started this session — worthless until live. **Deploy order is load-bearing:** the tracker's new URLs (`/go/learn?chapter=…`, chapter-only `/go/practice`) only resolve once the PYQ Vault route changes are live, so ship `Question_Bank` first, then nda-tracker. The cross-app golden path can only be checked after both deploy (sessions are non-interactive; no browser driver) — same manual-verify gap logged for every prior feature.
-
-**How to apply:**
-- Commit both repos (separate `feat:` commits) — PYQ Vault first, confirm its deploy is live, then nda-tracker.
-- On `nda-tracker.vercel.app`, open a student with a populated "Where to focus" card (e.g. Pooja): click **Learn →** on a chapter → confirm it lands on that chapter's notes index (`/notes/nda-maths/<chapter>`), and **Practice →** on a Maths chapter → confirm it lands on the chapter-filtered practice bank (not the generic browse).
-- Confirm graceful degrade: a focus chapter with **no notes** lands on the `/notes` index (not a 404); a chapter with **no practice questions** lands on `/browse` — acceptable fallbacks, but note which chapters hit them (notes/practice coverage is incomplete) in case coverage should be prioritised.
-- Pre-existing lint note: `StudentView.jsx:119` has 4 `set-state-in-effect` errors (baseline, unrelated to this change — a line not touched); leave them per the CLAUDE.md "add the disable comment only if you touch those lines" rule.
 
 ---
 
@@ -654,48 +450,9 @@ The NDA Program's **Physics / Chemistry / Biology** syllabus chapters were rebui
 
 **How to apply:** when re-enabling, strip the suffix at the render boundary, not in the data — a one-line `name.replace(/\s*\(\d+(\.\d+)?%\)\s*$/, '')` in `drawNextMonthFocus` (or in the builder's `chapters.push`). Don't remove the weightage from the syllabus chapter names; it's the whole point of the rebuild. Also re-check any *future* consumer that surfaces syllabus chapter names to students or parents — the weightage suffix is a faculty-facing annotation only.
 
-### ~~Add an optimistic-concurrency guard to `saveToSupabase` so stale tabs can't silently clobber~~ — **DONE 2026-07-25**
-
-Shipped option (1), the version guard: `src/store/persist.js` keeps a module-level `knownVersion` (the `updated_at` captured by `loadFromSupabase`) and predicates every update on it via `.eq('updated_at', knownVersion).select('updated_at')`. Zero rows matched → `staleLock` set, all further saves short-circuit, `onSaveConflict` fires → store `saveConflict` → new `src/components/layout/StaleDataBanner.jsx` ("Your data is out of date · Reload", no dismiss). Saves are serialised through a promise chain so overlapping fire-and-forget saves don't self-conflict; a null version (never loaded) still writes unguarded. TDD: +8 persist tests, +3 banner tests, 1884 green. Original entry kept below for the record.
-
-`faculty_state.data` is one JSONB blob written last-write-wins. Prod `saveToStorage` (`src/store/persist.js`) serialises **every allow-listed key** — `syllabusPrograms`, `batchSyllabusProgress`, timetables, send history, … — and `saveToSupabase` PUTs the whole object with no merge and no version check. The table already has an `updated_at` column, but **nothing reads it**. On 2026-07-25 this reverted a completed out-of-band syllabus rewrite ~2 minutes after it landed: a single admin tab that had loaded *before* the write flushed its stale in-memory blob on an unrelated mutation, restoring all 51 old chapters and their progress. Nothing was lost (the revert was a faithful copy of the prior state) but the work had to be re-applied, and the failure was **silent** — no error, no console warning, no UI hint.
-
-**Why:** this is a data-durability hole, not just an annoyance. Two admins working simultaneously will overwrite each other the same way, and neither will know — the loser's edits simply vanish on the winner's next save. It also makes every direct SQL/MCP edit to `faculty_state` conditionally safe at best, which matters because such edits are routine in this project (syllabus programs, `ndaFreqBySubject`, timelines). Today the only mitigation is a procedural "have everyone hard-refresh", which depends on a human remembering.
-
-**How to apply:** pick one —
-1. **Version guard (recommended).** Stash the `updated_at` returned by `loadFromSupabase()` in the store (non-persisted). Have `saveToSupabase` send it as a predicate — `.eq('updated_at', knownVersion)` on the update, or a small RPC doing a compare-and-set — and set `updated_at = now()` on success. Zero rows affected → the row moved under you: surface a non-dismissable "Your data is stale — reload before continuing" banner and **stop saving** until reload. Cheap, no schema change.
-2. **Per-key writes.** Split the blob save into targeted `jsonb_set` calls per changed key so two tabs editing different domains stop colliding. Narrows the blast radius but doesn't fix same-key races, and is a larger refactor of the save path.
-3. **Realtime invalidation.** Subscribe to `faculty_state` via Supabase Realtime and force a reload/merge when another client writes. Best UX, most moving parts.
-Note (1) and (3) compose well. Whichever is picked, add a test that a save from a client holding a stale version is rejected — that's the regression that matters.
-
-### ~~Browser-verify the rebuilt NDA P/C/B syllabus (still unconfirmed)~~ — **DONE 2026-07-25**
-
-Verified in-browser by the user: the rebuilt 14 / 12 / 9 P/C/B chapters render correctly on `nda-tracker.vercel.app` with the weightage suffixes and descending order intact, and the clobber has not recurred. Original entry kept below for the record.
-
-The NDA Program's Physics/Chemistry/Biology chapters were rebuilt to PYQ Vault's taxonomy on 2026-07-25 (14 / 12 / 9 chapters, weightage in each name, sorted desc) and re-applied after the clobber described above. The database was verified by query — 14/12/9, zero orphaned progress ids, surviving `Done` marks intact — but **nobody has confirmed it renders correctly in the app**, because the one attempt to look at it happened while the reverted data was live.
-
-**Why:** the golden-path check is the project's definition of done and it is the one step still open. It also double-checks that the clobber has not recurred — if the chapters show the old names again, a stale tab is still flushing and the version guard above stops being optional.
-
-**How to apply:** on `nda-tracker.vercel.app` → **Syllabus** → batch `LWS_NDA_2Y_(25-27)_B` → **NDA Program**, expand each of Physics / Chemistry / Biology. Confirm (a) counts read 14 / 12 / 9; (b) order is descending by the bracketed % (Physics starts `Light and Optics (21.6%)`, Chemistry `Carbon and Its Compounds (17.2%)`, Biology `Human Physiology (27.4%)`); (c) the carried-over `Done` ticks are present — Physics should show Done on Kinematics, Laws of Motion, Work/Energy/Power, Gravitation, Fluid Mechanics, Heat and Thermodynamics, Sound. Also spot-check `APJ_NDA_12th_(26-27)` (Chemistry: Metals and Non-Metals, Acids/Bases/Salts, Atomic Structure all Done). If any old chapter name appears, re-query Supabase before assuming a render bug.
-
 ---
 
 ## 2026-07-27
-
-### ~~Browser golden-path verify the offline-exam marks grid~~ — **DONE 2026-07-27**
-
-Verified in-browser by the user on `nda-tracker.vercel.app` — the derived roster, marks entry, and save path work end-to-end against live `studentProfiles`. This closes the last open Definition-of-Done item for commit `95ae7be`. Original entry kept below for the record.
-
-The in-app marks grid shipped this session (commit `95ae7be`, pushed to `main` → already deployed) with TDD coverage (+37 tests, 1924 green), clean lint, and a passing `vite build` — but **not click-verified**. The session had no browser tooling, and the save path needs a live Supabase **admin session** (only exists on Vercel). Same manual-verify gap logged for every prior feature; note the *file-upload* offline path was verified back on 2026-06-29, but the grid is a new path to the same `addExam`.
-
-**Why:** the seams unit tests can't reach are exactly the ones that matter here — `buildOfflineRoster` reading **live** `studentProfiles` (the tests use hand-built fixtures, so a real `batches[]`/`accountStatus` shape mismatch would be invisible), the `addExam` → Supabase round-trip with `questions: []` + `max_marks`, and whether the derived roster actually matches who sat the paper. If the roster comes back empty or wrong for a real batch, the whole feature is unusable and nothing in CI would say so.
-
-**How to apply:**
-- On `nda-tracker.vercel.app` (admin): Exams → **+ Offline marks** → fill name + max marks → tick a real batch → **confirm the roster loads with the expected students** (count matches the batch; no blocked/quit students; no duplicate rows for students with name variants).
-- Type marks for 2–3 students, leave one blank, Save. Confirm: the exam card shows an "Offline" badge with the right %-of-max; the blank student is **absent** from the results, not a zero; the exam appears in the Dashboard trend and that student's Exam History.
-- Test **📋 Paste a column**: paste `72`, blank line, `55` and confirm it fills rows 1 and 3 in roster order, leaving row 2 empty.
-- Switch to **📄 Upload file** → **Download template** and confirm the Name column arrives pre-filled with the selected batch's roster.
-- Edge: with no batch ticked, confirm the grid shows "Select a batch above to load its students" and Save stays disabled.
 
 ### Paste-a-column silently drops values past the end of the roster
 
@@ -704,20 +461,6 @@ The in-app marks grid shipped this session (commit `95ae7be`, pushed to `main` �
 **Why:** silent truncation on a marks-entry path is the bad kind of quiet — a misaligned paste assigns the wrong marks to the wrong students and looks completely normal on screen. Faculty would have to eyeball all 18 rows to catch it. Low likelihood, high cost, cheap to fix.
 
 **How to apply:** in `applyPaste`, compare `values.length` against `roster.length` and surface a mismatch **before** applying — either a confirm ("Pasted 20 values for 18 students — the list may not match this roster") or a non-blocking `Alert` after the fill stating how many were used and how many dropped. Keep the short-paste case silent (it's the intended top-up). `parseMarksPaste` already returns the full parsed array, so no change to the pure helper — this is a UI guard only. Add a modal test for the long-paste warning.
-
-### ~~Verify the `/school-attendance` teacher flow in a real browser (Definition-of-Done gap)~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
-
-Phase 1 shipped with TDD coverage (1967 green), baseline-clean lint and the migration applied to production Supabase — but **not click-verified**. Everything that matters here needs a live session and live data, which unit tests fixture away.
-
-**Why:** the seams the tests can't reach are exactly the risky ones. `findTeacherByEmail` joins the **auth email** to `timetableTeachers[].email` with no FK behind it — if the live teacher rows have blank or differently-spelled emails, every teacher sees "not linked to a teacher record" and the feature is dead on arrival. Likewise the `mapping.teacherId` coverage: if live mappings mostly have no teacher assigned, teachers will see an empty day while the admin board shows everything as "unassigned". Both are data-shape questions, invisible in CI.
-
-**How to apply:**
-- Query first (cheap, do this before touching a phone): how many `timetableTeachers` have a non-blank `email`, and what share of `timetableMappings` have a non-null `teacherId`. If either is thin, fix the data before rollout — the feature is only as good as that join.
-- Sign in as a real teacher account on a phone → `nda-tracker.vercel.app/school-attendance`. Confirm: their own periods only, right batches, ordered by time; the identity line names them.
-- File one period with absentees and one with **nobody** absent. Confirm both flip to **Filed**, and that the all-present one is what proves `lecture_submissions` is doing its job.
-- As admin: Attendance → Lecture log → confirm `FilingBoard` shows the same two as filed and names who is outstanding.
-- Confirm a teacher session does **not** trip the "your data is out of date · Reload" banner while navigating the portal (the `persist.js` early return).
-- Add to home screen; confirm the icon label reads "NDA Tracker" and the icon reopens the page.
 
 ### Phase 2 + 3 of teacher-filed attendance
 
@@ -758,16 +501,6 @@ CLAUDE.md's lint section notes that `App.jsx` and `StudentView.jsx` carry the sa
 **Why:** it is a genuine judgement call, not an oversight, and it should be made deliberately rather than by a doc-maintenance pass silently shortening them.
 
 **How to apply:** either relax the guideline (and say so in the skill's expectations), or trim only the entries whose length comes from *restating* the memory body rather than from distinct recall hooks — `project_whatsapp_block_gate` (302) and `project_open_ended_leave` (335) are the two clearest candidates. The store is also 350 KB total with `project_completed_archive.md` alone at 115 KB; folding its pre-2026-06 rows into a summary block (the file already did this once for the pre-Vercel era) would halve it.
-
-### ~~Meal checkpoints have no filed-vs-silent record~~ — **DONE 2026-07-28**
-
-Shipped in `4cedaa8`. `checkpoint_confirmations` gained a `kind` discriminator (`roll` | `meal`) with the count columns made nullable and a CHECK keeping rolls strict — deliberately **not** the plain "drop NOT NULL" suggested below, which would also have let a roll be written with no reconciliation. `markCheckpointFiled` writes meal rows and refuses roll checkpoints; the `ROLL_CHECKPOINTS` guard in `confirmRoll` therefore stayed. Admin filing board added atop the Hostel tab. (Original entry retained below for the reasoning trail.)
-
-Roll checkpoints get `checkpoint_confirmations` (headcount + `reconciled`), so "the warden did the night roll" is recorded. Meals have nothing: an unmarked breakfast and a breakfast where everyone showed up are both zero `checkpoint_absences` rows. Now that mess staff file their own meals, that ambiguity is live — the same gap `lecture_submissions` was created to close for lectures.
-
-**Why:** it is the failure mode that hides itself. An unfiled meal reads as a clean one, so nobody is chased and the gap never surfaces. The hostel subsystem already models the concept (`checkpoint_confirmations`), it just doesn't cover meals.
-
-**How to apply:** the table's `expected_count` / `confirmed_present` / `reconciled` are all `NOT NULL`, so extending it to meals needs either a migration making them nullable (a meal has no headcount) or a "filed" row with sentinel counts — the former is cleaner. Then add a filed/outstanding strip to the admin Hostel tab mirroring `FilingBoard`, and drop the `ROLL_CHECKPOINTS` guard in `confirmRoll` accordingly. Deferred because it needs a schema change and was outside the requested scope.
 
 ### `residential` is wrong for all 126 LWS Pune students
 
@@ -814,16 +547,6 @@ Building the staff-parity work extracted two pure helpers that the admin surface
 
 **How to apply:** cheapest is to fold an "unfiled checkpoints" line into the existing `send-attendance-alerts` `kind:'hostel'` payload (no new endpoint — the Vercel 12-function cap is at its ceiling). Needs a decision on timing: an alert at 09:00 for an unfiled breakfast is useful, one at 23:00 for an unfiled dinner is too late to fix anything.
 
-### ~~Browser golden-path verify the 2026-07-28 staff-parity work~~ — **DONE 2026-07-29** (browser pass confirmed by the owner — covers the Written Quiz flow noted in the body)
-
-Four capture flows shipped without a manual browser pass: teacher extra-class filing and homework filing on `/school-attendance`, and the leave lifecycle + meal filing on `/hostel-mess-attendance`. All are covered by tests and a serialized full suite (2073/2073), but the project's Definition of Done requires the golden path clicked through in a real browser, and these are phone-first surfaces used by staff mid-shift.
-
-**Why:** the failure modes left are the ones tests cannot see — a mis-tap target on a phone, a modal footer that still needs scrolling on a short viewport, a copied link that pastes wrong into WhatsApp. This subsystem exists because capture wasn't happening; friction here is the whole risk.
-
-**Also covers (added 2026-07-28, later the same day):** the **Written Quiz** flow — create one, check Save stays disabled until every student is marked or ticked absent, save, then re-open it from the "Written Quizzes today" strip and confirm the marks pre-fill. Then confirm the admin Exams page shows the *Written Quiz* badge + "by <teacher>", and that a monthly report PDF for that student renders `Name (Written Quiz)`.
-
-**How to apply:** on a real handset — (1) `/school-attendance` → **+ Extra class** → file → reload → the card must come back from the submission row; (2) same page → **Homework** → chapter + tick → the count badge appears; (3) `/hostel-mess-attendance` → save Breakfast with nobody missing → pill gets a ✓ and admin's Hostel tab reads 1/5 filed; (4) put a boarder on leave → the open-leave panel lists them → **back?** unlocks the row. Carries forward the still-open `/school-attendance` Phase-1 verification entry from 2026-07-27.
-
 ### A syllabus-sourced chapter picker for teacher homework filing
 
 Teacher homework filing takes the chapter as **free text**. The admin `HomeworkLogTab` does too, so this is not a regression — but hand-typed chapter names are the same class of problem as hand-typed student names, and `homework_pending` groups items by exact `(subject, chapter, type)`.
@@ -840,31 +563,27 @@ The 28 Jul "Sets" results blast reached 13 students + parents — a recipient fo
 
 **How to apply:** have `api/send-whatsapp.js` write its own `whatsapp_send_log` row before returning — row-level writes are immune to the blob guard, it is the same dual-path pattern every normalised domain already uses, and it needs no new serverless function (the Vercel 12-function cap is at its ceiling). The client then reads that for the "Sent N✓" badge. Second, smaller half: stop `staleLock` swallowing saves silently — surface "sent, but the record could not be saved, reload before doing anything else" on the send modal's result screen. One check would confirm the diagnosis outright: did whoever ran the blast see the red "Your data is out of date · Reload" banner? Also unrecorded and possibly the same cause — "ENG &Geo - Interior & pos" (23 Jul) and "Math's : Sets" (25 Jul).
 
-### ~~Decide the "Sets" resend~~ — **DONE 2026-07-28** (the label question below is still open)
+### Decide the offline-exam WhatsApp template labels (promoted 2026-09-12 from the struck entry above)
 
-Resent the same day: `POST /api/send-whatsapp 200` at 13:56 UTC, **17 messages, 0 skipped**, recorded under the re-uploaded exam `exam_1785246646088`. Marks behind it check out (Shivam 5 → 100%, Satyam 4 → 80%, Vihan 0 → 0% genuinely). Note the exam was deleted and re-uploaded first, so the original wrong message's deep-link points at a dead id and its focused card renders nothing — harmless, since every family got a fresh link.
+Promoted out of a struck heading — the Sets resend is done, **this half was never decided.** On an offline exam the numbers sent are **marks**, rendered under the approved template's fixed "Correct Qs" / "Total Qs" labels. For Sets that reads true by coincidence (marking `{correct:1, wrong:0}`, so 4 marks *is* 4 of 5 correct); for a paper marked out of 30 it will not.
 
-**The template-label half survives** and is the reason this entry stays readable rather than deleted: on an offline exam the corrected numbers are **marks** sitting under the approved template's fixed "Correct Qs" / "Total Qs" labels. For Sets that happens to read true (marking is `{correct:1, wrong:0}`, so 4 marks *is* 4 correct out of 5 questions), but for a paper marked out of 30 it will not. Either accept it as a documented quirk, or get a neutral template approved ("Marks: {{5}} / {{6}}") — ~3-day Meta lead time, a second template ID in Vercel env, and a branch in the endpoint choosing template by offline-ness. Param rules in `memory/feedback_whatsapp_template_param_rules.md`.
+**Why:** every offline-exam result sent between now and a template change inherits the mislabelling, and it goes to parents, who cannot ask what the max was. The cost only grows — and written/offline exam volume is rising now that teachers file their own quizzes.
 
-<details><summary>Original entry</summary>
+**How to apply:** pick one —
+1. **Accept it as a documented quirk** — cheapest; record it in FLOWS.md next to the result-send flow so the next person reading a parent's confused reply finds the answer. `whatsappResultScore.js` already computes `score / max` correctly; only the *labels* lie.
+2. **Get a neutral template approved** ("Marks: {{5}} / {{6}}") — ~3-day Meta lead time, a second template ID in Vercel env, and a branch in `api/send-whatsapp.js` choosing the template by offline-ness (derived, `!exam.questions?.length`). Param rules: [[feedback_whatsapp_template_param_rules]].
 
-The 13 Sets families were messaged "Score: 0%, Correct Qs: 0, Total Qs: 0" for a paper they scored 0–5 on. The scoring fix is deployed (`c5edadf`), so a resend now reads correctly (80% for a 4/5). The decision was never made. It is coupled to a second one: on an offline exam the corrected numbers are **marks** sitting under the approved template's fixed "Correct Qs" / "Total Qs" labels. For Sets that happens to read true (marking is `{correct:1, wrong:0}`, so 4 marks *is* 4 correct out of 5 questions), but for a paper marked out of 30 it will not.
+### Preview-vs-delivered and the student-portal display are still unverified (promoted 2026-09-12 from the struck entry above)
 
-**Why:** these are the same families who already received a wrong message, so a second one wants to be right in both senses. And the label question only gets more expensive later — every offline exam sent between now and a template change inherits it.
+Promoted out of a struck heading. The *send* half was confirmed in production (a real blast, 200, 17 messages, correct marks). Three things were never checked and the struck entry buried them:
 
-**How to apply:** resend is a normal blast (💬 Send on the exam, all students) once you decide it is wanted — but do it *after* confirming the deployed fix with a redirect-to-self test send, not before. For the labels, either accept marks-under-question-labels as a documented quirk, or get a neutral template approved ("Marks: {{5}} / {{6}}") — ~3-day Meta lead time, a second template ID in Vercel env, and a branch in the endpoint choosing template by offline-ness. Param rules in `memory/feedback_whatsapp_template_param_rules.md`.
+- The **"Score (as sent)" column's layout** at real widths — the table min-width was bumped 560→660px on inspection alone, never seen on a real screen.
+- That the **previewed number matches the delivered message body** for the same student. Nobody has put the two side by side, which is the column's entire purpose ([[feedback_preview_shares_producer_computation]] — sharing the producer's math makes divergence unlikely, not impossible).
+- The **student-portal display changes** that followed (`a5cb79b`, `f61dc9f`, `60a1796`) — the `—` cells for offline per-question columns, the `5 / 5` score, the `▲ N pts` delta.
 
-</details>
+**Why:** the portal changes are student- and parent-facing and were the fix for a defect that had reached parents (offline zeros). Verifying them needs a Vercel branch preview — localhost cannot reach the student portal at all, which is the same gap the "no `/api/student-login` dev shim" entry describes. Doing that entry first makes this one cheap.
 
-### ~~Browser golden-path verify the offline-exam WhatsApp score + the new preview column~~ — **DONE 2026-07-29** (browser pass confirmed by the owner)
-
-Both 2026-07-28 WhatsApp changes shipped without a manual browser pass: the offline scoring fix in `api/send-whatsapp.js` and the read-only "Score (as sent)" column in `WhatsAppPreviewModal`. Covered by tests (12 on the pure module, 7 on the modal including a parameterised binding assertion, 32 on the endpoint, full suite 2106/2106), but the project's Definition of Done requires the golden path clicked through, and there is no browser automation in the repo to do it from a session.
-
-**Why:** the remaining failure modes are the ones tests cannot see — the extra column crowding the parent-mobiles input at real widths (table min-width was bumped 560→660px on inspection alone), and, more importantly, whether the delivered WhatsApp body actually matches the previewed number. The whole point of the column is that it is trustworthy; nobody has yet seen it agree with a real message.
-
-**How to apply:** Exams → an **offline** exam (Sets, or Integration from 5 Jun which is in local dev data) → 💬 Send. Confirm the column reads `80% 4 / 5` for Satyam Pune rather than `0% 0 / 0`, and that the Branch / Mobile / Parent Mobiles fields are still comfortable. Then put your own number in "Test — redirect all to" and confirm the received message says 80%. Check one MCQ exam too, to confirm nothing regressed on the common path.
-
-**Narrowed 2026-07-28:** the *send* half is now confirmed in production, not just by tests — a real blast returned 200 with 17 messages against correct marks, and the student portal was opened on the resulting deep-link. What remains unverified is the **preview column's layout** at real widths and, strictly, that the previewed number matches the delivered message body for the same student (nobody has compared the two side by side). Also still unverified by anyone: the student-portal display changes that followed (`a5cb79b`, `f61dc9f`, `60a1796`) — the `—` cells, `5 / 5` score, and the `▲ N pts` delta.
+**How to apply:** Exams → an offline exam → 💬 Send → compare the column against the body of a `redirectTo` test send to your own number, and eyeball the Branch / Mobile / Parent Mobiles fields at a normal window width. Then open that student's portal on a branch preview ([[reference_browser_verify_portals]]) and confirm the `—` cells, the `score / max` and the delta render as intended.
 
 ### `StatCard` prepends an arrow to captions that aren't deltas
 
@@ -918,18 +637,22 @@ The written insights panel is descriptive only — every mark, median, spread, b
 
 **How to apply:** it only becomes worth a page with the student's **history** on it (this mark against their recent exams, class average, rank) — which is the comparison work above wearing a different hat. Do that first, then reuse it here; don't build a thin written page in the meantime.
 
-### ~~Subtopic cleanup Tiers 2 and 3 are unapplied~~ — **Tier 2 DONE 2026-07-29; Tier 3 open**
+### Subtopic cleanup Tier 3 — the merges that need a call per item (promoted 2026-09-12 from the struck entry above)
 
-Tier 1 (mechanical: casing, `&`-vs-`and`, plural/suffix, exact synonym) shipped 2026-07-29 — 58 questions, 2,665 → 2,641 distinct `(subject, chapter, subtopic)` triples. The remaining ~70 groups from `/subtopic-analyse` were deliberately left.
+Promoted out of a struck heading: Tiers 1 and 2 are applied, **Tier 3 is not**, and it was invisible under a `~~struck~~` title. Each of these is a judgment call about whether two names are one concept, not a string rule — which is exactly why they were held back rather than bundled into the safe merges.
 
-**Why:** they cross concept boundaries, so each needs a judgment call rather than a string rule, and bundling them behind the safe merges would have hidden the risky ones inside a large diff.
+**The list** (re-verify the literal strings against live Supabase first — they may have shifted, per [[feedback_query_database_before_reasoning]]):
+- `Polar Form` + `Exponential Form`
+- `First Ionization Enthalpy` + `Second Ionization Enthalpy`
+- `Velocity-Time Graph Area` + `Velocity-Time Graph Slope`
+- `Absolute Value Equations` + `Absolute Value Inequalities`
+- `Determinant Equations` + `Solving Determinant Equation` — **neither name is canonical; a new one has to be chosen.**
 
-**How to apply:** re-run `/subtopic-analyse` first — it reads Supabase live, so it will already reflect Tier 1. Then, per tier:
-- ~~**Tier 2 — concept merges.**~~ **Applied 2026-07-29** — 51 renames / 69 questions / 10 exams; distinct triples 2,641 → 2,597. Three groups were **narrowed** against live data first: Clouds (the report's 6 types were really ~27 subtopics / 45 Q including distinct concepts — only the `<X> Cloud Characteristics` family merged), Question Tags (30 buckets, not 6 — half are distinct grammar rules and stayed split), Total Internal Reflection (spans 3 chapters — only the same-chapter 6 merged). Original scope was: Question Tags → `Simple Present` (7 one-Q buckets), `Classical Probability` (split by Cards/Coins/Dice), `Cloud Types & Characteristics` (6 cloud types, 12 Q — the best non-Maths consolidation), `Conservation of Angular Momentum` (split by Earth/Gymnast/Human Body), `Phrasal Verbs` (split by keyword), `Common Chemicals` (one bucket per chemical). All share one shape: **split by prop or scenario rather than by concept**, leaving ~45 Q in buckets of 1–3.
-- **Tier 3 — needs a call per item.** `Polar Form` + `Exponential Form`, `First`/`Second Ionization Enthalpy`, `Velocity-Time Graph Area` + `Slope`, `Absolute Value Equations` + `Inequalities`, `Determinant Equations` + `Solving Determinant Equation` (neither name is the canonical — a new one must be chosen).
-- **Not renames — do not fold into either tier.** `Geometric Progressions` (32 Q) is a catch-all that likely already contains the sum questions; it needs re-tagging at the question level. `Inverse Trigonometric Identities` in the *Differentiation* chapter is a wrong chapter tag.
+**Not renames — do not fold in here.** `Geometric Progressions` (32 Q) is a catch-all that probably already contains the sum questions; it needs re-tagging at the question level. `Inverse Trigonometric Identities` sitting in the *Differentiation* chapter is a wrong chapter tag, not a subtopic merge — same shape as the `Direction Cosines and Ratios` entry.
 
-Add entries to **both** `merge_subtopics.py` and `migrate_subtopics_supabase.js` (the drift test enforces this), with a test case per pair and a KEEP case per near-miss, then `node migrate_subtopics_supabase.js --dry-run` before applying.
+**Why:** split subtopics fragment the per-subtopic signal that the drill-downs, wrong-answer audits and remediation links read. Low volume, so low urgency — worth folding into the next pass that touches the merge maps rather than a round of its own.
+
+**How to apply:** re-run `/subtopic-analyse` first (it reads Supabase live). Add each decided pair to **both** `merge_subtopics.py` and `migrate_subtopics_supabase.js` — the drift test enforces that they match — with a test case per pair and a KEEP case per near-miss, then `node migrate_subtopics_supabase.js --dry-run` before applying. Remember `apply_renames` is single-pass: a key that is an existing *target* silently stops one hop short, so retarget rather than append ([[feedback_retarget_dont_append_rename_map]]).
 
 ### Prevent question-text-as-subtopic-name at the tagging stage
 
@@ -1263,6 +986,8 @@ The stale-chunk fix (2026-09-10) makes the *symptom* legible at three download s
 
 ### Build the re-grade action if key corrections recur
 
+> **This is the single open entry for re-grading** (consolidated 2026-09-12). It supersedes *"Build the re-grade-from-stored-choices action"* (2026-06-10) and *"Feed the upload key-resolver into the re-grade action"* (2026-07-20), both of which said *build it* and are now struck. The gate below is the current instruction.
+
 Three wrong answer keys were found and corrected on 2026-09-11 (surfaced by Question Stats' key-conflict panel; the bank was consulted for the true key). All three sittings had been **graded by Evalbee against the wrong key**, so 30 result rows were re-graded — **by hand, in SQL**, because the re-grade action is deliberately unbuilt (see `CLAUDE.md` → grading invariant).
 
 **Why:** the manual path is fine for three questions and unacceptable for thirty. Each correction meant recomputing the verdict from `exam_results.choices`, adjusting `correct`/`incorrect`, and applying that exam's own marking scheme — two of the three exams used 2.5/−0.83 and the third 4/−1.33, so a shared constant would have produced silently wrong totals. That is exactly the kind of arithmetic a human should not repeat under time pressure.
@@ -1276,19 +1001,11 @@ Three wrong answer keys were found and corrected on 2026-09-11 (surfaced by Ques
 - Surface it where the error is found — the key-conflict panel on Question Stats — not as a general "edit marks" button.
 - **It must be loud.** Marks already sent to parents do not un-send, so the action should state how many students gain and lose before it runs, and record that it ran.
 
-### ~~Backfill `questionId` onto exams uploaded before the column existed~~ — **DONE 2026-09-11** (the 10 most recent Maths mocks)
-
-`migrate_question_ids.js` matched **1,191 of 1,200** questions to exactly one bank row by exact whitespace-normalised text, across 10 vault-built Maths mocks; **zero unmatched**, and the 9 ambiguous (text duplicated in the bank) were skipped rather than guessed. Verified from the DB: `with_ids == distinct_ids` on every exam, so no two questions claim the same row. NOT done by the `paper_questions` join proposed below — exact text against 33.5k LWS Maths questions proved unambiguous enough to verify directly, and zero misses is itself the evidence these papers came from the bank verbatim. **Older exams (pre-2026-08-29) still have none** — re-run with a larger `LIMIT` to extend. Original entry kept below for the reasoning trail.
-
-The PYQ Vault Tags export now emits `QuestionId` and `parseTagsFile` stores it, but **forward-only** — every exam already in the bank has no bank provenance. Logged as a backfill candidate, **not** to be run without an explicit decision (it edits shipped exam rows).
-
-**Why:** the value of the link (measured item difficulty, exposure control, finding every exam that used a mis-keyed question) scales with how much history carries ids. The forward-only set will take a full season to become useful on its own.
-
-**How to apply:**
-- **Do NOT fuzzy-match question text.** The vault knows exactly which questions went into which generated paper — `paper_questions` (migration 0039) holds the junction, and `papers` carries the finalize-snapshot. A per-paper join is exact; text matching would re-introduce the guessing this feature exists to remove.
-- Papers built before the paper-builder existed, hand-typed sheets, and teacher written quizzes have no vault row at all — they stay null, permanently and correctly.
-- Cheapest path for a recent exam needing no script: re-export its Tags sheet from the vault and re-upload via **Update Tags** — `ReuploadTagsModal` already merges `questionId` (`?? q.questionId` so a sheet without the column never wipes one).
-- A backfill must be a dry-run-first script that reports matched/unmatched per exam and writes only `questions[].questionId`, touching no other field. Run the 360 (scope · blast radius · does-it-apply · risk · cost) before proposing it.
+**Carried in from the two superseded entries** (keep these when it is built):
+- **Model: full recompute + preview** — the user's choice on 2026-06-10. Preview the diff first (N students change, Δ marks, rank shifts), snapshot prior values, write to `exam_results` (+ store) only on confirm.
+- **Never blind-zero a question you cannot re-grade.** Where a question has no valid key or no captured choice, keep Evalbee's original `responses[q]` — this is what protects bonus / dropped / multi-key items.
+- **Gate the action on `choices` existing** for that exam. Pre-2026-06-10 exams have none until their Evalbee XLS is re-uploaded (same backfill the integrity-coverage entry needs).
+- **Second entry point — the upload key-resolver.** `KeyMismatchPanel` (2026-07-20) already lets faculty override the Evalbee key with the tags-file `Answer` at Step 1, and `keyMismatches[].chosen` threads the corrected keys into wizard state. That override is the moment faculty is *most certain* a key is wrong, yet it currently leaves scores frozen — so once the action exists, offer its preview after an upload that overrode ≥1 conflict. Still opt-in: overriding a *displayed* answer is not consent to shift grading authority Evalbee→app.
 
 ### Follow-on phases for the cross-app question link (nothing consumes `questionId` yet)
 
@@ -1302,8 +1019,6 @@ Phase 0 (the link) shipped 2026-09-11. The column is inert until something reads
 - **Phase 2 must REPORT unmatched ids, never silently drop them.** Vault ids are not permanently stable: a stem repair there deletes and re-commits the row (because `content_hash` covers the stem), minting a **new uuid** — see the vault's `ARCHITECTURE.md` account of exactly that happening. So a tracker exam can legitimately hold an id the bank no longer has, through nobody's error. An unmatched id usually means *"this question was repaired since the exam"*, which is itself worth seeing; discarding it silently hides that ([[feedback_silent_fallback_hides_edge_errors]]). Same reasoning applies to any reconciliation built on `questionId`.
 - **Phase 3 — exposure control.** Export the id set a batch has already sat, for the vault's paper builder (`papers`/`batches` already model per-batch non-repetition).
 - **Phase 2+ needs the images question answered:** the Tags sheet is text-only, so a question with a figure loses it. Fetching by id is the fix, but it must be a *display* enrichment — the stored text stays the record of what the student sat.
-
----
 
 ---
 
@@ -1372,25 +1087,6 @@ wired up. It is a one-line miss, not a missing capability.
 shipped code, a different defect from the one being fixed, and it needs its own verification against
 a real Devanagari exam.
 
-### ~~De-duplicate the docx OMML pipeline (backfill candidate)~~ — **DONE 2026-09-12**
-
-`gatErrorSetDocx.js` is a verbatim copy of `practiceSetDocx.js`'s maths pipeline — `MARKER`,
-`MATH_PR_BLOCK`, `pickFn`, `latexToOmml`, `mathRuns`, `contentTable` and the post-pack marker swap.
-Only `prettifyMath` is shared. The single-pass marker-swap optimisation (measured at 675 s → 441 ms
-on a 1,740-equation set) had to be applied **twice**, by hand.
-
-Shipped the same day. `src/lib/docxMath.js` now owns `MARKER`, `MATH_PR_BLOCK`, `pickFn`,
-`latexToOmml`, `mathRuns`, `contentTable` and the post-pack marker swap; `practiceSetDocx.js` went
-468 → 267 lines (`4ecff2d`) and `gatErrorSetDocx.js` 415 → 300 (`8bc8c18`), one revertable commit
-each. `escapeRegex` deliberately stayed local to `gatErrorSetDocx` — its other caller,
-`stripAnswerPrefix`, has nothing to do with maths. Verified in real Word (`OMaths.Count` 9/9 and
-6/6 on fixtures), not just by parsing the zip. The 360 that authorised it is in
-[`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §2.
-
-**How to apply:** after `src/lib/docxMath.js` exists and the practice set is on it, repoint
-`gatErrorSetDocx` and delete its copies. Its existing tests are the guard. Verify in real Word — a
-repair prompt is invisible to the suite.
-
 ## 2026-09-12 — Orphaned insights plumbing (after the Insights tab removal)
 
 Removing the Insights page + the `ImprovementPlan` card left **`savedInsights` with zero renderers**. Still wired, doing nothing:
@@ -1400,6 +1096,15 @@ Removing the Insights page + the `ImprovementPlan` card left **`savedInsights` w
 - `savedInsights` in `DEFAULTS`, the `saveToStorage` allow-list, `loadRemoteData`, and `loadStudentData`'s reset.
 
 **Kept on purpose**, not an oversight: the Supabase tables and `migrate_insights_to_supabase.js` are untouched, so the single surviving plan (LWS-129) and the ability to resurrect the feature by re-adding a page both survive. Remove the plumbing only if the decision is that AI-written plans are not coming back — otherwise the cost is 2 idle queries per admin page load.
+
+**The cadence question folds in here** (consolidated 2026-09-12, absorbing the 2026-05-21 and 2026-05-25 entries, which were duplicates of each other). Those asked *how often* plans should refresh; that is downstream of the question this removal raises, so answer them in order:
+
+1. **Are AI-written plans coming back?** If no: delete the plumbing listed above, close `memory/project_ai_insights_cadence.md`, and keep the tables (they hold the one real plan). If yes: a page has to be re-added before a cadence means anything.
+2. **Only then, the cadence** — one question, three options, and do **not** open with stratification, schema or two-row-types (memory `project_ai_insights_cadence.md` records why that framing overwhelmed the earlier conversation):
+   - **Manual** — admin clicks "generate plan" per student. Nothing to build beyond the page.
+   - **Post-test** — a meaningful subject test finishing refreshes that student's plan. Needs a server hook + Claude API call. ⚠️ Now also needs a **function slot** — `api/` is at the Vercel Hobby 12-file ceiling, so it must fold into an existing endpoint via a `body.kind` dispatch ([[project_vercel_function_cap]]).
+   - **Calendar** — weekly/fortnightly cron refresh. Needs at-risk filtering to keep volume sane, plus the same function-slot constraint.
+3. Lock whichever answer in `memory/project_ai_insights_cadence.md` with a DECIDED date. Standing since 2026-05-20; the infrastructure (tables, admin-gated endpoint pattern, service-role client, Claude API) has all been in place since 2026-05-25 — the trigger decision has always been the only blocker.
 
 ## 2026-09-12 — Orphaned dashboard analytics (after the trend / priority / at-risk removal)
 
@@ -1413,25 +1118,27 @@ Two exports now have **zero app consumers** (tests only):
 
 **Why kept:** both are pure, cheap, tested, and the root-cause idea still ships to students through `focusAreas`. Removing them is a doc-touching change (a GUARDRAILS bullet) for no runtime gain.
 
-**How to apply** (only if the call is that neither widget is coming back): delete the two exports, their test blocks, the `GUARDRAILS.md` priority-formula bullet, and the moot 2026-07-14 alignment suggestion above. Otherwise leave as is — this entry is the record that it's intentional, not drift.
+**How to apply** (only if the call is that neither widget is coming back): delete the two exports, their test blocks, the `GUARDRAILS.md` priority-formula bullet, and the moot 2026-07-14 `getPriorityChapters` alignment suggestion (now in [`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md)). Otherwise leave as is — this entry is the record that it's intentional, not drift.
 
 ---
 
-## ~~2026-09-12 — No way to retire a batch~~ — **DONE 2026-09-12** (all three tiers)
+## 2026-09-12 — Retire the Sep26 batches in production
 
-`BATCH_RETIREMENT.md` (spec, nothing built). A batch's lifecycle is create → rename → hard
-delete; `deleteBatch` is a cleanup for a batch created in error, and using it to retire a
-finished cohort deletes teaching history and orphans `student_batches`. The Sept-2026 attempt
-batches need this now and `LWS_NDA_2Y_(25-27)_A/B` (67 students) hits it in 2027.
+### Run the batch-retirement procedure against production
 
-The spec covers a **Tier 1 zero-code runbook** (usable today, order matters — freeze absence
-times before touching the timetable, and run calendar sync after), **Tier 2 `archivedBatches[]`**
-(the real fix: a visibility flag, ~10 call sites, half a day), and **Tier 3** (tighten
-`deleteBatch` to refuse while `student_batches` rows exist).
+Promoted 2026-09-12 out of the struck entry above, where "still to do" sat under a **DONE** heading.
+The machinery shipped; **it has never been used.** Verified against production the same day:
+`faculty_state.data->'archivedBatches'` is `[]`, so every finished batch is still fully visible in
+every picker.
 
-**Shipped:** Tier 2 (`archivedBatches[]` + `src/lib/batchVisibility.js` + Settings UI), Tier 3
-(`deleteBatch` refuses while `memberCount > 0`), Tier 1 (procedure in `OPERATIONS.md` →
-*Retiring a finished batch*). The three "Record"-class sites — `isAligned` and the three
-`syllabusBatches.filter(...).join(', ')` join-order expressions — keep reading the *unfiltered*
-list, each pinned by a named regression test. **Still to do: actually retire the Sep26 batches** —
-the procedure has not been run against production.
+**Why:** the feature was built because the Sept-2026 attempt batches need retiring *now* — that was
+the motivating case, and it is unchanged. Until the procedure runs, the only ways to get a finished
+cohort out of the dropdowns remain the two the spec rejected: leave it cluttering every picker, or
+hard-delete it and lose the teaching history. `LWS_NDA_2Y_(25-27)_A/B` (67 students) hits this in
+2027, so the procedure wants a first real run while the person who wrote it is still nearby.
+
+**How to apply:** follow `OPERATIONS.md` → *Retiring a finished batch*. **Order is load-bearing** —
+freeze absence times (`node migrate_absence_times.js`) before touching the timetable, and run
+calendar sync after. Then confirm in-app that the retired batch disappears from the batch pickers
+while the three "Record"-class sites (alignment + the join-order expressions) still show it, and
+that its exams, syllabus progress and attendance history are all still reachable.
