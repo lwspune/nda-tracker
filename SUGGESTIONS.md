@@ -1303,6 +1303,53 @@ Phase 0 (the link) shipped 2026-09-11. The column is inert until something reads
 - **Phase 3 — exposure control.** Export the id set a batch has already sat, for the vault's paper builder (`papers`/`batches` already model per-batch non-repetition).
 - **Phase 2+ needs the images question answered:** the Tags sheet is text-only, so a question with a figure loses it. Fetching by id is the fix, but it must be a *display* enrichment — the stored text stays the record of what the student sat.
 
+---
+
+## 2026-09-12 — The class PDF prints a Devanagari exam title raw (10 exams)
+
+`examPdf.js` `drawHeader` does `doc.text(exam.name, 14, 20)` — straight into jsPDF, with no
+`pdfSafeExamLabel`. jsPDF's Standard-14 fonts are WinAnsi (256 single-byte slots), so the blue
+header band on those reports shows scattered Latin punctuation where the title should be.
+
+**Measured against production (2026-09-12):** `10 of 213` exams have a non-ASCII name — all
+Marathi/Hindi language papers (`३. बेटा मी ऐकतो आहे`, `२. लक्ष्मी`), and **all 10 are written exams**, so their PDF is
+title block + tables and the garbled title is most of what is on the page.
+
+**Why it survived:** `src/lib/pdfSafeText.js` exists precisely for this and is dated/commented with
+one of these very titles — but only `monthlyReportPdf.js` ever imported it. The class PDF was never
+wired up. It is a one-line miss, not a missing capability.
+
+**How to apply:**
+- `drawHeader` → `doc.text(pdfSafeExamLabel({ name: exam.name, subject: exam.subject }), 14, 20)`.
+  A Latin name passes through verbatim, so 203 of 213 exams are byte-identical; the other 10 get
+  `Marathi — Ch. 3` instead of garbage.
+- Check the rest of the file for the same miss — the all-students page redraws the header too.
+- Note this substitutes English rather than rendering the title: jsPDF has no shaping engine, so an
+  embedded Unicode font would reorder matras and break conjuncts, which is worse than obvious
+  garbage on a faculty document. The real fix for those exams is the Word export
+  ([`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §5), where Word does the shaping — which is why
+  this is logged rather than treated as urgent.
+
+**Not in scope of the session that found it** (2026-09-12, the PDF question-card typesetting work):
+shipped code, a different defect from the one being fixed, and it needs its own verification against
+a real Devanagari exam.
+
+### ~~De-duplicate the docx OMML pipeline (backfill candidate)~~ — **IN SCOPE 2026-09-12**, no longer a candidate
+
+`gatErrorSetDocx.js` is a verbatim copy of `practiceSetDocx.js`'s maths pipeline — `MARKER`,
+`MATH_PR_BLOCK`, `pickFn`, `latexToOmml`, `mathRuns`, `contentTable` and the post-pack marker swap.
+Only `prettifyMath` is shared. The single-pass marker-swap optimisation (measured at 675 s → 441 ms
+on a 1,740-equation set) had to be applied **twice**, by hand.
+
+**Why:** the exam Word report would be copy three. Logged here first, then pulled INTO the work
+on the same day — decision D1 in [`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §2, which carries
+the 360 (blast radius, risk, reversibility) for the rework. Kept in this log rather than deleted
+so the trail from "noticed" to "scheduled" survives.
+
+**How to apply:** after `src/lib/docxMath.js` exists and the practice set is on it, repoint
+`gatErrorSetDocx` and delete its copies. Its existing tests are the guard. Verify in real Word — a
+repair prompt is invisible to the suite.
+
 ## 2026-09-12 — Orphaned insights plumbing (after the Insights tab removal)
 
 Removing the Insights page + the `ImprovementPlan` card left **`savedInsights` with zero renderers**. Still wired, doing nothing:
