@@ -1,17 +1,6 @@
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
-
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
+import { readEnvLocal } from './_env.js'
+import { normMobile } from './_mobile.js'
 
 // Account statuses that revoke portal access. The gate fails CLOSED on these
 // explicit values but fails OPEN on blank/unknown — many legacy rows have no
@@ -20,15 +9,6 @@ function readEnvLocal() {
 const INACTIVE_STATUSES = new Set(['Block', 'Quit', 'Inactive'])
 function isInactive(student) {
   return INACTIVE_STATUSES.has(String(student?.account_status || '').trim())
-}
-
-function normMobile(m) {
-  if (!m) return null
-  let s = String(m).replace(/\D/g, '')
-  if (s.startsWith('0') && s.length === 11) s = '91' + s.slice(1)
-  if (s.length === 10) s = '91' + s
-  if (s.startsWith('91') && s.length === 12) return s
-  return null
 }
 
 export default async function handler(req, res) {

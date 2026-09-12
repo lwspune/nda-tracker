@@ -67,6 +67,189 @@ reviewable change, since three of them are working surfaces with their own tests
 
 ---
 
+## Refactor ledger (opened 2026-09-12)
+
+A tree-wide review for duplication and layering, ordered by **evidence of cost** rather than line
+count — per the no-speculative-refactors rule, an entry is here because a divergence already exists
+or a fix has already had to be applied by hand twice. Items are independent and close one at a time.
+Two of them (2 and 4) are live defects, not just smells.
+
+---
+
+### 1. `api/` still repeats its bearer-JWT auth preamble seven times
+
+The leaf helpers shipped 2026-09-12 (`_env.js` / `_mobile.js` / `_wabridge.js` — closed entry in
+[`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md)). **The auth half did not**, and is the
+remainder of that entry rather than a new finding.
+
+Seven endpoints repeat the same eight lines: read `authorization`, strip `Bearer `, 401 on empty,
+`createClient(url, anon)`, `auth.getUser(jwt)`, 401 on no user, `isTeacherUser` 403, then build a
+second JWT-scoped client for RLS. See [`send-whatsapp.js:38-54`](api/send-whatsapp.js#L38-L54),
+[`send-late-notifications.js`](api/send-late-notifications.js),
+[`send-exam-absence.js`](api/send-exam-absence.js),
+[`send-homework-pending.js`](api/send-homework-pending.js),
+[`send-attendance-alerts.js`](api/send-attendance-alerts.js),
+[`quiz-import.js`](api/quiz-import.js), [`teacher-account.js`](api/teacher-account.js).
+
+**Why:** it is the authorization boundary, and it is *not* uniform — `send-mentor-nudges` and
+`send-attendance-alerts` have a `CRON_SECRET` bypass, `teacher-account` layers a superadmin check,
+`quiz-import` has a shared-secret path, and `sync-calendar` 403s teachers without the rest. That
+variation is exactly why it was left alone in the first pass: unlike `normMobile`, these are not
+byte-identical, and collapsing them wrongly would grant access rather than merely garble a message.
+
+**How to apply:** deliberately, and **not** as a single `requireAdminSession`. Tabulate all seven
+call sites first — which 401, which 403, which accept a secret instead of a session, and what each
+returns — then extract only the common core (`bearerFrom(req)` + `getUserOrNull`) and leave each
+endpoint's policy decision inline and visible. A shared helper that hides *which* callers refuse a
+teacher is worse than seven copies that state it. Do it with a test per endpoint asserting the 401
+and the 403 separately, before touching any of them.
+
+---
+
+### 2. Three parsers of one server log format, and the Exams copy is stale — LIVE BUG
+
+`api/send-*.js` emit `FAIL -> Name (student|parent -> …)` and `SKIP Name — …` lines. Three clients
+regex them back apart: [`Attendance/index.jsx:72`](src/pages/Attendance/index.jsx#L72) handles both
+legs, [`Exams.jsx:139`](src/pages/Exams.jsx#L139) matches the student leg only, and
+[`Exams.jsx:154`](src/pages/Exams.jsx#L154) is a third variant.
+
+**Why:** [`send-whatsapp.js:245`](api/send-whatsapp.js#L245) emits a parent-leg `FAIL` that
+`Exams.jsx:139` does not match, so a result send that fails **only** to the parent is never recorded
+as failed. Its `SKIP` pattern also mis-captures [`send-whatsapp.js:239`](api/send-whatsapp.js#L239)
+(`SKIP Name parent 98… — unrecognised format`) as a student named `"Name parent 98…"`, and
+[`:260`](api/send-whatsapp.js#L260) as one named `"monitor 98…"`. The Attendance copy fixed all
+three cases; the Exams copy never received the fix. That is the cost of the duplication, already
+paid.
+
+**How to apply:** one tested `src/lib/sendLog.js` `parseFailedNames(lines)`, consumed by all three
+call sites — same ruling as `whatsappResultScore.js`: the parser lives next to the format, once.
+Keep the Attendance implementation as the surviving one; it is the correct contract.
+
+---
+
+### 3. `lib/hostelLeave.js` claims to be shared and is not
+
+The module header reads *"shared by the admin Hostel board and the warden's own capture page."* Only
+the warden page imports it ([`HostelAttendance/index.jsx:7`](src/pages/HostelAttendance/index.jsx#L7)).
+The admin board hand-rolls the same derivation inline at
+[`HostelTab.jsx:368-387`](src/pages/Attendance/HostelTab.jsx#L368-L387), with its own
+`STALE_LEAVE_DAYS = 3` ([`:31`](src/pages/Attendance/HostelTab.jsx#L31)) and its own `OPEN_LEAVE_MS`
+([`:34`](src/pages/Attendance/HostelTab.jsx#L34)). `STATUS_CYCLE` / `AWAY_STATUSES` / `STATUS_META`
+are duplicated too ([`HostelTab:18-28`](src/pages/Attendance/HostelTab.jsx#L18-L28) vs
+[`HostelAttendance:27-35`](src/pages/HostelAttendance/index.jsx#L27-L35)), under a comment that
+reads "Mirrors HostelTab."
+
+**Why:** **both** surfaces can open and close leaves, and an unclosed open-ended leave excuses a
+boarder at every checkpoint indefinitely. A stale threshold that drifts between the two is precisely
+the failure the flag exists to catch. `buildOpenLeaveList` is tested; the admin copy is not.
+
+**How to apply:** the logic is currently identical apart from `fromDmy` vs `fromIso` — reconcile
+with `isoToDmy(l.fromIso)` at the render site. Move the status maps to a shared module next to
+`hostelRoster.js`. `HostelTab.test.jsx` and `HostelAttendancePage.test.jsx` both exist, so the swap
+is covered on both sides.
+
+---
+
+### 4. `parseTimeToMinutes` exists four times under two different contracts — LATENT BUG
+
+[`lib/timetable.js:18`](src/lib/timetable.js#L18) returns **`0`** for unparseable input.
+[`AddSlotModal.jsx:5`](src/pages/Timetable/AddSlotModal.jsx#L5),
+[`TimetableGrid.jsx:5`](src/pages/Timetable/TimetableGrid.jsx#L5) and
+[`TimetablePage.jsx:28`](src/pages/Timetable/TimetablePage.jsx#L28) are byte-identical to each other
+and return **`null`**.
+
+**Why:** `0` is also a legitimate value (midnight), so the lib version cannot distinguish `00:00`
+from garbage — a malformed slot time sorts to the top of the day instead of being rejected. The
+three page copies hold the correct contract, and every page call site already writes `?? 0`; only
+[`AddSlotModal.jsx:38`](src/pages/Timetable/AddSlotModal.jsx#L38) depends on the distinction, for
+its validation gate.
+
+**How to apply:** keep the null-returning contract, delete the three page copies, and add `?? 0` at
+the five lib call sites ([`timetable.js:69`](src/lib/timetable.js#L69),
+[`:192`](src/lib/timetable.js#L192), [`teacherDay.js:71`](src/lib/teacherDay.js#L71),
+[`:156`](src/lib/teacherDay.js#L156), [`absentRoster.js:82`](src/lib/absentRoster.js#L82)) so
+duration arithmetic cannot produce `NaN`. Behaviour-preserving; `timetable.test.js` covers it.
+
+---
+
+### 5. The blocked-contact gate is re-implemented in three preview modals
+
+[`LateNotificationPreviewModal.jsx:13`](src/pages/Attendance/LateNotificationPreviewModal.jsx#L13),
+[`LectureMissPreviewModal.jsx`](src/pages/Attendance/LectureMissPreviewModal.jsx) and
+[`HomeworkPreviewModal.jsx:14`](src/pages/Attendance/HomeworkPreviewModal.jsx#L14) each build the
+same `byLwsId` index, apply the same `isBlockedStatus` skip, and emit the same
+`{ lwsId, name, mobile, parentMobiles }` row.
+
+**Why:** the gate is a guardrail — no send may reach a `Block`/`Quit`/`Inactive` contact — and it
+currently lives in the UI layer three times over, where a fourth flow can simply forget it. Three of
+the five endpoints still trust the client `students[]`, so the component *is* the enforcement point.
+
+**How to apply:** a tested `src/lib/recipientRows.js` `buildRecipientRows(idsOrMap, studentProfiles,
+mapExtra?)`. All three modals have tests that pin the blocked-contact behaviour, so the swap is
+verifiable. Fold the `ExamAbsencePreviewModal` `!== 'Active'` variant in only after deciding whether
+its stricter predicate is deliberate — it currently differs from `isBlockedStatus`.
+
+---
+
+### 6. Mechanical sweep: helpers that exist 7–15 times with no variation
+
+- **`safeFilename`** (`[^A-Za-z0-9_-]+` -> `_`), **7 copies** —
+  [`errorSetZip.js:65`](src/lib/errorSetZip.js#L65),
+  [`examReportDocx.js:411`](src/lib/examReportDocx.js#L411),
+  [`gatErrorSetDocx.js:314`](src/lib/gatErrorSetDocx.js#L314),
+  [`monthlyReportDocx.js:70`](src/lib/monthlyReportDocx.js#L70),
+  [`monthlyReportPdf.js:29`](src/lib/monthlyReportPdf.js#L29),
+  [`monthlyReportZip.js:41`](src/lib/monthlyReportZip.js#L41),
+  [`MonthlyReports/index.jsx:142`](src/pages/MonthlyReports/index.jsx#L142). Three of the comments
+  already say "same rule as" another copy.
+- **`downloadBlob`** (object-URL / anchor / revoke), **10 files**.
+- **`fmtDate`**, **11 copies in `src/` across 3 shapes** — four byte-identical `day-month-year`, two
+  `day-month`, five one-offs. Plus the hostel `DD-MM-YYYY` converters (`dmyToIso` / `isoToDmy` /
+  `todayDmy`) **three times** — the same helper whose absence at two call sites silently made the
+  chain's derived `class` checkpoint read `present` for every boarder on every date.
+- **`getSession()`**, **15 identical copies**, one at the top of every store slice.
+
+**Why:** individually trivial; collectively this is the substrate the other five entries grew out
+of. The `dmyToIso` case already caused a production bug.
+
+**How to apply:** `src/lib/dates.js` (`fmtDayMon`, `fmtFull`, `dmyToIso`, `isoToDmy`, `todayIso`,
+`todayDmy`, `dayBoundsMs`), `src/lib/download.js` (`downloadBlob`, `safeFilename`),
+`src/store/slices/session.js`. Do it as one sweep per helper, not one commit for all four — each is
+individually trivial to review and impossible to review together.
+
+---
+
+### 7. Layering and size — decide, don't assume
+
+Filed for a decision rather than as agreed work; **none of these is justified on line count alone.**
+
+- **`ModalShell` is in the wrong layer.** [`pages/Timetable/ModalShell.jsx`](src/pages/Timetable/ModalShell.jsx)
+  is imported by four files outside Timetable
+  ([`HostelAttendance`](src/pages/HostelAttendance/index.jsx#L10),
+  [`SchoolAttendance`](src/pages/SchoolAttendance/index.jsx#L13),
+  [`MarkAbsenteesModal`](src/pages/Attendance/MarkAbsenteesModal.jsx#L2),
+  [`MarkDefaultersModal`](src/pages/Attendance/MarkDefaultersModal.jsx#L2)), while 18 other files
+  hand-roll `fixed inset-0`. Moving it to `src/components/ui/` is one line per import and ends the
+  only cross-page import chain in the tree. Lowest-risk item in this ledger.
+- **[`pages/Exams.jsx`](src/pages/Exams.jsx) is the only page not in its own folder**, while
+  `src/pages/Exams/` sits next to it holding six of its children.
+- **[`TimetablePage.jsx`](src/pages/Timetable/TimetablePage.jsx) (1016 lines)** holds 148 lines of
+  pure `xlsx-js-style` export ([`:110-257`](src/pages/Timetable/TimetablePage.jsx#L110-L257)) plus
+  `groupScheduleRows` / `detectClashes` / `getTeacherSchedule` — all pure, all module-private in a
+  component file and therefore untestable. **Teacher-clash detection is user-facing logic with zero
+  direct coverage**, which is the actual argument for moving them to `lib/timetable.js`; the line
+  count is not.
+- **[`HostelTab.jsx`](src/pages/Attendance/HostelTab.jsx) (875 lines, 27 `useState`)** and
+  **[`SchoolAttendance/index.jsx`](src/pages/SchoolAttendance/index.jsx) (854 lines, 16 `useState` +
+  14 `useMemo`)** are the densest components. Both have tests, so a tab-by-tab split would be safe —
+  but do it when next editing them, not as a standalone pass.
+
+**Not in scope:** `src/lib/` (57 modules, most under 200 lines) and `src/store/slices/` (25 slices)
+are well-factored. The duplication is concentrated in `api/` and in page components' private
+helpers — extracting *from* pages *into* `lib/` is the direction of travel, never the reverse.
+
+---
+
 ## 2026-05-25
 
 ### Decide how monthly report PDFs reach parents

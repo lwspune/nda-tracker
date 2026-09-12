@@ -1,29 +1,8 @@
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
-
-const WABRIDGE_URL = 'https://web.wabridge.com/api/createmessage'
-
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
-
-function normMobile(m) {
-  if (!m) return null
-  let s = String(m).replace(/\D/g, '')
-  if (s.startsWith('0') && s.length === 11) s = '91' + s.slice(1)
-  if (s.length === 10) s = '91' + s
-  if (s.startsWith('91') && s.length === 12) return s
-  return null
-}
+import { readEnvLocal } from './_env.js'
+import { normMobile } from './_mobile.js'
+import { sendWabridge } from './_wabridge.js'
 
 // Wabridge/Meta drop messages whose template variables contain unicode dashes,
 // newlines, tabs, or runs of 5+ spaces. Subject + chapter (free text) are
@@ -41,29 +20,6 @@ function typeLabel(type) {
   if (type === 'both')  return 'Homework and Notes'
   if (type === 'notes') return 'Notes'
   return 'Homework'
-}
-
-async function sendWabridge(appKey, authKey, deviceId, templateId, destination, variables) {
-  const payload = {
-    'app-key':            appKey,
-    'auth-key':           authKey,
-    'destination_number': destination,
-    'device_id':          deviceId,
-    'template_id':        templateId,
-    variables,
-  }
-  try {
-    const r = await fetch(WABRIDGE_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    })
-    const data = await r.json()
-    if (data.status) return { ok: true,  detail: String(data.data?.messageid || 'ok') }
-    return { ok: false, detail: data.message || 'Unknown error' }
-  } catch (e) {
-    return { ok: false, detail: String(e) }
-  }
 }
 
 export default async function handler(req, res) {

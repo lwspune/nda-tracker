@@ -1,20 +1,9 @@
-import { readFileSync } from 'fs'
+import { readEnvLocal } from './_env.js'
 import { createClient } from '@supabase/supabase-js'
 import { buildTeacherBlocks, diffBlocks, toGCalEvent } from '../src/lib/calendarSync.js'
 import { getAccessToken, insertEvent, patchEvent, deleteEvent } from './_googleCalendar.js'
 import { isTeacherUser } from './_authRole.js'
 
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z0-9_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
 
 // "Today" in IST (Asia/Kolkata, no DST) as YYYY-MM-DD — anchors the first
 // occurrence of each weekly block.

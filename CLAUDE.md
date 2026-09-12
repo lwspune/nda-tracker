@@ -274,6 +274,7 @@ Use `useMode()` — never `IS_READ_ONLY` — for component visibility. **Full pe
 | `src/lib/teacherDay.js` | Teacher-scoped lecture derivation + the filed-vs-silent pairing (`getTeacherLecturesForDate` falls closed; `withFilingStatus`/`buildFilingBoard` read `filed` from the row, never a count) |
 | `api/student-login.js` | Student auth + payload assembly (own/parent number, siblings, integrity incidents) |
 | `api/send-whatsapp.js` | WhatsApp result dispatch (deep-link, monitoring copy) |
+| `api/_mobile.js` · `_env.js` · `_wabridge.js` | The shared server leaf helpers (2026-09-12), extracted from 6–11 copies each. **`normMobile` is the one phone normaliser** — it decides which number a parent message reaches AND whether a login mobile matches a record; it returns a 12-digit `91`-prefixed string or **null**, never a partial. `sendWabridge` **never throws** (callers loop per recipient). `fmtDate` is deliberately not `toLocaleDateString` — template variables must stay plain ASCII. Underscore-prefixed, so **not** counted against the 12-function cap |
 | `vite.config.js` | Dev server + `makeApiShim` dev shims for all `api/*` endpoints |
 | `data/faculty-data.json` · `students_db.json` | Dev data store · student roster (both gitignored) |
 
