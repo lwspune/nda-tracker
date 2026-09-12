@@ -208,3 +208,74 @@ describe('quiz-import — kind: paper — writing', () => {
     expect((await call(body())).status).toHaveBeenCalledWith(500)
   })
 })
+
+/**
+ * SITTINGS — one paper, conducted more than once.
+ *
+ * A paper is routinely run for batch A on Monday and batch B on Thursday. Each
+ * conduct owns its own date, batch and results, so each must be its own exam;
+ * before this, the id derived from the PAPER, so the second conduct upserted the
+ * first exam and — once it had results — was refused outright.
+ *
+ * The constraint that shapes it: SITTING 1 KEEPS THE ORIGINAL UNSUFFIXED ID.
+ * Nine drafts are live in production on `exam_vault_<paperId>`, and suffixing
+ * them would orphan every one.
+ */
+describe('quiz-import — kind: paper — sittings', () => {
+  it('treats an absent sittingNo as 1, so a pre-sittings vault deploys unchanged', async () => {
+    const { upsert } = mockDb()
+    await call(body())
+    expect(upsert.mock.calls[0][0].id).toBe(EXAM_ID)
+  })
+
+  it('leaves sitting 1 on the original unsuffixed id — the nine live drafts depend on it', async () => {
+    const { upsert } = mockDb()
+    await call(body({ sittingNo: 1 }))
+    expect(upsert.mock.calls[0][0].id).toBe(`exam_vault_${PAPER_ID}`)
+  })
+
+  it('gives a second conduct its OWN exam rather than overwriting the first', async () => {
+    const { upsert } = mockDb()
+    await call(body({ sittingNo: 2, title: 'NDA Mock 7 — Batch B' }))
+    const written = upsert.mock.calls[0][0]
+    expect(written.id).toBe(`exam_vault_${PAPER_ID}_s2`)
+    expect(written.id).not.toBe(EXAM_ID)
+    expect(written.name).toBe('NDA Mock 7 — Batch B')
+  })
+
+  it('stays namespaced on a later sitting — never collides with a hand-made exam_<timestamp>', async () => {
+    const { upsert } = mockDb()
+    await call(body({ sittingNo: 3 }))
+    expect(upsert.mock.calls[0][0].id.startsWith('exam_vault_')).toBe(true)
+  })
+
+  it('checks results against THIS sitting, so sitting 1 having results cannot block sitting 2', async () => {
+    // The guard reads exam_results for the derived id. A fresh sitting id has
+    // none, so a conducted sitting 1 must not refuse a brand-new sitting 2.
+    const { upsert } = mockDb({ resultCount: 0 })
+    const res = await call(body({ sittingNo: 2 }))
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(upsert).toHaveBeenCalled()
+  })
+
+  it('400s on a nonsense sittingNo rather than filing the paper under an id nobody recorded', async () => {
+    mockDb()
+    for (const bad of [0, -1, 1.5, 'two']) {
+      const res = await call(body({ sittingNo: bad }))
+      expect(res.status).toHaveBeenCalledWith(400)
+    }
+  })
+
+  it('still refuses to overwrite a conducted sitting, and says so machine-readably', async () => {
+    // The CODE is what lets the vault offer "push as a new sitting" instead of
+    // presenting a dead end. Without it the caller has only a sentence.
+    mockDb({ resultCount: 32 })
+    const res = await call(body({ sittingNo: 2 }))
+    expect(res.status).toHaveBeenCalledWith(409)
+    const p = payloadOf(res)
+    expect(p.code).toBe('has_results')
+    expect(p.resultCount).toBe(32)
+    expect(p.sittingNo).toBe(2)
+    expect(p.examId).toBe(`exam_vault_${PAPER_ID}_s2`)
+  })
+})

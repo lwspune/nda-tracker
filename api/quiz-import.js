@@ -1,20 +1,8 @@
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { quizQuestionComplete } from '../src/lib/quiz.js'
 import { buildQuizRow } from '../src/store/slices/quizSupabase.js'
 import { isTeacherUser } from './_authRole.js'
-
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
+import { readEnvLocal } from './_env.js'
 
 // Cross-app quiz import. PYQ Vault (question-bank) harvests Level-1 recall MCQs
 // from the /notes content and POSTs them here as a quiz. Shared-secret auth, same
@@ -208,7 +196,18 @@ async function handlePaperPush(req, res, env) {
   const paperId = String(body.paperId || '').trim()
   const title = String(body.title || '').trim()
   const questions = Array.isArray(body.questions) ? body.questions : []
+  // Which CONDUCT of the paper. Absent = 1, so a pre-sittings vault deploys
+  // unchanged. One paper is routinely run for several batches on several days;
+  // each is its own exam, because a sitting owns its own date, batch and
+  // results and none of those can be shared.
+  const sittingNo = body.sittingNo === undefined ? 1 : Number(body.sittingNo)
   if (!paperId) { res.status(400).json({ ok: false, error: 'paperId is required' }); return }
+  if (!Number.isInteger(sittingNo) || sittingNo < 1) {
+    // Refuse rather than coerce: a bad value would file the paper under an exam
+    // id the vault never recorded, which nothing downstream would notice.
+    res.status(400).json({ ok: false, error: 'sittingNo must be a positive integer' })
+    return
+  }
   if (!title) { res.status(400).json({ ok: false, error: 'title is required' }); return }
   if (questions.length === 0) { res.status(400).json({ ok: false, error: 'questions[] is empty' }); return }
 
@@ -220,10 +219,16 @@ async function handlePaperPush(req, res, env) {
   }
   const supabase = createClient(url, serviceKey)
 
-  // Deterministic + namespaced, so a re-push UPDATES this exam rather than
-  // creating a second one, and a vault exam can never collide with a
-  // hand-made exam_<timestamp>.
-  const examId = `exam_vault_${paperId}`
+  // Deterministic + namespaced, so a re-push of THIS SITTING updates its own
+  // exam rather than creating a second one, and a vault exam can never collide
+  // with a hand-made exam_<timestamp>.
+  //
+  // SITTING 1 KEEPS THE ORIGINAL ID, unsuffixed. Nine drafts are live in
+  // production on `exam_vault_<paperId>` (RESULTS_REUPLOAD.md section 1);
+  // suffixing them would orphan every one. Only a second conduct gets `_s<N>`.
+  const examId = sittingNo === 1
+    ? `exam_vault_${paperId}`
+    : `exam_vault_${paperId}_s${sittingNo}`
 
   // GUARD 1 — never rewrite an exam that already has results.
   // Students sat those questions; swapping them rewrites history and
@@ -240,8 +245,14 @@ async function handlePaperPush(req, res, env) {
   if ((resultCount || 0) > 0) {
     res.status(409).json({
       ok: false,
-      error: `"${title}" already has ${resultCount} result row(s) in the tracker — refusing to overwrite a conducted exam. Delete its results first if you really mean to replace it.`,
+      // The CODE is what lets the vault turn this from a dead end into an
+      // offer: "this was already conducted -- push it as a new sitting?".
+      // Without it the caller sees only a sentence and cannot branch.
+      code: 'has_results',
+      error: `"${title}" already has ${resultCount} result row(s) in the tracker — refusing to overwrite a conducted exam. Push it as a NEW SITTING if you are conducting it again, or delete its results first if you really mean to replace this one.`,
       examId,
+      sittingNo,
+      resultCount,
     })
     return
   }
