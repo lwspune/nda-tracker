@@ -72,7 +72,8 @@ reviewable change, since three of them are working surfaces with their own tests
 A tree-wide review for duplication and layering, ordered by **evidence of cost** rather than line
 count — per the no-speculative-refactors rule, an entry is here because a divergence already exists
 or a fix has already had to be applied by hand twice. Items are independent and close one at a time.
-Two of them (2 and 4) are live defects, not just smells.
+**Numbers are stable identifiers** — a gap means that entry closed into
+[`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md), not that it was dropped.
 
 ---
 
@@ -103,27 +104,6 @@ returns — then extract only the common core (`bearerFrom(req)` + `getUserOrNul
 endpoint's policy decision inline and visible. A shared helper that hides *which* callers refuse a
 teacher is worse than seven copies that state it. Do it with a test per endpoint asserting the 401
 and the 403 separately, before touching any of them.
-
----
-
-### 2. Three parsers of one server log format, and the Exams copy is stale — LIVE BUG
-
-`api/send-*.js` emit `FAIL -> Name (student|parent -> …)` and `SKIP Name — …` lines. Three clients
-regex them back apart: [`Attendance/index.jsx:72`](src/pages/Attendance/index.jsx#L72) handles both
-legs, [`Exams.jsx:139`](src/pages/Exams.jsx#L139) matches the student leg only, and
-[`Exams.jsx:154`](src/pages/Exams.jsx#L154) is a third variant.
-
-**Why:** [`send-whatsapp.js:245`](api/send-whatsapp.js#L245) emits a parent-leg `FAIL` that
-`Exams.jsx:139` does not match, so a result send that fails **only** to the parent is never recorded
-as failed. Its `SKIP` pattern also mis-captures [`send-whatsapp.js:239`](api/send-whatsapp.js#L239)
-(`SKIP Name parent 98… — unrecognised format`) as a student named `"Name parent 98…"`, and
-[`:260`](api/send-whatsapp.js#L260) as one named `"monitor 98…"`. The Attendance copy fixed all
-three cases; the Exams copy never received the fix. That is the cost of the duplication, already
-paid.
-
-**How to apply:** one tested `src/lib/sendLog.js` `parseFailedNames(lines)`, consumed by all three
-call sites — same ruling as `whatsappResultScore.js`: the parser lives next to the format, once.
-Keep the Attendance implementation as the surviving one; it is the correct contract.
 
 ---
 

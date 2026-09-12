@@ -16,6 +16,35 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~Three parsers of one server log format, and the Exams copy is stale~~ — **DONE 2026-09-12**
+
+Refactor-ledger item 2, and a **live bug**, not only duplication. `api/send-*.js` return a
+human-readable `lines[]` transcript; the client parsed it back with regexes to work out who was NOT
+reached, stored that as `failedNames`, and treated everyone else as notified. Three divergent
+implementations existed: one in `Attendance/index.jsx` and two inside `Exams.jsx`.
+
+**What was actually broken.** `api/send-whatsapp.js:245` emits
+`FAIL → <name> (parent → …)`, and the Exams copy matched only `\(student` — so an exam-result send
+that failed on the **parent leg alone** was recorded as a success and the student was stamped
+notified. Its `SKIP` pattern also captured `SKIP <name> parent 98765 — unrecognised format` as a
+student called `"<name> parent 98765"`, and `SKIP monitor 98765 — …` as one called
+`"monitor 98765"`. The Attendance copy had fixed the first two cases and never got ported back;
+neither copy handled the monitor lines.
+
+**Shipped:** `src/lib/sendLog.js` `parseFailedNames(lines)` with 13 cases in
+`src/lib/__tests__/sendLog.test.js`, every literal copied from an actual `lines.push()` call. All
+five call sites (three in Attendance, two in Exams) now share it; the Attendance-local test was
+folded in, including its first-seen-order case. **−114 lines, +59.**
+
+Two semantics were decided rather than inherited: a `— on leave` suppression **counts as
+not-reached** (the consumer marks everyone absent from the set as notified, and a suppressed student
+was not notified), and monitor legs are **excluded entirely** (staff sample, not a student — both
+old parsers inflated the "Resend N failed" count with a person who does not exist).
+
+Side effect: lint dropped from 13 errors to 12. Removing the exported `parseFailedNames` from
+`Attendance/index.jsx` cleared a `react-refresh/only-export-components` error — a page module that
+also exports a helper is exactly what that rule is for.
+
 ### ~~Extract `api/`'s duplicated leaf helpers~~ — **DONE 2026-09-12** (auth preamble split out, still live)
 
 Refactor-ledger item 1. `sendWabridge` existed **6 times** (five byte-identical, one differing only
