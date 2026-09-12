@@ -1305,6 +1305,44 @@ Phase 0 (the link) shipped 2026-09-11. The column is inert until something reads
 
 ---
 
+---
+
+## 2026-09-12 (/update-docs)
+
+### Cover the class PDF's ASCII fallback card with a test
+
+`examPdf.js` now renders question cards as captured images and falls back **per card** to the
+original `drawAsciiCard` + `stripLatex` path when a capture throws. That fallback is the only thing
+standing between an html2canvas failure and a report with no questions in it, and it has **no
+automated test** — it was verified once, by hand, by monkey-patching `Element.prototype.firstElementChild`
+to throw in a live browser (it produced a complete 9-page, 0-image report).
+
+**Why:** `stripLatex` is 90 lines of chained regexes with decent indirect coverage, but the
+*fallback wiring* — capture throws → one card degrades → the other nineteen still render → `y`
+advances correctly — is untested. A refactor of `questionDetailCards` could break it silently,
+and nobody would notice until a browser that html2canvas dislikes produced a report with gaps.
+
+**How to apply:** `vi.mock('html2canvas')` with a rejecting default export, call `downloadExamPdf`
+against a two-question fixture, and assert the returned doc still contains the question text (jsPDF
+exposes it via `doc.internal.pages`). One test; the mock is the whole cost.
+
+### Decide whether the PDF's image cards and the Word twin both earn their place — after faculty use them
+
+The class report now ships twice: a PDF whose ~20 question cards are **raster images** (~200 KB →
+~1.0 MB, no text selection or search inside a card) and an MCQ-only Word file that carries the
+worked solutions the PDF has never had room for. Both were built on reasoning, not on watching
+anyone use them.
+
+**Why:** this is the kill criterion written into [`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §12,
+and it is worth actually asking rather than letting both accrete. Two plausible outcomes:
+faculty use Word for everything question-shaped, in which case the PDF could go back to a lighter
+questions-free summary; or nobody opens Word, in which case delete it (the shared `docxMath.js`
+earns its keep either way, from the practice set and the error set).
+
+**How to apply:** after a month of use, ask which of the two gets downloaded. If the answer is
+"Word, always", consider dropping the PDF's detail cards entirely — that reverses the 5× file-size
+growth and the loss of searchable text in one move.
+
 ## 2026-09-12 — The class PDF prints a Devanagari exam title raw (10 exams)
 
 `examPdf.js` `drawHeader` does `doc.text(exam.name, 14, 20)` — straight into jsPDF, with no
@@ -1334,17 +1372,20 @@ wired up. It is a one-line miss, not a missing capability.
 shipped code, a different defect from the one being fixed, and it needs its own verification against
 a real Devanagari exam.
 
-### ~~De-duplicate the docx OMML pipeline (backfill candidate)~~ — **IN SCOPE 2026-09-12**, no longer a candidate
+### ~~De-duplicate the docx OMML pipeline (backfill candidate)~~ — **DONE 2026-09-12**
 
 `gatErrorSetDocx.js` is a verbatim copy of `practiceSetDocx.js`'s maths pipeline — `MARKER`,
 `MATH_PR_BLOCK`, `pickFn`, `latexToOmml`, `mathRuns`, `contentTable` and the post-pack marker swap.
 Only `prettifyMath` is shared. The single-pass marker-swap optimisation (measured at 675 s → 441 ms
 on a 1,740-equation set) had to be applied **twice**, by hand.
 
-**Why:** the exam Word report would be copy three. Logged here first, then pulled INTO the work
-on the same day — decision D1 in [`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §2, which carries
-the 360 (blast radius, risk, reversibility) for the rework. Kept in this log rather than deleted
-so the trail from "noticed" to "scheduled" survives.
+Shipped the same day. `src/lib/docxMath.js` now owns `MARKER`, `MATH_PR_BLOCK`, `pickFn`,
+`latexToOmml`, `mathRuns`, `contentTable` and the post-pack marker swap; `practiceSetDocx.js` went
+468 → 267 lines (`4ecff2d`) and `gatErrorSetDocx.js` 415 → 300 (`8bc8c18`), one revertable commit
+each. `escapeRegex` deliberately stayed local to `gatErrorSetDocx` — its other caller,
+`stripAnswerPrefix`, has nothing to do with maths. Verified in real Word (`OMaths.Count` 9/9 and
+6/6 on fixtures), not just by parsing the zip. The 360 that authorised it is in
+[`EXAM_REPORT_DOCX.md`](./EXAM_REPORT_DOCX.md) §2.
 
 **How to apply:** after `src/lib/docxMath.js` exists and the practice set is on it, repoint
 `gatErrorSetDocx` and delete its copies. Its existing tests are the guard. Verify in real Word — a
