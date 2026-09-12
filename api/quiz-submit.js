@@ -1,27 +1,7 @@
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { gradeQuizAttempt } from '../src/lib/quiz.js'
-
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
-
-function normMobile(m) {
-  if (!m) return null
-  let s = String(m).replace(/\D/g, '')
-  if (s.startsWith('0') && s.length === 11) s = '91' + s.slice(1)
-  if (s.length === 10) s = '91' + s
-  if (s.startsWith('91') && s.length === 12) return s
-  return null
-}
+import { readEnvLocal } from './_env.js'
+import { normMobile } from './_mobile.js'
 
 // Student quiz submission. Mobile-based identity (same trust model as student-login),
 // service-role client. Grades SERVER-SIDE against the answer key the student never

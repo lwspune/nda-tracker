@@ -16,6 +16,64 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~Three parsers of one server log format, and the Exams copy is stale~~ — **DONE 2026-09-12**
+
+Refactor-ledger item 2, and a **live bug**, not only duplication. `api/send-*.js` return a
+human-readable `lines[]` transcript; the client parsed it back with regexes to work out who was NOT
+reached, stored that as `failedNames`, and treated everyone else as notified. Three divergent
+implementations existed: one in `Attendance/index.jsx` and two inside `Exams.jsx`.
+
+**What was actually broken.** `api/send-whatsapp.js:245` emits
+`FAIL → <name> (parent → …)`, and the Exams copy matched only `\(student` — so an exam-result send
+that failed on the **parent leg alone** was recorded as a success and the student was stamped
+notified. Its `SKIP` pattern also captured `SKIP <name> parent 98765 — unrecognised format` as a
+student called `"<name> parent 98765"`, and `SKIP monitor 98765 — …` as one called
+`"monitor 98765"`. The Attendance copy had fixed the first two cases and never got ported back;
+neither copy handled the monitor lines.
+
+**Shipped:** `src/lib/sendLog.js` `parseFailedNames(lines)` with 13 cases in
+`src/lib/__tests__/sendLog.test.js`, every literal copied from an actual `lines.push()` call. All
+five call sites (three in Attendance, two in Exams) now share it; the Attendance-local test was
+folded in, including its first-seen-order case. **−114 lines, +59.**
+
+Two semantics were decided rather than inherited: a `— on leave` suppression **counts as
+not-reached** (the consumer marks everyone absent from the set as notified, and a suppressed student
+was not notified), and monitor legs are **excluded entirely** (staff sample, not a student — both
+old parsers inflated the "Resend N failed" count with a person who does not exist).
+
+Side effect: lint dropped from 13 errors to 12. Removing the exported `parseFailedNames` from
+`Attendance/index.jsx` cleared a `react-refresh/only-export-components` error — a page module that
+also exports a helper is exactly what that rule is for.
+
+### ~~Extract `api/`'s duplicated leaf helpers~~ — **DONE 2026-09-12** (auth preamble split out, still live)
+
+Refactor-ledger item 1. `sendWabridge` existed **6 times** (five byte-identical, one differing only
+in whitespace), `normMobile` **9 times** byte-identical, `readEnvLocal` **11 times**, and
+`fmtDate` + `MONTHS` **3 times** — with no direct test on any copy, despite `normMobile` being the
+function that decides which number a parent message is delivered to and whether a login mobile
+matches a student or guardian record.
+
+**Shipped:** `api/_mobile.js` (`normMobile`), `api/_env.js` (`readEnvLocal` + `envReader`),
+`api/_wabridge.js` (`sendWabridge`, `fmtDate`, `MONTHS`, `WABRIDGE_URL`), each with its own test
+file. Eleven endpoints rewritten: **−397 lines, +26**. Vercel function count unchanged at **12/12** —
+underscore-prefixed helpers are not counted, same precedent as `_authRole.js` / `_googleCalendar.js`.
+
+**One divergence surfaced and was resolved rather than preserved:** the eleven `readEnvLocal` copies
+did not agree. Eight matched env-var names with `[A-Z_]+`, three (`sync-calendar`,
+`send-mentor-nudges`, `send-attendance-alerts`) allowed digits with `[A-Z0-9_]+`. No key in use
+carries a digit, so nothing was broken, but the permissive pattern is the strict superset — a narrow
+one can only ever drop a key silently — so `_env.js` adopted `[A-Z0-9_]+` and a test pins it. The
+codemod refused those three files rather than guessing, which is how the difference was found at all.
+
+**Verified:** 3066 tests / 196 files pass; lint unchanged at its 28-problem baseline; and every
+`api/*.js` was loaded under **plain Node's ESM loader** — not just Vitest's resolver — because that
+is precisely where the 2026-07-28 `whatsappResultScore.js` extension bug hid behind 2106 green tests.
+
+**Remainder promoted back to [`SUGGESTIONS.md`](./SUGGESTIONS.md)**: the bearer-JWT auth preamble,
+repeated across seven endpoints, was deliberately left alone — those copies are *not* identical
+(CRON_SECRET bypasses, a superadmin layer, a shared-secret path), and collapsing them wrongly grants
+access rather than garbling a message.
+
 ### ~~De-duplicate the docx OMML pipeline (backfill candidate)~~ — **DONE 2026-09-12**
 
 `gatErrorSetDocx.js` is a verbatim copy of `practiceSetDocx.js`'s maths pipeline — `MARKER`,

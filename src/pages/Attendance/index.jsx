@@ -4,6 +4,7 @@ import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import { parseAttendanceExcel } from '../../lib/excel'
 import { homeworkNotifyKey } from '../../lib/homework'
+import { parseFailedNames } from '../../lib/sendLog'
 import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
 import { buildConsecutiveAbsent } from './consecutiveAbsent'
 import LateMarkingWidget from './LateMarkingWidget'
@@ -60,27 +61,6 @@ function fmtDate(iso) {
 }
 
 // ── page ─────────────────────────────────────────────────────
-
-// Extract names that failed or were skipped from the endpoint's log lines.
-// Lines come in formats:
-//   "  FAIL → Name (student → 9123…): error"
-//   "  FAIL → Name (parent → 9123…): error"
-//   "  SKIP Name — no mobile"
-//   "  SKIP Name parent 9123 — unrecognised format"
-// Format owned by api/send-late-notifications.js; keep this in sync if that
-// log shape ever changes.
-export function parseFailedNames(lines) {
-  if (!Array.isArray(lines)) return []
-  const out = new Set()
-  for (const raw of lines) {
-    const line = String(raw)
-    let m = line.match(/^\s*FAIL → (.+?) \((?:student|parent)/)
-    if (m) { out.add(m[1].trim()); continue }
-    m = line.match(/^\s*SKIP (.+?) (?:—|parent )/)
-    if (m) { out.add(m[1].trim()); continue }
-  }
-  return [...out]
-}
 
 export default function AttendancePage() {
   const studentProfiles  = useStore(s => s.studentProfiles)

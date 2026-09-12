@@ -18,6 +18,7 @@ import { downloadExamPdf }         from '../lib/examPdf'
 import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
 import ExportMenu from './Exams/ExportMenu'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../lib/chunkError'
+import { parseFailedNames } from '../lib/sendLog'
 
 export default function ExamsPage() {
   const exams = useStore(s => s.exams)
@@ -136,35 +137,6 @@ export default function ExamsPage() {
     setIntegrityExamId(prev => prev === id ? null : id)
   }
 
-  function parseFailedNames(lines) {
-    const names = new Set()
-    ;(lines || []).forEach(line => {
-      const t = line.trim()
-      const skip = t.match(/^SKIP (.+?) —/)
-      if (skip) { names.add(skip[1]); return }
-      const fail = t.match(/^FAIL → (.+?) \(student/)
-      if (fail) names.add(fail[1])
-    })
-    return [...names]
-  }
-
-  // Absence flow log format mirrors late/lecture-miss — captures FAIL on either
-  // leg (`(student` / `(parent`), SKIP for no-mobile (`— no mobile` / `— no parent mobile`),
-  // and SKIP for malformed parent numbers (`parent NUMBER —`).
-  function parseFailedNamesAbsence(lines) {
-    const names = new Set()
-    ;(lines || []).forEach(line => {
-      const t = line.trim()
-      const fail = t.match(/^FAIL → (.+?) \((student|parent)/)
-      if (fail) { names.add(fail[1]); return }
-      const skipParent = t.match(/^SKIP (.+?) parent /)
-      if (skipParent) { names.add(skipParent[1]); return }
-      const skip = t.match(/^SKIP (.+?) —/)
-      if (skip) names.add(skip[1])
-    })
-    return [...names]
-  }
-
   async function handleExamAbsenceConfirm(edits, redirectTo) {
     const exam = examAbsencePreviewExam
     setExamAbsenceSending(true)
@@ -181,7 +153,7 @@ export default function ExamsPage() {
       })
       const result = await res.json()
       if (result.ok) {
-        const failedSet = new Set(parseFailedNamesAbsence(result.lines))
+        const failedSet = new Set(parseFailedNames(result.lines))
         setExamAbsenceSendHistory(exam.id, {
           sentAt:      new Date().toISOString(),
           sent:        result.sent,

@@ -11,21 +11,9 @@
 // (the actual auth.admin.* operations). SUPABASE_SERVICE_ROLE_KEY must be set
 // in Vercel env — never ships to the browser bundle.
 
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
-
-function readEnvLocal() {
-  try {
-    return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
-        .split('\n')
-        .map(l => l.match(/^([A-Z_]+)=(.*)/))
-        .filter(Boolean)
-        .map(m => [m[1], m[2].trim()])
-    )
-  } catch { return {} }
-}
+import { readEnvLocal } from './_env.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
