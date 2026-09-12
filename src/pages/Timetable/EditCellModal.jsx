@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import useStore from '../../store/useStore'
-import ModalShell from './ModalShell'
+import { ModalShell } from '../../components/ui'
 
 // Handles both normal cells (day) and span cells (__span)
 export default function EditCellModal({ timetableId, slotId, day, currentCell, onClose }) {

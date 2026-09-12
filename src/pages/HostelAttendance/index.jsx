@@ -8,7 +8,7 @@ import { buildOpenLeaveList, STALE_LEAVE_DAYS } from '../../lib/hostelLeave'
 import { STATUS_CYCLE, AWAY_STATUSES } from '../../lib/hostelStatus'
 import { CAPTURE_CHECKPOINTS, ROLL_CHECKPOINTS } from '../../store/slices/checkpointSlice'
 import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
-import ModalShell from '../Timetable/ModalShell'
+import { ModalShell } from '../../components/ui'
 
 // /hostel-mess-attendance — the warden's and mess staff's own capture surface.
 //

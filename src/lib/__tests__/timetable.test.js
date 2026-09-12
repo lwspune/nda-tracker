@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName, parseTimeToMinutes } from '../timetable'
+import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName, parseTimeToMinutes, getTeacherSchedule, groupScheduleRows, detectClashes } from '../timetable'
 
 // Helper: build a minimal timetable shape matching what timetableSlice produces.
 function makeTimetable({ timeSlots = [], grid = {} } = {}) {
@@ -545,5 +545,154 @@ describe('callers absorb an unreadable time as 0, exactly as before', () => {
     })
     const out = getTodaysLectures(tt, '2026-09-14', MAPPINGS)   // a Monday
     expect(out.map(l => l.slotId)).toEqual(['s1', 's2'])
+  })
+})
+
+// ── teacher schedule + clash detection (moved out of TimetablePage 2026-09-12)
+//
+// These were module-private inside a 990-line component, so they could not be
+// imported and had ZERO direct coverage — despite detectClashes being the thing
+// that tells the office a teacher is booked in two rooms at once. That, not the
+// line count, is why they moved.
+
+const TT_A = {
+  id: 'tt-a', branch: 'LWS Pune', batchName: 'B1',
+  timeSlots: [
+    { id: 's1', startTime: '9:00 AM',  endTime: '10:00 AM' },
+    { id: 's2', startTime: '10:00 AM', endTime: '11:00 AM' },
+  ],
+  grid: {
+    s1: { Monday: { type: 'class', mappingId: 'm1' }, Tuesday: { type: 'class', mappingId: 'm1' } },
+    s2: { Monday: { type: 'class', mappingId: 'm2' } },
+  },
+}
+const TT_B = {
+  id: 'tt-b', branch: 'APJ', batchName: 'B2',
+  timeSlots: [{ id: 's9', startTime: '9:30 AM', endTime: '10:30 AM' }],
+  grid: { s9: { Monday: { type: 'class', mappingId: 'm1' } } },
+}
+const MAPS = [
+  { id: 'm1', label: 'Maths · Mr A', subject: 'Maths', teacherId: 't1' },
+  { id: 'm2', label: 'Physics · Mr B', subject: 'Physics', teacherId: 't2' },
+]
+
+describe('getTeacherSchedule', () => {
+  it('finds every cell taught by one teacher, across timetables', () => {
+    const rows = getTeacherSchedule([TT_A, TT_B], MAPS, 't1')
+    expect(rows).toHaveLength(3)          // Mon+Tue in B1, Mon in B2
+    expect(rows.every(r => r.mapping.teacherId === 't1')).toBe(true)
+  })
+
+  it('ignores another teacher’s cells', () => {
+    expect(getTeacherSchedule([TT_A], MAPS, 't2')).toHaveLength(1)
+    expect(getTeacherSchedule([TT_A], MAPS, 'nobody')).toEqual([])
+  })
+
+  it('skips breaks, full-row spans and cells whose mapping is gone', () => {
+    const tt = {
+      id: 'x', branch: 'B', batchName: 'C',
+      timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }],
+      grid: {
+        s1: {
+          Monday:    { type: 'break', label: 'Lunch' },
+          Tuesday:   { type: 'class', mappingId: 'deleted-mapping' },
+          Wednesday: { type: 'class', mappingId: 'm1' },
+          __span:    { type: 'span', label: 'Assembly' },
+        },
+      },
+    }
+    const rows = getTeacherSchedule([tt], MAPS, 't1')
+    expect(rows.map(r => r.day)).toEqual(['Wednesday'])
+  })
+
+  it('tolerates a slot with no grid row', () => {
+    const tt = { id: 'x', branch: 'B', batchName: 'C', timeSlots: [{ id: 'ghost' }], grid: {} }
+    expect(getTeacherSchedule([tt], MAPS, 't1')).toEqual([])
+  })
+})
+
+describe('groupScheduleRows', () => {
+  it('collapses the same slot on several days into one row', () => {
+    const rows = groupScheduleRows(getTeacherSchedule([TT_A], MAPS, 't1'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0].days.sort()).toEqual(['Monday', 'Tuesday'])
+    expect(rows[0].subject).toBe('Maths · Mr A')
+  })
+
+  it('orders rows by start time, then by branch and batch', () => {
+    const rows = groupScheduleRows([
+      ...getTeacherSchedule([TT_B], MAPS, 't1'),   // 9:30
+      ...getTeacherSchedule([TT_A], MAPS, 't1'),   // 9:00
+    ])
+    expect(rows.map(r => r.startTime)).toEqual(['9:00 AM', '9:30 AM'])
+  })
+
+  it('starts every row with an empty clashDays', () => {
+    const rows = groupScheduleRows(getTeacherSchedule([TT_A], MAPS, 't1'))
+    expect(rows[0].clashDays).toEqual([])
+  })
+})
+
+describe('detectClashes', () => {
+  // The whole point: one teacher, two batches, overlapping times, same day.
+  it('flags a teacher booked in two places at once', () => {
+    const rows = groupScheduleRows([
+      ...getTeacherSchedule([TT_A], MAPS, 't1'),   // Mon+Tue 9:00-10:00, B1
+      ...getTeacherSchedule([TT_B], MAPS, 't1'),   // Mon     9:30-10:30, B2
+    ])
+    const summaries = detectClashes(rows)
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0].day).toBe('Monday')
+    expect(summaries[0].labelA).toContain('B1')
+    expect(summaries[0].labelB).toContain('B2')
+  })
+
+  it('marks the clash day on BOTH rows, not just one', () => {
+    const rows = groupScheduleRows([
+      ...getTeacherSchedule([TT_A], MAPS, 't1'),
+      ...getTeacherSchedule([TT_B], MAPS, 't1'),
+    ])
+    detectClashes(rows)
+    const flagged = rows.filter(r => r.clashDays.includes('Monday'))
+    expect(flagged).toHaveLength(2)
+  })
+
+  // Tuesday exists only in B1, so it must NOT be flagged even though that row
+  // clashes on Monday — the flag is per-day, not per-row.
+  it('flags only the shared day', () => {
+    const rows = groupScheduleRows([
+      ...getTeacherSchedule([TT_A], MAPS, 't1'),
+      ...getTeacherSchedule([TT_B], MAPS, 't1'),
+    ])
+    detectClashes(rows)
+    const b1 = rows.find(r => r.batchName === 'B1')
+    expect(b1.clashDays).toEqual(['Monday'])
+  })
+
+  // Back-to-back is NOT a clash: 9-10 and 10-11 touch at the boundary.
+  it('does not flag classes that merely touch end-to-start', () => {
+    const rows = groupScheduleRows(getTeacherSchedule([TT_A], MAPS, 't1').concat(
+      getTeacherSchedule([{ ...TT_A, id: 'tt-c', batchName: 'B3',
+        timeSlots: [{ id: 's3', startTime: '10:00 AM', endTime: '11:00 AM' }],
+        grid: { s3: { Monday: { type: 'class', mappingId: 'm1' } } } }], MAPS, 't1')))
+    expect(detectClashes(rows)).toEqual([])
+  })
+
+  it('does not flag the same time on different days', () => {
+    const mon = { ...TT_A, id: 'x', batchName: 'BX',
+      timeSlots: [{ id: 's1', startTime: '9:00 AM', endTime: '10:00 AM' }],
+      grid: { s1: { Monday: { type: 'class', mappingId: 'm1' } } } }
+    const tue = { ...mon, id: 'y', batchName: 'BY',
+      grid: { s1: { Tuesday: { type: 'class', mappingId: 'm1' } } } }
+    const rows = groupScheduleRows([
+      ...getTeacherSchedule([mon], MAPS, 't1'),
+      ...getTeacherSchedule([tue], MAPS, 't1'),
+    ])
+    expect(detectClashes(rows)).toEqual([])
+  })
+
+  it('returns nothing for an empty or single-row schedule', () => {
+    expect(detectClashes([])).toEqual([])
+    expect(detectClashes(groupScheduleRows(getTeacherSchedule([TT_B], MAPS, 't1')))).toEqual([])
   })
 })

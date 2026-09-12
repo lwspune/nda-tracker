@@ -16,6 +16,40 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~Layering and size — decide, don't assume~~ — **DONE 2026-09-12** (two done, two declined)
+
+Refactor-ledger item 7, the last entry. It was filed as four *questions* rather than agreed work,
+because none was justified by the thing people usually justify a refactor with — file size. Two were
+worth doing, two were not, and saying so is the point of the entry.
+
+**DONE — the timetable logic escapes its component.** `getTeacherSchedule`, `groupScheduleRows`,
+`detectClashes` and `getTimetableTitle` moved to `lib/timetable.js`; the ~130-line styled-xlsx
+builder moved to the new `lib/timetableExcel.js`. `TimetablePage.jsx` went **993 → 775 lines**, but
+the line count was never the argument: these were module-private inside a component, so they could
+not be imported, and **`detectClashes` — what tells the office a teacher is booked in two rooms at
+once — had ZERO direct test coverage.** It now has 13 cases, including the two boundary rules that
+were never pinned: a class ending exactly when another starts is **not** a clash, and the flag is
+per-DAY, so a row clashing on Monday does not get its Tuesday flagged. `detectClashes` still
+**mutates** `rows[].clashDays` (the grid reads it to colour cells) — that is documented at the
+function now, along with why it is safe: the caller rebuilds rows every render.
+
+**DONE — `ModalShell` moved to `src/components/ui/`** and is exported from the barrel, so all
+**12** importers now reach it the same way every other shared component is reached. It previously
+sat in `pages/Timetable/` while five files outside Timetable reached across into that folder for it
+— the only cross-page import chain in the tree, now gone. Its test moved with it.
+
+**DECLINED — splitting `HostelTab.jsx` (870 lines) and `SchoolAttendance/index.jsx` (854).** They
+are the densest components in the app, both have tests, both work, and neither has caused a bug.
+Splitting them is a large diff for no behaviour change. Do it when next editing them, not as a
+standalone pass.
+
+**DECLINED (or rather: still open, trivially) — `pages/Exams.jsx`** is the only page not in its own
+folder while `src/pages/Exams/` sits beside it. Pure tidiness with no argument behind it either way;
+left alone rather than churn a 656-line file for a rename.
+
+**Noted, not done:** `ManageProgramModal.jsx` has its own local `ModalShell` component — a
+19th hand-rolled modal frame, unrelated to the moved one. Out of scope here.
+
 ### ~~Mechanical sweep: helpers that exist 7–15 times~~ — **DONE 2026-09-12** (incl. a date-format standard)
 
 Refactor-ledger item 6, the tail of the review. Unlike items 1–5 this one hid **no defect** — these

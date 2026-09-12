@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import ModalShell from '../Timetable/ModalShell'
+import { ModalShell } from '../../components/ui'
 
 // Modeled on MarkAbsenteesModal: pick which students have NOT completed a single
 // homework item (subject + chapter + type). The modal owns the draft checked-set

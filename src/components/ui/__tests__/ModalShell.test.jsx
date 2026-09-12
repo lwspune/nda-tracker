@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import ModalShell from '../ModalShell'
+import { ModalShell } from '../index'
 
 describe('ModalShell — footer slot', () => {
   // The reason this slot exists: with actions inside the scrolling body, a long

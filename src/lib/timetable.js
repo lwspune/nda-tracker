@@ -236,3 +236,100 @@ export function getSubjectHoursByBatch(timetables, mappings, { branch } = {}) {
     grandTotal,
   }
 }
+
+// ── Teacher schedule + clash detection ───────────────────────────────────────
+//
+// Moved out of TimetablePage.jsx on 2026-09-12. They were module-private inside
+// a 990-line component, so they could not be imported and had ZERO direct test
+// coverage — despite `detectClashes` being what tells the office a teacher is
+// booked in two rooms at once. That, not the line count, is why they moved.
+
+// Every class cell taught by one teacher, across ALL timetables.
+// Returns [{ timetable, slot, day, mapping }] — raw, one entry per (slot, day).
+// Skips breaks, full-row `__span` rows, and cells whose mapping no longer exists.
+export function getTeacherSchedule(timetables, mappings, teacherId) {
+  const results = []
+  for (const tt of timetables ?? []) {
+    for (const slot of tt.timeSlots ?? []) {
+      const row = tt.grid?.[slot.id] ?? {}
+      for (const [day, cell] of Object.entries(row)) {
+        if (day === '__span') continue
+        if (cell?.type !== 'class') continue
+        const m = (mappings ?? []).find(m => m.id === cell.mappingId)
+        if (m?.teacherId === teacherId) results.push({ timetable: tt, slot, day, mapping: m })
+      }
+    }
+  }
+  return results
+}
+
+// Collapse the raw entries into display rows — one per (timetable, slot,
+// mapping), carrying the days it runs — sorted chronologically by start time.
+// `clashDays` starts empty and is filled in by detectClashes.
+export function groupScheduleRows(rows) {
+  const map = new Map()
+  for (const { timetable, slot, day, mapping } of rows ?? []) {
+    const key = `${timetable.id}__${slot.id}__${mapping.id}`
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        branch:       timetable.branch,
+        batchName:    timetable.batchName,
+        startTime:    slot.startTime,
+        endTime:      slot.endTime,
+        startMinutes: parseTimeToMinutes(slot.startTime) ?? 0,
+        endMinutes:   parseTimeToMinutes(slot.endTime)   ?? 0,
+        subject:      mapping.label,
+        days:         [],
+        clashDays:    [],
+      })
+    }
+    map.get(key).days.push(day)
+  }
+  return [...map.values()].sort((a, b) => {
+    if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes
+    return `${a.branch} ${a.batchName}`.localeCompare(`${b.branch} ${b.batchName}`)
+  })
+}
+
+// One teacher, two places, same day, overlapping times.
+//
+// MUTATES `rows[].clashDays` (the grid reads it to colour the cell) and returns
+// the summary list the banner renders. The caller passes freshly-built rows each
+// render, which is what makes the mutation safe — do not hand it memoised rows.
+//
+// Two boundary rules, both pinned by tests: a class ending exactly when another
+// starts is NOT a clash, and the flag is per-DAY, so a row clashing on Monday
+// does not get its Tuesday flagged.
+export function detectClashes(rows) {
+  const summaries = []
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i], b = rows[j]
+      // No overlap if one ends before the other starts
+      if (a.startMinutes >= b.endMinutes || b.startMinutes >= a.endMinutes) continue
+      const sharedDays = a.days.filter(d => b.days.includes(d))
+      if (!sharedDays.length) continue
+      for (const day of sharedDays) {
+        if (!a.clashDays.includes(day)) a.clashDays.push(day)
+        if (!b.clashDays.includes(day)) b.clashDays.push(day)
+        summaries.push({
+          day,
+          labelA: `${a.branch} — ${a.batchName}: ${a.startTime}–${a.endTime} (${a.subject})`,
+          labelB: `${b.branch} — ${b.batchName}: ${b.startTime}–${b.endTime} (${b.subject})`,
+        })
+      }
+    }
+  }
+  return summaries
+}
+
+// The heading a timetable shows: its own `title` when faculty set one, else
+// "Branch — Batch". Shared by the page and the .xlsx export so the printed
+// sheet and the screen cannot disagree about what the timetable is called.
+export function getTimetableTitle(tt) {
+  if (!tt) return ''
+  const custom = tt.title?.trim()
+  if (custom) return custom
+  return `${tt.branch} — ${tt.batchName}`
+}

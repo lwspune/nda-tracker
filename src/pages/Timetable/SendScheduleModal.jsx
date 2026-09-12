@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import useStore from '../../store/useStore'
-import ModalShell from './ModalShell'
+import { ModalShell } from '../../components/ui'
 
 // phase: 'confirm' | 'sending' | 'done'
 // When mode='exam-reminder' is passed, skips the mode picker and sends a reminder.

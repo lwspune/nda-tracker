@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import ModalShell from '../Timetable/ModalShell'
+import { ModalShell } from '../../components/ui'
 import { computeAbsentees } from '../../lib/lectureRoster'
 import { fmtDate } from '../../lib/dates'
 

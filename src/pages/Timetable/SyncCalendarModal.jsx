@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import ModalShell from './ModalShell'
+import { ModalShell } from '../../components/ui'
 import { sortTeachersByName } from '../../lib/timetable'
 
 // Calls /api/sync-calendar with the admin session JWT.

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import ModalShell from '../Timetable/ModalShell'
+import { ModalShell } from '../../components/ui'
 import { buildOfflineRoster } from '../../lib/offlineRoster'
 import {
   writtenQuizCompletion, buildWrittenQuizExam, findDuplicateWrittenQuiz,

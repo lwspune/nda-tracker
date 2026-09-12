@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
-import ModalShell from './ModalShell'
+import { ModalShell } from '../../components/ui'
 import { visibleBatchOptions } from '../../lib/batchVisibility'
 
 // CRUD for branches and batches lives in Settings. This modal SELECTS from

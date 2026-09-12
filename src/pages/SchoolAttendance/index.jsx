@@ -10,7 +10,7 @@ import { buildOfflineRoster } from '../../lib/offlineRoster'
 import { resolveOnLeave } from '../../lib/analytics/chain'
 import MarkAbsenteesModal from '../Attendance/MarkAbsenteesModal'
 import MarkDefaultersModal from '../Attendance/MarkDefaultersModal'
-import ModalShell from '../Timetable/ModalShell'
+import { ModalShell } from '../../components/ui'
 import { deriveHomeworkType, homeworkTypeLabel, getHomeworkTargets } from '../../lib/homework'
 
 // Impromptu (substitute / extra) lectures have no timetable slot, so we mint a

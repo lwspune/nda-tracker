@@ -116,44 +116,18 @@ reviewable change, since three of them are working surfaces with their own tests
 
 ---
 
-## Refactor ledger (opened 2026-09-12)
+## Refactor ledger (opened 2026-09-12) — CLOSED
 
-A tree-wide review for duplication and layering, ordered by **evidence of cost** rather than line
-count — per the no-speculative-refactors rule, an entry is here because a divergence already exists
-or a fix has already had to be applied by hand twice. Items are independent and close one at a time.
-**Numbers are stable identifiers** — a gap means that entry closed into
-[`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md), not that it was dropped.
+All seven entries are done and archived in [`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md).
+The review's payload was **five defects that were not on the original list** — two parent-facing
+send endpoints not refusing teachers, a blocked-contact guard that vanished on a failed read, three
+endpoints that never checked account status server-side, and a send-log parser that marked students
+notified when only the parent leg failed. Each was invisible for the same reason: the check existed
+in several hand-maintained copies, so there was nothing to notice an omission against. That, not the
+line count, is the argument for this kind of pass.
 
----
-
-### 7. Layering and size — decide, don't assume
-
-Filed for a decision rather than as agreed work; **none of these is justified on line count alone.**
-
-- **`ModalShell` is in the wrong layer.** [`pages/Timetable/ModalShell.jsx`](src/pages/Timetable/ModalShell.jsx)
-  is imported by four files outside Timetable
-  ([`HostelAttendance`](src/pages/HostelAttendance/index.jsx#L10),
-  [`SchoolAttendance`](src/pages/SchoolAttendance/index.jsx#L13),
-  [`MarkAbsenteesModal`](src/pages/Attendance/MarkAbsenteesModal.jsx#L2),
-  [`MarkDefaultersModal`](src/pages/Attendance/MarkDefaultersModal.jsx#L2)), while 18 other files
-  hand-roll `fixed inset-0`. Moving it to `src/components/ui/` is one line per import and ends the
-  only cross-page import chain in the tree. Lowest-risk item in this ledger.
-- **[`pages/Exams.jsx`](src/pages/Exams.jsx) is the only page not in its own folder**, while
-  `src/pages/Exams/` sits next to it holding six of its children.
-- **[`TimetablePage.jsx`](src/pages/Timetable/TimetablePage.jsx) (1016 lines)** holds 148 lines of
-  pure `xlsx-js-style` export ([`:110-257`](src/pages/Timetable/TimetablePage.jsx#L110-L257)) plus
-  `groupScheduleRows` / `detectClashes` / `getTeacherSchedule` — all pure, all module-private in a
-  component file and therefore untestable. **Teacher-clash detection is user-facing logic with zero
-  direct coverage**, which is the actual argument for moving them to `lib/timetable.js`; the line
-  count is not.
-- **[`HostelTab.jsx`](src/pages/Attendance/HostelTab.jsx) (875 lines, 27 `useState`)** and
-  **[`SchoolAttendance/index.jsx`](src/pages/SchoolAttendance/index.jsx) (854 lines, 16 `useState` +
-  14 `useMemo`)** are the densest components. Both have tests, so a tab-by-tab split would be safe —
-  but do it when next editing them, not as a standalone pass.
-
-**Not in scope:** `src/lib/` (57 modules, most under 200 lines) and `src/store/slices/` (25 slices)
-are well-factored. The duplication is concentrated in `api/` and in page components' private
-helpers — extracting *from* pages *into* `lib/` is the direction of travel, never the reverse.
+Two items were partly or wholly **declined** on the record (splitting the two dense attendance
+components; moving `pages/Exams.jsx`) — see the archive for why.
 
 ---
 

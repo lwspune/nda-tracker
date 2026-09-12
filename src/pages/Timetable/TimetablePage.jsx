@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
-import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName, parseTimeToMinutes } from '../../lib/timetable'
+import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, sortTeachersByName, getTeacherSchedule, groupScheduleRows, detectClashes, getTimetableTitle } from '../../lib/timetable'
+import { downloadTimetableExcel } from '../../lib/timetableExcel'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -13,19 +13,10 @@ import AddSlotModal from './AddSlotModal'
 import SendScheduleModal from './SendScheduleModal'
 import SyncCalendarModal from './SyncCalendarModal'
 import ExamScheduleView from './ExamScheduleView'
-import { downloadBlob } from '../../lib/download'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 // ── Helpers ───────────────────────────────────────────────
-
-function getTimetableTitle(tt) {
-  if (!tt) return ''
-  const custom = tt.title?.trim()
-  if (custom) return custom
-  return `${tt.branch} — ${tt.batchName}`
-}
-
 
 // ISO 'YYYY-MM-DD' for the Monday of the current week (default "week of" anchor).
 function currentMondayISO() {
@@ -35,199 +26,6 @@ function currentMondayISO() {
   const mm = String(mon.getMonth() + 1).padStart(2, '0')
   const dd = String(mon.getDate()).padStart(2, '0')
   return `${mon.getFullYear()}-${mm}-${dd}`
-}
-
-// Group raw entries into display rows sorted chronologically by start time
-function groupScheduleRows(rows) {
-  const map = new Map()
-  for (const { timetable, slot, day, mapping } of rows) {
-    const key = `${timetable.id}__${slot.id}__${mapping.id}`
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        branch:       timetable.branch,
-        batchName:    timetable.batchName,
-        startTime:    slot.startTime,
-        endTime:      slot.endTime,
-        startMinutes: parseTimeToMinutes(slot.startTime) ?? 0,
-        endMinutes:   parseTimeToMinutes(slot.endTime)   ?? 0,
-        subject:      mapping.label,
-        days:         [],
-        clashDays:    [],
-      })
-    }
-    map.get(key).days.push(day)
-  }
-  return [...map.values()].sort((a, b) => {
-    if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes
-    return `${a.branch} ${a.batchName}`.localeCompare(`${b.branch} ${b.batchName}`)
-  })
-}
-
-// Mutates rows[].clashDays; returns clash summary objects
-function detectClashes(rows) {
-  const summaries = []
-  for (let i = 0; i < rows.length; i++) {
-    for (let j = i + 1; j < rows.length; j++) {
-      const a = rows[i], b = rows[j]
-      // No overlap if one ends before the other starts
-      if (a.startMinutes >= b.endMinutes || b.startMinutes >= a.endMinutes) continue
-      const sharedDays = a.days.filter(d => b.days.includes(d))
-      if (!sharedDays.length) continue
-      for (const day of sharedDays) {
-        if (!a.clashDays.includes(day)) a.clashDays.push(day)
-        if (!b.clashDays.includes(day)) b.clashDays.push(day)
-        summaries.push({
-          day,
-          labelA: `${a.branch} — ${a.batchName}: ${a.startTime}–${a.endTime} (${a.subject})`,
-          labelB: `${b.branch} — ${b.batchName}: ${b.startTime}–${b.endTime} (${b.subject})`,
-        })
-      }
-    }
-  }
-  return summaries
-}
-
-function downloadTimetableExcel(timetable, mappings, teachers = [], weekDates = null) {
-  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const FONT = 'Times New Roman'
-  const BORDER = { style: 'thin', color: { rgb: '000000' } }
-  const border = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
-
-  const cell = (v, s) => ({ v, t: 's', s })
-
-  const titleStyle = {
-    font: { name: FONT, bold: true, sz: 13 },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    border,
-  }
-  const headerStyle = {
-    font: { name: FONT, bold: true, sz: 11 },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    border,
-  }
-  const timeStyle = {
-    font: { name: FONT, bold: true, sz: 10 },
-    alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-    border,
-  }
-  const bodyStyle = {
-    font: { name: FONT, sz: 10 },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    border,
-  }
-  const spanLabelStyle = {
-    font: { name: FONT, bold: true, sz: 10 },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    border,
-  }
-
-  const slots = [...timetable.timeSlots].sort(
-    (a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0)
-  )
-  const { grid } = timetable
-  const rows = []
-  const merges = []
-  const rowHeights = []
-
-  // Row 0: title (custom title if set, else branch — batchName)
-  rows.push([
-    cell(getTimetableTitle(timetable), titleStyle),
-    ...Array(6).fill(cell('', titleStyle)),
-  ])
-  merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } })
-  rowHeights.push({ hpt: 28 })
-
-  // Row 1: headers — append the week's calendar date under each day when set
-  rows.push([
-    cell('Time', headerStyle),
-    ...DAYS.map(day => {
-      const dateLabel = weekDates ? fmtDayDate(weekDates[day]) : ''
-      return cell(dateLabel ? `${day}\n${dateLabel}` : day, headerStyle)
-    }),
-  ])
-  rowHeights.push({ hpt: weekDates ? 30 : 20 })
-
-  for (const slot of slots) {
-    const timeLabel = `${slot.startTime} – ${slot.endTime}`
-    const span = grid[slot.id]?.['__span']
-    const r = rows.length
-
-    if (span) {
-      rows.push([
-        cell(timeLabel, timeStyle),
-        cell(span.label || 'Break', spanLabelStyle),
-        ...Array(5).fill(cell('', spanLabelStyle)),
-      ])
-      merges.push({ s: { r, c: 1 }, e: { r, c: 6 } })
-      rowHeights.push({ hpt: 22 })
-    } else {
-      const row = [cell(timeLabel, timeStyle)]
-      let hasTeacherLine = false
-      for (const day of DAYS) {
-        const c = grid[slot.id]?.[day]
-        if (!c) { row.push(cell('', bodyStyle)); continue }
-        if (c.type === 'class') {
-          const m = mappings.find(m => m.id === c.mappingId)
-          if (!m) { row.push(cell('', bodyStyle)); continue }
-          const subjectText = m.label
-          const teacherName = m.teacherId ? (teachers.find(t => t.id === m.teacherId)?.name ?? null) : null
-          const text = teacherName ? `${subjectText}\n${teacherName}` : subjectText
-          if (teacherName) hasTeacherLine = true
-          row.push(cell(text, bodyStyle))
-        } else {
-          row.push(cell(c.label || 'Break', bodyStyle))
-        }
-      }
-      rows.push(row)
-      rowHeights.push({ hpt: hasTeacherLine ? 32 : 22 })
-    }
-  }
-
-  // Footnotes — append "Notes" header + one row per line
-  const footnoteLines = (timetable.footnotes ?? '')
-    .split('\n').map(l => l.trim()).filter(Boolean)
-  if (footnoteLines.length > 0) {
-    const notesHeaderStyle = {
-      font: { name: FONT, bold: true, sz: 10 },
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-      border,
-    }
-    const notesBodyStyle = {
-      font: { name: FONT, sz: 10 },
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-      border,
-    }
-    const headerRow = rows.length
-    rows.push([cell('Notes', notesHeaderStyle), ...Array(6).fill(cell('', notesHeaderStyle))])
-    merges.push({ s: { r: headerRow, c: 0 }, e: { r: headerRow, c: 6 } })
-    rowHeights.push({ hpt: 20 })
-    footnoteLines.forEach((line, i) => {
-      const r = rows.length
-      rows.push([cell(`${i + 1}. ${line}`, notesBodyStyle), ...Array(6).fill(cell('', notesBodyStyle))])
-      merges.push({ s: { r, c: 0 }, e: { r, c: 6 } })
-      rowHeights.push({ hpt: 20 })
-    })
-  }
-
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!merges'] = merges
-  ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }]
-  ws['!rows'] = rowHeights
-
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Timetable')
-
-  // Browser-native download (XLSX.writeFile uses Node's fs which Vite
-  // externalises — calling it from the browser throws "Cannot access
-  // .writeFileSync in client code").
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbout], { type: 'application/octet-stream' })
-  // Its own filename rule, deliberately: it keeps the dot so the .xlsx
-  // extension survives, which safeFilename() would strip.
-  const name = `${timetable.branch}-${timetable.batchName}-timetable.xlsx`
-    .replace(/[^a-z0-9.]+/gi, '-').toLowerCase()
-  downloadBlob(blob, name)
 }
 
 // ── Component ─────────────────────────────────────────────
@@ -279,24 +77,8 @@ export default function TimetablePage() {
 
   const activeTT = timetables.find(t => t.id === selectedTTId) ?? null
 
-  function getTeacherSchedule(teacherId) {
-    const results = []
-    for (const tt of timetables) {
-      for (const slot of tt.timeSlots) {
-        const row = tt.grid[slot.id] ?? {}
-        for (const [day, cell] of Object.entries(row)) {
-          if (day === '__span') continue
-          if (cell?.type !== 'class') continue
-          const m = mappings.find(m => m.id === cell.mappingId)
-          if (m?.teacherId === teacherId) results.push({ timetable: tt, slot, day, mapping: m })
-        }
-      }
-    }
-    return results
-  }
-
   // Derived teacher schedule state (computed each render — fresh objects, safe to mutate)
-  const rawRows      = selectedTeacherId ? getTeacherSchedule(selectedTeacherId) : []
+  const rawRows      = selectedTeacherId ? getTeacherSchedule(timetables, mappings, selectedTeacherId) : []
   const groupedRows  = groupScheduleRows(rawRows)
   const clashes      = detectClashes(groupedRows)
   const totalClasses = groupedRows.reduce((sum, r) => sum + r.days.length, 0)
