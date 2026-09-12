@@ -2,6 +2,7 @@ import { readEnvLocal } from './_env.js'
 import { createClient } from '@supabase/supabase-js'
 import { fmtNudgeDate, isNudgeDay, istDateString, pickDailyMentees, MENTEES_PER_DAY } from '../src/lib/mentorNudge.js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge } from './_wabridge.js'
 
@@ -40,14 +41,14 @@ export default async function handler(req, res) {
   if (!serviceKey) { res.status(500).json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY not configured' }); return }
 
   // ── Auth: cron secret OR admin JWT (teachers rejected) ──
-  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const bearer = bearerFrom(req)
   let mode
   if (cronSecret && bearer === cronSecret) {
     mode = 'cron'
   } else {
     if (!bearer) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
     const anon = createClient(supabaseUrl, supabaseAnon)
-    const { data: { user } } = await anon.auth.getUser(bearer)
+    const user = await getUserOrNull(anon, bearer)
     if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
     if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
     mode = 'admin'

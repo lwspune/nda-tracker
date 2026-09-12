@@ -16,6 +16,45 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~`api/` repeats its bearer-JWT auth preamble nine times~~ — **DONE 2026-09-12** (two unlocked doors found)
+
+Refactor-ledger item 1, the remainder left open when the leaf helpers shipped. It was left open on
+the grounds that the nine copies are **not** identical — CRON_SECRET bypasses, two shared-secret
+paths, a superadmin layer — so collapsing them wrongly would grant access rather than garble a
+message. Tabulating them first is what found the actual problem.
+
+**Two endpoints were not enforcing "teachers never send", and neither was a decision:**
+
+1. **`send-whatsapp.js`** — the endpoint that WhatsApps **exam results to students and parents** —
+   accepted any valid Supabase session, with no teacher check at all. It was the only parent-facing
+   send without one.
+2. **The lecture-miss path of `send-attendance-alerts.js`** — also parent-facing, also unguarded,
+   while `handleHostelAlert` **in the same file** was correctly gated.
+
+The second explains the first's blast radius: `send-late-notifications`, `send-homework-pending` and
+`send-exam-absence` all carry comments saying they 403 teachers *"mirroring
+api/send-attendance-alerts.js"* — they were modelled on the one path that never had the check.
+`CLAUDE.md` asserted the rule was enforced; it was not. Fixed, with a failing test written first in
+each case.
+
+**Shipped:**
+- `api/_auth.js` — `bearerFrom(req)` + `getUserOrNull(client, jwt)`. **Only the mechanical steps.**
+  Every 401 body, every 403, every wording stays **inline** in its endpoint, because a
+  `requireAdminSession()` that hides *which* callers refuse a teacher is precisely what let these two
+  hide. `getUserOrNull` also never throws — the nine inline copies all destructured
+  `{ data: { user } }`, which raises an unhandled rejection on a failed auth call instead of
+  refusing; null routes it into each caller's existing `if (!user) → 401`, failing closed.
+- `api/__tests__/authDoors.test.js` — a **structural** guard: every file calling `getUserOrNull` must
+  call `isTeacherUser` at least as many times, so a *second* door in an existing file cannot be added
+  unlocked (exactly the attendance-alerts shape). Opt out deliberately with an `ALLOWS_TEACHERS`
+  comment. Verified to go red when the `send-whatsapp` gate is removed.
+- Door tests where there were none: `sync-calendar` had **no test file at all**; the lecture path had
+  no teacher test. 401 and 403 are asserted **separately** everywhere, since "the feature works" was
+  never evidence the door was locked.
+
+**Not done, deliberately:** the cron-secret, shared-secret and superadmin paths were left exactly as
+they are. They are genuinely different policies and belong where a reader can see them.
+
 ### ~~`lib/hostelLeave.js` claims to be shared and is not~~ — **DONE 2026-09-12**
 
 Refactor-ledger item 3. The module's own header said it was *"shared by the admin Hostel board and

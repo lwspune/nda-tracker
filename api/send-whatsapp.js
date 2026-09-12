@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { isBlockedStatus } from '../src/lib/accountStatus.js'
+import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { examScoreBasis, resultScore } from '../src/lib/whatsappResultScore.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
@@ -36,15 +38,25 @@ export default async function handler(req, res) {
   }
 
   // Verify faculty session via Supabase JWT
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) {
     res.status(401).json({ ok: false, error: 'Unauthorized — no session token' })
     return
   }
   const anonClient = createClient(supabaseUrl, supabaseAnon)
-  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  const user = await getUserOrNull(anonClient, jwt)
   if (!user) {
     res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' })
+    return
+  }
+  // Teachers hold real Supabase sessions (they capture attendance at
+  // /school-attendance), so a valid session does NOT imply admin. Parent-facing
+  // sends stay with the office — the same 403 the other six send endpoints
+  // carry. This one was missed when that rule was rolled out on 2026-07-28 and
+  // was the ONLY parent-facing send without it until 2026-09-12, which is what
+  // nine hand-maintained copies of an eight-line auth preamble buys you.
+  if (isTeacherUser(user)) {
+    res.status(403).json({ ok: false, error: 'Forbidden' })
     return
   }
 

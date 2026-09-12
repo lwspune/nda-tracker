@@ -194,3 +194,58 @@ describe('send-lecture-absences', () => {
     expect(res.body.skipped).toBe(1)
   })
 })
+
+// ── the auth door (2026-09-12) ───────────────────────────────────────────────
+// One test per door, 401 and 403 asserted SEPARATELY. The lecture path had no
+// teacher test, and on a sibling endpoint (send-whatsapp) the missing 403 turned
+// out to be a real gap — so "the other tests pass" is not evidence the door is
+// locked.
+
+function setAuthAs(user) {
+  createClient.mockImplementation(() => ({
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user } }) },
+    from: () => ({
+      select: () => ({ lte: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }),
+    }),
+  }))
+}
+
+describe('send-attendance-alerts (lecture) — the auth door', () => {
+  const BODY = { date: '2026-09-12', batchName: 'B1', students: [] }
+
+  it('401s with no session token', async () => {
+    setEnv(); setAuthOk()
+    const { res } = await call(BODY, { jwt: '' })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('401s when the token resolves to no user', async () => {
+    setEnv(); setAuthAs(null)
+    const { res } = await call(BODY)
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('403s a teacher — parent-facing sends stay admin-side', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthAs({ id: 't-uid', app_metadata: { role: 'teacher' } })
+    const { res } = await call(BODY)
+    expect(res.statusCode).toBe(403)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  // app_metadata only — user_metadata is writable by the account holder.
+  it('403s a teacher who relabelled their own user_metadata', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthAs({ id: 't-uid', app_metadata: { role: 'teacher' }, user_metadata: { role: 'admin' } })
+    const { res } = await call(BODY)
+    expect(res.statusCode).toBe(403)
+  })
+
+  it('lets an admin through', async () => {
+    setEnv(); mockWabridge(true)
+    setAuthAs({ id: 'admin-uid', app_metadata: {} })
+    const { res } = await call(BODY)
+    expect(res.statusCode).not.toBe(401)
+    expect(res.statusCode).not.toBe(403)
+  })
+})

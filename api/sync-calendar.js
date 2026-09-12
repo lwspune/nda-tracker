@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { buildTeacherBlocks, diffBlocks, toGCalEvent } from '../src/lib/calendarSync.js'
 import { getAccessToken, insertEvent, patchEvent, deleteEvent } from './_googleCalendar.js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 
 
 // "Today" in IST (Asia/Kolkata, no DST) as YYYY-MM-DD — anchors the first
@@ -46,10 +47,10 @@ export default async function handler(req, res) {
   }
 
   // ── Admin gate (reject teachers — they must never trigger calendar writes) ──
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
   const anon = createClient(supabaseUrl, supabaseAnon)
-  const { data: { user } } = await anon.auth.getUser(jwt)
+  const user = await getUserOrNull(anon, jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
   if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 

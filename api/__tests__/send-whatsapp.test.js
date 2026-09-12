@@ -467,3 +467,64 @@ describe('POST /api/send-whatsapp', () => {
     expect(scoreVarsFor('Ravi Kumar')).toEqual([{ pct: '50%', correct: '15', total: '30' }])
   })
 })
+
+// ── the auth door (2026-09-12) ───────────────────────────────────────────────
+//
+// CLAUDE.md states the rule plainly: "Capture only — teachers never send. All
+// parent-facing sends stay admin-side." Seven endpoints enforced it; this one —
+// the endpoint that WhatsApps EXAM RESULTS to students and parents — never got
+// the check, because the eight-line auth preamble is hand-maintained in nine
+// separate files and there was nothing to notice the omission against.
+//
+// The 401 cases already exist above; these pin the 403 and the boundary between
+// them, separately, which is the only way the next missing door gets caught.
+
+describe('send-whatsapp — the auth door', () => {
+  it('401s when no session token is presented', async () => {
+    setupMocks()
+    const res = await call({ examName: 'NDA Test 1' }, { jwt: '' })
+    expect(res.status).toHaveBeenCalledWith(401)
+  })
+
+  it('401s when the token resolves to no user', async () => {
+    setupMocks({ anonClient: makeAnonClient({ user: null }) })
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).toHaveBeenCalledWith(401)
+  })
+
+  // The gap. A teacher holds a real Supabase session (they capture attendance at
+  // /school-attendance), so a valid session does NOT imply admin.
+  it('403s a teacher — parent-facing sends stay admin-side', async () => {
+    setupMocks({ anonClient: makeAnonClient({ user: { id: 't-uid', app_metadata: { role: 'teacher' } } }) })
+    mockWabridge(true)
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(globalThis.fetch).not.toHaveBeenCalled()   // nothing went out
+  })
+
+  // The claim must be read from app_metadata ONLY — user_metadata is writable by
+  // the account holder, so a teacher could otherwise relabel themselves through.
+  it('403s a teacher even when user_metadata claims another role', async () => {
+    setupMocks({ anonClient: makeAnonClient({
+      user: { id: 't-uid', app_metadata: { role: 'teacher' }, user_metadata: { role: 'admin' } },
+    }) })
+    mockWabridge(true)
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('lets an admin session through', async () => {
+    setupMocks({ anonClient: makeAnonClient({ user: { id: 'admin-uid', app_metadata: {} } }) })
+    mockWabridge(true)
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).not.toHaveBeenCalledWith(401)
+    expect(res.status).not.toHaveBeenCalledWith(403)
+  })
+
+  it('lets a superadmin session through', async () => {
+    setupMocks({ anonClient: makeAnonClient({ user: { id: 'sa-uid', app_metadata: { role: 'superadmin' } } }) })
+    mockWabridge(true)
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).not.toHaveBeenCalledWith(403)
+  })
+})

@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { readEnvLocal } from './_env.js'
 
 export default async function handler(req, res) {
@@ -32,11 +33,11 @@ export default async function handler(req, res) {
   }
 
   // Caller verification — anon client + JWT from Authorization header.
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
 
   const anonClient = createClient(supabaseUrl, supabaseAnon)
-  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  const user = await getUserOrNull(anonClient, jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
   if (isTeacherUser(user)) {
     res.status(403).json({ ok: false, error: 'Forbidden — teacher accounts cannot manage auth accounts' })

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { partitionBlocked } from './_blockGate.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
@@ -42,10 +43,10 @@ export default async function handler(req, res) {
     return
   }
 
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
   const anonClient = createClient(supabaseUrl, supabaseAnon)
-  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  const user = await getUserOrNull(anonClient, jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
   // Teachers hold real sessions and capture at /school-attendance, so a valid
   // session no longer implies admin. Parent-facing sends stay with the office

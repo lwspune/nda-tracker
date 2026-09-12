@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { quizQuestionComplete } from '../src/lib/quiz.js'
 import { buildQuizRow } from '../src/store/slices/quizSupabase.js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { readEnvLocal } from './_env.js'
 
 // Cross-app quiz import. PYQ Vault (question-bank) harvests Level-1 recall MCQs
@@ -45,7 +46,10 @@ export default async function handler(req, res) {
     res.status(500).json({ error: 'Quiz import is not configured on the server' })
     return
   }
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  // Same header parse, different authority: this token is compared to a shared
+  // secret, not resolved to a user. The COMPARISON stays inline — only the
+  // parsing is shared.
+  const token = bearerFrom(req)
   if (!token || token !== importSecret) {
     res.status(401).json({ error: 'Unauthorized' })
     return
@@ -127,10 +131,10 @@ async function handleHydrateQuestions(req, res, env) {
     return
   }
 
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
   const anonClient = createClient(supabaseUrl, anonKey)
-  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  const user = await getUserOrNull(anonClient, jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
   // Teachers hold real sessions for /school-attendance capture, so a valid
   // session does not imply admin (mirrors the send endpoints).
@@ -186,7 +190,10 @@ async function handlePaperPush(req, res, env) {
     res.status(500).json({ ok: false, error: 'Paper push is not configured — set VAULT_SYNC_SECRET.' })
     return
   }
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  // Same header parse, different authority: this token is compared to a shared
+  // secret, not resolved to a user. The COMPARISON stays inline — only the
+  // parsing is shared.
+  const token = bearerFrom(req)
   if (!token || token !== vaultSecret) {
     res.status(401).json({ ok: false, error: 'Unauthorized' })
     return

@@ -126,36 +126,6 @@ or a fix has already had to be applied by hand twice. Items are independent and 
 
 ---
 
-### 1. `api/` still repeats its bearer-JWT auth preamble seven times
-
-The leaf helpers shipped 2026-09-12 (`_env.js` / `_mobile.js` / `_wabridge.js` — closed entry in
-[`SUGGESTIONS_ARCHIVE.md`](./SUGGESTIONS_ARCHIVE.md)). **The auth half did not**, and is the
-remainder of that entry rather than a new finding.
-
-Seven endpoints repeat the same eight lines: read `authorization`, strip `Bearer `, 401 on empty,
-`createClient(url, anon)`, `auth.getUser(jwt)`, 401 on no user, `isTeacherUser` 403, then build a
-second JWT-scoped client for RLS. See [`send-whatsapp.js:38-54`](api/send-whatsapp.js#L38-L54),
-[`send-late-notifications.js`](api/send-late-notifications.js),
-[`send-exam-absence.js`](api/send-exam-absence.js),
-[`send-homework-pending.js`](api/send-homework-pending.js),
-[`send-attendance-alerts.js`](api/send-attendance-alerts.js),
-[`quiz-import.js`](api/quiz-import.js), [`teacher-account.js`](api/teacher-account.js).
-
-**Why:** it is the authorization boundary, and it is *not* uniform — `send-mentor-nudges` and
-`send-attendance-alerts` have a `CRON_SECRET` bypass, `teacher-account` layers a superadmin check,
-`quiz-import` has a shared-secret path, and `sync-calendar` 403s teachers without the rest. That
-variation is exactly why it was left alone in the first pass: unlike `normMobile`, these are not
-byte-identical, and collapsing them wrongly would grant access rather than merely garble a message.
-
-**How to apply:** deliberately, and **not** as a single `requireAdminSession`. Tabulate all seven
-call sites first — which 401, which 403, which accept a secret instead of a session, and what each
-returns — then extract only the common core (`bearerFrom(req)` + `getUserOrNull`) and leave each
-endpoint's policy decision inline and visible. A shared helper that hides *which* callers refuse a
-teacher is worse than seven copies that state it. Do it with a test per endpoint asserting the 401
-and the 403 separately, before touching any of them.
-
----
-
 ### 6. Mechanical sweep: helpers that exist 7–15 times with no variation
 
 - **`safeFilename`** (`[^A-Za-z0-9_-]+` -> `_`), **7 copies** —

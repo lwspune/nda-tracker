@@ -2,6 +2,7 @@ import { readEnvLocal } from './_env.js'
 import { createClient } from '@supabase/supabase-js'
 import { buildDailyChain, resolveOnLeave, buildWardenAlert } from '../src/lib/analytics/chain.js'
 import { isTeacherUser } from './_authRole.js'
+import { bearerFrom, getUserOrNull } from './_auth.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
 
@@ -72,11 +73,17 @@ async function handleLectureAbsences(req, res) {
     return
   }
 
-  const jwt = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const jwt = bearerFrom(req)
   if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
   const anonClient = createClient(supabaseUrl, supabaseAnon)
-  const { data: { user } } = await anonClient.auth.getUser(jwt)
+  const user = await getUserOrNull(anonClient, jwt)
   if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Lecture-miss is parent-facing, so it stays with the office. This check was
+  // missing until 2026-09-12 even though handleHostelAlert BELOW has it, and
+  // even though send-late / send-homework / send-exam-absence all carry comments
+  // saying they 403 teachers "mirroring api/send-attendance-alerts.js" — they
+  // were modelled on the one path that never had the check.
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
   const { date, redirectTo, students } = req.body || {}
   if (!date || !Array.isArray(students)) {
@@ -182,13 +189,13 @@ async function handleHostelAlert(req, res) {
   if (!serviceKey) { res.status(500).json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY not configured' }); return }
 
   // ── Auth: cron secret OR admin JWT (teachers rejected) ──
-  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const bearer = bearerFrom(req)
   if (cronSecret && bearer === cronSecret) {
     // cron
   } else {
     if (!bearer) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
     const anon = createClient(supabaseUrl, supabaseAnon)
-    const { data: { user } } = await anon.auth.getUser(bearer)
+    const user = await getUserOrNull(anon, bearer)
     if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
     if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
   }
