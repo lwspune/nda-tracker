@@ -79,7 +79,7 @@ export function buildAbsentRoster({
 
   const out = [...byStudent.values()]
   for (const s of out) {
-    s.periods.sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime))
+    s.periods.sort((a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0))
   }
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)))
 }

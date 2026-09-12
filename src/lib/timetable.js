@@ -13,16 +13,32 @@ export function sortTeachersByName(teachers = []) {
   )
 }
 
-// Exported for src/lib/teacherDay.js, which orders one teacher's periods across
-// several batches (each batch has its own slot rows, so string sort won't do).
+// "9:30 AM" / "09:30" -> minutes past midnight. Returns NULL when it cannot
+// read the input.
+//
+// The one copy of this helper. It lived in four places until 2026-09-12 — here,
+// and byte-identically in TimetablePage, TimetableGrid and AddSlotModal — and
+// the copies disagreed on exactly one case: this one returned 0 for unreadable
+// input where the other three returned null.
+//
+// Null is the correct contract, because 0 is also a REAL answer (midnight). A
+// 0-returning parser cannot tell "12:00 AM" from "I could not read this", so an
+// unreadable slot time silently became midnight and sorted ahead of the first
+// period of the day, with a duration of zero, without erroring. AddSlotModal's
+// validation is the one caller that must tell them apart, and it could not while
+// it depended on this behaviour.
+//
+// Callers that sort or subtract coerce with `?? 0` at the point of use, which
+// keeps their behaviour identical — the difference is that the coercion is now
+// deliberate and local rather than baked into the parser.
 export function parseTimeToMinutes(str) {
-  if (!str) return 0
+  if (!str) return null
   const s = String(str).trim().toUpperCase()
   const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)
   if (m12) {
     let h = parseInt(m12[1], 10)
     const min = parseInt(m12[2], 10)
-    if (min >= 60 || h < 1 || h > 12) return 0
+    if (min >= 60 || h < 1 || h > 12) return null
     if (m12[3] === 'PM' && h !== 12) h += 12
     if (m12[3] === 'AM' && h === 12) h = 0
     return h * 60 + min
@@ -30,10 +46,10 @@ export function parseTimeToMinutes(str) {
   const m24 = s.match(/^(\d{1,2}):(\d{2})$/)
   if (m24) {
     const h = parseInt(m24[1], 10), min = parseInt(m24[2], 10)
-    if (h > 23 || min >= 60) return 0
+    if (h > 23 || min >= 60) return null
     return h * 60 + min
   }
-  return 0
+  return null
 }
 
 function resolveDayName(date) {
@@ -66,7 +82,7 @@ export function getTodaysLectures(timetable, date, mappings) {
   const grid = timetable.grid ?? {}
 
   const slots = [...timetable.timeSlots].sort(
-    (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+    (a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0)
   )
 
   const results = []
@@ -189,7 +205,7 @@ export function getSubjectHoursByBatch(timetables, mappings, { branch } = {}) {
     for (const slot of tt.timeSlots ?? []) {
       const row = grid[slot.id]
       if (!row || row.__span) continue
-      const mins = parseTimeToMinutes(slot.endTime) - parseTimeToMinutes(slot.startTime)
+      const mins = (parseTimeToMinutes(slot.endTime) ?? 0) - (parseTimeToMinutes(slot.startTime) ?? 0)
       if (mins <= 0) continue
       const hours = mins / 60
       for (const [day, c] of Object.entries(row)) {

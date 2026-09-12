@@ -68,7 +68,7 @@ export function getTeacherLecturesForDate({ teacherId, timetables, mappings, dat
   // Across batches, slot rows are independent — order by actual clock time.
   // A same-time double-booking keeps both entries so the clash stays visible.
   return out.sort(
-    (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+    (a, b) => (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0)
       || String(a.batchName).localeCompare(String(b.batchName))
   )
 }
@@ -153,7 +153,7 @@ export function buildFilingBoard({ timetables, mappings, teachers, submissions, 
 
   const rows = withFilingStatus(lectures, submissions).sort(
     (a, b) => String(a.batchName).localeCompare(String(b.batchName))
-      || parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+      || (parseTimeToMinutes(a.startTime) ?? 0) - (parseTimeToMinutes(b.startTime) ?? 0)
   )
 
   const filed = rows.filter(r => r.filed).length

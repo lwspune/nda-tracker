@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { PageHeader, EmptyState } from '../../components/ui'
-import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName } from '../../lib/timetable'
+import { getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName, parseTimeToMinutes } from '../../lib/timetable'
 import TimetableGrid from './TimetableGrid'
 import EditCellModal from './EditCellModal'
 import ManageMappingsModal from './ManageMappingsModal'
@@ -25,26 +25,6 @@ function getTimetableTitle(tt) {
   return `${tt.branch} — ${tt.batchName}`
 }
 
-function parseTimeToMinutes(str) {
-  if (!str) return null
-  const s = str.trim().toUpperCase()
-  const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)
-  if (m12) {
-    let h = parseInt(m12[1], 10)
-    const min = parseInt(m12[2], 10)
-    if (min >= 60 || h < 1 || h > 12) return null
-    if (m12[3] === 'PM' && h !== 12) h += 12
-    if (m12[3] === 'AM' && h === 12) h = 0
-    return h * 60 + min
-  }
-  const m24 = s.match(/^(\d{1,2}):(\d{2})$/)
-  if (m24) {
-    const h = parseInt(m24[1], 10), min = parseInt(m24[2], 10)
-    if (h > 23 || min >= 60) return null
-    return h * 60 + min
-  }
-  return null
-}
 
 // ISO 'YYYY-MM-DD' for the Monday of the current week (default "week of" anchor).
 function currentMondayISO() {

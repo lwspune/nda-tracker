@@ -16,6 +16,36 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-09-12
 
+### ~~`parseTimeToMinutes` exists four times under two different contracts~~ — **DONE 2026-09-12**
+
+Refactor-ledger item 4. One helper — clock time to minutes past midnight — written out four times:
+`lib/timetable.js` plus byte-identical copies in `TimetablePage`, `TimetableGrid` and `AddSlotModal`.
+The copies agreed on everything except the only case that matters: the three page copies returned
+**null** for input they could not read; the library copy returned **0**.
+
+**Why null is the right contract.** `0` is also a real answer — midnight. A 0-returning parser cannot
+tell `12:00 AM` from *"I could not read this"*, so an unreadable slot time silently became midnight,
+sorted ahead of the first period of the day, and computed a duration of zero, without erroring.
+`AddSlotModal`'s validation is the one caller that must tell them apart, and it could only do so by
+keeping its own copy.
+
+**Shipped:** one exported `parseTimeToMinutes` on the null contract, three copies deleted, and `?? 0`
+added at the five library call sites that sort or subtract (`timetable.js` ×2, `teacherDay.js` ×2,
+`absentRoster.js`) so a null cannot become `NaN`. **Behaviour is unchanged** — the coercion is now
+deliberate and local rather than baked into the parser. The helper was **exported and completely
+untested** despite four copies; it now has 10 cases, including one asserting midnight stays
+distinguishable from unreadable.
+
+**Exposure was latent, not live.** Before changing anything, production was queried: all **88**
+timetable slots parse cleanly — zero blank, zero unreadable — and `AddSlotModal` validates typed
+input, so a bad time cannot be entered through the UI. The reachable routes are a raw JSONB edit or a
+future import path.
+
+**Verified in a real browser, not only vitest** (`reference_browser_verify_portals`): the Timetable
+page renders its grid with the TIME column in correct ascending order (6:00 AM → 8:45 PM) and no
+console errors, and the browser-resolved module itself returns `0` for `00:00`, `null` for `rubbish`,
+and reports the two as distinguishable.
+
 ### ~~Three parsers of one server log format, and the Exams copy is stale~~ — **DONE 2026-09-12**
 
 Refactor-ledger item 2, and a **live bug**, not only duplication. `api/send-*.js` return a

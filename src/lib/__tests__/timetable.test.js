@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName } from '../timetable'
+import { getTodaysLectures, getSubjectHoursByBatch, getTeacherDayHours, getWeekDates, fmtDayDate, sortTeachersByName, parseTimeToMinutes } from '../timetable'
 
 // Helper: build a minimal timetable shape matching what timetableSlice produces.
 function makeTimetable({ timeSlots = [], grid = {} } = {}) {
@@ -445,5 +445,105 @@ describe('sortTeachersByName', () => {
     const teachers = [{ id: 't1' }, { id: 't2', name: 'A' }]
     // Nameless teacher sorts as empty string → first; no throw.
     expect(sortTeachersByName(teachers).map(t => t.id)).toEqual(['t1', 't2'])
+  })
+})
+
+describe('parseTimeToMinutes', () => {
+  // One helper, four copies until 2026-09-12 — and the copies disagreed about
+  // the only case that matters. The three page copies returned null for input
+  // they could not read; this one returned 0. But 0 is also a REAL answer
+  // (midnight), so the 0-returning version could not tell "12:00 AM" apart from
+  // "I could not read this", and anything unreadable silently sorted to the top
+  // of the day. The null contract is the surviving one.
+
+  it('reads 12-hour times', () => {
+    expect(parseTimeToMinutes('9:30 AM')).toBe(570)
+    expect(parseTimeToMinutes('1:00 PM')).toBe(780)
+    expect(parseTimeToMinutes('11:45 PM')).toBe(1425)
+  })
+
+  it('handles the two 12-o-clock special cases', () => {
+    expect(parseTimeToMinutes('12:00 AM')).toBe(0)      // midnight
+    expect(parseTimeToMinutes('12:00 PM')).toBe(720)    // noon
+    expect(parseTimeToMinutes('12:30 AM')).toBe(30)
+  })
+
+  it('reads 24-hour times', () => {
+    expect(parseTimeToMinutes('09:30')).toBe(570)
+    expect(parseTimeToMinutes('13:00')).toBe(780)
+    expect(parseTimeToMinutes('00:00')).toBe(0)
+    expect(parseTimeToMinutes('23:59')).toBe(1439)
+  })
+
+  it('is tolerant about spacing and case', () => {
+    expect(parseTimeToMinutes('9:30am')).toBe(570)
+    expect(parseTimeToMinutes('  9:30 AM  ')).toBe(570)
+    expect(parseTimeToMinutes('9:30AM')).toBe(570)
+  })
+
+  // The whole point of the change. Each of these used to come back as 0 —
+  // indistinguishable from a real midnight.
+  it('returns null for anything it cannot read', () => {
+    expect(parseTimeToMinutes('not a time')).toBeNull()
+    expect(parseTimeToMinutes('9.30')).toBeNull()
+    expect(parseTimeToMinutes('930')).toBeNull()
+    expect(parseTimeToMinutes('9:30 XM')).toBeNull()
+  })
+
+  it('returns null for out-of-range values', () => {
+    expect(parseTimeToMinutes('13:00 PM')).toBeNull()   // 13 is not a 12-hour hour
+    expect(parseTimeToMinutes('0:30 AM')).toBeNull()
+    expect(parseTimeToMinutes('24:00')).toBeNull()
+    expect(parseTimeToMinutes('09:60')).toBeNull()
+  })
+
+  it('returns null for missing input', () => {
+    expect(parseTimeToMinutes('')).toBeNull()
+    expect(parseTimeToMinutes(null)).toBeNull()
+    expect(parseTimeToMinutes(undefined)).toBeNull()
+  })
+
+  // Midnight must stay distinguishable from unreadable — this is the assertion
+  // the old contract could not make.
+  it('tells a real midnight apart from unreadable input', () => {
+    expect(parseTimeToMinutes('00:00')).toBe(0)
+    expect(parseTimeToMinutes('rubbish')).toBeNull()
+    expect(parseTimeToMinutes('00:00')).not.toBeNull()
+  })
+})
+
+describe('callers absorb an unreadable time as 0, exactly as before', () => {
+  // The library's own call sites sort and subtract, where a null would produce
+  // NaN and scramble an order or a total. They coerce with ?? 0 at the point of
+  // use, so behaviour is unchanged — the difference is that the coercion is now
+  // deliberate and local rather than baked into the parser.
+
+  it('getSubjectHoursByBatch does not emit NaN for a broken slot', () => {
+    const tt = {
+      id: 'tt1', branch: 'LWS Pune', batchName: 'B1',
+      timeSlots: [{ id: 's1', startTime: 'rubbish', endTime: 'also rubbish' }],
+      grid: { s1: { Monday: { type: 'class', mappingId: 'm-maths' } } },
+    }
+    const out = getSubjectHoursByBatch([tt], MAPPINGS)
+    for (const row of Object.values(out.byBatch ?? out ?? {})) {
+      for (const v of Object.values(row ?? {})) {
+        expect(Number.isNaN(v)).toBe(false)
+      }
+    }
+  })
+
+  it('getTodaysLectures still orders readable slots correctly', () => {
+    const tt = makeTimetable({
+      timeSlots: [
+        { id: 's2', startTime: '10:00 AM', endTime: '11:00 AM' },
+        { id: 's1', startTime: '8:00 AM', endTime: '9:00 AM' },
+      ],
+      grid: {
+        s1: { Monday: { type: 'class', mappingId: 'm-maths' } },
+        s2: { Monday: { type: 'class', mappingId: 'm-phy' } },
+      },
+    })
+    const out = getTodaysLectures(tt, '2026-09-14', MAPPINGS)   // a Monday
+    expect(out.map(l => l.slotId)).toEqual(['s1', 's2'])
   })
 })

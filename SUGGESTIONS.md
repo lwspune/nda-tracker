@@ -179,28 +179,6 @@ is covered on both sides.
 
 ---
 
-### 4. `parseTimeToMinutes` exists four times under two different contracts — LATENT BUG
-
-[`lib/timetable.js:18`](src/lib/timetable.js#L18) returns **`0`** for unparseable input.
-[`AddSlotModal.jsx:5`](src/pages/Timetable/AddSlotModal.jsx#L5),
-[`TimetableGrid.jsx:5`](src/pages/Timetable/TimetableGrid.jsx#L5) and
-[`TimetablePage.jsx:28`](src/pages/Timetable/TimetablePage.jsx#L28) are byte-identical to each other
-and return **`null`**.
-
-**Why:** `0` is also a legitimate value (midnight), so the lib version cannot distinguish `00:00`
-from garbage — a malformed slot time sorts to the top of the day instead of being rejected. The
-three page copies hold the correct contract, and every page call site already writes `?? 0`; only
-[`AddSlotModal.jsx:38`](src/pages/Timetable/AddSlotModal.jsx#L38) depends on the distinction, for
-its validation gate.
-
-**How to apply:** keep the null-returning contract, delete the three page copies, and add `?? 0` at
-the five lib call sites ([`timetable.js:69`](src/lib/timetable.js#L69),
-[`:192`](src/lib/timetable.js#L192), [`teacherDay.js:71`](src/lib/teacherDay.js#L71),
-[`:156`](src/lib/teacherDay.js#L156), [`absentRoster.js:82`](src/lib/absentRoster.js#L82)) so
-duration arithmetic cannot produce `NaN`. Behaviour-preserving; `timetable.test.js` covers it.
-
----
-
 ### 5. The blocked-contact gate is re-implemented in three preview modals
 
 [`LateNotificationPreviewModal.jsx:13`](src/pages/Attendance/LateNotificationPreviewModal.jsx#L13),
