@@ -1,6 +1,6 @@
 // Component tests for Exams page — subject filter and re-upload buttons.
 
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -58,7 +58,12 @@ vi.mock('../../components/upload/OfflineExamModal', () => ({
   ),
 }))
 
+vi.mock('../../lib/omr/sheetPdf', () => ({
+  downloadAnswerSheetPdf: vi.fn(() => Promise.resolve()),
+}))
+
 import ExamsPage from '../Exams'
+import { downloadAnswerSheetPdf } from '../../lib/omr/sheetPdf'
 import { useMode } from '../../context/ModeContext'
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -510,9 +515,72 @@ describe('Exams page — written exams offer Edit marks, not re-upload', () => {
   })
 
   it('offers no export menu at all before any results are in', () => {
+    // A written exam has no questions[], so there is no answer sheet to print
+    // either — the menu stays absent entirely.
     setExams([makeWrittenExam({ name: 'Sets', students: [] })])
     renderExams()
     expect(screen.queryByRole('button', { name: /export/i })).not.toBeInTheDocument()
+  })
+
+  // The OMR answer sheet inverts the rule every other item here follows: it is
+  // needed BEFORE anyone sits the paper, so it does not require results. That is
+  // what makes the bank -> tracker loop work — the vault pushes a draft, you
+  // print its sheet, students sit it, you scan.
+  it('offers the answer sheet on an MCQ exam that has no results yet', async () => {
+    setExams([makeExam({ name: 'Mock 1', students: [] })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /one per page/i })).toBeInTheDocument()
+  })
+
+  it('offers ONLY the answer sheet before results — the class report needs marks', async () => {
+    setExams([makeExam({ name: 'Mock 1', students: [] })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /one per page/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /class report/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /word/i })).not.toBeInTheDocument()
+  })
+
+  it('does not offer an answer sheet for a written exam, which has no questions', async () => {
+    setExams([makeWrittenExam({ name: 'Sets' })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.queryByRole('menuitem', { name: /answer sheet/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the 2-up sheet only when the paper actually fits two to a page', async () => {
+    // Same ABSENT-not-disabled rule the rest of the menu follows.
+    const long = Array.from({ length: 200 }, (_, i) => ({ q: i + 1, chapter: 'A' }))
+    setExams([makeExam({ name: 'Huge', students: [], questions: long })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /one per page/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /2 per page/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the 2-up sheet for a normal-length paper', async () => {
+    setExams([makeExam({ name: 'Mock 1', students: [] })])
+    renderExams()
+    await openExportMenu()
+    expect(screen.getByRole('menuitem', { name: /2 per page/i })).toBeInTheDocument()
+  })
+
+  // Rendering the item proves nothing about it being wired to anything.
+  it('actually builds the sheet when the item is clicked, at the right n-up', async () => {
+    const exam = makeExam({ name: 'Mock 1', students: [] })
+    setExams([exam])
+    renderExams()
+    await openExportMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: /one per page/i }))
+    // runExport yields 50ms so the busy label can paint before the build starts.
+    await waitFor(() => expect(downloadAnswerSheetPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ id: exam.id }), { perPage: 1 }))
+
+    await openExportMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: /2 per page/i }))
+    await waitFor(() => expect(downloadAnswerSheetPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ id: exam.id }), { perPage: 2 }))
   })
 
   it('hides Edit marks outside admin mode', () => {

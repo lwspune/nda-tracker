@@ -15,6 +15,8 @@ import WhatsAppResultsModal  from './Exams/WhatsAppResultsModal'
 import WhatsAppPreviewModal  from './Exams/WhatsAppPreviewModal'
 import ExamAbsencePreviewModal from './Exams/ExamAbsencePreviewModal'
 import { downloadExamPdf }         from '../lib/examPdf'
+import { downloadAnswerSheetPdf } from '../lib/omr/sheetPdf'
+import { sheetCapacity }          from '../lib/omr/layout'
 import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
 import ExportMenu from './Exams/ExportMenu'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../lib/chunkError'
@@ -63,6 +65,7 @@ export default function ExamsPage() {
   const [pdfGenerating, setPdfGenerating]             = useState(null)
   const [reportsGenerating, setReportsGenerating]     = useState(null)
   const [wordGenerating, setWordGenerating]           = useState(null)
+  const [sheetGenerating, setSheetGenerating]         = useState(null)
   const [wordSolutions, setWordSolutions]             = useState(true)
   const [exportError, setExportError]                 = useState('')
   const [whatsappPreviewExam, setWhatsappPreviewExam] = useState(null)
@@ -80,15 +83,45 @@ export default function ExamsPage() {
   // on `examFormat`, the same predicate Update Results / Update Tags / Integrity
   // / Reports already use — not on `source`, which tags who entered the marks.
   function buildExportItems(exam) {
-    if (!exam.students.length) return []
+    const items = []
+
+    // The OMR answer sheet inverts the rule the rest of this menu follows: it is
+    // wanted BEFORE anyone sits the paper, so it does not require results. That
+    // is what closes the bank -> tracker loop — the vault pushes a paper as a
+    // draft, you print its sheet here, students sit it, then you scan.
+    if (exam.questions.length > 0) {
+      const twoUpFits = exam.questions.length <= sheetCapacity({ perPage: 2 })
+      items.push({
+        key: 'omr',
+        label: '🫧 Answer sheet',
+        hint: `OMR · ${exam.questions.length} questions · one per page`,
+        busy: sheetGenerating === `${exam.id}:1`,
+        onSelect: () => runExport(setSheetGenerating, `${exam.id}:1`,
+          () => downloadAnswerSheetPdf(exam, { perPage: 1 })),
+      })
+      // Absent rather than disabled when the paper is too long to halve, the
+      // same rule Word follows on a written exam.
+      if (twoUpFits) {
+        items.push({
+          key: 'omr2',
+          label: '🫧 Answer sheet · 2 per page',
+          hint: 'same sheet, halves the paper',
+          busy: sheetGenerating === `${exam.id}:2`,
+          onSelect: () => runExport(setSheetGenerating, `${exam.id}:2`,
+            () => downloadAnswerSheetPdf(exam, { perPage: 2 })),
+        })
+      }
+    }
+
+    if (!exam.students.length) return items
     const mcq = examFormat(exam) === 'mcq'
-    const items = [{
+    items.push({
       key: 'pdf',
       label: '📄 PDF',
       hint: 'class report · fixed layout',
       busy: pdfGenerating === exam.id,
       onSelect: () => runExport(setPdfGenerating, exam.id, () => downloadExamPdf(exam)),
-    }]
+    })
     if (mcq) {
       items.push({
         key: 'word',

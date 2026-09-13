@@ -9,6 +9,7 @@
 // sheet pays for the library.
 
 import { buildSheetLayout } from './layout'
+import { downloadBlob, safeFilename } from '../download'
 
 const BLACK = [0, 0, 0]
 const LINE_W = 0.25
@@ -120,4 +121,20 @@ export async function renderOmrSheetPdf(layout, meta = {}) {
 export async function buildOmrSheetPdf(opts = {}) {
   const { title, ...layoutOpts } = opts
   return renderOmrSheetPdf(buildSheetLayout(layoutOpts), { title })
+}
+
+/**
+ * The answer sheet for an exam, downloaded.
+ *
+ * The sheet is GENERIC — it carries no exam identity, only a question count —
+ * so one print run can be photocopied and used for any paper of that length,
+ * and the operator picks the exam when scanning. The exam here supplies the
+ * question count and a title for the header stamp, nothing more.
+ */
+export async function downloadAnswerSheetPdf(exam, { perPage = 1 } = {}) {
+  const questionCount = exam?.questions?.length || 0
+  if (!questionCount) throw new Error('This exam has no questions to build a sheet from.')
+  const blob = await buildOmrSheetPdf({ questionCount, perPage, title: exam.name })
+  const suffix = perPage === 2 ? '_2up' : ''
+  downloadBlob(blob, `${safeFilename(exam.name, 'answer_sheet')}_${questionCount}Q${suffix}.pdf`)
 }
