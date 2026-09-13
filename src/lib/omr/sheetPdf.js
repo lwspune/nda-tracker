@@ -40,7 +40,7 @@ function drawHeader(doc, sheet, meta, fonts) {
     meta?.title,
   ].filter(Boolean).join(' · ')
   doc.setFontSize(fonts.stamp)
-  doc.text(stamp, header.stampAnchor.x, header.stampAnchor.y, textOpts(sheet, { align: 'right' }))
+  doc.text(stamp, header.stampAnchor.x, header.stampAnchor.y, textOpts(sheet))
 }
 
 function drawRegistration(doc, sheet) {
@@ -59,7 +59,7 @@ function drawRoll(doc, sheet, fonts) {
     doc.rect(b.x, b.y, b.width, b.height, 'S')
   }
   for (const d of roll.digitLabels) {
-    doc.text(String(d.value), d.x, d.y, textOpts(sheet, { align: 'right', baseline: 'middle' }))
+    doc.text(String(d.value), d.x, d.y, textOpts(sheet, { baseline: 'middle' }))
   }
   for (const col of roll.columns) {
     for (const bub of col.bubbles) doc.circle(bub.x, bub.y, bub.r, 'S')
@@ -73,12 +73,12 @@ function drawQuestions(doc, sheet, fonts) {
       doc.setFontSize(fonts.option)
       q.groupHeader.labels.forEach((label, i) => {
         const a = q.groupHeader.anchors[i]
-        doc.text(label, a.x, a.y, textOpts(sheet, { align: 'center', baseline: 'middle' }))
+        doc.text(label, a.x, a.y, textOpts(sheet, { baseline: 'middle' }))
       })
     }
     doc.setFontSize(fonts.number)
     doc.text(String(q.q), q.numberAnchor.x, q.numberAnchor.y,
-      textOpts(sheet, { align: 'right', baseline: 'middle' }))
+      textOpts(sheet, { baseline: 'middle' }))
     for (const o of q.options) doc.circle(o.x, o.y, o.r, 'S')
   }
 }

@@ -196,16 +196,21 @@ describe('buildSheetLayout — adaptive bubble sizing', () => {
 // numbers and captions — invisible to every geometry test, because none of them
 // knew how big the text was.
 describe('buildSheetLayout — type clears the bubbles', () => {
-  /** Page-space box of a line of text, accounting for the sheet's rotation. */
-  const textBox = (anchor, str, pt, align, rotated) => {
+  /**
+   * Page-space box of a line of text.
+   *
+   * Anchors are the START of the text and it always runs FORWARD from there —
+   * upward on a rotated sheet, rightward otherwise. Verified against the text
+   * matrices jsPDF actually emits (`Tm` = [0 1 -1 0] at 90°), not assumed: an
+   * earlier version modelled jsPDF's `align` shifting the anchor backwards,
+   * which is not what it does under rotation, and the test inherited the same
+   * wrong model as the code so it agreed with the bug.
+   */
+  const textBox = (anchor, str, pt, rotated) => {
     const w = textWidthMm(str, pt), h = fontHeightMm(pt)
-    if (rotated) {
-      // text advances upward (-y); `right` means it ENDS at the anchor
-      const y0 = align === 'right' ? anchor.y : align === 'center' ? anchor.y - w / 2 : anchor.y - w
-      return { x0: anchor.x - h / 2, x1: anchor.x + h / 2, y0, y1: y0 + w }
-    }
-    const x0 = align === 'right' ? anchor.x - w : align === 'center' ? anchor.x - w / 2 : anchor.x
-    return { x0, x1: x0 + w, y0: anchor.y - h / 2, y1: anchor.y + h / 2 }
+    return rotated
+      ? { x0: anchor.x - h / 2, x1: anchor.x + h / 2, y0: anchor.y - w, y1: anchor.y }
+      : { x0: anchor.x, x1: anchor.x + w, y0: anchor.y - h / 2, y1: anchor.y + h / 2 }
   }
   const clears = (box, b) => {
     const dx = Math.max(box.x0 - b.x, 0, b.x - box.x1)
@@ -215,21 +220,21 @@ describe('buildSheetLayout — type clears the bubbles', () => {
 
   const overlap = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
 
-  // Clearance from the BUBBLES turned out to be guaranteed by construction: the
-  // number is right-aligned away from them and `numberW` is sized to hold '000'
-  // at its own font, so inflating the type to 2x produced zero collisions. That
-  // assertion could not fail, so it is not the one worth making.
-  //
-  // The hazard that IS real at tight pitch is numbers colliding with EACH OTHER:
-  // on a rotated sheet adjacent questions are one pitch apart across the text,
-  // and the text's height grows with the font.
+  // Two real hazards, both of which have actually bitten:
+  //   1. the number running forward INTO its own bubbles (3-digit numbers did,
+  //      by 0.92mm, measured out of the emitted PDF)
+  //   2. adjacent numbers colliding with EACH OTHER at tight pitch
   for (const [questionCount, perPage] of [[30, 1], [71, 1], [150, 1], [150, 2], [30, 2]]) {
-    it(`keeps adjacent question numbers apart (${questionCount}q, ${perPage}-up)`, () => {
+    it(`keeps question numbers off the bubbles and apart (${questionCount}q, ${perPage}-up)`, () => {
       const layout = buildSheetLayout({ questionCount, perPage })
       const { fonts } = layout.geometry
       for (const sheet of layout.sheets) {
+        const bubbles = sheet.questions.flatMap(q => q.options)
         const boxes = sheet.questions.map(q =>
-          textBox(q.numberAnchor, q.q, fonts.number, 'right', sheet.rotated))
+          textBox(q.numberAnchor, q.q, fonts.number, sheet.rotated))
+        boxes.forEach(box => {
+          for (const b of bubbles) expect(clears(box, b)).toBe(true)
+        })
         for (let i = 1; i < boxes.length; i++) {
           expect(overlap(boxes[i - 1], boxes[i])).toBe(false)
         }
@@ -242,9 +247,16 @@ describe('buildSheetLayout — type clears the bubbles', () => {
     const layout = buildSheetLayout({ questionCount: 150, perPage: 2 })
     const sheet = layout.sheets[0]
     const blown = sheet.questions.map(q =>
-      textBox(q.numberAnchor, q.q, layout.geometry.fonts.number * 3, 'right', sheet.rotated))
+      textBox(q.numberAnchor, q.q, layout.geometry.fonts.number * 3, sheet.rotated))
     const hits = blown.filter((b, i) => i > 0 && overlap(blown[i - 1], b)).length
     expect(hits).toBeGreaterThan(0)
+
+    // and the bubble-clearance arm goes red too — text runs FORWARD from its
+    // anchor, so a bigger font reaches into the bubbles. That is the exact
+    // defect that shipped: 3-digit numbers, 0.92mm in.
+    const bubbles = sheet.questions.flatMap(q => q.options)
+    const onBubbles = blown.filter(box => bubbles.some(b => !clears(box, b))).length
+    expect(onBubbles).toBeGreaterThan(0)
   })
 
   it('keeps the A B C D caption clear of the bubbles it labels', () => {
@@ -256,7 +268,7 @@ describe('buildSheetLayout — type clears the bubbles', () => {
         for (const q of sheet.questions) {
           if (!q.groupHeader) continue
           q.groupHeader.labels.forEach((label, i) => {
-            const box = textBox(q.groupHeader.anchors[i], label, fonts.option, 'center', sheet.rotated)
+            const box = textBox(q.groupHeader.anchors[i], label, fonts.option, sheet.rotated)
             for (const b of bubbles) expect(clears(box, b)).toBe(true)
           })
         }

@@ -60,6 +60,10 @@ const HEADER_H_HALF = 13       // ditto, 2-up
 const HEADER_GAP = 4
 const ROLL_DIGITS_DEFAULT = 5
 const CUT_MARGIN = 3
+// Clearance between the printed question number and the first bubble. There is
+// spare margin on the sheet, so this is bought cheaply.
+const NUMBER_GAP_RIGHT = 1.8
+const NUMBER_GAP_LEFT = 1.0
 
 const round = n => Math.round(n * 1000) / 1000
 
@@ -101,7 +105,7 @@ function geometryFor(diameter) {
     pitch: round(pitch),
     regSize: round(diameter),          // Evalbee's squares are bubble-sized
     // Wide enough for the largest question number we print, at its own size.
-    numberW: round(textWidthMm('000', fonts.number) + 2),
+    numberW: round(textWidthMm('000', fonts.number) + NUMBER_GAP_LEFT + NUMBER_GAP_RIGHT),
     // One blank slot per group, as Evalbee does — but never tighter than the
     // A B C D caption that has to sit in it without touching the bubbles.
     groupSlot: round(Math.max(pitch, fontHeightMm(fonts.option) + 1.4)),
@@ -296,7 +300,11 @@ function buildRollBlock(topY, x, rollDigits, g, T) {
   return {
     label: { text: 'Roll No', ...T.pt(x + g.numberW, labelY) },
     digitLabels: Array.from({ length: 10 }, (_, v) => ({
-      value: v, ...T.pt(x + g.numberW - 1.2, firstBubbleY + v * g.pitch),
+      value: v,
+      ...T.pt(
+        x + g.numberW - NUMBER_GAP_RIGHT - textWidthMm(String(v), g.fonts.roll),
+        firstBubbleY + v * g.pitch,
+      ),
     })),
     columns,
   }
@@ -329,15 +337,24 @@ function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDig
       if (i % GROUP_SIZE === 0) y += g.groupSlot
       const cy = y + g.radius
       localInk.push(cy)
+      // Anchors are the START of the text, computed here from its measured
+      // width. The renderer must NOT use jsPDF's align under rotation: `right`
+      // does not shift the anchor back along a rotated baseline, so a 3-digit
+      // number ran forward INTO the bubbles while a 2-digit one did not.
+      const numW = textWidthMm(String(q), g.fonts.number)
       questions.push({
         q,
         ...T.pt(x, cy),
-        numberAnchor: T.pt(x + g.numberW - 1.2, cy),
+        numberAnchor: T.pt(x + g.numberW - NUMBER_GAP_RIGHT - numW, cy),
         groupHeader: i % GROUP_SIZE === 0
           ? {
             labels: optionLabels,
-            anchors: optionLabels.map((_, oi) =>
-              T.pt(x + g.numberW + g.radius + oi * g.pitch, y - g.groupSlot / 2)),
+            anchors: optionLabels.map((label, oi) =>
+              T.pt(
+                x + g.numberW + g.radius + oi * g.pitch
+                  - textWidthMm(label, g.fonts.option) / 2,
+                y - g.groupSlot / 2,
+              )),
           }
           : null,
         options: optionLabels.map((label, oi) => ({
