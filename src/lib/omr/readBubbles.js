@@ -44,10 +44,16 @@ const quantile = (sorted, p) => {
  */
 export function calibrate(scores) {
   const sorted = [...scores].sort((a, b) => a - b)
-  // The bulk of any sheet is empty paper, so the low end is the baseline; the
-  // top end is a real mark. Both are taken off-extreme to shrug off outliers.
+  // The bulk of any sheet is empty paper, so a low quantile is the baseline.
+  //
+  // The filled level is the MAXIMUM, not a high quantile. A quantile assumes a
+  // predictable share of bubbles is filled, and that is false at the edges: a
+  // student who answered three questions has ~2% of bubbles inked, so the 98th
+  // percentile is still empty paper, the range collapses and the whole sheet
+  // reads as blank. A stray pixel cannot distort the max either, because a score
+  // is the filled FRACTION of a disc, not a single sample.
   const low = quantile(sorted, 0.15)
-  const high = quantile(sorted, 0.98)
+  const high = sorted.length ? sorted[sorted.length - 1] : 0
   const range = high - low
   if (range < MIN_CONTRAST) {
     return { blank: true, low, high, range, emptyAt: Infinity, fillAt: Infinity }

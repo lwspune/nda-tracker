@@ -27,6 +27,17 @@ describe('calibrate', () => {
     expect(cal.blank).toBe(true)
   })
 
+  it('handles a sheet where almost nothing was answered', () => {
+    // A high quantile assumes a predictable share of bubbles is inked. A student
+    // who answered three questions breaks that assumption, the range collapses,
+    // and the sheet reads as blank — so the filled level is the maximum.
+    const scores = [...Array(168).fill(0.05), 0.92, 0.9]
+    const cal = calibrate(scores)
+    expect(cal.blank).toBe(false)
+    expect(0.92).toBeGreaterThan(cal.fillAt)
+    expect(0.05).toBeLessThan(cal.emptyAt)
+  })
+
   it('is not fooled by pencil — it calibrates on contrast, not absolute darkness', () => {
     const pen = calibrate([...Array(100).fill(0.06), ...Array(20).fill(0.9)])
     const pencil = calibrate([...Array(100).fill(0.06), ...Array(20).fill(0.42)])
