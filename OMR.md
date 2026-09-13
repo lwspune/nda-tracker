@@ -588,6 +588,35 @@ wholly blank roll block is a refusal (Aarti More's sheet arrived that way); and
 two sheets resolving to one student are **both** surfaced, because one of them
 belongs to somebody else and quietly keeping the last discards a real result.
 
+## The detector is shipped code now (2026-09-13)
+
+**[`src/lib/omr/detectSquares.js`](./src/lib/omr/detectSquares.js)** — grayscale,
+local threshold, connected components, square filter, bubble sampling. Input is
+ImageData-shaped, which is what a `<canvas>` hands the browser and what a test
+can build in three lines, so none of it needs a device or a DOM to verify. The
+scratchpad copy is gone; the photo spike now drives the shipped module.
+
+**Device independence is a property of the design, not a hope.** Candidate size
+is a fraction of frame width, thresholding is local, and the geometry that
+follows is recovered from the sheet itself — so scale, rotation, perspective and
+lighting are all absorbed. The nine validation photos came from a phone whose
+model nobody recorded, which is exactly the point: if a particular handset
+mattered, the design would be wrong.
+
+**The one addition beyond a straight port — 3×3 erosion before component
+finding — improved the real photos, not just the synthetic case that prompted
+it.** Speckle landing against a registration square joins its blob, stretches the
+bounding box and drops `fill` below threshold, so the square goes missing.
+Eroding severs those one-pixel attachments; a solid 10 px square survives.
+
+| | before | after |
+|---|---|---|
+| squares found | 24–28 of 28 | **28 of 28 on eight of the nine** |
+| lattice coverage | 86–100 % | **100 %**, 98 % on the 150-question sheet |
+
+The returned mask is deliberately **not** eroded — `sampleDarkness` reads it, and
+thinning the ink there would bias every bubble toward empty.
+
 ## Still outstanding
 
 1. **More raw captures.** Two have arrived and both are usable as reader input —
