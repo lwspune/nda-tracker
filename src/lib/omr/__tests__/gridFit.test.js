@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fitLattice, solveHomographyLS, applyH } from '../gridFit'
+import { buildSheetLayout } from '../layout'
 
 // The Phase B spike rectified 6 of 9 real photos. All three failures had one
 // cause: a corner registration square lost to shadow, so anchoring on four
@@ -180,5 +181,51 @@ describe('fitLattice', () => {
     const scatter = Array.from({ length: 30 }, () => ({ x: rand() * 500, y: rand() * 700 }))
     const fit = fitLattice(scatter)
     expect(fit === null || fit.assigned < scatter.length * 0.6).toBe(true)
+  })
+})
+
+// The reader has to be able to fit the sheet the printer PRINTS. Nothing here is
+// photographed — these are the layout's own registration centres, so a failure
+// is pure geometry and nothing to do with lighting, focus or a phone.
+//
+// Short papers print a 2-COLUMN sheet, where the diagonal between the columns is
+// nearly as short as two row-steps and the diagonals outnumber the true
+// horizontals. Picking the most POPULATED direction that clears the gate chose
+// one of those diagonals as the second axis on a 20-question sheet: it fitted as
+// 2x5, half the marks went unindexed, and every 20Q paper was refused with "this
+// looks like a 2x6 sheet, but this exam prints 2x10". 1, 2, 9, 12, 13 and 16
+// questions failed the same way. A sweep, not a case, because the trigger is a
+// spacing RATIO — the next layout tweak could move which counts land on it.
+describe('fitLattice — every sheet this app can print', () => {
+  const counts = Array.from({ length: 200 }, (_, i) => i + 1)
+
+  it.each([1, 2, 9, 12, 13, 16, 17, 20, 22, 30, 50, 150])('fits its own %iQ sheet', qc => {
+    const sheet = buildSheetLayout({ questionCount: qc }).sheets[0]
+    const half = sheet.registration[0].size / 2
+    const pts = sheet.registration.map(s => ({ x: s.x + half, y: s.y + half }))
+    const cols = new Set(sheet.registration.map(s => s.x)).size
+    const rows = new Set(sheet.registration.map(s => s.y)).size
+    const fit = fitLattice(pts)
+    expect(fit).not.toBeNull()
+    expect({ cols: fit.cols, rows: fit.rows, assigned: fit.assigned })
+      .toEqual({ cols, rows, assigned: pts.length })
+  })
+
+  it('fits every question count from 1 to 200', () => {
+    const bad = []
+    for (const qc of counts) {
+      let sheet
+      try { sheet = buildSheetLayout({ questionCount: qc }).sheets[0] } catch { continue }
+      const half = sheet.registration[0].size / 2
+      const pts = sheet.registration.map(s => ({ x: s.x + half, y: s.y + half }))
+      const cols = new Set(sheet.registration.map(s => s.x)).size
+      const rows = new Set(sheet.registration.map(s => s.y)).size
+      const fit = fitLattice(pts)
+      if (!fit || fit.cols !== cols || fit.rows !== rows || fit.assigned !== pts.length) {
+        bad.push(`${qc}Q: prints ${cols}x${rows}, fits ` +
+          (fit ? `${fit.cols}x${fit.rows} with ${fit.assigned}/${pts.length}` : 'nothing'))
+      }
+    }
+    expect(bad).toEqual([])
   })
 })

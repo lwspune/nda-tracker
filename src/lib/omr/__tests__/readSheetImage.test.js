@@ -123,6 +123,24 @@ describe('readSheetImage', () => {
     expect(r.answers).toBeUndefined()
   })
 
+  // A short paper prints a 2-COLUMN sheet, and the whole chain used to refuse
+  // one: the row step and the between-column diagonal are close enough that the
+  // lattice came back measured in two-row units, so a 20-question sheet fitted
+  // as 2x5 and every 20Q paper was rejected with "is it the right paper?".
+  // Three real exams are 20-question papers. The geometry is pinned across all
+  // counts in gridFit.test.js; this is the end-to-end proof.
+  it('reads a short 2-column sheet, not just the wide ones', () => {
+    const layout20 = buildSheetLayout({ questionCount: 20 })
+    const image = renderSheet(layout20, { marks: new Map([[1, [0]], [20, [3]]]), roll: '00013' })
+    const r = readSheetImage(image, { layout: layout20, roster })
+    expect(r.ok).toBe(true)
+    expect(r.grid).toEqual({ cols: 2, rows: 10 })
+    expect(r.answers[1]).toBe('A')
+    expect(r.answers[20]).toBe('D')
+    expect(r.roll.digits).toBe('00013')
+    expect(r.student.lwsId).toBe('LWS-013')
+  })
+
   it('reports the registration squares it found, for diagnosing a bad capture', () => {
     const image = renderSheet(layout30, {})
     const r = readSheetImage(image, { layout: layout30 })

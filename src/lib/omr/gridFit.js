@@ -67,10 +67,25 @@ export function solveHomographyLS(src, dst) {
 
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y })
 const len = v => Math.hypot(v.x, v.y)
-const median = a => {
-  if (!a.length) return 0
-  const s = [...a].sort((x, y) => x - y)
-  return s[s.length >> 1]
+/**
+ * The ONE-step length among edges that all point the same way.
+ *
+ * A direction family holds one-step edges and two-step ones — each square keeps
+ * its K nearest neighbours, and on a narrow sheet the square two rows up is
+ * nearer than anything in the other column. The median was taking whichever
+ * happened to be more numerous, and on a 2-column sheet the two-steps are half
+ * the family or more: a 20-question sheet (2x10, rows 23.8px apart) measured its
+ * row step as 47.6 and fitted as 2x5 with half its marks unindexed, refusing
+ * every 20Q paper. 1, 2, 9, 12, 13 and 16 questions failed the same way.
+ *
+ * A low quantile rather than the outright minimum: lengths cluster at multiples
+ * of the true step, so the bottom of the sorted list IS the one-step cluster,
+ * while one jittered or mis-detected square must not define the basis alone.
+ */
+const oneStep = lengths => {
+  if (!lengths.length) return 0
+  const s = [...lengths].sort((x, y) => x - y)
+  return s[Math.min(s.length - 1, Math.floor(s.length * 0.15))]
 }
 
 /**
@@ -101,11 +116,11 @@ function basisVectors(points, neighbourEdges) {
 
   const repr = entry => {
     // Sign-align so opposite-pointing edges reinforce instead of cancelling,
-    // then take the MEDIAN LENGTH within this direction — a family can hold
-    // two-step edges as well as one-step, and the median lands on one step.
+    // then take the ONE-STEP LENGTH within this direction. A family holds
+    // two-step edges as well as one-step, and the basis must be the short one.
     const ref = entry[1][0]
     const aligned = entry[1].map(v => ((v.x * ref.x + v.y * ref.y) < 0 ? { x: -v.x, y: -v.y } : v))
-    const step = median(aligned.map(len))
+    const step = oneStep(aligned.map(len))
     const near = aligned.filter(v => Math.abs(len(v) - step) < step * 0.35)
     const pick = near.length ? near : aligned
     return {
@@ -115,14 +130,33 @@ function basisVectors(points, neighbourEdges) {
   }
   const u = repr(ranked[0])
   // The second axis must be a genuinely different direction, not a near-parallel
-  // bucket and not the diagonal that sits between the two real axes.
-  const second = ranked.slice(1).find(e => {
-    const v = repr(e)
+  // bucket and not the diagonal that sits between the two real axes — and among
+  // the directions that clear that gate, the SHORTEST one rather than the busiest.
+  //
+  // A diagonal spans the same lattice as the true axis, so nothing downstream
+  // rejects it: it indexes every square and then reports the wrong SHAPE, because
+  // the index extents shear. On a 2-column sheet the diagonal is barely longer
+  // than the row step, clears the gate at cos ~0.49, and carries more edges than
+  // the true horizontal — a 20-question sheet (2x10) came back 2x11 and
+  // `readSheetImage` refused it on shape.
+  //
+  // Shortest, not most-orthogonal: the two shortest independent vectors ARE the
+  // reduced basis of a lattice, and that survives perspective, which orthogonality
+  // does not — a photographed grid's own axes are not perpendicular in the image,
+  // so a diagonal can be the more orthogonal of the two.
+  //
+  // Sparse buckets stay excluded: four stray blobs can point anywhere, and one
+  // short accidental pair must not outvote an axis carrying forty edges.
+  const floor = Math.max(3, ranked[0][1].length * 0.08)
+  let second = null, shortest = Infinity
+  for (const entry of ranked.slice(1)) {
+    if (entry[1].length < floor) continue
+    const v = repr(entry)
     const cos = Math.abs((u.x * v.x + u.y * v.y) / (len(u) * len(v)))
-    return cos < 0.5
-  })
+    if (cos < 0.5 && len(v) < shortest) { shortest = len(v); second = v }
+  }
   if (!second) return null
-  return { u, v: repr(second) }
+  return { u, v: second }
 }
 
 /**
@@ -139,7 +173,15 @@ export function fitLattice(points, { minPoints = 8, tol = 0.34 } = {}) {
   if (!points || points.length < minPoints) return null
 
   // Nearest neighbours, capped — enough to see all four lattice directions.
-  const K = 6
+  //
+  // Eight, not six. On a 2-column sheet the squares two and three rows up are
+  // both nearer than anything in the other column, so at six the true horizontal
+  // direction never entered the buckets at all and the fit returned null. The
+  // printed sheets sit at a column:row ratio of ~1.7 and were fine, but a photo
+  // taken at a slant compresses one axis and pushes the ratio up. Swept over
+  // 2/3/5-column grids at ratios 0.4-4.0, this takes the failures from 91 to 6,
+  // all of them beyond ratio 3.5.
+  const K = 8
   const neighbours = points.map((p, idx) => {
     const d = points.map((q, k) => ({ k, dist: k === idx ? Infinity : len(sub(q, p)) }))
     d.sort((a, b) => a.dist - b.dist)
