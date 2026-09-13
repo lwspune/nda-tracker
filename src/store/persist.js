@@ -133,6 +133,7 @@ export async function loadExamsFromSupabase() {
     maxMarks:  row.max_marks ?? null,
     createdBy: row.created_by ?? null,
     source:    row.source ?? 'admin',
+    gradedBy:  row.graded_by ?? 'evalbee',
     createdAt: row.created_at,
     students:  resultsByExam[row.id] ?? [],
   }))

@@ -20,6 +20,12 @@ export function buildExamRow(exam) {
     // teachers can create their own offline exams.
     created_by: exam.createdBy  ?? null,
     source:     exam.source     ?? 'admin',
+    // WHO decided the marks. 'evalbee' means responses[] is the machine's
+    // verdict and must never be re-derived from questions[].answer; 'scanner'
+    // means our own OMR reader graded it from the student's chosen letter, so a
+    // key correction may legitimately re-grade it. Defaulting to 'evalbee'
+    // keeps every existing exam exactly as it was.
+    graded_by:  exam.gradedBy   ?? 'evalbee',
     created_at: exam.createdAt  ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }

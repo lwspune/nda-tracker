@@ -5,8 +5,7 @@
 -- They are NOT dormant — `buildQuizRow` (src/store/slices/quizSupabase.js)
 -- writes all three on every quiz save, so a Supabase project rebuilt by
 -- replaying the other migrations would reject every quiz write with
--- PGRST204 "column not found". They carry the classification a PYQ-Vault quiz
--- import sends (exam / chapter / theme), or what the editor sets by hand.
+-- PGRST204 "column not found".
 --
 -- IF NOT EXISTS throughout: this is a no-op against the project that already
 -- has them, and the real definition for any project built from scratch.

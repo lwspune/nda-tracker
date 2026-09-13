@@ -249,3 +249,17 @@ describe('updateExamQuestions', () => {
     await expect(updateExamQuestions(client, 'exam_1', QUESTIONS)).rejects.toThrow('exam questions update failed')
   })
 })
+
+// graded_by is the provenance that makes a later re-grade safe to act on: an
+// Evalbee exam's responses are the machine's verdict and must never be
+// re-derived from a key, while a scanner-graded one is ours.
+describe('buildExamRow — grading provenance', () => {
+  it('defaults to the vendor, which is right for every exam that already exists', () => {
+    expect(buildExamRow({ id: 'e', name: 'n', date: '2026-01-01' }).graded_by).toBe('evalbee')
+  })
+
+  it('carries scanner through when our own reader graded the sheet', () => {
+    expect(buildExamRow({ id: 'e', name: 'n', date: '2026-01-01', gradedBy: 'scanner' }).graded_by)
+      .toBe('scanner')
+  })
+})
