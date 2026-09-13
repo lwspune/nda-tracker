@@ -76,6 +76,39 @@ function geometryFor(diameter) {
     rollLabelH: round(Math.max(3.5, 1.8 * diameter)),
     rollWriteH: round(Math.max(4, 2 * diameter)),
     rollGap: round(Math.max(3, 1.5 * diameter)),
+    // Breathing room between the hand-written digit boxes and the first bubble
+    // row. Without it the box border lands exactly on the bubbles.
+    rollBoxGap: round(Math.max(1.5, 0.6 * diameter)),
+  }
+}
+
+/**
+ * Local sheet coordinates -> page coordinates.
+ *
+ * A sheet is always laid out in its own frame with the origin at its top-left;
+ * this places it. Two-up is ROTATED 90° so each half's columns run along the
+ * 210 mm long edge instead of the 148.5 mm short one — which is how Evalbee fits
+ * 150 questions two-up, and doing the same here roughly halves the paper for a
+ * full mock.
+ */
+function makeTransform({ rotated, slotX, slotY, localW }) {
+  if (!rotated) {
+    return {
+      rotated: false, angle: 0,
+      pt: (x, y) => ({ x: round(slotX + x), y: round(slotY + y) }),
+      rect: (x, y, w, h) => ({
+        x: round(slotX + x), y: round(slotY + y), width: round(w), height: round(h),
+      }),
+    }
+  }
+  // 90° anticlockwise: local (x, y) -> page (slotX + y, slotY + localW - x)
+  return {
+    rotated: true, angle: 90,
+    pt: (x, y) => ({ x: round(slotX + y), y: round(slotY + localW - x) }),
+    rect: (x, y, w, h) => ({
+      x: round(slotX + y), y: round(slotY + localW - x - w),
+      width: round(h), height: round(w),
+    }),
   }
 }
 
@@ -104,13 +137,23 @@ function columnWidthNeeded(optionCount, g) {
   return g.numberW + (optionCount - 1) * g.pitch + g.diameter
 }
 
+/** The sheet's own frame, in local coordinates (origin top-left of the sheet). */
+function localSize(page, perPage) {
+  // One-up fills the page. Two-up takes half the page and turns it, so the
+  // sheet's long axis runs along the page's 210 mm width.
+  return perPage === 1
+    ? { localW: page.width, localH: page.height, rotated: false }
+    : { localW: page.height / perPage, localH: page.width, rotated: true }
+}
+
 function frame(page, perPage, g, columns, optionCount, rollDigits) {
-  const sheetH = page.height / perPage
+  const { localW, localH } = localSize(page, perPage)
+  const sheetH = localH
   const headerH = perPage === 1 ? HEADER_H_FULL : HEADER_H_HALF
   const pad = perPage === 1 ? MARGIN : CUT_MARGIN + 2
   const bodyTop = MARGIN + headerH + HEADER_GAP
   const bodyBottom = sheetH - pad
-  const usableW = page.width - 2 * MARGIN
+  const usableW = localW - 2 * MARGIN
 
   // Natural widths. Column one also carries the roll block, which is one lattice
   // slot wider than a question column (5 digits against 4 options), so it gets
@@ -202,28 +245,26 @@ function splitAcrossColumns(questionCount, columns, firstCap, restCap) {
   return out
 }
 
-function buildRollBlock(originY, x, rollDigits, g) {
-  const labelY = originY
+function buildRollBlock(topY, x, rollDigits, g, T) {
+  const labelY = topY
   const writeY = labelY + g.rollLabelH
-  const firstBubbleY = writeY + g.rollWriteH + g.radius
+  // rollBoxGap keeps the hand-written digit boxes off the first bubble row.
+  const firstBubbleY = writeY + g.rollWriteH + g.rollBoxGap + g.radius
   const columns = []
   for (let d = 0; d < rollDigits; d++) {
-    const cx = round(x + g.numberW + g.radius + d * g.pitch)
+    const cx = x + g.numberW + g.radius + d * g.pitch
     columns.push({
       index: d,
-      writeBox: {
-        x: round(x + g.numberW + d * g.pitch), y: round(writeY),
-        width: round(g.pitch), height: round(g.rollWriteH),
-      },
+      writeBox: T.rect(x + g.numberW + d * g.pitch, writeY, g.pitch, g.rollWriteH),
       bubbles: Array.from({ length: 10 }, (_, v) => ({
-        value: v, x: cx, y: round(firstBubbleY + v * g.pitch), r: g.radius,
+        value: v, ...T.pt(cx, firstBubbleY + v * g.pitch), r: g.radius,
       })),
     })
   }
   return {
-    label: { text: 'Roll No', x: round(x + g.numberW), y: round(labelY) },
+    label: { text: 'Roll No', ...T.pt(x + g.numberW, labelY) },
     digitLabels: Array.from({ length: 10 }, (_, v) => ({
-      value: v, x: round(x + g.numberW - 1.2), y: round(firstBubbleY + v * g.pitch),
+      value: v, ...T.pt(x + g.numberW - 1.2, firstBubbleY + v * g.pitch),
     })),
     columns,
   }
@@ -231,33 +272,45 @@ function buildRollBlock(originY, x, rollDigits, g) {
 
 function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDigits, g, columns }) {
   const f = frame(page, perPage, g, columns, optionLabels.length, rollDigits)
-  const originY = index * f.sheetH
+  const { localW, localH, rotated } = localSize(page, perPage)
+  // Two-up stacks the halves down the page; one-up is the whole page.
+  const T = makeTransform({
+    rotated,
+    slotX: 0,
+    slotY: rotated ? index * (page.height / perPage) : 0,
+    localW,
+  })
   const { contentX, regX } = columnXs(g, columns, f)
 
   const firstCap = columnCapacity(f.bodyHeight - rollHeight(rollDigits, g), g)
   const restCap = columnCapacity(f.bodyHeight, g)
   const perColumn = splitAcrossColumns(questionCount, columns, firstCap, restCap)
-  const roll = buildRollBlock(originY + f.bodyTop, contentX[0], rollDigits, g)
+  const roll = buildRollBlock(f.bodyTop, contentX[0], rollDigits, g, T)
 
   const questions = []
+  const localInk = []          // local y of every bubble, for sizing the grid
   let q = 1
   perColumn.forEach((count, col) => {
     const x = contentX[col]
-    let y = originY + f.bodyTop + (col === 0 ? rollHeight(rollDigits, g) : 0)
+    let y = f.bodyTop + (col === 0 ? rollHeight(rollDigits, g) : 0)
     for (let i = 0; i < count; i++) {
       if (i % GROUP_SIZE === 0) y += g.groupSlot
-      const cy = round(y + g.radius)
+      const cy = y + g.radius
+      localInk.push(cy)
       questions.push({
         q,
-        x: round(x),
-        y: cy,
+        ...T.pt(x, cy),
+        numberAnchor: T.pt(x + g.numberW - 1.2, cy),
         groupHeader: i % GROUP_SIZE === 0
-          ? { y: round(y - g.groupSlot / 2), labels: optionLabels }
+          ? {
+            labels: optionLabels,
+            anchors: optionLabels.map((_, oi) =>
+              T.pt(x + g.numberW + g.radius + oi * g.pitch, y - g.groupSlot / 2)),
+          }
           : null,
         options: optionLabels.map((label, oi) => ({
           label,
-          x: round(x + g.numberW + g.radius + oi * g.pitch),
-          y: cy,
+          ...T.pt(x + g.numberW + g.radius + oi * g.pitch, cy),
           r: g.radius,
         })),
       })
@@ -269,36 +322,51 @@ function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDig
   // The registration grid frames the CONTENT, not the page. Running it to the
   // page bottom leaves rows of squares under an empty half-sheet, which reads as
   // a misprint; Evalbee's 30-question grid likewise spans only its own block.
-  const lastInk = Math.max(
-    ...questions.map(q => q.y + g.radius),
-    ...roll.columns.flatMap(c => c.bubbles.map(b => b.y + g.radius)),
-  )
-  const top = originY + f.bodyTop
-  const bottom = Math.min(originY + f.bodyBottom - g.regSize, lastInk + f.gutter)
+  const rollLastY = f.bodyTop + g.rollLabelH + g.rollWriteH + g.rollBoxGap + 9.5 * g.pitch
+  const lastInk = Math.max(...localInk, rollDigits ? rollLastY : 0)
+  const top = f.bodyTop
+  const bottom = Math.min(f.bodyBottom - g.regSize, lastInk + g.radius + f.gutter)
   const rowCount = Math.max(REG_ROWS_MIN, Math.round((bottom - top) / REG_ROW_TARGET) + 1)
   const step = (bottom - top) / (rowCount - 1)
-  const regY = Array.from({ length: rowCount }, (_, i) => round(top + i * step))
+  const regY = Array.from({ length: rowCount }, (_, i) => top + i * step)
+
+  const square = (x, y) => {
+    const r = T.rect(x, y, g.regSize, g.regSize)
+    return { x: r.x, y: r.y, size: g.regSize }
+  }
   const registration = []
-  for (const y of regY) for (const x of regX) registration.push({ x, y, size: g.regSize })
+  for (const y of regY) for (const x of regX) registration.push(square(x, y))
 
   const [minX, maxX] = [regX[0], regX[regX.length - 1]]
   const [minY, maxY] = [regY[0], regY[regY.length - 1]]
+  // Corner names are the SHEET's corners, which is what the reader needs — after
+  // rotation they are no longer the page's corners.
   const anchors = [
-    { x: minX, y: minY, size: g.regSize, corner: 'topLeft' },
-    { x: maxX, y: minY, size: g.regSize, corner: 'topRight' },
-    { x: minX, y: maxY, size: g.regSize, corner: 'bottomLeft' },
-    { x: maxX, y: maxY, size: g.regSize, corner: 'bottomRight' },
+    { ...square(minX, minY), corner: 'topLeft' },
+    { ...square(maxX, minY), corner: 'topRight' },
+    { ...square(minX, maxY), corner: 'bottomLeft' },
+    { ...square(maxX, maxY), corner: 'bottomRight' },
   ]
+
+  const fields = ['NAME', 'EXAM', 'DATE']
+  const rowH = f.headerH / fields.length
+  const headerW = localW - 2 * MARGIN
 
   return {
     index,
-    origin: { x: 0, y: round(originY) },
-    width: page.width,
-    height: round(f.sheetH),
+    rotated,
+    textAngle: T.angle,
+    width: round(localW),
+    height: round(localH),
     header: {
-      x: MARGIN, y: round(originY + MARGIN),
-      width: round(page.width - 2 * MARGIN), height: f.headerH,
-      fields: ['NAME', 'EXAM', 'DATE'],
+      ...T.rect(MARGIN, MARGIN, headerW, f.headerH),
+      fields,
+      rows: fields.map((label, i) => ({
+        label,
+        ...T.rect(MARGIN, MARGIN + i * rowH, headerW, rowH),
+        labelAnchor: T.pt(MARGIN + 2.5, MARGIN + i * rowH + rowH / 2 + 1),
+      })),
+      stampAnchor: T.pt(MARGIN + headerW - 2, MARGIN - 1.2),
     },
     roll,
     questions,

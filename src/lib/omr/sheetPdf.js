@@ -19,23 +19,27 @@ const FONT = { number: 7, option: 7, roll: 7, header: 9, stamp: 5.5 }
 // misread silently, and the stamp is what makes that diagnosable by eye.
 export const LAYOUT_VERSION = 'v1'
 
+// Every coordinate already comes from the layout in PAGE space; the only thing
+// the renderer adds is the text angle, since a rotated (two-up) sheet needs its
+// labels turned with it.
+const textOpts = (sheet, extra = {}) =>
+  sheet.textAngle ? { ...extra, angle: sheet.textAngle } : extra
+
 function drawHeader(doc, sheet, meta) {
   const { header } = sheet
-  const rowH = header.height / header.fields.length
   doc.setLineWidth(LINE_W)
   doc.setFontSize(FONT.header)
-  header.fields.forEach((label, i) => {
-    const y = header.y + i * rowH
-    doc.rect(header.x, y, header.width, rowH, 'S')
-    doc.text(`${label} :`, header.x + 2.5, y + rowH / 2 + 1)
-  })
+  for (const row of header.rows) {
+    doc.rect(row.x, row.y, row.width, row.height, 'S')
+    doc.text(`${row.label} :`, row.labelAnchor.x, row.labelAnchor.y, textOpts(sheet))
+  }
   const stamp = [
     `OMR ${LAYOUT_VERSION}`,
     `${sheet.questions.length}Q`,
     meta?.title,
   ].filter(Boolean).join(' · ')
   doc.setFontSize(FONT.stamp)
-  doc.text(stamp, header.x + header.width - 2, header.y - 1.2, { align: 'right' })
+  doc.text(stamp, header.stampAnchor.x, header.stampAnchor.y, textOpts(sheet, { align: 'right' }))
 }
 
 function drawRegistration(doc, sheet) {
@@ -46,7 +50,7 @@ function drawRegistration(doc, sheet) {
 function drawRoll(doc, sheet) {
   const { roll } = sheet
   doc.setFontSize(FONT.roll)
-  doc.text(roll.label.text, roll.label.x, roll.label.y + 3)
+  doc.text(roll.label.text, roll.label.x, roll.label.y, textOpts(sheet, { baseline: 'top' }))
 
   doc.setLineWidth(LINE_W)
   for (const col of roll.columns) {
@@ -54,7 +58,7 @@ function drawRoll(doc, sheet) {
     doc.rect(b.x, b.y, b.width, b.height, 'S')
   }
   for (const d of roll.digitLabels) {
-    doc.text(String(d.value), d.x, d.y + 1, { align: 'right' })
+    doc.text(String(d.value), d.x, d.y, textOpts(sheet, { align: 'right', baseline: 'middle' }))
   }
   for (const col of roll.columns) {
     for (const bub of col.bubbles) doc.circle(bub.x, bub.y, bub.r, 'S')
@@ -67,11 +71,13 @@ function drawQuestions(doc, sheet) {
     if (q.groupHeader) {
       doc.setFontSize(FONT.option)
       q.groupHeader.labels.forEach((label, i) => {
-        doc.text(label, q.options[i].x, q.groupHeader.y + 1.5, { align: 'center' })
+        const a = q.groupHeader.anchors[i]
+        doc.text(label, a.x, a.y, textOpts(sheet, { align: 'center', baseline: 'middle' }))
       })
     }
     doc.setFontSize(FONT.number)
-    doc.text(String(q.q), q.x + 6, q.y + 1, { align: 'right' })
+    doc.text(String(q.q), q.numberAnchor.x, q.numberAnchor.y,
+      textOpts(sheet, { align: 'right', baseline: 'middle' }))
     for (const o of q.options) doc.circle(o.x, o.y, o.r, 'S')
   }
 }

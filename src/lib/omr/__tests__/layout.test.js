@@ -263,18 +263,24 @@ describe('buildSheetLayout — 2-up printing', () => {
     }
   })
 
-  it('refuses a 150-question paper at 2-up rather than going below the floor', () => {
-    // Evalbee DOES fit 150 two-up, by authoring that sheet in landscape so its
-    // question columns run along the 156mm long edge instead of the 118mm short
-    // one. We lay out portrait, so the honest answer here is "not at this size".
-    // Revisit only if Phase B shows our reader is safe at ~2mm.
-    expect(() => buildSheetLayout({ questionCount: 150, perPage: 2 })).toThrow(/capacity/i)
+  it('fits a full 150-question mock 2-up, by turning the sheet like Evalbee does', () => {
+    // The rotation is the whole point: a half-page's columns run along the
+    // 210mm long edge rather than the 148.5mm short one. Portrait 2-up topped
+    // out near 116, which is why a full mock could not be printed two to a page.
+    const { sheets, geometry } = buildSheetLayout({ questionCount: 150, perPage: 2 })
+    expect(sheets).toHaveLength(2)
+    for (const s of sheets) {
+      expect(s.questions).toHaveLength(150)
+      expect(s.rotated).toBe(true)
+      expect(s.textAngle).toBe(90)
+    }
+    expect(geometry.bubbleDiameter).toBeGreaterThanOrEqual(BUBBLE_MIN_MM)
   })
 
-  it('still fits a normal class test 2-up, which is what 2-up is for', () => {
-    const { sheets, geometry } = buildSheetLayout({ questionCount: 100, perPage: 2 })
-    expect(sheets[0].questions).toHaveLength(100)
-    expect(geometry.bubbleDiameter).toBeGreaterThanOrEqual(BUBBLE_MIN_MM)
+  it('leaves a one-up sheet unrotated', () => {
+    const { sheets } = buildSheetLayout({ questionCount: 100, perPage: 1 })
+    expect(sheets[0].rotated).toBe(false)
+    expect(sheets[0].textAngle).toBe(0)
   })
 
   it('keeps the two halves from overlapping, so a cut separates them cleanly', () => {
