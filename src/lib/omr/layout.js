@@ -63,16 +63,48 @@ const CUT_MARGIN = 3
 
 const round = n => Math.round(n * 1000) / 1000
 
+const PT_PER_MM = 72 / 25.4
+
+/**
+ * Type sizes, in points, derived from the bubble diameter.
+ *
+ * These live HERE rather than in the renderer because they have to scale with
+ * the ink: a fixed 7pt looks right at a 3.8mm bubble and collides with itself at
+ * 2.85mm, which is what a 150-question two-up sheet uses. Keeping them in the
+ * layout also makes the clearances testable.
+ */
+function fontsFor(diameter) {
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+  const base = clamp(diameter * 1.9, 4, 9)
+  return {
+    number: round(base),
+    option: round(base * 0.92),
+    roll: round(base),
+    header: round(clamp(diameter * 2.4, 6, 11)),
+    stamp: round(clamp(diameter * 1.5, 4, 6.5)),
+  }
+}
+
+/** Height of a line of type, in mm — the conservative bound for clearance. */
+export const fontHeightMm = pt => pt / PT_PER_MM
+/** Helvetica digits are 0.556em; this is the width of `text` at `pt`. */
+export const textWidthMm = (text, pt) => String(text).length * 0.556 * fontHeightMm(pt)
+
 /** Everything else is a multiple of the bubble diameter, so the sheet scales as one piece. */
 function geometryFor(diameter) {
   const pitch = diameter * PITCH_RATIO
+  const fonts = fontsFor(diameter)
   return {
+    fonts,
     diameter: round(diameter),
     radius: round(diameter / 2),
     pitch: round(pitch),
     regSize: round(diameter),          // Evalbee's squares are bubble-sized
-    numberW: round(Math.max(6, 3.2 * diameter)),
-    groupSlot: round(pitch),           // one blank slot per group, as Evalbee does
+    // Wide enough for the largest question number we print, at its own size.
+    numberW: round(textWidthMm('000', fonts.number) + 2),
+    // One blank slot per group, as Evalbee does — but never tighter than the
+    // A B C D caption that has to sit in it without touching the bubbles.
+    groupSlot: round(Math.max(pitch, fontHeightMm(fonts.option) + 1.4)),
     rollLabelH: round(Math.max(3.5, 1.8 * diameter)),
     rollWriteH: round(Math.max(4, 2 * diameter)),
     rollGap: round(Math.max(3, 1.5 * diameter)),
@@ -429,6 +461,7 @@ export function buildSheetLayout({
       registrationSize: g.regSize,
       columns,
       registrationColumns: columns + 1,
+      fonts: g.fonts,
     },
     cutLine: perPage === 2 ? round(page.height / 2) : null,
     sheets,

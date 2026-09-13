@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildSheetLayout, sheetCapacity, A4,
   PITCH_RATIO, BUBBLE_MIN_MM, BUBBLE_MAX_MM,
+  fontHeightMm, textWidthMm,
 } from '../layout'
 
 // The layout is the SHARED source of truth: the generator draws from it and the
@@ -187,6 +188,87 @@ describe('buildSheetLayout — adaptive bubble sizing', () => {
       const regCols = new Set(layout.sheets[0].registration.map(r => r.x)).size
       expect(regCols).toBe(usedColumns + 1)
     }
+  })
+})
+
+// Type has to clear the ink. Font sizes were fixed at 7pt while the geometry
+// scaled, so a 150-question two-up sheet (2.85mm bubbles) crowded its own
+// numbers and captions — invisible to every geometry test, because none of them
+// knew how big the text was.
+describe('buildSheetLayout — type clears the bubbles', () => {
+  /** Page-space box of a line of text, accounting for the sheet's rotation. */
+  const textBox = (anchor, str, pt, align, rotated) => {
+    const w = textWidthMm(str, pt), h = fontHeightMm(pt)
+    if (rotated) {
+      // text advances upward (-y); `right` means it ENDS at the anchor
+      const y0 = align === 'right' ? anchor.y : align === 'center' ? anchor.y - w / 2 : anchor.y - w
+      return { x0: anchor.x - h / 2, x1: anchor.x + h / 2, y0, y1: y0 + w }
+    }
+    const x0 = align === 'right' ? anchor.x - w : align === 'center' ? anchor.x - w / 2 : anchor.x
+    return { x0, x1: x0 + w, y0: anchor.y - h / 2, y1: anchor.y + h / 2 }
+  }
+  const clears = (box, b) => {
+    const dx = Math.max(box.x0 - b.x, 0, b.x - box.x1)
+    const dy = Math.max(box.y0 - b.y, 0, b.y - box.y1)
+    return Math.hypot(dx, dy) > b.r
+  }
+
+  const overlap = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+
+  // Clearance from the BUBBLES turned out to be guaranteed by construction: the
+  // number is right-aligned away from them and `numberW` is sized to hold '000'
+  // at its own font, so inflating the type to 2x produced zero collisions. That
+  // assertion could not fail, so it is not the one worth making.
+  //
+  // The hazard that IS real at tight pitch is numbers colliding with EACH OTHER:
+  // on a rotated sheet adjacent questions are one pitch apart across the text,
+  // and the text's height grows with the font.
+  for (const [questionCount, perPage] of [[30, 1], [71, 1], [150, 1], [150, 2], [30, 2]]) {
+    it(`keeps adjacent question numbers apart (${questionCount}q, ${perPage}-up)`, () => {
+      const layout = buildSheetLayout({ questionCount, perPage })
+      const { fonts } = layout.geometry
+      for (const sheet of layout.sheets) {
+        const boxes = sheet.questions.map(q =>
+          textBox(q.numberAnchor, q.q, fonts.number, 'right', sheet.rotated))
+        for (let i = 1; i < boxes.length; i++) {
+          expect(overlap(boxes[i - 1], boxes[i])).toBe(false)
+        }
+      }
+    })
+  }
+
+  it('the spacing check can fail — inflating the type collides the numbers', () => {
+    // A check that has never gone red is not evidence.
+    const layout = buildSheetLayout({ questionCount: 150, perPage: 2 })
+    const sheet = layout.sheets[0]
+    const blown = sheet.questions.map(q =>
+      textBox(q.numberAnchor, q.q, layout.geometry.fonts.number * 3, 'right', sheet.rotated))
+    const hits = blown.filter((b, i) => i > 0 && overlap(blown[i - 1], b)).length
+    expect(hits).toBeGreaterThan(0)
+  })
+
+  it('keeps the A B C D caption clear of the bubbles it labels', () => {
+    for (const [questionCount, perPage] of [[150, 1], [150, 2]]) {
+      const layout = buildSheetLayout({ questionCount, perPage })
+      const { fonts } = layout.geometry
+      for (const sheet of layout.sheets) {
+        const bubbles = sheet.questions.flatMap(q => q.options)
+        for (const q of sheet.questions) {
+          if (!q.groupHeader) continue
+          q.groupHeader.labels.forEach((label, i) => {
+            const box = textBox(q.groupHeader.anchors[i], label, fonts.option, 'center', sheet.rotated)
+            for (const b of bubbles) expect(clears(box, b)).toBe(true)
+          })
+        }
+      }
+    }
+  })
+
+  it('shrinks the type along with the ink', () => {
+    const big = buildSheetLayout({ questionCount: 30 }).geometry
+    const small = buildSheetLayout({ questionCount: 150, perPage: 2 }).geometry
+    expect(small.bubbleDiameter).toBeLessThan(big.bubbleDiameter)
+    expect(small.fonts.number).toBeLessThan(big.fonts.number)
   })
 })
 

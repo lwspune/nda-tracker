@@ -12,7 +12,8 @@ import { buildSheetLayout } from './layout'
 
 const BLACK = [0, 0, 0]
 const LINE_W = 0.25
-const FONT = { number: 7, option: 7, roll: 7, header: 9, stamp: 5.5 }
+// Type sizes come from the LAYOUT, not from here: they scale with the bubble, and
+// a fixed size that reads well at 3.8mm collides with itself at 2.85mm.
 
 // Bumped whenever the geometry changes. Printed on the sheet because sheets
 // outlive deployments: a stack printed from v1 and read by a v2 reader would
@@ -25,10 +26,10 @@ export const LAYOUT_VERSION = 'v1'
 const textOpts = (sheet, extra = {}) =>
   sheet.textAngle ? { ...extra, angle: sheet.textAngle } : extra
 
-function drawHeader(doc, sheet, meta) {
+function drawHeader(doc, sheet, meta, fonts) {
   const { header } = sheet
   doc.setLineWidth(LINE_W)
-  doc.setFontSize(FONT.header)
+  doc.setFontSize(fonts.header)
   for (const row of header.rows) {
     doc.rect(row.x, row.y, row.width, row.height, 'S')
     doc.text(`${row.label} :`, row.labelAnchor.x, row.labelAnchor.y, textOpts(sheet))
@@ -38,7 +39,7 @@ function drawHeader(doc, sheet, meta) {
     `${sheet.questions.length}Q`,
     meta?.title,
   ].filter(Boolean).join(' · ')
-  doc.setFontSize(FONT.stamp)
+  doc.setFontSize(fonts.stamp)
   doc.text(stamp, header.stampAnchor.x, header.stampAnchor.y, textOpts(sheet, { align: 'right' }))
 }
 
@@ -47,9 +48,9 @@ function drawRegistration(doc, sheet) {
   for (const s of sheet.registration) doc.rect(s.x, s.y, s.size, s.size, 'F')
 }
 
-function drawRoll(doc, sheet) {
+function drawRoll(doc, sheet, fonts) {
   const { roll } = sheet
-  doc.setFontSize(FONT.roll)
+  doc.setFontSize(fonts.roll)
   doc.text(roll.label.text, roll.label.x, roll.label.y, textOpts(sheet, { baseline: 'top' }))
 
   doc.setLineWidth(LINE_W)
@@ -65,17 +66,17 @@ function drawRoll(doc, sheet) {
   }
 }
 
-function drawQuestions(doc, sheet) {
+function drawQuestions(doc, sheet, fonts) {
   doc.setLineWidth(LINE_W)
   for (const q of sheet.questions) {
     if (q.groupHeader) {
-      doc.setFontSize(FONT.option)
+      doc.setFontSize(fonts.option)
       q.groupHeader.labels.forEach((label, i) => {
         const a = q.groupHeader.anchors[i]
         doc.text(label, a.x, a.y, textOpts(sheet, { align: 'center', baseline: 'middle' }))
       })
     }
-    doc.setFontSize(FONT.number)
+    doc.setFontSize(fonts.number)
     doc.text(String(q.q), q.numberAnchor.x, q.numberAnchor.y,
       textOpts(sheet, { align: 'right', baseline: 'middle' }))
     for (const o of q.options) doc.circle(o.x, o.y, o.r, 'S')
@@ -95,13 +96,14 @@ export async function renderOmrSheetPdf(layout, meta = {}) {
     format: [layout.page.width, layout.page.height],
   })
   doc.setFont('helvetica', 'normal')
+  const fonts = layout.geometry.fonts
 
   for (const sheet of layout.sheets) {
     doc.setDrawColor(...BLACK)
-    drawHeader(doc, sheet, meta)
+    drawHeader(doc, sheet, meta, fonts)
     drawRegistration(doc, sheet)
-    drawRoll(doc, sheet)
-    drawQuestions(doc, sheet)
+    drawRoll(doc, sheet, fonts)
+    drawQuestions(doc, sheet, fonts)
   }
 
   if (layout.cutLine != null) {
