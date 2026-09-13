@@ -29,8 +29,9 @@ import AttendancePage from './pages/Attendance'
 import SchoolAttendancePage from './pages/SchoolAttendance'
 import ScanSheetsPage from './pages/ScanSheets'
 import HostelAttendancePage from './pages/HostelAttendance'
-import { isSchoolAttendancePath, isHostelAttendancePath, isScanPath } from './lib/routing'
+import { isSchoolAttendancePath, isHostelAttendancePath, isScanPath, scanExamIdFromSearch } from './lib/routing'
 import { hasHostelAccess } from './lib/teacherDay'
+
 export default function App() {
   const activePage = useStore(s => s.activePage)
   const hydrated   = useStore(s => s.hydrated)
@@ -59,6 +60,20 @@ export default function App() {
 
   // Load data: dev = from disk, prod admin = from Supabase, prod teacher/student = no-op
   useEffect(() => { initStore() }, [])
+
+  // /scan (and /scan?exam=<id>) in DEV. Production handles it inside
+  // OnlineAdminPortal, which is the only place a session exists; on localhost
+  // there is no portal component to hang it off, and without this the route the
+  // sidebar registers cannot be reached by URL at all — so the link an exam card
+  // hands out could not be opened on the machine it was built on.
+  useEffect(() => {
+    if (IS_READ_ONLY) return
+    if (!isScanPath(window.location.pathname, import.meta.env.BASE_URL)) return
+    const examId = scanExamIdFromSearch(window.location.search)
+    const state = useStore.getState()
+    if (examId) state.setScanExam(examId)
+    else state.setActivePage('scan')
+  }, [])
 
   // Shareable quiz link (?quiz=<id>): focused, self-contained student quiz page.
   // Independent of the store + auth — handles its own one-time mobile identity.
@@ -229,16 +244,24 @@ function StaffCaptureRoute({ surface, session, onLogout }) {
 function OnlineAdminPortal({ session, onLogout }) {
   const activePage = useStore(s => s.activePage)
   const setActivePage = useStore(s => s.setActivePage)
+  const setScanExam = useStore(s => s.setScanExam)
 
   // /scan is a convenience entry point, not a separate surface: it is the same
   // admin app, opened straight onto the scanner because that is done on a phone
   // standing over a stack of paper. Set once on mount so later navigation
   // sticks, matching how TeacherPortal lands on its capture page.
+  //
+  // ?exam=<id> carries WHICH paper, which the sheet itself cannot say — it is
+  // printed identity-free on purpose. That is what makes the link worth sending
+  // to the phone rather than just telling someone to open /scan.
   useEffect(() => {
-    if (isScanPath(window.location.pathname, import.meta.env.BASE_URL)) setActivePage('scan')
-    // setActivePage is a stable zustand action; listing it keeps the rule quiet
+    if (!isScanPath(window.location.pathname, import.meta.env.BASE_URL)) return
+    const examId = scanExamIdFromSearch(window.location.search)
+    if (examId) setScanExam(examId)
+    else setActivePage('scan')
+    // Both are stable zustand actions; listing them keeps the rule quiet
     // without changing the mount-once behaviour.
-  }, [setActivePage])
+  }, [setActivePage, setScanExam])
 
   const pages = {
     schoolAttendance: <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />,

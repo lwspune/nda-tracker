@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isSchoolAttendancePath, isHostelAttendancePath, buildCaptureUrl, isScanPath,
+  scanExamIdFromSearch, buildScanUrl,
   SCHOOL_ATTENDANCE_PATH, HOSTEL_ATTENDANCE_PATH,
 } from '../routing'
 
@@ -95,5 +96,43 @@ describe('isScanPath', () => {
     expect(isScanPath('/school-attendance')).toBe(false)
     expect(isScanPath('/scan-sheets')).toBe(false)
     expect(isScanPath('/')).toBe(false)
+  })
+})
+
+// /scan?exam=<id> — the link an exam card hands you, so the phone that will
+// actually shoot the sheets opens straight onto the right paper.
+describe('scanExamIdFromSearch', () => {
+  it('reads the exam id', () => {
+    expect(scanExamIdFromSearch('?exam=exam_1775963910018')).toBe('exam_1775963910018')
+  })
+
+  it('is null when there is none, so the picker just shows', () => {
+    expect(scanExamIdFromSearch('')).toBeNull()
+    expect(scanExamIdFromSearch('?foo=bar')).toBeNull()
+    expect(scanExamIdFromSearch('?exam=')).toBeNull()
+    expect(scanExamIdFromSearch(undefined)).toBeNull()
+  })
+
+  it('survives other parameters alongside it', () => {
+    expect(scanExamIdFromSearch('?mobile=99&exam=e1')).toBe('e1')
+  })
+})
+
+describe('buildScanUrl', () => {
+  it('carries the exam through, base and all', () => {
+    expect(buildScanUrl('e1', 'https://nda-tracker.vercel.app', '/'))
+      .toBe('https://nda-tracker.vercel.app/scan?exam=e1')
+    expect(buildScanUrl('e1', 'https://lwspune.github.io', '/nda-tracker/'))
+      .toBe('https://lwspune.github.io/nda-tracker/scan?exam=e1')
+  })
+
+  it('is the bare scanner when no exam is named', () => {
+    expect(buildScanUrl(null, 'https://nda-tracker.vercel.app', '/'))
+      .toBe('https://nda-tracker.vercel.app/scan')
+  })
+
+  // An id with a character that needs escaping must not break the link.
+  it('escapes the id', () => {
+    expect(buildScanUrl('a b&c', 'https://x.test', '/')).toBe('https://x.test/scan?exam=a%20b%26c')
   })
 })

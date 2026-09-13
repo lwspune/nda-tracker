@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockStore = {
   exams: [],
   studentList: [],
+  scanExamId: null,
   replaceExam: vi.fn(),
 }
 vi.mock('../../store/useStore', () => ({ default: selector => selector(mockStore) }))
@@ -47,6 +48,7 @@ const upload = async (...names) =>
 beforeEach(() => {
   vi.clearAllMocks()
   mockStore.exams = [mcqExam()]
+  mockStore.scanExamId = null
   mockStore.studentList = [
     { lws_id: 'LWS-001', canonical_name: 'Asha R', evalbee_roll_nos: ['00001'], batches: ['NDA_A'] },
   ]
@@ -199,5 +201,57 @@ describe('Scan page · adding to results already filed', () => {
     await waitFor(() => expect(screen.getByText('Asha R')).toBeInTheDocument())
     expect(screen.queryByText(/graded by evalbee/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled()
+  })
+})
+
+// Opening the scanner FROM an exam card. The picker offers every MCQ exam the
+// school has ever run, so on a phone, over a stack of paper, finding today's
+// paper in it is the slowest part of the job.
+describe('Scan page · opened on one exam', () => {
+  const other = () => mcqExam({ id: 'e2', name: 'Mock 2', date: '2026-03-03' })
+
+  beforeEach(() => {
+    mockStore.exams = [mcqExam(), other()]
+    mockStore.scanExamId = 'e2'
+  })
+
+  it('opens on that exam without anything to choose', async () => {
+    renderPage()
+    expect(screen.getByText(/Mock 2/)).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /exam/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/choose sheet photographs/i)).not.toBeDisabled()
+  })
+
+  it('still lets you change your mind', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
+    expect(screen.getByRole('combobox', { name: /exam/i })).toBeInTheDocument()
+  })
+
+  // The link is the point of the deep link: it is opened on the phone that will
+  // shoot the sheets, not on the screen that shows it.
+  it('offers the link for the phone that will do the scanning', () => {
+    renderPage()
+    expect(screen.getByText(/\/scan\?exam=e2/)).toBeInTheDocument()
+  })
+
+  it('falls back to the picker when the named exam is not there', () => {
+    mockStore.scanExamId = 'no_such_exam'
+    renderPage()
+    expect(screen.getByRole('combobox', { name: /exam/i })).toBeInTheDocument()
+  })
+})
+
+describe('Scan page · the picker itself', () => {
+  it('offers the most recent exam first, not the oldest', () => {
+    mockStore.exams = [
+      mcqExam({ id: 'old', name: 'Old paper', date: '2025-01-01' }),
+      mcqExam({ id: 'new', name: 'New paper', date: '2026-09-01' }),
+      mcqExam({ id: 'mid', name: 'Mid paper', date: '2026-02-01' }),
+    ]
+    renderPage()
+    const options = [...screen.getByRole('combobox', { name: /exam/i }).options]
+      .map(o => o.value).filter(Boolean)
+    expect(options).toEqual(['new', 'mid', 'old'])
   })
 })

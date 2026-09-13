@@ -38,6 +38,25 @@ export function isScanPath(pathname, baseUrl = '/') {
   return path === SCAN_PATH || path === `${SCAN_PATH}/`
 }
 
+/**
+ * The exam a /scan link names, or null.
+ *
+ * The printed sheet is deliberately identity-free — one run of 150Q sheets is
+ * photocopied for any 150Q paper — so the exam can never be recovered from the
+ * paper and has to be chosen at scan time. Choosing it from a list of every MCQ
+ * exam the school has ever run is the tedium; naming it in the link is the fix.
+ */
+export function scanExamIdFromSearch(search) {
+  const value = new URLSearchParams(String(search || '')).get('exam')
+  return value ? value : null
+}
+
+/** The absolute /scan link for one exam — for the phone, not this screen. */
+export function buildScanUrl(examId, origin = '', baseUrl = '/') {
+  const url = buildCaptureUrl(SCAN_PATH, origin, baseUrl)
+  return examId ? `${url}?exam=${encodeURIComponent(examId)}` : url
+}
+
 // The absolute link faculty hand to a teacher / the warden.
 //
 // The base prefix is the whole reason this isn't a template string at the call

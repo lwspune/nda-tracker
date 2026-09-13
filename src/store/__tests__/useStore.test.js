@@ -47,3 +47,30 @@ describe('useStore.loadExamsFromSupabase (store action)', () => {
     expect(useStore.getState().exams).toEqual([])
   })
 })
+
+// Opening the scanner FROM an exam card. The picker offers every MCQ exam the
+// school has ever run — 173 of them today, which is the tedium this removes.
+describe('useStore.setScanExam', () => {
+  beforeEach(() => {
+    useStore.setState({ activePage: 'dashboard', scanExamId: null, activeStudent: 'Someone' })
+  })
+
+  it('lands on the scanner with that exam already chosen', () => {
+    useStore.getState().setScanExam('exam_2')
+    expect(useStore.getState().activePage).toBe('scan')
+    expect(useStore.getState().scanExamId).toBe('exam_2')
+  })
+
+  it('clears the held student, as every other navigation does', () => {
+    useStore.getState().setScanExam('exam_2')
+    expect(useStore.getState().activeStudent).toBeNull()
+  })
+
+  // Navigating away must not leave the scanner pinned to a stale exam the next
+  // time it is opened from the sidebar.
+  it('is forgotten on the next navigation', () => {
+    useStore.getState().setScanExam('exam_2')
+    useStore.getState().setActivePage('exams')
+    expect(useStore.getState().scanExamId).toBeNull()
+  })
+})

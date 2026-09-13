@@ -12,6 +12,9 @@
 import { useMemo, useRef, useState } from 'react'
 import useStore from '../store/useStore'
 import { PageHeader, EmptyState, Card, Badge } from '../components/ui'
+import CopyLinkBar from '../components/ui/CopyLinkBar'
+import { buildScanUrl } from '../lib/routing'
+import { fmtDate } from '../lib/dates'
 import { getExamBatches, examFormat } from '../lib/analytics'
 import { buildSheetLayout } from '../lib/omr/layout'
 import { readSheetImage } from '../lib/omr/readSheetImage'
@@ -77,8 +80,13 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   // below would rebuild the roster on each one.
   const studentList = useStore(s => s.studentList)
   const replaceExam = useStore(s => s.replaceExam)
+  // Set when the scanner was opened FROM an exam — its card, or a /scan?exam=
+  // link. Null when it was opened from the sidebar, and then the picker shows.
+  const scanExamId = useStore(s => s.scanExamId)
 
   const [examId, setExamId] = useState('')
+  // Opened on one exam, the picker is out of the way until it is wanted.
+  const [picking, setPicking] = useState(false)
   const [sheets, setSheets] = useState([])
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(null)
@@ -88,10 +96,22 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
 
   // Only a paper with per-question data can be scanned; a written exam records a
   // total and has no bubbles to read.
+  //
+  // Newest first. The list holds every MCQ exam the school has ever run, and the
+  // one being scanned was almost certainly sat this week — store order buried it
+  // a hundred rows down.
   const scannable = useMemo(
-    () => (exams || []).filter(e => examFormat(e) === 'mcq'),
+    () => (exams || [])
+      .filter(e => examFormat(e) === 'mcq')
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
     [exams])
-  const exam = scannable.find(e => e.id === examId) || null
+
+  // The exam named on the way in wins, until the operator asks to change it.
+  // A named exam that is not here (a stale link, a deleted paper) falls back to
+  // the picker rather than to nothing.
+  const named = scanExamId && !picking ? scannable.find(e => e.id === scanExamId) : null
+  const exam = named || scannable.find(e => e.id === examId) || null
+  const locked = Boolean(named)
 
   const roster = useMemo(
     () => (exam ? buildScanRoster(studentList || [], getExamBatches(exam)) : []),
@@ -193,8 +213,37 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
     <div className="space-y-4">
       <PageHeader title="Scan answer sheets" subtitle="Read filled OMR sheets into an exam" />
 
+      {/* The link, not this screen, is what reaches the phone the sheets will
+          be shot with — and it must be built with the base prefix, or the
+          gh-pages build hands out a link that 404s silently. */}
+      {locked && (
+        <CopyLinkBar
+          label="Scan link"
+          url={buildScanUrl(exam.id, window.location.origin, import.meta.env.BASE_URL)}
+          hint="Opens this exam's scanner straight away — send it to the phone doing the scanning."
+        />
+      )}
+
       <Card>
         <div className="flex flex-wrap items-end gap-3">
+          {locked ? (
+            <div className="flex flex-col gap-1 text-[12px] text-ink-2">
+              Exam
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[14px] font-semibold text-ink-1">{exam.name}</span>
+                <span className="text-[12px] text-ink-3">
+                  {exam.questions.length}Q · {fmtDate(exam.date)}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary text-[11px]"
+                  onClick={() => { setPicking(true); setSheets([]); setSaved(null); setMixOk(false) }}
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          ) : (
           <label className="flex flex-col gap-1 text-[12px] text-ink-2">
             Exam
             <select
@@ -210,6 +259,7 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
               ))}
             </select>
           </label>
+          )}
 
           <label className="flex flex-col gap-1 text-[12px] text-ink-2">
             Sheets

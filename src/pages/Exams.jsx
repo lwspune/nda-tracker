@@ -27,6 +27,7 @@ export default function ExamsPage() {
   const studentProfiles = useStore(s => s.studentProfiles)
   const deleteExam = useStore(s => s.deleteExam)
   const openUploadModal = useStore(s => s.openUploadModal)
+  const setScanExam = useStore(s => s.setScanExam)
   const bulkUpdateStudentContacts  = useStore(s => s.bulkUpdateStudentContacts)
   const whatsappSendHistory        = useStore(s => s.whatsappSendHistory)
   const setWhatsappSendHistory     = useStore(s => s.setWhatsappSendHistory)
@@ -539,6 +540,21 @@ export default function ExamsPage() {
                             Written exams correct their marks in the grid. */}
                         {isMcq ? (
                           <>
+                            {/* Reached from the exam because the paper cannot
+                                say which exam it is: the printed sheet is
+                                deliberately identity-free (sheetPdf.js), so one
+                                run of 150Q sheets photocopies for any 150Q
+                                paper and the exam is chosen at scan time. Doing
+                                that from a list of every MCQ exam the school has
+                                run, on a phone, over a stack of paper, was the
+                                slowest part of the job. */}
+                            <button
+                              onClick={() => setScanExam(exam.id)}
+                              className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"
+                              title="Read filled OMR answer sheets into this exam"
+                            >
+                              🫧 Scan sheets
+                            </button>
                             <button
                               onClick={() => setReuploadResultsExam(exam)}
                               className="btn btn-sm btn-secondary text-[11px] min-h-[44px]"

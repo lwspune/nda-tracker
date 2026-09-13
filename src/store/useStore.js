@@ -32,6 +32,9 @@ const useStore = create((set, get) => ({
   // ── UI state ──────────────────────────────────────────────
   activePage: 'dashboard',
   activeStudent: null,
+  // Which exam the scanner opens onto. A navigation intent, not data — not
+  // persisted, exactly like activePage.
+  scanExamId: null,
   uploadModalOpen: false,
 
   // ── Core helpers ──────────────────────────────────────────
@@ -156,11 +159,19 @@ const useStore = create((set, get) => ({
 
   // ── Navigation ────────────────────────────────────────────
   setActivePage(page) {
-    set({ activePage: page, activeStudent: null })
+    // scanExamId is cleared here too: it says which exam THIS visit to the
+    // scanner is for, so leaving the page must not pin the next visit to it.
+    set({ activePage: page, activeStudent: null, scanExamId: null })
   },
 
   setActiveStudent(name) {
     set({ activeStudent: name, activePage: 'students' })
+  },
+
+  // Open the scanner on one exam — from its own card, or from a /scan?exam=<id>
+  // link sent to the phone the sheets will actually be shot with.
+  setScanExam(examId) {
+    set({ scanExamId: examId, activePage: 'scan', activeStudent: null })
   },
 
   // ── Upload modal ──────────────────────────────────────────

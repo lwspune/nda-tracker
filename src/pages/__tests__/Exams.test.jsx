@@ -17,6 +17,7 @@ const mockStore = {
   setWhatsappSendHistory: vi.fn(),
   setExamAbsenceSendHistory: vi.fn(),
   markExamAbsencesNotified: vi.fn(),
+  setScanExam: vi.fn(),
 }
 
 vi.mock('../../store/useStore', () => ({
@@ -702,3 +703,31 @@ describe('Exams page — pagination', () => {
   })
 })
 
+
+// Scanning is reached FROM the exam, because the paper cannot say which exam it
+// belongs to — the printed sheet is deliberately identity-free so one run can be
+// photocopied for any paper of that length. Picking it out of every MCQ exam the
+// school has ever run, on a phone, over a stack of paper, was the slow part.
+describe('Exams page — scanning answer sheets', () => {
+  it('opens the scanner on that exam', async () => {
+    setExams([makeExam()])
+    renderExams()
+    await userEvent.click(screen.getByRole('button', { name: /scan sheets/i }))
+    expect(mockStore.setScanExam).toHaveBeenCalledWith('exam-1')
+  })
+
+  // A written paper records a total and has no bubbles to read, so the control
+  // is ABSENT rather than disabled — the same rule the export menu follows.
+  it('is not offered for a written exam', () => {
+    setExams([makeWrittenExam()])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /scan sheets/i })).not.toBeInTheDocument()
+  })
+
+  it('is not offered to a teacher, who may not file results', () => {
+    useMode.mockReturnValue('teacher')
+    setExams([makeExam()])
+    renderExams()
+    expect(screen.queryByRole('button', { name: /scan sheets/i })).not.toBeInTheDocument()
+  })
+})
