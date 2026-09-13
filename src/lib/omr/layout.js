@@ -35,13 +35,11 @@
 // Registration columns follow the same sheets: ALWAYS question columns + 1
 // (30 q → 2 columns → 3; 71 q → 3 → 4; 150 q → 4 → 5).
 //
-// ── Why our 2-up capacity is lower than Evalbee's ────────────────────────────
-// Evalbee fits 150 questions two-up; we top out around 116. They do it by
-// AUTHORING the 2-up sheet in landscape — its question columns run along the
-// 156 mm long edge of the half-page, where ours run down the 118 mm short edge.
-// Supporting that means a transposed layout, and it only pays off at the
-// ~2 mm floor, which is the least proven density. Deferred until Phase B shows
-// what our reader can actually resolve. 2-up still covers normal class tests.
+// ── Two-up is ROTATED, like Evalbee's ────────────────────────────────────────
+// Each half is turned 90° so its question columns run along the page's 210 mm
+// long edge instead of the 148.5 mm short one. Laid out portrait, two-up topped
+// out near 116 questions and a full mock could not be printed two to a page;
+// turned, capacity is ~188. See `makeTransform`.
 
 export const A4 = { width: 210, height: 297 }
 

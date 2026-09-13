@@ -357,12 +357,27 @@ was tuned for that; it falls out of the sizing rule, which is the useful part.
 | 71 | 3.8 mm | 3 | 17/27/27 | **3** |
 | 150 | 3.45 mm | 4 | 30/40/40/40 | **4** (⌀2.08 mm two-up) |
 
-**Known gap: our 2-up tops out near 116 questions where Evalbee fits 150.** They
-author the 2-up sheet in *landscape*, so its columns run along the 156 mm long
-edge of the half-page while ours run down the 118 mm short edge. Supporting that
-means a transposed layout and only pays off at the ~2 mm floor — the least proven
-density — so it is deferred until Phase B measures what our reader can resolve.
-2-up still covers ordinary class tests.
+**Two-up is rotated, like Evalbee's (done 2026-09-13).** Each half turns 90° so
+its columns run along the page's 210 mm long edge rather than the 148.5 mm short
+one. Portrait two-up topped out near 116 questions; turned, capacity is **~188**,
+so a full 150-question mock prints two to a page and halves the paper for a
+300-student sitting.
+
+**Type scales with the ink, and is placed by its START point.** Font sizes derive
+from the bubble diameter and live in the layout (a fixed 7pt reads well at 3.8 mm
+and crowds itself at 2.4 mm). Text anchors are the *start* of the string, computed
+from its measured width — **never jsPDF's `align` under rotation**, which does not
+shift the anchor back along a rotated baseline: that shipped 82 collisions, every
+one a three-digit number running forward into its own bubbles by 0.92 mm.
+
+**Verify a sheet by parsing the emitted PDF, not by modelling it.** The bug above
+survived a unit test *and* a visual preview, because both used my model of where
+jsPDF puts rotated text and the model was wrong. Reading the text matrices out of
+the generated file and testing them against the circles in that same file is what
+found it — and what confirms the fix (0 collisions, 0 overlaps across 30q one-up,
+150q one-up, 150q two-up). A useful corollary: an earlier version of that probe
+only matched `Tm`-positioned text, so it silently checked *nothing* on one-up
+sheets, which use `Td`.
 
 **Decisions taken while building:**
 
@@ -427,6 +442,51 @@ content streams are uncompressed vector data — so this is exact, not measured.
 (18/30/23), blue pen, patterned cloth background, slight rotation, shadow across
 the top, several marks overflowing their circle and Q71 left blank. **Un-annotated,
 so it is usable as reader input** — the first sample that is.
+
+## Phase B spike — first result (2026-09-13)
+
+Run against **nine raw phone photos** of Evalbee sheets, deliberately: they are
+denser than anything we generate, so passing there is the stronger signal. The
+question was not "can we read the answers" (we lack their per-sheet geometry for
+every layout) but the one the whole build rests on: **find the registration grid
+in a real photo, pick the corners, rectify, and have the remaining squares land
+on a clean lattice.**
+
+**6 of 9 pass. Where the rectification anchors correctly it is excellent** —
+residuals of **0.1–0.6 % of grid pitch**, far below a bubble radius. That
+includes the 150-question sheet at Evalbee's tightest density (2.08 mm bubbles),
+which recovered its **5 × 11** grid exactly.
+
+**Two things the spike established:**
+
+1. **Shape alone separates registration squares from filled answers.** A square
+   fills its bounding box (~1.0); an inked bubble is a disc and fills π/4 ≈
+   0.785. At a 0.82 threshold the heavy blue-pen answers were passing as
+   registration marks and inventing phantom grid columns. **0.90 separates them
+   with no size or position assumption.**
+2. **Illumination correction is not optional.** One global threshold loses a
+   whole corner to the shadow these photos all have; thresholding each pixel
+   against a coarse local background estimate does not.
+
+**The single failure mode, and it is the real finding.** All three failures share
+one cause: a corner registration square lost to shadow, so the code anchors on
+the *second* row and the whole transform skews — squares then map to negative y,
+above their own "top-left". Picking four extremes by `min(x+y)` and hoping is
+fragile. The fix is standard and bounded: fit the lattice **globally** over all
+detected squares rather than trusting four points — estimate row and column lines
+and take the homography from their intersections, so a missing square costs
+nothing.
+
+**A trap worth recording: the first verdict metric was circular.** It scored
+residual against the *nearest* cluster, so when clustering over-split, every
+square got its own row and the residual was trivially ~0 — three wrong
+rectifications reported "OK". Density (does the grid actually fill?) is what
+catches it. Requiring every row to hold an identical count then over-corrected,
+failing two *correct* rectifications that were merely missing a square or two.
+
+**Verdict: GO.** The hard part works, at the hardest density, on real phone
+photos. The remaining risk is anchor robustness, which is a known problem with a
+known fix rather than an open question.
 
 ## Still outstanding
 
