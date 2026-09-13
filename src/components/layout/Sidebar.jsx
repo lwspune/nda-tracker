@@ -13,6 +13,10 @@ const NAV = [
   { id: 'hostelAttendance', icon: '🏠', label: 'Hostel & Mess', hostelOnly: true },
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'exams',     icon: '📝', label: 'Exams' },
+  // Reading filled answer sheets. Its own page rather than a control on Exams:
+  // done standing over a stack of paper with a phone, while Exams is a desk job.
+  // Admin-only — results drive the parent-facing sends.
+  { id: 'scan',      icon: '🫧', label: 'Scan Sheets', adminOnly: true },
   { id: 'quizzes',   icon: '❓', label: 'Daily Quiz' },
   { id: 'students',   icon: '👤', label: 'Students' },
   { id: 'attendance', icon: '📋', label: 'Attendance' },

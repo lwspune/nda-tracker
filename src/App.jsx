@@ -27,8 +27,9 @@ import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
 import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
 import SchoolAttendancePage from './pages/SchoolAttendance'
+import ScanSheetsPage from './pages/ScanSheets'
 import HostelAttendancePage from './pages/HostelAttendance'
-import { isSchoolAttendancePath, isHostelAttendancePath } from './lib/routing'
+import { isSchoolAttendancePath, isHostelAttendancePath, isScanPath } from './lib/routing'
 import { hasHostelAccess } from './lib/teacherDay'
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -145,6 +146,7 @@ export default function App() {
     schoolAttendance: <SchoolAttendancePage />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
@@ -226,11 +228,23 @@ function StaffCaptureRoute({ surface, session, onLogout }) {
 // Vercel + Supabase auth session, no teacher role metadata. Same layout as dev admin mode.
 function OnlineAdminPortal({ session, onLogout }) {
   const activePage = useStore(s => s.activePage)
+  const setActivePage = useStore(s => s.setActivePage)
+
+  // /scan is a convenience entry point, not a separate surface: it is the same
+  // admin app, opened straight onto the scanner because that is done on a phone
+  // standing over a stack of paper. Set once on mount so later navigation
+  // sticks, matching how TeacherPortal lands on its capture page.
+  useEffect(() => {
+    if (isScanPath(window.location.pathname, import.meta.env.BASE_URL)) setActivePage('scan')
+    // setActivePage is a stable zustand action; listing it keeps the rule quiet
+    // without changing the mount-once behaviour.
+  }, [setActivePage])
 
   const pages = {
     schoolAttendance: <SchoolAttendancePage email={session?.user?.email} onLogout={onLogout} />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
@@ -294,6 +308,7 @@ function TeacherPortal({ session, onLogout }) {
     hostelAttendance: <HostelAttendancePage email={session?.user?.email} onLogout={onLogout} />,
     dashboard:  <DashboardPage />,
     exams:      <ExamsPage />,
+    scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,

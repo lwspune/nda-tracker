@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isSchoolAttendancePath, isHostelAttendancePath, buildCaptureUrl,
+  isSchoolAttendancePath, isHostelAttendancePath, buildCaptureUrl, isScanPath,
   SCHOOL_ATTENDANCE_PATH, HOSTEL_ATTENDANCE_PATH,
 } from '../routing'
 
@@ -78,5 +78,22 @@ describe('buildCaptureUrl', () => {
   it('tolerates a missing origin/base rather than emitting "undefined"', () => {
     expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH, '', '')).toBe('/school-attendance')
     expect(buildCaptureUrl(SCHOOL_ATTENDANCE_PATH)).toBe('/school-attendance')
+  })
+})
+
+describe('isScanPath', () => {
+  it('matches the scan route, with or without a trailing slash', () => {
+    expect(isScanPath('/scan')).toBe(true)
+    expect(isScanPath('/scan/')).toBe(true)
+  })
+
+  it('respects the gh-pages base, where a hand-built link would 404 silently', () => {
+    expect(isScanPath('/nda-tracker/scan', '/nda-tracker/')).toBe(true)
+  })
+
+  it('does not match a sibling capture route or a prefix', () => {
+    expect(isScanPath('/school-attendance')).toBe(false)
+    expect(isScanPath('/scan-sheets')).toBe(false)
+    expect(isScanPath('/')).toBe(false)
   })
 })

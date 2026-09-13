@@ -26,6 +26,18 @@ export function isHostelAttendancePath(pathname, baseUrl = '/') {
   return path === HOSTEL_ATTENDANCE_PATH || path === `${HOSTEL_ATTENDANCE_PATH}/`
 }
 
+// Scanning OMR answer sheets. A sibling of the capture paths above for the same
+// reason they are siblings of each other: it is a different job, done standing
+// over a stack of paper with a phone, by whoever is doing the marking that day.
+// The Exams page manages exams at a desk and already carries eight controls per
+// card; nobody is taking 300 photographs inside it.
+export const SCAN_PATH = '/scan'
+
+export function isScanPath(pathname, baseUrl = '/') {
+  const path = String(pathname || '/').replace(baseUrl, '/')
+  return path === SCAN_PATH || path === `${SCAN_PATH}/`
+}
+
 // The absolute link faculty hand to a teacher / the warden.
 //
 // The base prefix is the whole reason this isn't a template string at the call
