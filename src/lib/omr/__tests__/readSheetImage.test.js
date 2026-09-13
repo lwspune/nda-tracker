@@ -141,6 +141,30 @@ describe('readSheetImage', () => {
     expect(r.student.lwsId).toBe('LWS-013')
   })
 
+  // The viewfinder draws this as the "I can see the sheet" outline. It comes
+  // from the solved transform, so it tracks the paper through tilt and rotation
+  // instead of being a fixed frame the operator has to line the sheet up inside.
+  it('reports where the sheet is in the frame', () => {
+    const image = renderSheet(layout30, { marks: new Map([[1, [0]]]) })
+    const r = readSheetImage(image, { layout: layout30 })
+    expect(r.corners).toHaveLength(4)
+    // The render is flat-on at S px per mm, so the quad must land on the outer
+    // registration marks themselves — not merely somewhere sensible.
+    const reg = layout30.sheets[0].registration
+    const size = layout30.geometry.registrationSize
+    const want = {
+      x0: Math.min(...reg.map(s => s.x)) * S,
+      x1: (Math.max(...reg.map(s => s.x)) + size) * S,
+      y0: Math.min(...reg.map(s => s.y)) * S,
+      y1: (Math.max(...reg.map(s => s.y)) + size) * S,
+    }
+    const [tl, tr, br, bl] = r.corners
+    expect(tl.x).toBeCloseTo(want.x0, -1); expect(tl.y).toBeCloseTo(want.y0, -1)
+    expect(tr.x).toBeCloseTo(want.x1, -1); expect(tr.y).toBeCloseTo(want.y0, -1)
+    expect(br.x).toBeCloseTo(want.x1, -1); expect(br.y).toBeCloseTo(want.y1, -1)
+    expect(bl.x).toBeCloseTo(want.x0, -1); expect(bl.y).toBeCloseTo(want.y1, -1)
+  })
+
   it('reports the registration squares it found, for diagnosing a bad capture', () => {
     const image = renderSheet(layout30, {})
     const r = readSheetImage(image, { layout: layout30 })

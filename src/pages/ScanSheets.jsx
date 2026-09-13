@@ -22,6 +22,7 @@ import { buildScanRoster } from '../lib/omr/scanRoster'
 import { gradeScannedSheet } from '../lib/omr/gradeSheet'
 import { findDuplicateRolls } from '../lib/omr/resolveRoll'
 import { planScanSave } from '../lib/omr/mergeResults'
+import SheetScanner from '../components/scan/SheetScanner'
 
 /**
  * A File to ImageData, via a canvas.
@@ -161,6 +162,21 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  /**
+   * A sheet the viewfinder read.
+   *
+   * Lands in the same list the file input fills, and is named so a bad one can
+   * be told apart from the files beside it — one review list decides what may be
+   * saved, whatever the pixels came from.
+   */
+  function onCamera(result) {
+    setSaved(null)
+    setSheets(prev => [
+      ...prev,
+      { name: `Camera sheet ${prev.filter(s => s.fromCamera).length + 1}`, fromCamera: true, result },
+    ])
+  }
+
   /** Resolve one flagged question by hand. */
   function resolve(sheetIdx, q, outcome) {
     setSheets(prev => prev.map((s, i) => {
@@ -285,6 +301,16 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
         </div>
       </Card>
 
+      {/* The camera reads the sheet as it sees it, so a stack is one motion per
+          sheet instead of photograph-then-wait. The file input stays for
+          desktops, for a device that refuses the camera, and for re-reading a
+          shot somebody already took. */}
+      {exam && layout && (
+        <Card>
+          <SheetScanner layout={layout} roster={roster} onCapture={onCamera} />
+        </Card>
+      )}
+
       {busy && <Card><div className="text-[13px] text-ink-2">Reading sheets…</div></Card>}
 
       {saved && (
@@ -387,6 +413,10 @@ function SheetCard({ index, sheet, roster, onResolve }) {
         <span className="text-[12px] text-ink-3">
           roll {r.roll.digits || '—'} · {answered} answered · {r.reviewCount} to check
         </span>
+        {/* Which capture this row came from. Only matters when a row looks
+            wrong, so it sits last and quiet — but then it is the only way to
+            know which photograph or which pass of the camera to redo. */}
+        <span className="text-[11px] text-ink-3 font-mono">{sheet.name}</span>
       </div>
 
       {r.student.review && (

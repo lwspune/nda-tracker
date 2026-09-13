@@ -35,7 +35,11 @@ export function readSheetImage(image, { layout, sheetIndex = 0, roster = [] } = 
   const sheet = layout.sheets[sheetIndex]
   if (!sheet) return fail('That sheet index is not in this layout.')
 
-  const { squares, stats } = detectRegistrationSquares(image)
+  // `mask` comes back from the SAME call the squares did. Asking twice cost a
+  // second full grayscale + local-threshold + erode + connected-components pass
+  // over the frame — about half the total time, which is free to hand back and
+  // is the difference between a viewfinder that keeps up and one that lurches.
+  const { squares, mask, stats } = detectRegistrationSquares(image)
   if (squares.length < 8) {
     return fail(
       `Only ${squares.length} registration marks found — is the whole sheet in frame?`,
@@ -79,13 +83,20 @@ export function readSheetImage(image, { layout, sheetIndex = 0, roster = [] } = 
 
   // Sample in the PHOTO, at the radius the sheet's own geometry projects to —
   // so distance from the lens changes nothing.
-  const { mask } = detectRegistrationSquares(image)
   const at = (mmx, mmy, rmm) => {
     const c = applyH(H, mmx, mmy)
     const edge = applyH(H, mmx + rmm, mmy)
     const rpx = Math.hypot(edge.x - c.x, edge.y - c.y)
     return sampleDarkness(mask, image.width, image.height, c.x, c.y, rpx)
   }
+
+  // Where the sheet sits in this frame, for the viewfinder to outline. Projected
+  // through the same H the bubbles are sampled with, so it follows the paper
+  // through tilt and rotation rather than asking the operator to line the sheet
+  // up inside a fixed box.
+  const x0 = grid.xs[0], x1 = grid.xs[grid.xs.length - 1] + grid.half * 2
+  const y0 = grid.ys[0], y1 = grid.ys[grid.ys.length - 1] + grid.half * 2
+  const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([mx, my]) => applyH(H, mx, my))
 
   const questionRows = sheet.questions.map(q => ({
     q: q.q,
@@ -107,6 +118,7 @@ export function readSheetImage(image, { layout, sheetIndex = 0, roster = [] } = 
     reason: null,
     squaresFound: squares.length,
     grid: { cols: fit.cols, rows: fit.rows },
+    corners,
     residual: fit.residual,
     answers: result.answers,
     decisions: result.decisions,

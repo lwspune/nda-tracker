@@ -17,6 +17,17 @@ vi.mock('../../config', () => ({ IS_READ_ONLY: false }))
 const readSheetImage = vi.fn()
 vi.mock('../../lib/omr/readSheetImage', () => ({ readSheetImage: (...a) => readSheetImage(...a) }))
 
+
+// The scanner owns a camera and a canvas, neither of which jsdom has; its own
+// tests inject both. Here it is a button that hands the page one read sheet.
+vi.mock('../../components/scan/SheetScanner', () => ({
+  default: ({ onCapture }) => (
+    <div data-testid="sheet-scanner">
+      <button onClick={() => onCapture(readSheetImage(), 'auto')}>fake-capture</button>
+    </div>
+  ),
+}))
+
 import ScanSheetsPage from '../ScanSheets'
 
 const mcqExam = (o = {}) => ({
@@ -253,5 +264,30 @@ describe('Scan page · the picker itself', () => {
     const options = [...screen.getByRole('combobox', { name: /exam/i }).options]
       .map(o => o.value).filter(Boolean)
     expect(options).toEqual(['new', 'mid', 'old'])
+  })
+})
+
+// The viewfinder lands its sheets in the same review list the file input does —
+// one place that decides what may be saved, whatever the pixels came from.
+describe('Scan page · the camera', () => {
+  it('is not offered until an exam is chosen', () => {
+    renderPage()
+    expect(screen.queryByTestId('sheet-scanner')).not.toBeInTheDocument()
+  })
+
+  it('files what the camera read into the same review list', async () => {
+    renderPage()
+    await pickExam()
+    expect(screen.getByTestId('sheet-scanner')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /fake-capture/i }))
+    await waitFor(() => expect(screen.getByText('Asha R')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /save 1 result/i })).not.toBeDisabled()
+  })
+
+  it('names camera sheets so a bad one can be told apart from the files', async () => {
+    renderPage()
+    await pickExam()
+    await userEvent.click(screen.getByRole('button', { name: /fake-capture/i }))
+    await waitFor(() => expect(screen.getByText(/camera sheet 1/i)).toBeInTheDocument())
   })
 })
