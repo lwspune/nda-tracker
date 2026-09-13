@@ -471,11 +471,33 @@ which recovered its **5 × 11** grid exactly.
 **The single failure mode, and it is the real finding.** All three failures share
 one cause: a corner registration square lost to shadow, so the code anchors on
 the *second* row and the whole transform skews — squares then map to negative y,
-above their own "top-left". Picking four extremes by `min(x+y)` and hoping is
-fragile. The fix is standard and bounded: fit the lattice **globally** over all
-detected squares rather than trusting four points — estimate row and column lines
-and take the homography from their intersections, so a missing square costs
-nothing.
+above their own "top-left". Four points is the fewest that can define a
+homography and also the fewest that can be wrong together.
+
+### Closed 2026-09-13 — `src/lib/omr/gridFit.js`, now 9 of 9
+
+Rather than trusting four extremes, `fitLattice` recovers each square's INTEGER
+lattice index by walking the grid from its most central point, then fits the
+transform by least squares over **every** indexed square. A missing square costs
+nothing (its neighbours still pin the lattice) and a stray blob is simply never
+indexed.
+
+Same photos, same detector, only the rectification changed:
+
+| | before | after |
+|---|---|---|
+| rectified | 6 / 9 | **9 / 9** |
+| squares indexed | — | **every one, on all 9** |
+| grid recovered | 3 wrong (4×18, 4×20) | correct on all 9 (4×7, and 5×11 for the 150-q sheet) |
+| residual | 0.1–0.6 % where it worked | 0.5–2.8 % of a cell |
+
+**A bug the synthetic tests missed, twice over.** The first cut ranked candidate
+lattice directions after filtering edges by a GLOBAL median length. The real
+sheets are strongly anisotropic — registration columns ~214 px apart, rows
+~130 px — so the long axis fell outside the filter and a *diagonal* was chosen
+instead, reading a 4×7 grid as 4×10. My synthetic grid was near-square, so it
+passed. Direction families are now ranked by edge count and the one-step length
+is taken per family; the anisotropic case is pinned by its own test.
 
 **A trap worth recording: the first verdict metric was circular.** It scored
 residual against the *nearest* cluster, so when clustering over-split, every
