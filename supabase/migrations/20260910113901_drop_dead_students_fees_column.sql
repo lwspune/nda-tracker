@@ -1,0 +1,12 @@
+-- students.fees held an all-null 8-key skeleton on 126 of 329 rows and a real
+-- value on NONE of them (verified 2026-09-10). It was mapped from the Student
+-- Search List's fee columns and never wired up.
+--
+-- Dropped rather than reused because `loadExistingStudents` reads this table with
+-- `select('*')` in EVERY teacher session — any fee column here is fee data in
+-- every teacher's browser. Fee data lives in student_fee_plans / fee_installments
+-- / fee_payments, behind a superadmin policy.
+--
+-- Applied only after the bundle that stopped writing `fees: {}` went live; the
+-- previous deploy's student-import upsert would have 400'd on a missing column.
+alter table public.students drop column fees;
