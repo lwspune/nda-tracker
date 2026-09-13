@@ -16,8 +16,9 @@ import { getExamBatches, examFormat } from '../lib/analytics'
 import { buildSheetLayout } from '../lib/omr/layout'
 import { readSheetImage } from '../lib/omr/readSheetImage'
 import { buildScanRoster } from '../lib/omr/scanRoster'
-import { gradeScannedSheet, GRADED_BY_SCANNER } from '../lib/omr/gradeSheet'
+import { gradeScannedSheet } from '../lib/omr/gradeSheet'
 import { findDuplicateRolls } from '../lib/omr/resolveRoll'
+import { planScanSave } from '../lib/omr/mergeResults'
 
 /**
  * A File to ImageData, via a canvas.
@@ -39,6 +40,37 @@ async function fileToImageData(file, maxEdge = 1600) {
   return ctx.getImageData(0, 0, width, height)
 }
 
+/**
+ * The read sheets as exam result rows.
+ *
+ * Hoisted out of the save handler so the preview counts and the save itself are
+ * built from the SAME rows — a preview that grades the stack its own way stops
+ * being a preview of what the button does.
+ */
+function gradeAll(readable, exam, roster) {
+  return readable.map(s => {
+    const outcomes = {}
+    for (const d of s.result.decisions) {
+      if (d.state === 'multi') outcomes[d.q] = 'multi'
+      else if (d.choice) outcomes[d.q] = d.choice
+    }
+    const graded = gradeScannedSheet({
+      outcomes, questions: exam.questions, marking: exam.marking,
+    })
+    const profile = roster.find(r => r.lwsId === s.result.student.lwsId)
+    return {
+      name: profile?.name || s.result.student.lwsId,
+      rollNo: s.result.roll.digits || '',
+      totalMarks: graded.totalMarks,
+      correct: graded.correct,
+      incorrect: graded.incorrect,
+      notAttempted: graded.notAttempted,
+      responses: graded.responses,
+      choices: graded.choices,
+    }
+  })
+}
+
 export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   const exams = useStore(s => s.exams)
   // Not defaulted here: `x || []` mints a new array every render, so the memo
@@ -50,6 +82,8 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   const [sheets, setSheets] = useState([])
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(null)
+  // An explicit yes to mixing scanner-graded marks into a vendor-graded exam.
+  const [mixOk, setMixOk] = useState(false)
   const fileRef = useRef(null)
 
   // Only a paper with per-question data can be scanned; a written exam records a
@@ -74,7 +108,19 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
 
   const readable = sheets.filter(s => s.result?.ok)
   const blocked = sheets.some(s => !s.result?.ok || !s.result.complete) || duplicates.length > 0
+
+  // What saving would do to results already filed. Computed from the sheets as
+  // they stand so the counts and the provenance warning are the ones the button
+  // will act on, not a second opinion about them.
+  const plan = useMemo(
+    () => (exam ? planScanSave({ exam, scanned: gradeAll(readable, exam, roster), roster }) : null),
+    // `readable` is derived from `sheets` each render; depending on it directly
+    // would rebuild on every keystroke elsewhere on the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [exam, sheets, roster])
+
   const canSave = readable.length > 0 && !blocked && !busy
+    && !(plan?.mixesProvenance && !mixOk)
 
   async function onFiles(e) {
     const files = [...(e.target.files || [])]
@@ -118,33 +164,16 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   }
 
   function save() {
-    if (!exam || !canSave) return
-    const students = readable.map(s => {
-      const outcomes = {}
-      for (const d of s.result.decisions) {
-        if (d.state === 'multi') outcomes[d.q] = 'multi'
-        else if (d.choice) outcomes[d.q] = d.choice
-      }
-      const graded = gradeScannedSheet({
-        outcomes, questions: exam.questions, marking: exam.marking,
-      })
-      const profile = roster.find(r => r.lwsId === s.result.student.lwsId)
-      return {
-        name: profile?.name || s.result.student.lwsId,
-        rollNo: s.result.roll.digits || '',
-        totalMarks: graded.totalMarks,
-        correct: graded.correct,
-        incorrect: graded.incorrect,
-        notAttempted: graded.notAttempted,
-        responses: graded.responses,
-        choices: graded.choices,
-      }
-    })
-    // `gradedBy` is what lets a later key correction re-grade THESE marks and
-    // not an Evalbee exam's, whose responses are the machine's verdict.
-    replaceExam(exam.id, { ...exam, students, gradedBy: GRADED_BY_SCANNER })
-    setSaved({ count: students.length })
+    if (!exam || !canSave || !plan) return
+    // Merged, never replaced: a stack is scanned over several sittings, and the
+    // sheets in hand are not the exam's whole result set. `gradedBy` comes from
+    // the plan, which keeps the vendor's label while any vendor-graded row
+    // survives — that is what a later key correction reads before deciding
+    // whether it may re-grade.
+    replaceExam(exam.id, { ...exam, students: plan.students, gradedBy: plan.gradedBy })
+    setSaved({ added: plan.added, replaced: plan.replaced })
     setSheets([])
+    setMixOk(false)
   }
 
   if (!scannable.length) {
@@ -171,7 +200,9 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
             <select
               className="form-input min-w-[220px]"
               value={examId}
-              onChange={e => { setExamId(e.target.value); setSheets([]); setSaved(null) }}
+              onChange={e => {
+                setExamId(e.target.value); setSheets([]); setSaved(null); setMixOk(false)
+              }}
             >
               <option value="">Choose an exam…</option>
               {scannable.map(e => (
@@ -209,7 +240,8 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
       {saved && (
         <Card>
           <div className="text-[13px] text-accent font-semibold">
-            Saved {saved.count} result{saved.count === 1 ? '' : 's'} to {exam?.name}.
+            Saved to {exam?.name} — {saved.added} new
+            {saved.replaced > 0 && `, ${saved.replaced} re-scanned`}.
           </div>
         </Card>
       )}
@@ -236,11 +268,38 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
         />
       ))}
 
+      {/* Scanning into an exam somebody else graded. Both labels would then be
+          true of the same result set, so the exam keeps the vendor's — and that
+          is a call for a human, not a default. */}
+      {plan?.mixesProvenance && sheets.length > 0 && (
+        <Card>
+          <div className="text-[13px] text-ink-1 font-semibold mb-1">
+            This exam already has results graded by Evalbee
+          </div>
+          <div className="text-[12px] text-ink-2 mb-2">
+            Scanned marks are graded here, against the answer key; Evalbee&rsquo;s are its own
+            verdict and must never be re-derived from a key. Saving mixes the two, so the
+            exam stays labelled Evalbee-graded and a future key correction will leave it alone.
+          </div>
+          <label className="flex items-center gap-2 text-[12px] text-ink-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mixOk}
+              onChange={e => setMixOk(e.target.checked)}
+              className="accent-accent"
+            />
+            Mix scanned marks into this exam
+          </label>
+        </Card>
+      )}
+
       {sheets.length > 0 && (
         <Card>
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-[12px] text-ink-2">
               {readable.length} of {sheets.length} read
+              {plan?.kept > 0 && ` · ${plan.kept} kept`}
+              {plan?.replaced > 0 && ` · ${plan.replaced} re-scanned`}
               {blocked && ' · something still needs resolving'}
             </div>
             <button className="btn btn-primary" disabled={!canSave} onClick={save}>

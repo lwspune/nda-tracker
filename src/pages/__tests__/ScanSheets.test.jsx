@@ -144,3 +144,60 @@ describe('Scan page', () => {
     expect(row.totalMarks).toBe(8)
   })
 })
+
+// A stack is not scanned in one sitting. Saving used to write only the sheets
+// from THIS session, which deleted every result filed before them.
+describe('Scan page · adding to results already filed', () => {
+  const prior = {
+    name: 'Bhavesh Patil', rollNo: '00002', totalMarks: 12,
+    correct: 3, incorrect: 0, notAttempted: 0, responses: {}, choices: {},
+  }
+
+  it('keeps the results the exam already holds', async () => {
+    mockStore.exams = [mcqExam({ gradedBy: 'scanner', students: [prior] })]
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await waitFor(() => expect(screen.getByText('Asha R')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    const [, saved] = mockStore.replaceExam.mock.calls[0]
+    expect(saved.students.map(s => s.name)).toEqual(['Bhavesh Patil', 'Asha R'])
+  })
+
+  it('says what saving will do to the results already there', async () => {
+    mockStore.exams = [mcqExam({ gradedBy: 'scanner', students: [prior] })]
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await waitFor(() => expect(screen.getByText(/1 kept/i)).toBeInTheDocument())
+  })
+
+  // `responses` on an Evalbee row is the machine's verdict; relabelling the whole
+  // exam 'scanner' is what would let a later key correction rewrite those marks.
+  it('will not mix scanned marks into a vendor-graded exam unasked', async () => {
+    mockStore.exams = [mcqExam({ gradedBy: 'evalbee', students: [prior] })]
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await waitFor(() => expect(screen.getByText(/graded by evalbee/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /mix scanned marks/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    const [, saved] = mockStore.replaceExam.mock.calls[0]
+    expect(saved.students).toHaveLength(2)
+    // The surviving Evalbee row still says who graded it.
+    expect(saved.gradedBy).toBe('evalbee')
+  })
+
+  it('needs no such tick for an exam with no results yet', async () => {
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await waitFor(() => expect(screen.getByText('Asha R')).toBeInTheDocument())
+    expect(screen.queryByText(/graded by evalbee/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled()
+  })
+})

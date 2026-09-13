@@ -14,7 +14,8 @@
 /**
  * @param {object[]} studentList  raw student rows from the store
  * @param {string[]} batchNames   the exam's batch tags (`getExamBatches`)
- * @returns {{lwsId:string, name:string, evalbeeRollNos:string[], batches:string[]}[]}
+ * @returns {{lwsId:string, name:string, evalbeeRollNos:string[], nameVariants:string[],
+ *            batches:string[]}[]}
  */
 export function buildScanRoster(studentList = [], batchNames = []) {
   const wanted = new Set(batchNames.filter(Boolean))
@@ -30,6 +31,10 @@ export function buildScanRoster(studentList = [], batchNames = []) {
       lwsId: s.lws_id,
       name: s.canonical_name || s.name || '',
       evalbeeRollNos: s.evalbee_roll_nos || [],
+      // Not used to identify a sheet — that is the roll number's job — but to
+      // recognise a result the exam already holds under the sheet's own
+      // spelling, so a re-scan replaces that student instead of duplicating them.
+      nameVariants: s.name_variants || [],
       batches: s.batches || [],
     }))
 }

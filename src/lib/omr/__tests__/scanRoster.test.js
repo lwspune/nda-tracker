@@ -3,7 +3,8 @@ import { buildScanRoster } from '../scanRoster'
 import { resolveRoll } from '../resolveRoll'
 
 const list = [
-  { lws_id: 'LWS-001', canonical_name: 'A One', evalbee_roll_nos: ['00007'], batches: ['NDA_A'] },
+  { lws_id: 'LWS-001', canonical_name: 'A One', evalbee_roll_nos: ['00007'], batches: ['NDA_A'],
+    name_variants: ['A One', 'A 1'] },
   { lws_id: 'LWS-002', canonical_name: 'B Two', evalbee_roll_nos: ['00007'], batches: ['NDA_B'] },
   { lws_id: 'LWS-003', canonical_name: 'C Three', evalbee_roll_nos: ['00009'], batches: ['NDA_A', 'NDA_B'] },
   { lws_id: 'LWS-004', canonical_name: 'D Four', evalbee_roll_nos: [], batches: [] },
@@ -30,6 +31,13 @@ describe('buildScanRoster', () => {
 
   it('carries the Evalbee roll numbers through', () => {
     expect(buildScanRoster(list, ['NDA_A'])[0].evalbeeRollNos).toEqual(['00007'])
+  })
+
+  // Not for identifying a sheet — a sheet carries a roll, not a name — but for
+  // recognising a result this exam already holds under a sheet's own spelling.
+  it('carries the name variants through', () => {
+    expect(buildScanRoster(list, ['NDA_A'])[0].nameVariants).toEqual(['A One', 'A 1'])
+    expect(buildScanRoster(list, ['NDA_A'])[1].nameVariants).toEqual([])
   })
 
   // The point of the whole thing: a roll that is ambiguous school-wide is
