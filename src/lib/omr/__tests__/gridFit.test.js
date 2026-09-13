@@ -109,6 +109,30 @@ describe('fitLattice', () => {
     expect(fit.assigned).toBe(28)
   })
 
+  it('orients the lattice so i grows rightwards and j downwards', () => {
+    // Consumers match these indices against the layout's own column/row order.
+    // If the axis comes back reversed, every correspondence is mirrored and the
+    // resulting homography is silently useless — an 18px reprojection error on
+    // an 11px bubble, which is exactly what the end-to-end run hit.
+    for (const H of [
+      PHOTO_H,
+      [-38, 2.5, 700, 3, 41, 90, -0.006, 0.010, 1],     // mirrored in x
+      [38, 2.5, 120, -3, -41, 700, 0.006, -0.010, 1],   // mirrored in y
+    ]) {
+      const pts = strip(makeGrid(4, 6, H))
+      const fit = fitLattice(pts)
+      expect(fit).not.toBeNull()
+      const cov = (a, b) => {
+        const ma = a.reduce((s, v) => s + v, 0) / a.length
+        const mb = b.reduce((s, v) => s + v, 0) / b.length
+        return a.reduce((s, v, k) => s + (v - ma) * (b[k] - mb), 0)
+      }
+      const idx = fit.indices
+      expect(cov(pts.map(p => p.x), idx.map(v => v.i))).toBeGreaterThan(0)
+      expect(cov(pts.map(p => p.y), idx.map(v => v.j))).toBeGreaterThan(0)
+    }
+  })
+
   it('tolerates detection jitter', () => {
     const pts = makeGrid(5, 11)
     let seed = 7

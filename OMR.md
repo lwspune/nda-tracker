@@ -510,6 +510,54 @@ failing two *correct* rectifications that were merely missing a square or two.
 photos. The remaining risk is anchor robustness, which is a known problem with a
 known fix rather than an open question.
 
+## Phase C — first slice (2026-09-13)
+
+**[`src/lib/omr/readBubbles.js`](./src/lib/omr/readBubbles.js)** — fill scores to
+answers, or a refusal. Scores are plain 0–1 numbers, so the decision is testable
+without an image anywhere near it.
+
+- **Calibrated per sheet, not against a fixed threshold.** What matters is a
+  mark's contrast against *its own* sheet, which is what lets pencil and biro, a
+  light hand and a dim photo all read correctly.
+- **A sheet with no marks reads as blank, not as 600 ambiguities.** Without a
+  minimum-contrast floor, an unfilled sheet gets its own paper noise stretched
+  across the full range and every bubble lands in the ambiguous band — burying
+  the operator on the one case that should be instant.
+- **`multi` is distinct from `blank`.** Evalbee scores a double mark wrong even
+  when one of the two is the key, so collapsing them would turn a wrong answer
+  into an unattempted one.
+- **An ambiguous bubble is decisive even when another option looks clear** — the
+  classic case is an erasure beside a fresh mark, and taking the darker one
+  silently discards what the student meant.
+- `complete` is false while anything is unresolved, mirroring
+  `writtenQuizCompletion().complete`.
+
+### End-to-end, against a sheet with known answers
+
+The chain — layout (mm) → raster → perspective warp + shadow → detect →
+`fitLattice` → mm-to-image homography → sample → `readSheet` — run over 12
+combinations (30 / 71 / 150 questions × 4 seeds):
+
+**Zero silent misreads in all twelve.** Everything flagged for review was a
+planted double mark; everything decided was right.
+
+**It caught a bug nothing else could.** `fitLattice` oriented its axes with
+`sum(x · i)` — both terms positive, so the sum always is, so the check never
+fired. The lattice came back **mirrored**, every correspondence was wrong, and
+the homography reprojected 18.6 px out on an 11 px bubble. Eleven unit tests
+passed throughout, because the synthetic grids happened to be in canonical
+orientation. Now a centred covariance, with mirrored-in-x and mirrored-in-y
+fixtures. Reprojection went 18.6 px → **0.44 px**.
+
+**A harness artifact worth recording.** The first end-to-end run found only 8 of
+24 registration squares, because the warp used nearest-neighbour sampling and
+every edge came out ragged, dropping the squares' fill ratio to 0.85. The fix was
+to make the simulation bilinear — a real camera integrates over the pixel — not
+to loosen the detector to match a bad simulation. The threshold did move to
+**0.85, and for a reason rather than by tuning**: a disc cannot exceed π/4 ≈
+0.785 fill, so anything above that must be a square. Re-checked on all 9 real
+photos at 0.85, 0.88 and 0.90 — 9/9 at each.
+
 ## Still outstanding
 
 1. **More raw captures.** Two have arrived and both are usable as reader input —

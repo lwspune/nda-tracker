@@ -202,15 +202,26 @@ export function fitLattice(points, { minPoints = 8, tol = 0.34 } = {}) {
   let cols = maxI - minI + 1, rows = maxJ - minJ + 1
   if (swap) [cols, rows] = [rows, cols]
 
-  // Flip either axis if it runs backwards, so (0,0) is the top-left square.
-  const at = k => points[k]
-  const iVec = { x: 0, y: 0 }, jVec = { x: 0, y: 0 }
-  for (const k of assignedKeys) {
-    iVec.x += at(k).x * idx[k].i; iVec.y += at(k).y * idx[k].i
-    jVec.x += at(k).x * idx[k].j; jVec.y += at(k).y * idx[k].j
+  // Flip either axis if it runs backwards, so (0,0) is the top-left square and
+  // the indices line up with the layout's own column/row order.
+  //
+  // This has to be a CENTRED covariance. Summing `x * i` cannot work — both are
+  // positive, so the sum always is, and the check silently never fired. The
+  // lattice then came back mirrored, every correspondence was wrong, and the
+  // homography was useless while every unit test still passed.
+  const cov = pick => {
+    const a = assignedKeys.map(k => pick.coord(points[k]))
+    const b = assignedKeys.map(k => pick.index(idx[k]))
+    const ma = a.reduce((s, v) => s + v, 0) / a.length
+    const mb = b.reduce((s, v) => s + v, 0) / b.length
+    return a.reduce((s, v, n) => s + (v - ma) * (b[n] - mb), 0)
   }
-  if (iVec.x < 0) for (const k of assignedKeys) idx[k] = { ...idx[k], i: cols - 1 - idx[k].i }
-  if (jVec.y < 0) for (const k of assignedKeys) idx[k] = { ...idx[k], j: rows - 1 - idx[k].j }
+  if (cov({ coord: p => p.x, index: v2 => v2.i }) < 0) {
+    for (const k of assignedKeys) idx[k] = { ...idx[k], i: cols - 1 - idx[k].i }
+  }
+  if (cov({ coord: p => p.y, index: v2 => v2.j }) < 0) {
+    for (const k of assignedKeys) idx[k] = { ...idx[k], j: rows - 1 - idx[k].j }
+  }
 
   const src = assignedKeys.map(k => points[k])
   const dst = assignedKeys.map(k => ({ x: idx[k].i, y: idx[k].j }))
