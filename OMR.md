@@ -558,6 +558,36 @@ to loosen the detector to match a bad simulation. The threshold did move to
 0.785 fill, so anything above that must be a square. Re-checked on all 9 real
 photos at 0.85, 0.88 and 0.90 — 9/9 at each.
 
+## Identity during the Evalbee transition (2026-09-13)
+
+Students keep using the roll number they already know, so
+**[`src/lib/omr/resolveRoll.js`](./src/lib/omr/resolveRoll.js)** matches
+`students.evalbee_roll_nos[]` — the column `rollEnrichment` already fills from
+every results sheet. **That settles ledger issue #9: the vendor-named column is
+load-bearing and must not be renamed while both schemes are in use.**
+
+Checked against the live roster rather than assumed, and three of the four
+findings changed the design:
+
+| measured | consequence |
+|---|---|
+| only **82 of 329** students (75 of 242 active) have any Evalbee roll | roll alone can never be the identity path; the LWS number is a real fallback, not a nicety |
+| **69 of 82** hold "multiple" rolls — almost all just `["00002","2","0002"]` | normalise digits and drop leading zeros; students write all three forms |
+| **12 of 64** distinct rolls are held by more than one student, globally | these are per-batch sequence numbers (1–65), reused across batches — so the roster MUST be the exam's batch. Within a batch: **zero collisions in all five**, which is what makes the closed set work |
+| **7 cases inside one batch** where a student's Evalbee roll equals a *different* student's LWS number | **the rule had to change** — see below |
+
+**Matching Evalbee first and returning was wrong.** It reads well ("the student
+writes the number they know") and would have silently handed sheets to the wrong
+person: a student with no Evalbee roll writes their LWS number and collects
+someone else's marks. Both namespaces are now consulted before answering, and two
+readings pointing at two students is a question for a human, not a preference to
+resolve. Evalbee still wins where the LWS number agrees or is unclaimed.
+
+Other rules: an unreadable digit column is a refusal, never a rounded-up guess; a
+wholly blank roll block is a refusal (Aarti More's sheet arrived that way); and
+two sheets resolving to one student are **both** surfaced, because one of them
+belongs to somebody else and quietly keeping the last discards a real result.
+
 ## Still outstanding
 
 1. **More raw captures.** Two have arrived and both are usable as reader input —

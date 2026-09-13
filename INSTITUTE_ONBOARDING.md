@@ -196,12 +196,12 @@ Supabase access can't see that project.
 
 ---
 
-### 9. `evalbee_roll_nos` is vendor-named
+### 9. ~~`evalbee_roll_nos` is vendor-named~~ — DO NOT RENAME (2026-09-13)
 
-A real column on `students` and a match signal, populated from the results
-sheet's Roll No. Renaming means a migration plus edits across `mergeLogic`,
-`recordMerge`, `rollEnrichment` and `studentSlice`. Cosmetic; do it when #3
-settles, since #3 decides what a "roll no" even is.
+Settled by #3. Students keep using the Evalbee roll number they already know
+during the transition, so `src/lib/omr/resolveRoll.js` matches this column to
+identify a scanned sheet. It is load-bearing for as long as both numbering
+schemes are in use, and the vendor name is the least of its properties.
 
 ---
 
