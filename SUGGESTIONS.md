@@ -6,6 +6,56 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-09-14
+
+### Nobody has scanned a real answer sheet with a real phone
+
+The OMR scanner is verified end to end, and every sheet it has ever read was **rendered by the app
+itself** — a canvas drawing of the layout, fed either through the file input or through a Y4M that
+Chrome served as a fake webcam. The detector was separately validated on nine real photographs in an
+earlier session, but the *live* path never has been.
+
+**Why:** a rendered sheet has perfect contrast, no focus hunting, no rolling-shutter skew, no paper
+curl and no shadow from the hand holding it. The reader is built to tolerate all of those
+(local thresholding, a homography fitted from the sheet itself), but "built to" is not "shown to".
+The measured cost of 35.7ms a frame is a desktop number; a mid-range Android is 2–4× slower, and
+nothing has confirmed the torch capability is even exposed on a real device.
+
+**How to apply:** print one sheet from an exam card, fill it in by hand, open that exam's
+`/scan?exam=<id>` link on a phone, and scan it. Watch for: how long the lock takes, whether
+autofocus settles on a flat white page, whether the overlay quad tracks, and whether any answer
+reads differently from what was marked. A single real sheet answers more than another synthetic one
+ever will. If frames lurch, the fix is already scoped — move `readSheetImage` into a Vite module
+worker (no new dependency); do not reach for it before measuring.
+
+---
+
+### A 2-up answer sheet has never been read (probably fine — one test would close it)
+
+`downloadAnswerSheetPdf(exam, {perPage: 2})` is offered in the Export menu, and `readSheetImage`'s
+`sheetIndex` is **hardcoded to `0`** at both call sites — `ScanSheetsPage` and `SheetScanner` never
+pass it. So no cut half of a 2-per-page sheet has been through the reader.
+
+**Why it is probably fine.** Measured on the layout itself (30Q / 60Q / 150Q at `perPage: 2`): the
+two halves are **identical copies of the whole sheet** — each carries the full question range, not
+half of it — both rotated 90°, with registration grids the same shape and identical **modulo a pure
+148.5 mm translation**, and the first bubble at the same offset from its own grid origin on both.
+A pure translation is exactly what the homography absorbs, and the shape check compares cols×rows,
+which match. Reading a cut half against `sheets[0]` should therefore be geometrically exact.
+
+**Why it is still worth one test.** "Should be" is doing the work in that sentence, and the failure
+is late and expensive: somebody prints 300 two-up sheets for a real exam, cuts them, and finds out
+at scanning time. The remaining unknown is empirical rather than geometric — a cut half is A5, so it
+fills the frame differently, though the detector sizes its candidates as a fraction of frame width
+precisely so that does not matter.
+
+**How to apply:** render a 2-up layout, split the image along `layout.cutLine`, and read each half
+against `sheets[0]` — the case an operator actually creates. Put the result beside the other
+`readSheetImage` cases. If a half only reads against `sheets[1]`, the page should try both indices
+and take whichever fits, never ask the operator which half they are holding.
+
+---
+
 ## 2026-09-12
 
 ### `students[].correct/incorrect/notAttempted` can contradict `responses`
@@ -1059,6 +1109,17 @@ Three wrong answer keys were found and corrected on 2026-09-11 (surfaced by Ques
 **Why:** the manual path is fine for three questions and unacceptable for thirty. Each correction meant recomputing the verdict from `exam_results.choices`, adjusting `correct`/`incorrect`, and applying that exam's own marking scheme — two of the three exams used 2.5/−0.83 and the third 4/−1.33, so a shared constant would have produced silently wrong totals. That is exactly the kind of arithmetic a human should not repeat under time pressure.
 
 **Do NOT build it yet.** One incident is not a pattern, and the data needed to judge is now being collected: Question Stats reports key conflicts continuously, and its review queue currently lists 122 questions where a distractor outpulls the key. If some of those turn out to be genuine key errors, that is the trigger.
+
+**Amended 2026-09-14 — the OMR scanner adds a class of exam where this is no longer a shift of
+grading authority.** A scanner-graded exam was graded *here*, against the key, from marks this app
+read; re-grading one after a key correction changes nothing about who the grader is, which is the
+whole reason the Evalbee case is delicate. `exams.graded_by` now round-trips (`GRADED_BY_SCANNER` /
+`GRADED_BY_VENDOR`, `mergeResults.planScanSave` resolves it toward the vendor on a mixed exam), so
+the action can tell which exams it may touch — that was the missing precondition, and it is the
+reason provenance was recorded in the first place. The gate above still stands for **Evalbee-graded**
+exams. If the scanner is adopted for real stacks, a re-grade scoped to `graded_by = 'scanner'` is a
+smaller and safer first version than the one described below, and everything below still applies to it
+(preview first, scheme from the exam, a skip stays a skip, never blind-zero).
 
 **How to apply, when the trigger comes:**
 - The pure core is `regrade(exam, results, {qno, newKey})` → new `responses`, `correct`, `incorrect`, `total_marks` per row. Everything it needs already exists: `choices` is populated on 100% of rows, and the per-exam `marking` is on the exam. TDD it against the three corrections made on 2026-09-11, whose before/after numbers are in that session's history.
