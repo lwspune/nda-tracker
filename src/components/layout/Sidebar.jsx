@@ -13,10 +13,12 @@ const NAV = [
   { id: 'hostelAttendance', icon: '🏠', label: 'Hostel & Mess', hostelOnly: true },
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'exams',     icon: '📝', label: 'Exams' },
-  // Reading filled answer sheets. Its own page rather than a control on Exams:
-  // done standing over a stack of paper with a phone, while Exams is a desk job.
-  // Admin-only — results drive the parent-facing sends.
-  { id: 'scan',      icon: '🫧', label: 'Scan Sheets', adminOnly: true },
+  // No 'scan' entry, deliberately. The scanner is still a page (`/scan`, and the
+  // `?exam=` link an exam card hands out), but a NAV item is the one way in that
+  // arrives with no exam chosen — and it cannot read a sheet without one, so it
+  // would only drop you onto a picker listing every MCQ exam the school has run.
+  // The exam card's own Scan sheets button lands you there with the paper set,
+  // next to the Export menu that printed the sheet in the first place.
   { id: 'quizzes',   icon: '❓', label: 'Daily Quiz' },
   { id: 'students',   icon: '👤', label: 'Students' },
   { id: 'attendance', icon: '📋', label: 'Attendance' },
