@@ -22,6 +22,7 @@ import { buildScanRoster } from '../lib/omr/scanRoster'
 import { gradeScannedSheet } from '../lib/omr/gradeSheet'
 import { findDuplicateRolls } from '../lib/omr/resolveRoll'
 import { planScanSave } from '../lib/omr/mergeResults'
+import { resolveQuestion, assignStudent } from '../lib/omr/reviewSheet'
 import SheetScanner from '../components/scan/SheetScanner'
 
 /**
@@ -51,7 +52,7 @@ async function fileToImageData(file, maxEdge = 1600) {
  * built from the SAME rows — a preview that grades the stack its own way stops
  * being a preview of what the button does.
  */
-function gradeAll(readable, exam, roster) {
+function gradeAll(readable, exam, people) {
   return readable.map(s => {
     const outcomes = {}
     for (const d of s.result.decisions) {
@@ -61,7 +62,10 @@ function gradeAll(readable, exam, roster) {
     const graded = gradeScannedSheet({
       outcomes, questions: exam.questions, marking: exam.marking,
     })
-    const profile = roster.find(r => r.lwsId === s.result.student.lwsId)
+    // `people`, not the roster: a sheet attributed by hand may name somebody
+    // outside this exam's batch, and filing their marks under a bare LWS id
+    // would mint a result row nothing else can match.
+    const profile = people.find(r => r.lwsId === s.result.student.lwsId)
     return {
       name: profile?.name || s.result.student.lwsId,
       rollNo: s.result.roll.digits || '',
@@ -118,6 +122,23 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
     () => (exam ? buildScanRoster(studentList || [], getExamBatches(exam)) : []),
     [exam, studentList])
 
+  // Who a sheet may be attributed to BY HAND. Wider than `roster` on purpose:
+  // the roster is what a roll NUMBER is matched against, and keeping that narrow
+  // is what stops a misread digit landing on another cohort's student. A person
+  // reading the sheet in their hand is not misreading anything, and batch
+  // membership is CURRENT while the exam is historical — the student who moved
+  // last term still sat this paper.
+  const people = useMemo(() => {
+    const inBatch = new Set(roster.map(r => r.lwsId))
+    const everyone = (studentList || [])
+      .filter(s => s?.lws_id)
+      .map(s => ({ lwsId: s.lws_id, name: s.canonical_name || s.name || s.lws_id }))
+    return [
+      ...everyone.filter(p => inBatch.has(p.lwsId)),
+      ...everyone.filter(p => !inBatch.has(p.lwsId)),
+    ]
+  }, [roster, studentList])
+
   const layout = useMemo(() => {
     if (!exam) return null
     try { return buildSheetLayout({ questionCount: exam.questions.length }) } catch { return null }
@@ -134,11 +155,11 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   // they stand so the counts and the provenance warning are the ones the button
   // will act on, not a second opinion about them.
   const plan = useMemo(
-    () => (exam ? planScanSave({ exam, scanned: gradeAll(readable, exam, roster), roster }) : null),
+    () => (exam ? planScanSave({ exam, scanned: gradeAll(readable, exam, people), roster }) : null),
     // `readable` is derived from `sheets` each render; depending on it directly
     // would rebuild on every keystroke elsewhere on the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [exam, sheets, roster])
+    [exam, sheets, roster, people])
 
   const canSave = readable.length > 0 && !blocked && !busy
     && !(plan?.mixesProvenance && !mixOk)
@@ -177,26 +198,21 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
     ])
   }
 
-  /** Resolve one flagged question by hand. */
-  function resolve(sheetIdx, q, outcome) {
-    setSheets(prev => prev.map((s, i) => {
-      if (i !== sheetIdx) return s
-      const decisions = s.result.decisions.map(d =>
-        d.q === q ? { ...d, review: false, choice: outcome === 'multi' || outcome === 'blank' ? null : outcome,
-                      state: outcome === 'multi' ? 'multi' : outcome === 'blank' ? 'blank' : 'single',
-                      resolvedByHand: true }
-                  : d)
-      const needsReview = decisions.filter(d => d.review)
-      const answers = Object.fromEntries(decisions.map(d => [d.q, d.choice]))
-      return {
-        ...s,
-        result: {
-          ...s.result, decisions, needsReview, answers,
-          reviewCount: needsReview.length,
-          complete: needsReview.length === 0 && !s.result.roll.review && !s.result.student.review,
-        },
-      }
-    }))
+  /** Apply one human decision to one sheet. */
+  function amend(sheetIdx, fn) {
+    setSheets(prev => prev.map((s, i) => (i === sheetIdx ? { ...s, result: fn(s.result) } : s)))
+  }
+
+  /**
+   * Drop a sheet from the stack.
+   *
+   * A sheet that could not be read blocks the save for everything beside it, and
+   * a blurry photograph in the middle of a batch is ordinary. Without this the
+   * only way out was changing the exam, which discards every sheet scanned so far.
+   */
+  function discard(sheetIdx) {
+    setSheets(prev => prev.filter((_, i) => i !== sheetIdx))
+    setSaved(null)
   }
 
   function save() {
@@ -339,8 +355,10 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
           key={`${s.name}-${i}`}
           index={i}
           sheet={s}
-          roster={roster}
-          onResolve={(q, outcome) => resolve(i, q, outcome)}
+          people={people}
+          onResolve={(q, outcome) => amend(i, r => resolveQuestion(r, q, outcome))}
+          onAssign={lwsId => amend(i, r => assignStudent(r, lwsId))}
+          onDiscard={() => discard(i)}
         />
       ))}
 
@@ -388,7 +406,24 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   )
 }
 
-function SheetCard({ index, sheet, roster, onResolve }) {
+/** Drop this sheet. Every card carries one — see `discard`. */
+function DiscardButton({ index, onDiscard }) {
+  return (
+    <button
+      type="button"
+      onClick={onDiscard}
+      aria-label={`Discard sheet ${index + 1}`}
+      title="Remove this sheet from the stack"
+      className="ml-auto text-ink-3 hover:text-danger text-[12px] font-semibold
+                 min-h-[44px] px-2 rounded focus:outline-none
+                 focus-visible:ring-2 focus-visible:ring-accent/40"
+    >
+      ✕ Discard
+    </button>
+  )
+}
+
+function SheetCard({ index, sheet, people, onResolve, onAssign, onDiscard }) {
   const r = sheet.result
   if (!r?.ok) {
     return (
@@ -396,12 +431,13 @@ function SheetCard({ index, sheet, roster, onResolve }) {
         <div className="flex items-center gap-2 flex-wrap">
           <Badge tone="danger">Sheet {index + 1}</Badge>
           <span className="text-[13px] text-ink-1 font-semibold">{sheet.name}</span>
+          <DiscardButton index={index} onDiscard={onDiscard} />
         </div>
         <div className="text-[12px] text-danger mt-1">{r?.reason || 'Could not read this sheet.'}</div>
       </Card>
     )
   }
-  const student = roster.find(s => s.lwsId === r.student.lwsId)
+  const student = people.find(s => s.lwsId === r.student.lwsId)
   const answered = Object.values(r.answers).filter(Boolean).length
   return (
     <Card>
@@ -417,10 +453,47 @@ function SheetCard({ index, sheet, roster, onResolve }) {
             wrong, so it sits last and quiet — but then it is the only way to
             know which photograph or which pass of the camera to redo. */}
         <span className="text-[11px] text-ink-3 font-mono">{sheet.name}</span>
+        <DiscardButton index={index} onDiscard={onDiscard} />
       </div>
 
+      {/* A refusal with no answer is a dead end: an unattributed sheet blocks
+          the save for the whole stack. `candidates` is what the roll matched
+          when it matched more than one student — offered first, because that is
+          the case where the reader already knows both names. */}
       {r.student.review && (
-        <div className="text-[12px] text-danger mt-1">{r.student.reason || r.roll.reason}</div>
+        <div className="mt-1 space-y-1">
+          <div className="text-[12px] text-danger">{r.student.reason || r.roll.reason}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(r.student.candidates || []).map(c => (
+              <button
+                key={c.lwsId}
+                className="btn btn-sm btn-secondary text-[11px]"
+                onClick={() => onAssign(c.lwsId)}
+              >
+                {c.name || c.lwsId}
+              </button>
+            ))}
+            {/* A <select> IS right here, unlike the tag controls in Step3Tags.
+                That rule exists because a select cannot display a value absent
+                from its options, so correct-but-unlisted data read as missing.
+                Here there is no held value to display — it is a choose-once
+                action that resets — and an id that is not a real student must
+                never be acceptable. Batch members are listed first. */}
+            <label className="flex items-center gap-2 text-[12px] text-ink-2">
+              Whose sheet is this?
+              <select
+                className="form-input text-[12px] min-w-[200px]"
+                value=""
+                onChange={e => e.target.value && onAssign(e.target.value)}
+              >
+                <option value="">Choose a student…</option>
+                {people.map(p => (
+                  <option key={p.lwsId} value={p.lwsId}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
       )}
 
       {r.needsReview.map(d => (

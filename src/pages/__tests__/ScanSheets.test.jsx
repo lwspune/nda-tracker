@@ -291,3 +291,75 @@ describe('Scan page · the camera', () => {
     await waitFor(() => expect(screen.getByText(/camera sheet 1/i)).toBeInTheDocument())
   })
 })
+
+// Every refusal the reader makes has to have an answer, or it is a dead end: a
+// sheet that cannot be read, or cannot be attributed, blocks the save for the
+// WHOLE stack, and the only escape was changing the exam — which discards
+// everything scanned so far.
+describe('Scan page · sheets that need a human', () => {
+  const unidentified = () => okSheet({
+    complete: false,
+    roll: { digits: '00099', review: false, reason: null },
+    student: { lwsId: null, matchedBy: null, review: true,
+               reason: 'roll 00099 is not on the roster for this exam', candidates: [] },
+  })
+
+  it('lets a human say whose sheet it is, which unblocks the save', async () => {
+    readSheetImage.mockReturnValue(unidentified())
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await waitFor(() => expect(screen.getByText(/not on the roster/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled()
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /whose sheet/i }), 'LWS-001')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled())
+  })
+
+  it('files the assigned student’s marks under their name', async () => {
+    readSheetImage.mockReturnValue(unidentified())
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /whose sheet/i }), 'LWS-001')
+    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    const [, saved] = mockStore.replaceExam.mock.calls[0]
+    expect(saved.students[0].name).toBe('Asha R')
+  })
+
+  // The picker is wider than the automatic match on purpose: a misread digit
+  // must not land on another cohort's student, but a person reading the sheet in
+  // their hand is not misreading anything, and batch membership is CURRENT while
+  // the exam is historical.
+  it('offers students beyond the exam’s own batch', async () => {
+    mockStore.studentList = [
+      ...mockStore.studentList,
+      { lws_id: 'LWS-777', canonical_name: 'Other Batch Student',
+        evalbee_roll_nos: ['00077'], batches: ['NDA_B'] },
+    ]
+    readSheetImage.mockReturnValue(unidentified())
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    const options = [...screen.getByRole('combobox', { name: /whose sheet/i }).options]
+      .map(o => o.value)
+    expect(options).toContain('LWS-777')
+  })
+
+  it('discards a sheet that cannot be read, so the rest can be saved', async () => {
+    readSheetImage
+      .mockReturnValueOnce(okSheet())
+      .mockReturnValueOnce({ ok: false, reason: 'Only 3 registration marks found' })
+    renderPage()
+    await pickExam()
+    await upload('good.jpg', 'blurry.jpg')
+    await waitFor(() => expect(screen.getByText(/3 registration marks/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /discard sheet 2/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save 1 result/i })).not.toBeDisabled())
+  })
+})
