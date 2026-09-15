@@ -7,8 +7,20 @@ import { getSubtopicShares } from '../ndaSubtopics'
 
 // Expected marks from an accuracy + wrong-rate against a marks pool. Shared by
 // the chapter and subtopic passes so the two levels cannot drift apart.
+//
+// DELIBERATELY UNCLAMPED (2026-09-15). A row may project negative marks; the
+// floor lives once, on `total`. Ported from PYQ Vault, where the per-row
+// Math.max was worth 7.7 of one student's visible 94 across three chapters
+// whose own arithmetic predicted a LOSS — and the card then ranked one of them
+// (-4.56 floored to 0) as that student's second-biggest OPPORTUNITY.
+//
+// Two reasons it cannot sit here. It is not grain-invariant, since
+// Sum(max(0,x)) >= max(0,Sum(x)) means splitting a chapter across more subtopic
+// rows mechanically RAISES the projection. And a negative is the most
+// actionable thing this function can say: "attempting this at your current rate
+// costs you marks" is an instruction, where "+30 opportunity" is its opposite.
 function expectedMarks(marksAtStake, accuracy, wrongRate) {
-  return Math.max(0, accuracy * marksAtStake - wrongRate * marksAtStake * 0.33)
+  return accuracy * marksAtStake - wrongRate * marksAtStake * 0.33
 }
 
 // Projected NDA score using chapter accuracy and frequency table.
@@ -101,23 +113,26 @@ export function computeProjectedScore(name, exams, ndaFreq, totalMarks = 300, op
     const wrongRate = totalAttempted > 0 ? totalWrong / totalAttempted : 0
 
     // Expected marks = accuracy × marksAtStake − wrongRate × marksAtStake × 0.33
-    const clamped = expectedMarks(marksAtStake, accuracy, wrongRate)
-    totalProjected += clamped
+    const projected = expectedMarks(marksAtStake, accuracy, wrongRate)
+    totalProjected += projected
 
     breakdown.push({
       chapter: freq.chapter,
       marksAtStake,
-      projected: clamped,
+      projected,
       accuracy,
       wrongRate,
-      gap: marksAtStake - clamped,
+      gap: marksAtStake - projected,
     })
 
     if (withSubtopics) addSubtopicRows(freq.chapter, marksAtStake, subs)
   })
 
   breakdown.sort((a, b) => b.gap - a.gap)
-  const result = { total: Math.round(totalProjected), breakdown }
+  // THE ONE FLOOR. A chapter may be negative; a headline out of 300 may not.
+  // Not a hypothetical guard — a weak enough student on a negatively-marked
+  // paper really does sum below zero.
+  const result = { total: Math.max(0, Math.round(totalProjected)), breakdown }
   if (withSubtopics) {
     // Flat and cross-chapter — the ranking question is "which subtopic anywhere
     // is worth the most", not "which subtopic within this chapter".

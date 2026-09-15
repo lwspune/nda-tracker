@@ -147,3 +147,22 @@ The Sept-2026 attempt batches finished with no way to retire them: the lifecycle
 **What shipped:** `archivedBatches[]`, one persisted key in the `faculty_state` blob, no Supabase column and no migration (an absent key reads as `[]` = today's behaviour). Every consumer of the batch list was sorted into **offer** (hide archived — uploads, quizzes, new timetables, the row editor's add-dropdown, the syllabus tab bar behind a toggle), **lens** (keep, grouped under "Archived" — Monthly Reports, Error Sets, the Students batch filter) and **record** (unfiltered, always — `isAligned` and the three join-order expressions). The record class is where the feature could do damage, and both traps are pinned by tests. Analytics were deliberately left archive-blind.
 
 The archived row in Settings also reports what is **still live** on the batch (timetable, exam schedules), because an archived batch with a timetable is still on teachers' screens and their Google Calendar — without that line "archived" reads as "done" when it isn't. Full spec, the three traps and the measured live data: [`BATCH_RETIREMENT.md`](./BATCH_RETIREMENT.md).
+
+## 2026-09-15 — the projected-score floor moves from every row to the total
+
+**What changed:** `expectedMarks` in `src/lib/analytics/projection.js` no longer wraps its result in `Math.max(0, ..)`. A chapter — and a subtopic row — may now project negative marks. The floor is applied once, to `computeProjectedScore(...).total`.
+
+**Why.** Ported from PYQ Vault, which found the same `Math.max` worth **7.7 marks of a visible 94** on one student, across three chapters whose own arithmetic predicted a LOSS. The card then ranked one of them (−4.56 floored to 0) as that student's **second-biggest opportunity**, because `gap = marksAtStake − projected` is largest exactly where `projected` was suppressed. Two independent reasons it cannot sit per row:
+
+1. **It is not grain-invariant.** `Σ max(0, x) ≥ max(0, Σ x)`, so splitting one chapter's marks across more subtopic rows mechanically RAISES the projection. The number should not move because the taxonomy was re-grained.
+2. **It deletes the most actionable thing the function can say.** "Attempting this at your current rate costs you marks" is an instruction — skip it, or fix it. Rendering that as "+30 opportunity" says the opposite.
+
+**Measured on live data (222 exams, 335 scored students, Maths):** 134 of 335 totals moved, mean **−2.41**, worst **−21**. The effect is smallest for toppers (the 3 students above 150 moved a mean of −0.67) and largest for weak students, which is the point — a topper has few net-negative chapters. One rank swap in the top 10 and one entry/exit at the boundary.
+
+**Deliberately NOT ported from PYQ Vault — two of its three fixes do not belong here:**
+
+- **The skip half-weight (`weight * 0.5` in `chapterStats.js`) is CORRECT here and was left alone.** PYQ Vault moved blanks to full weight because its mocks are self-serve: a student opens a paper at home and answers the 35% they like the look of, so a blank is a choice. This app's data is **invigilated OMR** — one hall, one clock, no retakes — where a blank genuinely means "could not do it under the same pressure as everyone else". Do not "finish the port" by changing it.
+- **Chapter-projection summed from subtopics was NOT ported, because it would silently delete a fifth of the data.** PYQ Vault derives subtopic weightage live from the same taxonomy its questions carry, so every chapter resolves. Here `getSubtopicShares` reads a **frozen hand-transcription** (`ndaSubtopics.js`, Maths only). Measured across 120 students: only **78.1% of tagged questions (135,865 of 174,010) fall in a subtopic the table lists** — the other **38,145 would contribute 0** if a chapter were summed from its subtopic rows. Worse, for every non-Maths subject the table is empty (Physics: all 47 chapters uncovered, subtopic sum 0 against a chapter total of 16), so every non-Maths projection would read 0.
+
+**The consequence still open:** `total` is pooled from chapters while `subtopicBreakdown` is built independently, and `ProjectedScoreCard` renders ONE headline above a chapters/subtopics toggle. The two do not agree — on the top-10 students the subtopic sum runs 1–11 marks below the headline. Fixing it means refreshing `ndaSubtopics.js` against the live bank first (PYQ Vault derives exactly this per-subtopic weightage at request time since its migration 0100), not summing what is there today.
+
