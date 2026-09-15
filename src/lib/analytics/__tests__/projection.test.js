@@ -83,6 +83,54 @@ function statsExam(name, qs) {
   return [{ id: 'e1', date: '2026-07-01', name: 'Mock', questions, students: [{ name, responses }] }]
 }
 
+describe('computeProjectedScore — the floor sits at the TOTAL, not on every row', () => {
+  // Ported from PYQ Vault 2026-09-15, where the same Math.max(0, ..) inside
+  // expectedMarks was worth 7.7 marks of a visible 94 on one student.
+  //
+  // Two reasons it does not belong per row. (1) It is not grain-invariant:
+  // Sum(max(0,x)) >= max(0,Sum(x)), so splitting one chapter's marks across more
+  // subtopic rows mechanically RAISES the projection. (2) It deletes the most
+  // actionable line the card can print — "attempting this at your current rate
+  // COSTS you marks" — and redraws it as an opportunity of the full chapter
+  // weight, which is how a chapter you reliably lose marks on ends up ranked as
+  // your biggest gain.
+  const ALL_WRONG = [
+    { subtopic: 'Functional Equations', verdict: -1 },
+    { subtopic: 'Functional Equations', verdict: -1 },
+  ]
+
+  it('lets a chapter project NEGATIVE marks', () => {
+    // 0% accuracy, 100% wrong-rate on 30 marks => 0 - 1 x 30 x 0.33 = -9.9
+    const { breakdown } = computeProjectedScore('Dev', functionsExam('Dev', ALL_WRONG), FREQ, 300)
+    const fn = breakdown.find(b => b.chapter === 'Functions')
+    expect(fn.projected).toBeCloseTo(-9.9, 4)
+    expect(fn.gap).toBeCloseTo(39.9, 4)   // recovering means climbing from -9.9 to 30
+  })
+
+  it('lets a SUBTOPIC row project negative too', () => {
+    // Functional Equations holds 16.51% of the chapter => 4.953 marks.
+    const { subtopicBreakdown } = computeProjectedScore(
+      'Dev', functionsExam('Dev', ALL_WRONG), FREQ, 300, { withSubtopics: true })
+    const fe = subtopicBreakdown.find(s => s.subtopic === 'Functional Equations')
+    expect(fe.projected).toBeCloseTo(-1 * 4.953 * 0.33, 4)
+  })
+
+  it('floors the TOTAL at zero so no student is shown a negative headline', () => {
+    // Not a hypothetical guard: on PYQ Vault one production lane (72 answers at
+    // 17% accuracy) sums below zero.
+    const { total } = computeProjectedScore('Dev', functionsExam('Dev', ALL_WRONG), FREQ, 300)
+    expect(total).toBe(0)
+  })
+
+  it('leaves a positive projection untouched', () => {
+    const { total, breakdown } = computeProjectedScore('Amy', functionsExam('Amy', [
+      { subtopic: 'Functional Equations', verdict: 1 },
+    ]), FREQ, 300)
+    expect(breakdown.find(b => b.chapter === 'Functions').projected).toBeCloseTo(30, 4)
+    expect(total).toBe(30)
+  })
+})
+
 describe('computeProjectedScore — subtopicBreakdown', () => {
   const exams = statsExam('Dev', [
     { subtopic: CT, verdict: 1 },
@@ -122,7 +170,11 @@ describe('computeProjectedScore — subtopicBreakdown', () => {
 
     const disp = subtopicBreakdown.find(s => s.subtopic === DISP)
     expect(disp.accuracy).toBeCloseTo(0, 5)            // 1 wrong
-    expect(disp.projected).toBe(0)                     // clamped, never negative
+    // UPDATED 2026-09-15: was `toBe(0) // clamped, never negative`. The clamp
+    // moved to `total`, so a row that loses marks now SAYS it loses marks —
+    // 0% accuracy with a 100% wrong-rate on 8.25 marks is -8.25 x 0.33.
+    expect(disp.projected).toBeCloseTo(-disp.marksAtStake * 0.33, 4)
+    expect(disp.projected).toBeLessThan(0)
   })
 
   it('marks an untested subtopic null-accuracy with its full marks at stake as the gap', () => {
