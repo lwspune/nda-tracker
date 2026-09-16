@@ -419,3 +419,72 @@ describe('ScanSheets — print format', () => {
       .toBeInTheDocument()
   })
 })
+
+// This page called the shared UI components with prop names they do not take —
+// `subtitle`/`message` where they read `sub`, and `tone` where Badge reads
+// `variant`. React drops an unknown prop silently, so nothing failed and nothing
+// rendered: the page had no subtitle, the empty state no explanation, and every
+// sheet badge fell back to Badge's grey default. The badge colour is the
+// at-a-glance triage over a scanned stack, which is the whole point of it.
+describe('Scan page · what the shared components are actually told', () => {
+  const badgeFor = async label => (await screen.findByText(label))
+
+  it('says what the page is for under its title', () => {
+    renderPage()
+    expect(screen.getByText(/read filled OMR sheets into an exam/i)).toBeInTheDocument()
+  })
+
+  it('explains what a scannable exam is when there is none', () => {
+    mockStore.exams = [mcqExam({ questions: [] })]   // a written exam
+    renderPage()
+    expect(screen.getByText(/per-question data/i)).toBeInTheDocument()
+  })
+
+  it('marks a cleanly read sheet as read', async () => {
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/green/)
+  })
+
+  it('marks a sheet still holding a question for a human as unfinished', async () => {
+    readSheetImage.mockReturnValue(okSheet({
+      complete: false, reviewCount: 1,
+      needsReview: [{ q: 1, state: 'unclear', scores: [0.4, 0.35, 0, 0] }],
+    }))
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/yellow/)
+  })
+
+  it('marks a sheet it could not read at all as a failure', async () => {
+    readSheetImage.mockReturnValue({ ok: false, reason: 'Only 3 registration marks found' })
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/red/)
+  })
+})
+
+// The scan link is shown to the phone that already followed it.
+//
+// Measured at 390x844, that card is 200px of the 742px standing between the top
+// of the page and the viewfinder, and on a 360x640 Android it is what puts the
+// start button itself below the fold. It is worth keeping on the desk screen,
+// which is where somebody sends the link FROM; on the phone it is 200px of a
+// URL its reader is already at.
+describe('Scan page · the scan link on a phone', () => {
+  beforeEach(() => { mockStore.scanExamId = 'e1' })
+
+  it('still offers the link on a screen with room for it', () => {
+    renderPage()
+    expect(screen.getByText(/\/scan\?exam=e1/)).toBeInTheDocument()
+  })
+
+  it('keeps it off the phone it was sent to', () => {
+    renderPage()
+    const card = screen.getByText(/\/scan\?exam=e1/).closest('.card')
+    expect(card.parentElement.className).toMatch(/max-md:hidden/)
+  })
+})
