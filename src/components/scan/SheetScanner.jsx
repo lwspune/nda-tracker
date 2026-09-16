@@ -73,7 +73,7 @@ const TONE = {
 }
 
 export default function SheetScanner({
-  layout,
+  layouts,
   roster,
   onCapture,
   intervalMs = 90,
@@ -145,7 +145,7 @@ export default function SheetScanner({
       try {
         const image = captureFrame(videoRef.current, workRef.current, maxEdge)
         if (image) {
-          const result = readFrame(image, { layout, roster })
+          const result = readFrame(image, { layouts, roster })
           const step = liveStep(liveRef.current, result)
           liveRef.current = step.state
           setStatus({ phase: step.phase, message: step.message })

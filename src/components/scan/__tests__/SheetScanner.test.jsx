@@ -31,7 +31,7 @@ function setup(props = {}) {
   const readFrame = props.readFrame || vi.fn(() => okResult())
   const utils = render(
     <SheetScanner
-      layout={{ sheets: [{}] }}
+      layouts={[{ perPage: 1, sheets: [{}] }]}
       roster={[]}
       onCapture={onCapture}
       openCamera={openCamera}
@@ -119,4 +119,17 @@ describe('SheetScanner', () => {
     unmount()
     await waitFor(() => expect(stopSpy).toHaveBeenCalled())
   })
+})
+
+// The scanner is handed every format the paper could have been printed in, and
+// passes the set straight through: deciding which one it is belongs to the
+// reader, which has the detected grid in front of it. Reading each candidate
+// end to end instead would halve the frame rate for an answer the first fit
+// already contains.
+it('passes every candidate format through to the reader', async () => {
+  const layouts = [{ perPage: 1, sheets: [{}] }, { perPage: 2, sheets: [{}] }]
+  const { readFrame } = setup({ layouts })
+  await startCamera()
+  await waitFor(() => expect(readFrame).toHaveBeenCalled())
+  expect(readFrame.mock.calls[0][1].layouts).toBe(layouts)
 })

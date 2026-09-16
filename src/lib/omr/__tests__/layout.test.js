@@ -408,3 +408,32 @@ describe('buildSheetLayout — contract stability', () => {
     expect(page).toEqual({ width: 210, height: 297 })
   })
 })
+
+// ── The grid shape the reader checks against ─────────────────────────────────
+//
+// The reader used to re-derive this by counting distinct page x and y, which is
+// only the sheet's own columns and rows when the sheet is unrotated. Stating it
+// here means there is one answer, and the reader cannot disagree with the sheet
+// it is reading.
+describe('buildSheetLayout — registration grid shape', () => {
+  it('states its own grid, in the SHEET’s columns and rows', () => {
+    for (const [perPage, want] of [[1, { cols: 2, rows: 11 }], [2, { cols: 3, rows: 7 }]]) {
+      const L = buildSheetLayout({ questionCount: 25, perPage })
+      expect({
+        cols: L.geometry.registrationColumns,
+        rows: L.geometry.registrationRows,
+      }).toEqual(want)
+      // and it agrees with the squares actually drawn
+      expect(L.sheets[0].registration).toHaveLength(want.cols * want.rows)
+    }
+  })
+
+  it('counts rows along the sheet, not along the page', () => {
+    // A two-up sheet is rotated, so its rows are distinct page X values and its
+    // columns are distinct page Y ones — the opposite of the flat case.
+    const s = buildSheetLayout({ questionCount: 25, perPage: 2 }).sheets[0]
+    const xs = new Set(s.registration.map(r => r.x)).size
+    const ys = new Set(s.registration.map(r => r.y)).size
+    expect({ xs, ys }).toEqual({ xs: 7, ys: 3 })
+  })
+})

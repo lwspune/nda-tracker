@@ -172,3 +172,134 @@ describe('readSheetImage', () => {
     expect(r.grid).toEqual({ cols: layout30.geometry.registrationColumns, rows: expect.any(Number) })
   })
 })
+
+// ── Two-up sheets ────────────────────────────────────────────────────────────
+//
+// The Exams page has always offered a 2-up print, and the scanner has never
+// been able to read one: it built the layout with perPage defaulting to 1, so a
+// 25-question sheet printed 3x7 was checked against the 1-up 2x11 and refused
+// with "is it the right paper?" — blaming the paper for the reader's own
+// mistake. Passing perPage through did not fix it either, because the grid was
+// re-derived by counting distinct page x and y, which are the sheet's columns
+// and rows only when the sheet is NOT turned.
+
+/**
+ * A half-sheet as the operator actually photographs it: cut off the page, and
+ * held the way it is read.
+ *
+ * This matters to the test rather than being scenery. A homography absorbs
+ * rotation, so the sampling would work on the uncut page — but `fitLattice`
+ * reports its columns and rows in the IMAGE's orientation, and the shape check
+ * compares those against the sheet's. Reading a turned sheet off an unturned
+ * page would pass while the real capture failed.
+ */
+function asHeld(layout, pageImage, sheetIndex) {
+  const sheet = layout.sheets[sheetIndex]
+  if (!sheet.rotated) return pageImage
+  const localW = layout.page.height / layout.perPage
+  const slotY = sheetIndex * localW
+  const width = Math.round(localW * S)
+  const height = Math.round(layout.page.width * S)
+  const data = new Uint8ClampedArray(width * height * 4).fill(255)
+  const originY = Math.round((slotY + localW) * S)
+  for (let Y = 0; Y < height; Y++) {
+    for (let X = 0; X < width; X++) {
+      // local x <- page y (reversed), local y <- page x
+      const Px = Y, Py = originY - X
+      if (Px < 0 || Py < 0 || Px >= pageImage.width || Py >= pageImage.height) continue
+      const from = (Py * pageImage.width + Px) * 4
+      const to = (Y * width + X) * 4
+      data[to] = pageImage.data[from]
+      data[to + 1] = pageImage.data[from + 1]
+      data[to + 2] = pageImage.data[from + 2]
+      data[to + 3] = 255
+    }
+  }
+  return { width, height, data }
+}
+
+const layout25two = buildSheetLayout({ questionCount: 25, perPage: 2 })
+const layout25one = buildSheetLayout({ questionCount: 25, perPage: 1 })
+
+describe('readSheetImage — two-up sheets', () => {
+  it('reads a two-up half-sheet, photographed as it is held', () => {
+    const marks = new Map([[1, [0]], [9, [2]], [10, [1]], [25, [3]]])
+    const page = renderSheet(layout25two, { marks, roll: '00048' })
+    const r = readSheetImage(asHeld(layout25two, page, 0), { layout: layout25two, roster })
+    expect(r.ok).toBe(true)
+    // 3x7 is the shape in the photograph; 2x11 is what the 1-up layout prints.
+    expect(r.grid).toEqual({ cols: 3, rows: 7 })
+    expect(r.answers[1]).toBe('A')
+    expect(r.answers[9]).toBe('C')     // last of the short first column
+    expect(r.answers[10]).toBe('B')    // first of the second column
+    expect(r.answers[25]).toBe('D')
+    expect(r.roll.digits).toBe('00048')
+    expect(r.student.lwsId).toBe('LWS-048')
+    expect(r.reviewCount).toBe(0)
+  })
+
+  it('reads the bottom half of the page as readily as the top', () => {
+    // The two halves are the same sheet at a different page offset, and the
+    // homography absorbs the offset — but only if the correspondences are built
+    // from the half that was actually photographed.
+    const page = renderSheet(layout25two, { marks: new Map([[3, [1]]]), sheetIndex: 1 })
+    const r = readSheetImage(asHeld(layout25two, page, 1), { layout: layout25two, sheetIndex: 1 })
+    expect(r.ok).toBe(true)
+    expect(r.answers[3]).toBe('B')
+  })
+
+  it('still refuses a genuinely wrong paper', () => {
+    const page = renderSheet(layout25two, { marks: new Map([[1, [0]]]) })
+    const r = readSheetImage(asHeld(layout25two, page, 0), { layout: layout25one })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/3×7|3x7/)
+    expect(r.reason).toMatch(/2×11|2x11/)
+  })
+})
+
+// ── Choosing the format ──────────────────────────────────────────────────────
+//
+// The printed sheet carries no exam identity and, once the stamp is clipped, no
+// legible format either — so the operator should not have to remember which
+// button they printed from. The grid shape answers it for 160 of the 188
+// printable question counts. For the other 28 both formats print the SAME grid
+// while putting a given question in a different column entirely, so there the
+// only honest answer is to ask.
+describe('readSheetImage — picking the format', () => {
+  it('picks the format the sheet was actually printed in', () => {
+    const page = renderSheet(layout25two, { marks: new Map([[10, [1]]]) })
+    const r = readSheetImage(asHeld(layout25two, page, 0), {
+      layouts: [layout25one, layout25two],
+    })
+    expect(r.ok).toBe(true)
+    expect(r.perPage).toBe(2)
+    expect(r.answers[10]).toBe('B')
+  })
+
+  it('picks the one-up sheet from the same candidates', () => {
+    const image = renderSheet(layout25one, { marks: new Map([[10, [1]]]) })
+    const r = readSheetImage(image, { layouts: [layout25one, layout25two] })
+    expect(r.ok).toBe(true)
+    expect(r.perPage).toBe(1)
+    expect(r.answers[10]).toBe('B')
+  })
+
+  it('refuses to guess when both formats print the same grid', () => {
+    // 26Q is 3x7 either way, and the column split differs — guessing would put
+    // Q10 most of a block away from where it sampled, and file that against a
+    // real student.
+    const one = buildSheetLayout({ questionCount: 26, perPage: 1 })
+    const two = buildSheetLayout({ questionCount: 26, perPage: 2 })
+    expect(one.geometry.registrationRows).toBe(two.geometry.registrationRows)
+    const page = renderSheet(two, { marks: new Map([[1, [0]]]) })
+    const r = readSheetImage(asHeld(two, page, 0), { layouts: [one, two] })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/one per page|two per page|which/i)
+  })
+
+  it('reports the grid it found even when it refuses', () => {
+    const page = renderSheet(layout25two, { marks: new Map() })
+    const r = readSheetImage(asHeld(layout25two, page, 0), { layout: layout25one })
+    expect(r.grid).toEqual({ cols: 3, rows: 7 })
+  })
+})

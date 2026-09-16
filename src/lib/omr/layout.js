@@ -403,6 +403,10 @@ function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDig
     index,
     rotated,
     textAngle: T.angle,
+    // The grid in the SHEET's own columns and rows. Stated rather than left to
+    // be counted, because counting distinct page x/y only gives this for an
+    // unrotated sheet — a turned two-up sheet's rows ARE its distinct page x.
+    grid: { cols: regX.length, rows: regY.length },
     width: round(localW),
     height: round(localH),
     header: {
@@ -476,6 +480,7 @@ export function buildSheetLayout({
       registrationSize: g.regSize,
       columns,
       registrationColumns: columns + 1,
+      registrationRows: sheets[0].grid.rows,
       fonts: g.fonts,
     },
     cutLine: perPage === 2 ? round(page.height / 2) : null,
