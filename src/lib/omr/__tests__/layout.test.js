@@ -228,17 +228,35 @@ describe('buildSheetLayout — type clears the bubbles', () => {
     it(`keeps question numbers off the bubbles and apart (${questionCount}q, ${perPage}-up)`, () => {
       const layout = buildSheetLayout({ questionCount, perPage })
       const { fonts } = layout.geometry
+      // Collected and asserted once, not once per pair. At 150q that inner loop
+      // ran expect() about 90,000 times per sheet — seconds of building
+      // assertion objects around milliseconds of geometry — which is what put
+      // this over the 5s budget under a contended parallel run. It also names
+      // the offender now, where `expected false to be true` could not say which
+      // of 150 numbers was at fault. Same pairs checked, same verdict.
+      const collisions = []
       for (const sheet of layout.sheets) {
         const bubbles = sheet.questions.flatMap(q => q.options)
         const boxes = sheet.questions.map(q =>
           textBox(q.numberAnchor, q.q, fonts.number, sheet.rotated))
-        boxes.forEach(box => {
-          for (const b of bubbles) expect(clears(box, b)).toBe(true)
+        const where = `${questionCount}q ${perPage}-up sheet ${sheet.index}`
+        boxes.forEach((box, bi) => {
+          const hit = bubbles.find(b => !clears(box, b))
+          if (hit) {
+            collisions.push(
+              `${where}: the number for Q${sheet.questions[bi].q} touches ` +
+              `the bubble at ${hit.x},${hit.y}`)
+          }
         })
         for (let i = 1; i < boxes.length; i++) {
-          expect(overlap(boxes[i - 1], boxes[i])).toBe(false)
+          if (overlap(boxes[i - 1], boxes[i])) {
+            collisions.push(
+              `${where}: the numbers for Q${sheet.questions[i - 1].q} and ` +
+              `Q${sheet.questions[i].q} overlap`)
+          }
         }
       }
+      expect(collisions).toEqual([])
     })
   }
 
