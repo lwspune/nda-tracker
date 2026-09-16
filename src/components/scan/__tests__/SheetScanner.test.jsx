@@ -133,3 +133,94 @@ it('passes every candidate format through to the reader', async () => {
   await waitFor(() => expect(readFrame).toHaveBeenCalled())
   expect(readFrame.mock.calls[0][1].layouts).toBe(layouts)
 })
+
+// The viewfinder on a phone.
+//
+// Measured in a real browser at 390x844: the video sat at y=742 in a window
+// whose last 60px are the fixed bottom nav, so 42px of a 243px picture were on
+// screen and the status line — the only thing that says whether a sheet was
+// read — was 209px below the fold. On a 360x640 Android even the start button
+// was below the fold. So while the camera runs the scanner lifts out of the
+// page flow into a full-screen layer BELOW the md breakpoint. Desktop measured
+// fine and is left exactly as it was, which is why this is a CSS breakpoint and
+// not a matchMedia branch: same DOM at every width, nothing new to keep in sync.
+//
+// jsdom has no layout, so what is pinned here is what jsdom can see — that the
+// classes switch, that the controls travel with the picture, and above all the
+// two invariants this restructure could quietly break. The geometry itself is
+// verified in a browser.
+describe('SheetScanner · the viewfinder on a phone', () => {
+  const root = container => container.firstChild
+
+  it('sits in the page flow until the camera runs', () => {
+    const { container } = setup()
+    expect(root(container).className).not.toMatch(/fixed/)
+  })
+
+  it('lifts out of the page flow while the camera runs', async () => {
+    const { container } = setup()
+    await startCamera()
+    await waitFor(() => expect(root(container).className).toMatch(/max-md:fixed/))
+    expect(root(container).className).toMatch(/max-md:inset-0/)
+  })
+
+  it('hands the page back when the camera stops', async () => {
+    const { container } = setup()
+    await startCamera()
+    await waitFor(() => expect(root(container).className).toMatch(/max-md:fixed/))
+    await userEvent.click(screen.getByRole('button', { name: /stop camera/i }))
+    expect(root(container).className).not.toMatch(/fixed/)
+  })
+
+  // A Stop button or a status line left behind in the page flow would be under
+  // the layer, unreachable and unreadable with a stack of paper in hand.
+  it('keeps the controls and the status with the picture', async () => {
+    const { container } = setup()
+    await startCamera()
+    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
+    expect(root(container)).toContainElement(screen.getByRole('button', { name: /stop camera/i }))
+    expect(root(container)).toContainElement(screen.getByRole('status'))
+    expect(root(container)).toContainElement(container.querySelector('video'))
+  })
+
+  it('brings the keep-this-sheet offer along too', async () => {
+    const { container } = setup({
+      readFrame: vi.fn(() => okResult({ complete: false, reviewCount: 2 })),
+    })
+    await startCamera()
+    const keep = await screen.findByRole('button', { name: /keep this sheet/i })
+    expect(root(container)).toContainElement(keep)
+  })
+
+  // start() assigns the stream to videoRef.current. Were the layer a
+  // conditionally-rendered subtree, the video would mount AFTER that assignment
+  // and the operator would get a black rectangle — the camera running, the
+  // frames unread, nothing thrown. The node has to survive the switch.
+  it('never remounts the video, so the stream it was handed survives', async () => {
+    const { container } = setup()
+    const before = container.querySelector('video')
+    expect(before).toBeTruthy()
+    await startCamera()
+    await waitFor(() => expect(screen.getByRole('button', { name: /stop camera/i })).toBeInTheDocument())
+    expect(container.querySelector('video')).toBe(before)
+  })
+
+  // drawOverlay maps the read frame onto the video with one ratio per axis,
+  // which is only correct while the element's box matches the stream's aspect —
+  // measured at 324x243 against a 1920x1440 stream, exactly 1.333 both ways.
+  // Centring the picture in a tall layer must therefore grow a wrapper AROUND
+  // the outline box, never the outline box itself; stretched to fill the layer
+  // it would draw the green "sheet found" outline well off the paper.
+  it('centres the picture without stretching the box the outline is drawn in', async () => {
+    const { container } = setup()
+    await startCamera()
+    const video = container.querySelector('video')
+    const box = video.parentElement
+    const overlay = box.querySelector('canvas')
+    expect(overlay).toBeTruthy()
+    expect(box.className).toMatch(/relative/)
+    // A wrapper of its own between the box and the layer: that is what takes
+    // the centring, so the box stays tight around the video.
+    expect(box.parentElement).not.toBe(root(container))
+  })
+})

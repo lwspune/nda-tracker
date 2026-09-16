@@ -63,6 +63,30 @@ function cameraTrouble(err) {
   return `The camera could not be started (${name || 'unknown error'}).`
 }
 
+// While the camera runs, the scanner leaves the page flow on a phone.
+//
+// Measured in a browser at 390x844: inline, the picture began at y=742 with the
+// fixed bottom nav covering everything past 784 — 42px of a 243px viewfinder on
+// screen, and the status line, the only thing that says whether a sheet was
+// read, 209px below the fold. On a 360x640 Android even the start button was
+// below the fold.
+//
+// A `max-md:` breakpoint rather than a matchMedia branch: the DOM is then
+// identical at every width, so the desktop layout — which measured fine — is the
+// same nodes in the same order, and there is no second arrangement to keep in
+// step with this one.
+//
+// Surface-coloured rather than black, which is the usual scanner backdrop. The
+// picture is letterboxed in a tall phone whatever sits behind it, and every text
+// tone in this component is a dark-on-light token; a black layer would need a
+// second palette for the status line and the "N read" count, and would fail
+// contrast the first time somebody added a tone and forgot.
+const LAYER =
+  'space-y-2 max-md:fixed max-md:inset-0 max-md:z-[60] max-md:bg-surface ' +
+  'max-md:flex max-md:flex-col max-md:gap-3 max-md:space-y-0 max-md:px-3 ' +
+  'max-md:pt-[max(0.75rem,env(safe-area-inset-top))] ' +
+  'max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+
 const TONE = {
   hunting:   'text-ink-3',
   holding:   'text-amber-600',
@@ -204,7 +228,7 @@ export default function SheetScanner({
   }
 
   return (
-    <div className="space-y-2">
+    <div className={running ? LAYER : 'space-y-2'}>
       <div className="flex items-center gap-2 flex-wrap">
         {!running ? (
           <button
@@ -236,21 +260,36 @@ export default function SheetScanner({
 
       {error && <div className="text-[12px] text-danger" role="alert">{error}</div>}
 
-      <div className={running ? 'relative' : 'hidden'}>
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          autoPlay
-          aria-label="Camera view of the answer sheet"
-          className="w-full max-w-[520px] rounded-lg bg-black"
-        />
-        <canvas
-          ref={overlayRef}
-          aria-hidden="true"
-          className="absolute inset-0 w-full max-w-[520px] pointer-events-none"
-        />
-        <canvas ref={workRef} className="hidden" aria-hidden="true" />
+      {/* Two boxes, not one. The outer takes the centring and may grow to fill
+          the layer; the inner stays tight around the picture. That matters
+          because the overlay canvas is `inset-0` against the inner box and
+          drawOverlay maps the read frame onto video.clientWidth/clientHeight
+          with one independent ratio per axis — correct only while that box
+          matches the stream's aspect, measured at 324x243 against a 1920x1440
+          stream, 1.333 both ways. Let the box stretch to fill a tall phone and
+          the green "sheet found" outline lands well off the paper: a scanner
+          lying about what it is looking at. */}
+      <div
+        className={running
+          ? 'max-md:flex-1 max-md:flex max-md:items-center max-md:justify-center'
+          : 'hidden'}
+      >
+        <div className="relative w-full max-w-[520px]">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            aria-label="Camera view of the answer sheet"
+            className="w-full rounded-lg bg-black"
+          />
+          <canvas
+            ref={overlayRef}
+            aria-hidden="true"
+            className="absolute inset-0 w-full pointer-events-none"
+          />
+          <canvas ref={workRef} className="hidden" aria-hidden="true" />
+        </div>
       </div>
 
       {running && (
