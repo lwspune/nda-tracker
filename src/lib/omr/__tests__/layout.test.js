@@ -259,7 +259,16 @@ describe('buildSheetLayout — type clears the bubbles', () => {
     expect(onBubbles).toBeGreaterThan(0)
   })
 
+  // Collisions are COLLECTED and asserted once, not asserted per pair. This
+  // compares every caption against every bubble on a 150-question sheet, three
+  // sheets over — about 216,000 pairs. The geometry costs milliseconds; 216,000
+  // `expect` calls cost seconds, and on a loaded machine that overran the 5s
+  // default and reported a timeout, which reads as "something broke" when
+  // nothing had. One assertion is also the only way a failure can say WHICH
+  // caption landed on which bubble; per-pair it could only ever say
+  // "expected false to be true".
   it('keeps the A B C D caption clear of the bubbles it labels', () => {
+    const collisions = []
     for (const [questionCount, perPage] of [[150, 1], [150, 2]]) {
       const layout = buildSheetLayout({ questionCount, perPage })
       const { fonts } = layout.geometry
@@ -269,11 +278,20 @@ describe('buildSheetLayout — type clears the bubbles', () => {
           if (!q.groupHeader) continue
           q.groupHeader.labels.forEach((label, i) => {
             const box = textBox(q.groupHeader.anchors[i], label, fonts.option, sheet.rotated)
-            for (const b of bubbles) expect(clears(box, b)).toBe(true)
+            // Every bubble is still tested; only the first offender per caption
+            // is reported, so a regression names the caption instead of burying
+            // it in hundreds of lines about the same one.
+            const hit = bubbles.find(b => !clears(box, b))
+            if (hit) {
+              collisions.push(
+                `${questionCount}q ${perPage}-up sheet ${sheet.index}: ` +
+                `caption "${label}" above Q${q.q} touches the bubble at ${hit.x},${hit.y}`)
+            }
           })
         }
       }
     }
+    expect(collisions).toEqual([])
   })
 
   it('shrinks the type along with the ink', () => {
