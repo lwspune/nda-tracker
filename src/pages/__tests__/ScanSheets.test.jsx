@@ -466,3 +466,25 @@ describe('Scan page · what the shared components are actually told', () => {
     expect((await badgeFor('Sheet 1')).className).toMatch(/red/)
   })
 })
+
+// The scan link is shown to the phone that already followed it.
+//
+// Measured at 390x844, that card is 200px of the 742px standing between the top
+// of the page and the viewfinder, and on a 360x640 Android it is what puts the
+// start button itself below the fold. It is worth keeping on the desk screen,
+// which is where somebody sends the link FROM; on the phone it is 200px of a
+// URL its reader is already at.
+describe('Scan page · the scan link on a phone', () => {
+  beforeEach(() => { mockStore.scanExamId = 'e1' })
+
+  it('still offers the link on a screen with room for it', () => {
+    renderPage()
+    expect(screen.getByText(/\/scan\?exam=e1/)).toBeInTheDocument()
+  })
+
+  it('keeps it off the phone it was sent to', () => {
+    renderPage()
+    const card = screen.getByText(/\/scan\?exam=e1/).closest('.card')
+    expect(card.parentElement.className).toMatch(/max-md:hidden/)
+  })
+})

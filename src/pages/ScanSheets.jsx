@@ -272,13 +272,21 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
 
       {/* The link, not this screen, is what reaches the phone the sheets will
           be shot with — and it must be built with the base prefix, or the
-          gh-pages build hands out a link that 404s silently. */}
+          gh-pages build hands out a link that 404s silently.
+
+          Which is also why it is hidden below the md breakpoint: on a phone this
+          is a 200px card quoting a URL to the device already sitting at it, and
+          those 200px are most of what pushes the camera button off the bottom of
+          a 360x640 screen. It stays on the desk screen, which is the one the
+          link is sent FROM. */}
       {locked && (
-        <CopyLinkBar
-          label="Scan link"
-          url={buildScanUrl(exam.id, window.location.origin, import.meta.env.BASE_URL)}
-          hint="Opens this exam's scanner straight away — send it to the phone doing the scanning."
-        />
+        <div className="max-md:hidden">
+          <CopyLinkBar
+            label="Scan link"
+            url={buildScanUrl(exam.id, window.location.origin, import.meta.env.BASE_URL)}
+            hint="Opens this exam's scanner straight away — send it to the phone doing the scanning."
+          />
+        </div>
       )}
 
       <Card>
