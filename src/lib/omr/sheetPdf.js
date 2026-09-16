@@ -8,7 +8,7 @@
 // jsPDF is dynamic-imported, matching `examPdf.js`: nobody who never prints a
 // sheet pays for the library.
 
-import { buildSheetLayout } from './layout'
+import { buildSheetLayout, textWidthMm } from './layout'
 import { downloadBlob, safeFilename } from '../download'
 
 const BLACK = [0, 0, 0]
@@ -27,6 +27,20 @@ export const LAYOUT_VERSION = 'v1'
 const textOpts = (sheet, extra = {}) =>
   sheet.textAngle ? { ...extra, angle: sheet.textAngle } : extra
 
+/**
+ * The stamp, trimmed to the run the layout reserved for it.
+ *
+ * Trimmed from the TITLE end: the version and the question count are what a
+ * mismatched sheet is spotted by, and a shortened name still identifies the
+ * paper. Letting it overrun instead is what this whole function exists to stop.
+ */
+function fitStamp(text, maxWidth, pt) {
+  if (textWidthMm(text, pt) <= maxWidth) return text
+  let s = text
+  while (s.length > 1 && textWidthMm(`${s}…`, pt) > maxWidth) s = s.slice(0, -1)
+  return `${s}…`
+}
+
 function drawHeader(doc, sheet, meta, fonts) {
   const { header } = sheet
   doc.setLineWidth(LINE_W)
@@ -35,13 +49,25 @@ function drawHeader(doc, sheet, meta, fonts) {
     doc.rect(row.x, row.y, row.width, row.height, 'S')
     doc.text(`${row.label} :`, row.labelAnchor.x, row.labelAnchor.y, textOpts(sheet))
   }
-  const stamp = [
+  const stamp = fitStamp([
     `OMR ${LAYOUT_VERSION}`,
     `${sheet.questions.length}Q`,
     meta?.title,
-  ].filter(Boolean).join(' · ')
+  ].filter(Boolean).join(' · '), header.stampMaxWidth, fonts.stamp)
+
   doc.setFontSize(fonts.stamp)
-  doc.text(stamp, header.stampAnchor.x, header.stampAnchor.y, textOpts(sheet))
+  // Right-aligned by measuring and walking BACK from the run's end along the
+  // sheet's own +x axis. jsPDF's `align: 'right'` cannot do this — under
+  // rotation it does not shift the anchor back along a rotated baseline, the
+  // same trap layout.js documents for the question numbers. `axis` comes from
+  // the layout so the transform stays in one place.
+  const w = textWidthMm(stamp, fonts.stamp)
+  doc.text(
+    stamp,
+    header.stampEnd.x - w * sheet.axis.x,
+    header.stampEnd.y - w * sheet.axis.y,
+    textOpts(sheet),
+  )
 }
 
 function drawRegistration(doc, sheet) {
