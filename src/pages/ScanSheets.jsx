@@ -256,11 +256,11 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   if (!scannable.length) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Scan answer sheets" subtitle="Read filled OMR sheets into an exam" />
+        <PageHeader title="Scan answer sheets" sub="Read filled OMR sheets into an exam" />
         <EmptyState
           icon="🫧"
           title="No exam to scan into"
-          message="Scanning needs a paper with per-question data. Upload or push one first, then print its answer sheet from the Exams page."
+          sub="Scanning needs a paper with per-question data. Upload or push one first, then print its answer sheet from the Exams page."
         />
       </div>
     )
@@ -268,7 +268,7 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Scan answer sheets" subtitle="Read filled OMR sheets into an exam" />
+      <PageHeader title="Scan answer sheets" sub="Read filled OMR sheets into an exam" />
 
       {/* The link, not this screen, is what reaches the phone the sheets will
           be shot with — and it must be built with the base prefix, or the
@@ -478,7 +478,7 @@ function SheetCard({ index, sheet, people, showFormat, onResolve, onAssign, onDi
     return (
       <Card>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge tone="danger">Sheet {index + 1}</Badge>
+          <Badge variant="red">Sheet {index + 1}</Badge>
           <span className="text-[13px] text-ink-1 font-semibold">{sheet.name}</span>
           <DiscardButton index={index} onDiscard={onDiscard} />
         </div>
@@ -491,7 +491,7 @@ function SheetCard({ index, sheet, people, showFormat, onResolve, onAssign, onDi
   return (
     <Card>
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge tone={r.complete ? 'success' : 'warning'}>Sheet {index + 1}</Badge>
+        <Badge variant={r.complete ? 'green' : 'yellow'}>Sheet {index + 1}</Badge>
         <span className="text-[13px] text-ink-1 font-semibold">
           {student ? student.name : 'Student not identified'}
         </span>

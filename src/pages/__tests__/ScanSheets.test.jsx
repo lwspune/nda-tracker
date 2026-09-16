@@ -419,3 +419,50 @@ describe('ScanSheets — print format', () => {
       .toBeInTheDocument()
   })
 })
+
+// This page called the shared UI components with prop names they do not take —
+// `subtitle`/`message` where they read `sub`, and `tone` where Badge reads
+// `variant`. React drops an unknown prop silently, so nothing failed and nothing
+// rendered: the page had no subtitle, the empty state no explanation, and every
+// sheet badge fell back to Badge's grey default. The badge colour is the
+// at-a-glance triage over a scanned stack, which is the whole point of it.
+describe('Scan page · what the shared components are actually told', () => {
+  const badgeFor = async label => (await screen.findByText(label))
+
+  it('says what the page is for under its title', () => {
+    renderPage()
+    expect(screen.getByText(/read filled OMR sheets into an exam/i)).toBeInTheDocument()
+  })
+
+  it('explains what a scannable exam is when there is none', () => {
+    mockStore.exams = [mcqExam({ questions: [] })]   // a written exam
+    renderPage()
+    expect(screen.getByText(/per-question data/i)).toBeInTheDocument()
+  })
+
+  it('marks a cleanly read sheet as read', async () => {
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/green/)
+  })
+
+  it('marks a sheet still holding a question for a human as unfinished', async () => {
+    readSheetImage.mockReturnValue(okSheet({
+      complete: false, reviewCount: 1,
+      needsReview: [{ q: 1, state: 'unclear', scores: [0.4, 0.35, 0, 0] }],
+    }))
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/yellow/)
+  })
+
+  it('marks a sheet it could not read at all as a failure', async () => {
+    readSheetImage.mockReturnValue({ ok: false, reason: 'Only 3 registration marks found' })
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect((await badgeFor('Sheet 1')).className).toMatch(/red/)
+  })
+})
