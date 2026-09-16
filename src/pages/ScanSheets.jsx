@@ -79,6 +79,9 @@ function gradeAll(readable, exam, people) {
   })
 }
 
+/** How a print format is named to the operator, wherever it is shown. */
+const FORMAT_LABEL = { 1: 'one per page', 2: 'two per page' }
+
 export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   const exams = useStore(s => s.exams)
   // Not defaulted here: `x || []` mints a new array every render, so the memo
@@ -97,6 +100,9 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
   const [saved, setSaved] = useState(null)
   // An explicit yes to mixing scanner-graded marks into a vendor-graded exam.
   const [mixOk, setMixOk] = useState(false)
+  // Which print format to read against — 'auto' lets the sheet answer for
+  // itself, and is only worth overriding for the counts where it cannot.
+  const [format, setFormat] = useState('auto')
   const fileRef = useRef(null)
 
   // Only a paper with per-question data can be scanned; a written exam records a
@@ -139,10 +145,29 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
     ]
   }, [roster, studentList])
 
-  const layout = useMemo(() => {
-    if (!exam) return null
-    try { return buildSheetLayout({ questionCount: exam.questions.length }) } catch { return null }
+  /**
+   * The formats this paper can be printed in, as layouts.
+   *
+   * Both are offered to the reader by default. The printed sheet carries no
+   * legible format marking — the stamp that names it is a few millimetres of
+   * type — so requiring the operator to remember which button they printed from
+   * is a setting they can only get wrong, and getting it wrong reads as "is it
+   * the right paper?" about paper that is correct. The detected grid settles it
+   * for every question count except the 28 where both formats print the same
+   * shape; there the reader refuses and `format` below is the way out.
+   */
+  const formats = useMemo(() => {
+    if (!exam) return []
+    return [1, 2].flatMap(perPage => {
+      try { return [buildSheetLayout({ questionCount: exam.questions.length, perPage })] }
+      catch { return [] }       // longer than that format can hold
+    })
   }, [exam])
+
+  const layouts = useMemo(
+    () => (format === 'auto' ? formats : formats.filter(l => String(l.perPage) === format)),
+    [formats, format])
+  const layout = layouts[0] || null
 
   const duplicates = useMemo(
     () => findDuplicateRolls(sheets.map((s, i) => ({ sheet: i + 1, lwsId: s.result?.student?.lwsId ?? null }))),
@@ -166,13 +191,13 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
 
   async function onFiles(e) {
     const files = [...(e.target.files || [])]
-    if (!files.length || !layout) return
+    if (!files.length || !layouts.length) return
     setBusy(true); setSaved(null)
     const next = []
     for (const file of files) {
       try {
         const image = await decodeImage(file)
-        next.push({ name: file.name, result: readSheetImage(image, { layout, roster }) })
+        next.push({ name: file.name, result: readSheetImage(image, { layouts, roster }) })
       } catch (err) {
         console.error('[scan] could not read', file.name, err)
         next.push({ name: file.name, result: { ok: false, reason: 'Could not open that image.' } })
@@ -307,6 +332,29 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
             />
           </label>
 
+          {/* Only worth showing when there is something to choose between. For
+              most papers the grid answers it, and the operator never has to
+              know this exists — it is here for the counts where both formats
+              print the same shape and the reader rightly refuses to guess. */}
+          {formats.length > 1 && (
+            <label className="flex flex-col gap-1 text-[12px] text-ink-2">
+              Sheet format
+              <select
+                className="form-input"
+                value={format}
+                onChange={e => setFormat(e.target.value)}
+                aria-label="Sheet format"
+              >
+                <option value="auto">Detect from the sheet</option>
+                {formats.map(l => (
+                  <option key={l.perPage} value={String(l.perPage)}>
+                    {FORMAT_LABEL[l.perPage]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {exam && (
             <div className="text-[12px] text-ink-3">
               {roster.length
@@ -323,7 +371,7 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
           shot somebody already took. */}
       {exam && layout && (
         <Card>
-          <SheetScanner layout={layout} roster={roster} onCapture={onCamera} />
+          <SheetScanner layouts={layouts} roster={roster} onCapture={onCamera} />
         </Card>
       )}
 
@@ -356,6 +404,7 @@ export default function ScanSheetsPage({ decodeImage = fileToImageData }) {
           index={i}
           sheet={s}
           people={people}
+          showFormat={formats.length > 1}
           onResolve={(q, outcome) => amend(i, r => resolveQuestion(r, q, outcome))}
           onAssign={lwsId => amend(i, r => assignStudent(r, lwsId))}
           onDiscard={() => discard(i)}
@@ -423,7 +472,7 @@ function DiscardButton({ index, onDiscard }) {
   )
 }
 
-function SheetCard({ index, sheet, people, onResolve, onAssign, onDiscard }) {
+function SheetCard({ index, sheet, people, showFormat, onResolve, onAssign, onDiscard }) {
   const r = sheet.result
   if (!r?.ok) {
     return (
@@ -453,6 +502,12 @@ function SheetCard({ index, sheet, people, onResolve, onAssign, onDiscard }) {
             wrong, so it sits last and quiet — but then it is the only way to
             know which photograph or which pass of the camera to redo. */}
         <span className="text-[11px] text-ink-3 font-mono">{sheet.name}</span>
+        {/* Which format this one read as. A stack printed one way reads the
+            same way all through, so an odd row out is the tell that a sheet
+            from another print run got into the pile. */}
+        {showFormat && FORMAT_LABEL[r.perPage] && (
+          <span className="text-[11px] text-ink-3">{FORMAT_LABEL[r.perPage]}</span>
+        )}
         <DiscardButton index={index} onDiscard={onDiscard} />
       </div>
 

@@ -363,3 +363,59 @@ describe('Scan page · sheets that need a human', () => {
       expect(screen.getByRole('button', { name: /save 1 result/i })).not.toBeDisabled())
   })
 })
+
+// ── Print format ─────────────────────────────────────────────────────────────
+//
+// The Exams page prints one-up or two-up, and the page used to build only the
+// one-up layout — so every two-up stack was refused with "is it the right
+// paper?", blaming paper that was correct. The sheet carries no legible format
+// marking, so the operator should not have to remember which button they
+// printed from: the detected grid answers it for all but 28 question counts.
+describe('ScanSheets — print format', () => {
+  const qs = n => Array.from({ length: n }, (_, i) => ({ q: i + 1, answer: 'A' }))
+  const layoutsFor = () => readSheetImage.mock.calls[0][1].layouts
+
+  it('hands the reader both formats, so a two-up stack reads without being told', async () => {
+    mockStore.exams = [mcqExam({ questions: qs(25) })]
+    readSheetImage.mockReturnValue(okSheet())
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    expect(layoutsFor().map(l => l.perPage)).toEqual([1, 2])
+  })
+
+  it('narrows to the format the operator pins, for the papers a photo cannot settle', async () => {
+    // 26Q prints 3x7 either way, so the reader refuses to guess; pinning the
+    // format is the way out, and it has to actually reach the reader.
+    mockStore.exams = [mcqExam({ questions: qs(26) })]
+    readSheetImage.mockReturnValue(okSheet())
+    renderPage()
+    await pickExam()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sheet format/i }), '2')
+    await upload('a.jpg')
+    expect(layoutsFor().map(l => l.perPage)).toEqual([2])
+  })
+
+  it('does not offer a format the paper cannot be printed in', async () => {
+    // 200 questions fit one-up (273) but not two-up (188), so two-up is not a
+    // choice to offer — and the reader must not be handed a layout that throws.
+    mockStore.exams = [mcqExam({ questions: qs(200) })]
+    readSheetImage.mockReturnValue(okSheet())
+    renderPage()
+    await pickExam()
+    expect(screen.queryByRole('option', { name: /two per page/i })).toBeNull()
+    await upload('a.jpg')
+    expect(layoutsFor().map(l => l.perPage)).toEqual([1])
+  })
+
+  it('says which format it read, so the operator can spot a wrong stack', async () => {
+    mockStore.exams = [mcqExam({ questions: qs(25) })]
+    readSheetImage.mockReturnValue(okSheet({ perPage: 2 }))
+    renderPage()
+    await pickExam()
+    await upload('a.jpg')
+    // On the sheet row, not the format picker's own option of the same name.
+    expect(await screen.findByText(/two per page/i, { selector: 'span' }))
+      .toBeInTheDocument()
+  })
+})

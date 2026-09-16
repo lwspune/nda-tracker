@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { buildSheetLayout } from '../layout'
+import { buildSheetLayout, textWidthMm } from '../layout'
 
 // jsPDF is mocked so these tests pin WHAT gets drawn — a sheet missing its
 // registration squares or its roll block still "renders" and still produces a
@@ -91,5 +91,86 @@ describe('renderOmrSheetPdf', () => {
     const blob = await renderOmrSheetPdf(buildSheetLayout({ questionCount: 30 }))
     expect(blob).toBeInstanceOf(Blob)
     expect(blob.type).toBe('application/pdf')
+  })
+})
+
+// ── The header stamp ─────────────────────────────────────────────────────────
+//
+// The stamp is what makes a mismatched sheet diagnosable by eye, and it shipped
+// running off the paper: anchored at the RIGHT edge of the header and drawn
+// left-to-right from there, so of `OMR v1 · 25Q · NDA - Set Theory` only the
+// first 10mm — `OMR v1 ·` — landed on the sheet. Two-up was worse: the bottom
+// half's tail crossed the cut line and printed across the TOP half, so a cut
+// sheet carried the neighbouring paper's identity at its top-left.
+describe('renderOmrSheetPdf — the header stamp', () => {
+  beforeEach(reset)
+
+  /** Where a drawn string starts and ends, in page millimetres. */
+  const runOf = ([text, x, y, opts], layout) => {
+    const w = textWidthMm(text, layout.geometry.fonts.stamp)
+    // angle 90 is anticlockwise, so the baseline runs toward decreasing page y
+    const end = (opts?.angle || 0) === 90 ? { x, y: y - w } : { x: x + w, y }
+    return { start: { x, y }, end, width: w, text }
+  }
+  const stampsIn = () => calls.text.filter(a => String(a[0]).startsWith('OMR '))
+
+  it('prints the whole stamp on the paper, at both formats', async () => {
+    for (const perPage of [1, 2]) {
+      reset()
+      const layout = buildSheetLayout({ questionCount: 25, perPage })
+      await renderOmrSheetPdf(layout, { title: 'NDA - Set Theory' })
+      const stamps = stampsIn()
+      expect(stamps).toHaveLength(perPage)
+      for (const call of stamps) {
+        const { start, end, text } = runOf(call, layout)
+        expect(text).toBe('OMR v1 · 25Q · NDA - Set Theory')
+        for (const p of [start, end]) {
+          expect(p.x).toBeGreaterThanOrEqual(0)
+          expect(p.y).toBeGreaterThanOrEqual(0)
+          expect(p.x).toBeLessThanOrEqual(layout.page.width)
+          expect(p.y).toBeLessThanOrEqual(layout.page.height)
+        }
+      }
+    }
+  })
+
+  it('keeps each half’s stamp on its own side of the cut', async () => {
+    const layout = buildSheetLayout({ questionCount: 25, perPage: 2 })
+    await renderOmrSheetPdf(layout, { title: 'NDA - Set Theory' })
+    const runs = stampsIn().map(c => runOf(c, layout))
+    expect(runs).toHaveLength(2)
+    for (const r of runs) {
+      const lo = Math.min(r.start.y, r.end.y), hi = Math.max(r.start.y, r.end.y)
+      // wholly above the cut, or wholly below it — never straddling
+      expect(lo < layout.cutLine === hi < layout.cutLine).toBe(true)
+    }
+    // and the two are not on the same half
+    expect(runs[0].start.y < layout.cutLine).not.toBe(runs[1].start.y < layout.cutLine)
+  })
+
+  it('truncates a long exam name rather than running off the sheet', async () => {
+    const layout = buildSheetLayout({ questionCount: 25, perPage: 2 })
+    // Comfortably past the reserved run, so this pins the trim and not the
+    // happy path — a name that merely looks long still fits.
+    const long = `NDA Maths Blueprint Mock 4 ${'Set Theory and Relations '.repeat(6)}`
+    await renderOmrSheetPdf(layout, { title: long })
+    const [call] = stampsIn()
+    const { width, text } = runOf(call, layout)
+    expect(width).toBeLessThanOrEqual(layout.sheets[0].header.stampMaxWidth)
+    // the version and the length survive — they are what a mismatch is spotted by
+    expect(text.startsWith('OMR v1 · 25Q · ')).toBe(true)
+    expect(text.endsWith('…')).toBe(true)
+  })
+
+  it('right-aligns the stamp against the run the layout reserved', async () => {
+    for (const perPage of [1, 2]) {
+      reset()
+      const layout = buildSheetLayout({ questionCount: 25, perPage })
+      await renderOmrSheetPdf(layout, { title: 'NDA - Set Theory' })
+      const { end } = runOf(stampsIn()[0], layout)
+      const { stampEnd } = layout.sheets[0].header
+      expect(end.x).toBeCloseTo(stampEnd.x, 3)
+      expect(end.y).toBeCloseTo(stampEnd.y, 3)
+    }
   })
 })

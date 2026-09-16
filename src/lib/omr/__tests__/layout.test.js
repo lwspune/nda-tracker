@@ -408,3 +408,96 @@ describe('buildSheetLayout — contract stability', () => {
     expect(page).toEqual({ width: 210, height: 297 })
   })
 })
+
+// ── The header stamp ─────────────────────────────────────────────────────────
+//
+// The stamp is the only thing on the paper that says which layout printed it,
+// and sheetPdf.js keeps it there precisely so a version or length mismatch is
+// "diagnosable by eye". It shipped anchored at the RIGHT edge of the header and
+// drawn left-to-right from there, so 34.7mm of text started 10mm from the edge
+// and all but `OMR v1 ·` ran off the paper. Two-up was worse than cosmetic: the
+// bottom half's stamp crossed the cut line and printed its tail across the top
+// half, so a cut sheet carried the WRONG paper's identity.
+describe('buildSheetLayout — the header stamp', () => {
+  // The renderer measures the text, so the layout cannot place it; what the
+  // layout owes is the run the text has to fit in, and the direction to lay it
+  // back along. Without the axis the renderer would have to know that a rotated
+  // sheet's +x is the page's -y, which is exactly the transform knowledge this
+  // module exists to keep in one place.
+  it('gives the stamp a run that ends inside the sheet, both formats', () => {
+    for (const perPage of [1, 2]) {
+      const { sheets } = buildSheetLayout({ questionCount: 25, perPage })
+      for (const sheet of sheets) {
+        const { stampEnd, stampMaxWidth } = sheet.header
+        expect(stampMaxWidth).toBeGreaterThan(20)
+        // Walking the full run back from the end must stay on the sheet.
+        const start = {
+          x: stampEnd.x - stampMaxWidth * sheet.axis.x,
+          y: stampEnd.y - stampMaxWidth * sheet.axis.y,
+        }
+        for (const p of [stampEnd, start]) {
+          expect(p.x).toBeGreaterThanOrEqual(0)
+          expect(p.y).toBeGreaterThanOrEqual(0)
+          expect(p.x).toBeLessThanOrEqual(210)
+          expect(p.y).toBeLessThanOrEqual(297)
+        }
+      }
+    }
+  })
+
+  it('keeps each half’s stamp run on its own side of the cut', () => {
+    const { sheets, cutLine } = buildSheetLayout({ questionCount: 25, perPage: 2 })
+    const [top, bottom] = sheets
+    const runOf = sheet => {
+      const { stampEnd, stampMaxWidth } = sheet.header
+      const start = {
+        x: stampEnd.x - stampMaxWidth * sheet.axis.x,
+        y: stampEnd.y - stampMaxWidth * sheet.axis.y,
+      }
+      return [Math.min(start.y, stampEnd.y), Math.max(start.y, stampEnd.y)]
+    }
+    expect(runOf(top)[1]).toBeLessThan(cutLine)
+    expect(runOf(bottom)[0]).toBeGreaterThan(cutLine)
+  })
+
+  it('reports the sheet’s own +x axis, in page millimetres', () => {
+    const flat = buildSheetLayout({ questionCount: 25, perPage: 1 }).sheets[0]
+    // One-up: the sheet's left-to-right IS the page's.
+    expect(flat.axis.x).toBeCloseTo(1, 6)
+    expect(flat.axis.y).toBeCloseTo(0, 6)
+
+    // Two-up is turned 90° anticlockwise, so reading-right runs UP the page.
+    const turned = buildSheetLayout({ questionCount: 25, perPage: 2 }).sheets[0]
+    expect(turned.axis.x).toBeCloseTo(0, 6)
+    expect(turned.axis.y).toBeCloseTo(-1, 6)
+  })
+})
+
+// ── The grid shape the reader checks against ─────────────────────────────────
+//
+// The reader used to re-derive this by counting distinct page x and y, which is
+// only the sheet's own columns and rows when the sheet is unrotated. Stating it
+// here means there is one answer, and the reader cannot disagree with the sheet
+// it is reading.
+describe('buildSheetLayout — registration grid shape', () => {
+  it('states its own grid, in the SHEET’s columns and rows', () => {
+    for (const [perPage, want] of [[1, { cols: 2, rows: 11 }], [2, { cols: 3, rows: 7 }]]) {
+      const L = buildSheetLayout({ questionCount: 25, perPage })
+      expect({
+        cols: L.geometry.registrationColumns,
+        rows: L.geometry.registrationRows,
+      }).toEqual(want)
+      // and it agrees with the squares actually drawn
+      expect(L.sheets[0].registration).toHaveLength(want.cols * want.rows)
+    }
+  })
+
+  it('counts rows along the sheet, not along the page', () => {
+    // A two-up sheet is rotated, so its rows are distinct page X values and its
+    // columns are distinct page Y ones — the opposite of the flat case.
+    const s = buildSheetLayout({ questionCount: 25, perPage: 2 }).sheets[0]
+    const xs = new Set(s.registration.map(r => r.x)).size
+    const ys = new Set(s.registration.map(r => r.y)).size
+    expect({ xs, ys }).toEqual({ xs: 7, ys: 3 })
+  })
+})

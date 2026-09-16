@@ -129,6 +129,11 @@ function makeTransform({ rotated, slotX, slotY, localW }) {
   if (!rotated) {
     return {
       rotated: false, angle: 0,
+      // One millimetre of the sheet's own +x, in page millimetres. The renderer
+      // needs it to lay right-aligned text BACK along the baseline, and keeping
+      // it here is what stops sheetPdf.js having to know that a turned sheet's
+      // reading-right is the page's -y.
+      axis: { x: 1, y: 0 },
       pt: (x, y) => ({ x: round(slotX + x), y: round(slotY + y) }),
       rect: (x, y, w, h) => ({
         x: round(slotX + x), y: round(slotY + y), width: round(w), height: round(h),
@@ -138,6 +143,7 @@ function makeTransform({ rotated, slotX, slotY, localW }) {
   // 90° anticlockwise: local (x, y) -> page (slotX + y, slotY + localW - x)
   return {
     rotated: true, angle: 90,
+    axis: { x: 0, y: -1 },
     pt: (x, y) => ({ x: round(slotX + y), y: round(slotY + localW - x) }),
     rect: (x, y, w, h) => ({
       x: round(slotX + y), y: round(slotY + localW - x - w),
@@ -403,6 +409,11 @@ function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDig
     index,
     rotated,
     textAngle: T.angle,
+    axis: T.axis,
+    // The grid in the SHEET's own columns and rows. Stated rather than left to
+    // be counted, because counting distinct page x/y only gives this for an
+    // unrotated sheet — a turned two-up sheet's rows ARE its distinct page x.
+    grid: { cols: regX.length, rows: regY.length },
     width: round(localW),
     height: round(localH),
     header: {
@@ -413,7 +424,14 @@ function buildSheet({ page, perPage, index, questionCount, optionLabels, rollDig
         ...T.rect(MARGIN, MARGIN + i * rowH, headerW, rowH),
         labelAnchor: T.pt(MARGIN + 2.5, MARGIN + i * rowH + rowH / 2 + 1),
       })),
-      stampAnchor: T.pt(MARGIN + headerW - 2, MARGIN - 1.2),
+      // The stamp is RIGHT-aligned, so what the layout can place is where it
+      // ENDS — the renderer measures the string and walks it back along `axis`.
+      // Anchoring the start here instead put 34.7mm of text 10mm from the edge:
+      // all but `OMR v1 ·` ran off the paper, and on a two-up page the bottom
+      // half's tail printed across the cut onto the top half, which is how a cut
+      // sheet ended up carrying the other paper's identity.
+      stampEnd: T.pt(MARGIN + headerW - 2, MARGIN - 1.2),
+      stampMaxWidth: round(headerW - 2),
     },
     roll,
     questions,
@@ -476,6 +494,7 @@ export function buildSheetLayout({
       registrationSize: g.regSize,
       columns,
       registrationColumns: columns + 1,
+      registrationRows: sheets[0].grid.rows,
       fonts: g.fonts,
     },
     cutLine: perPage === 2 ? round(page.height / 2) : null,
