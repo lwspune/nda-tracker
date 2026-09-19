@@ -229,9 +229,14 @@ export async function parseOfflineResults(file) {
 // already knows who is in the batch, and pre-filled canonical names avoid the
 // spelling variants hand-typed rosters introduce. Falls back to the header + one
 // example row when no roster is available (no batch selected yet).
+//
+// The example row's Marks cell is BLANK, never 0 — a 0 is a valid mark, so an
+// untouched example row parsed as a real student scoring zero and reached three
+// live exams before this was caught. Blank is what the parser reads as "did not
+// appear", and it is what the roster branch below already emits.
 export function buildOfflineTemplateRows(rosterNames) {
   const header = ['Name', 'Marks']
-  if (!rosterNames?.length) return [header, ['Student Full Name', 0]]
+  if (!rosterNames?.length) return [header, ['Student Full Name', '']]
   return [header, ...rosterNames.map(n => [n, ''])]
 }
 

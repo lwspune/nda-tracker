@@ -95,3 +95,22 @@ describe('buildOfflineTemplateRows', () => {
     expect(students.map(s => s.totalMarks)).toEqual([72, 55])
   })
 })
+
+// Regression (2026-09-19): the no-roster fallback shipped ['Student Full Name', 0].
+// A 0 is a valid mark, so an example row left in the sheet parsed as a real
+// student scoring zero — it reached three live exams, inflating the student
+// count and dragging the class mean. Blank means "did not appear" everywhere
+// else in this flow, which is what the roster branch already emits.
+describe('buildOfflineTemplateRows — the example row must not parse as a student', () => {
+  it('leaves the example row Marks blank, not 0', () => {
+    const rows = buildOfflineTemplateRows()
+    expect(rows[1][1]).toBe('')
+  })
+
+  it('drops an untouched example row on upload instead of filing a 0', async () => {
+    const rows = buildOfflineTemplateRows()
+    rows.push(['Alice', 72])
+    const { students } = await parseOfflineResults(fileFromAoa(rows))
+    expect(students.map(s => s.name)).toEqual(['Alice'])
+  })
+})
