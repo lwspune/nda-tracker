@@ -304,6 +304,45 @@ describe('AttendanceRings', () => {
     expect(screen.queryByText(/my attendance/i)).not.toBeInTheDocument()
   })
 
+  // ── Latest two months by default ───────────────────────────────
+
+  const THREE_MONTHS = [
+    { date: '2026-03-02', status: 'L' },
+    { date: '2026-04-01', status: 'P' },
+    { date: '2026-05-01', status: 'P' },
+  ]
+  const monthLabels = () => screen.getAllByTestId('ring-month-label').map(el => el.textContent)
+
+  it('shows only the two latest months until asked for the rest', () => {
+    render(<AttendanceRings attendance={THREE_MONTHS} />)
+    expect(monthLabels()).toEqual(['May 26', 'Apr 26'])
+    const more = screen.getByRole('button', { name: /show all 3 months/i })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(more)
+    expect(monthLabels()).toEqual(['May 26', 'Apr 26', 'Mar 26'])
+    const fewer = screen.getByRole('button', { name: /show fewer/i })
+    expect(fewer).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(fewer)
+    expect(monthLabels()).toEqual(['May 26', 'Apr 26'])
+  })
+
+  it('offers no toggle when there are two months or fewer', () => {
+    render(<AttendanceRings attendance={ATTENDANCE} />)
+    expect(screen.queryByRole('button', { name: /show all|show fewer/i })).not.toBeInTheDocument()
+  })
+
+  it('hiding a month also closes its open list', () => {
+    render(<AttendanceRings attendance={THREE_MONTHS} />)
+    fireEvent.click(screen.getByRole('button', { name: /show all 3 months/i }))
+    fireEvent.click(screen.getByRole('button', { name: /days late: 1/i }))
+    expect(screen.getByTestId('late-dates-list-2026-03')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /show fewer/i }))
+    expect(screen.queryByTestId('late-dates-list-2026-03')).not.toBeInTheDocument()
+  })
+
   // ── Single-open expansion (B1) ─────────────────────────────────
 
   it('opening Missed Lectures auto-collapses Days Late in the same month', () => {

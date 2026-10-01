@@ -9,6 +9,9 @@ const CX = SIZE / 2
 const CY = SIZE / 2
 const STROKE = 9
 
+// Months shown before "Show all": the current one and the one before it.
+const DEFAULT_MONTHS = 2
+
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 function fmtDayMonth(iso) {
@@ -199,6 +202,7 @@ export default function AttendanceRings({
   // other chip replaces it. The list renders once, below the grid, at full
   // width — inside a phone-sized ring column it had ~75px to wrap into.
   const [expanded, setExpanded] = useState(null) // { month, kind } | null
+  const [showAll, setShowAll] = useState(false)
 
   if (!stats.length) {
     return (
@@ -210,13 +214,21 @@ export default function AttendanceRings({
     )
   }
 
-  const openStat = expanded && stats.find(s => s.month === expanded.month)
+  const visible  = showAll ? stats : stats.slice(0, DEFAULT_MONTHS)
+  const hasMore  = stats.length > DEFAULT_MONTHS
+  const openStat = expanded && visible.find(s => s.month === expanded.month)
+
+  function toggleShowAll() {
+    // Hiding a month closes its list too, so it can't reopen out of sight later.
+    if (showAll) setExpanded(prev => (prev && stats.slice(0, DEFAULT_MONTHS).some(s => s.month === prev.month) ? prev : null))
+    setShowAll(v => !v)
+  }
   const openKind = openStat && KINDS.find(k => k.kind === expanded.kind)
 
   return (
     <div className="pt-1">
       <div className="grid grid-cols-4 gap-x-2 gap-y-4 md:flex md:flex-wrap md:gap-8">
-        {stats.map(s => (
+        {visible.map(s => (
           <Ring
             key={s.month}
             stat={s}
@@ -238,6 +250,19 @@ export default function AttendanceRings({
           <div className="text-[11px] font-bold mb-1">{openKind.full} · {openStat.label}</div>
           <div className="text-[12px] font-mono leading-relaxed">{openKind.items(openStat).join(' · ')}</div>
         </div>
+      )}
+
+      {hasMore && (
+        <button
+          type="button"
+          onClick={toggleShowAll}
+          aria-expanded={showAll}
+          className="mt-2 min-h-[44px] px-2 text-[12px] font-semibold text-accent hover:underline rounded
+                     focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          {showAll ? 'Show fewer' : `Show all ${stats.length} months`}{' '}
+          <span aria-hidden="true">{showAll ? '▴' : '▾'}</span>
+        </button>
       )}
     </div>
   )
