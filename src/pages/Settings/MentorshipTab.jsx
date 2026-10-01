@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import useStore from '../../store/useStore'
+import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
 
 // Calls the admin POST path of /api/send-mentor-nudges with the current session.
 async function callNudges(body) {
@@ -24,6 +25,10 @@ export default function MentorshipTab() {
   const [busy, setBusy] = useState(false)
   const [testMobile, setTestMobile] = useState('')
   const [result, setResult] = useState(null) // { kind, data }
+  // Settings → WhatsApp. Preview and test send stay enabled while it is off:
+  // neither messages a mentor nor advances the rotation, and the server lets
+  // both through (api/_flowGate.js). Only the cron's real send is stopped.
+  const nudgeOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'mentorNudge'))
 
   async function run(body, kind) {
     setBusy(true)
@@ -51,6 +56,12 @@ export default function MentorshipTab() {
           covered before anyone repeats. This runs automatically (Mon–Fri). Use the tools below to preview
           today's picks or send yourself a test — neither advances the live rotation.
         </p>
+
+        {nudgeOff && (
+          <p className="text-[12px] text-red-700 font-semibold mb-3">
+            {flowOffMessage('mentorNudge')}. The daily run will skip until it is switched back on.
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <button

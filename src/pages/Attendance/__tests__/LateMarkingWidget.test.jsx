@@ -29,6 +29,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockStore.studentProfiles = PROFILES
   mockStore.lateSendHistory = {}
+  mockStore.whatsappFlows = {}
   mockStore.markLate.mockResolvedValue(true)
   mockStore.unmarkLate.mockResolvedValue(true)
   mockStore.getLateStudentsForDate.mockResolvedValue([])
@@ -168,5 +169,42 @@ describe('LateMarkingWidget — pending-aware send states', () => {
     render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
     await screen.findByText('Arjun Sharma')
     expect(screen.getByRole('button', { name: /all notified · resend all/i })).toBeInTheDocument()
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('LateMarkingWidget — WhatsApp switch', () => {
+  it('disables the send button and says why when the late flow is switched off', async () => {
+    mockStore.whatsappFlows = { late: { enabled: false } }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    const onSend = vi.fn()
+    render(<LateMarkingWidget date="2026-05-21" onSend={onSend} />)
+    await screen.findByText('Arjun Sharma')
+    const btn = screen.getByRole('button', { name: /send morning late notifications/i })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', expect.stringMatching(/switched off in Settings/))
+    expect(screen.getByText(/late to first lecture is switched off in settings/i)).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('disables the "Notify N pending" button too', async () => {
+    mockStore.whatsappFlows = { late: { enabled: false } }
+    mockStore.lateSendHistory = {
+      '2026-05-21': { sentAt: Date.now(), sent: 0, skipped: 1, failedNames: [], notifiedLwsIds: [] },
+    }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Arjun Sharma')
+    expect(screen.getByRole('button', { name: /notify 1 pending/i })).toBeDisabled()
+  })
+
+  it('is not disabled by a different flow being off', async () => {
+    mockStore.whatsappFlows = { homework: { enabled: false } }
+    mockStore.getLateStudentsForDate.mockResolvedValue(['LWS-001'])
+    render(<LateMarkingWidget date="2026-05-21" onSend={vi.fn()} />)
+    await screen.findByText('Arjun Sharma')
+    expect(screen.getByRole('button', { name: /send morning late notifications/i })).not.toBeDisabled()
+    expect(screen.queryByText(/switched off in settings/i)).toBeNull()
   })
 })

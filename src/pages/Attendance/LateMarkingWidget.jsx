@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
+import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
+import FlowOffNote from '../../components/ui/FlowOffNote'
 
 // Top-of-Attendance widget. Faculty marks "late to first lecture" students in the
 // morning. Each add/remove writes/deletes a status='L' row in student_attendance.
@@ -10,6 +12,10 @@ export default function LateMarkingWidget({ date, onSend }) {
   const unmarkLate = useStore(s => s.unmarkLate)
   const getLateStudentsForDate = useStore(s => s.getLateStudentsForDate)
   const history = useStore(s => s.lateSendHistory?.[date] ?? null)
+  // Settings → WhatsApp. The server refuses too (api/_flowGate.js); this only
+  // stops faculty building a send that would be refused.
+  const flowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'late'))
+  const offTitle = flowOff ? flowOffMessage('late') : undefined
 
   const [lateIds, setLateIds] = useState([])
   const [query, setQuery] = useState('')
@@ -89,7 +95,8 @@ export default function LateMarkingWidget({ date, onSend }) {
               <button
                 type="button"
                 onClick={() => onSend?.(lateIds)}
-                disabled={lateIds.length === 0 || loading}
+                disabled={lateIds.length === 0 || loading || flowOff}
+                title={offTitle}
                 className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Send Morning Late Notifications"
               >
@@ -105,7 +112,8 @@ export default function LateMarkingWidget({ date, onSend }) {
               <button
                 type="button"
                 onClick={() => onSend?.(lateIds)}
-                disabled={loading}
+                disabled={loading || flowOff}
+                title={offTitle}
                 className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label={`Notify ${pendingIds.length} pending`}
               >
@@ -118,7 +126,8 @@ export default function LateMarkingWidget({ date, onSend }) {
             <button
               type="button"
               onClick={() => onSend?.(lateIds)}
-              disabled={lateIds.length === 0 || loading}
+              disabled={lateIds.length === 0 || loading || flowOff}
+              title={offTitle}
               className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="All notified · Resend all"
             >
@@ -127,6 +136,7 @@ export default function LateMarkingWidget({ date, onSend }) {
           )
         })()}
       </div>
+      {flowOff && <FlowOffNote flow="late" className="block -mt-1 mb-3" />}
 
       {/* Search box */}
       <div className="relative mb-3">

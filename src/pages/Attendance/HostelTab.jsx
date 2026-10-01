@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import useStore from '../../store/useStore'
+import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
+import FlowOffNote from '../../components/ui/FlowOffNote'
 import { supabase } from '../../lib/supabase'
 import { EmptyState, Spinner, Alert, CopyLinkBar } from '../../components/ui'
 import { buildCaptureUrl, HOSTEL_ATTENDANCE_PATH } from '../../lib/routing'
@@ -60,6 +62,8 @@ export default function HostelTab() {
   const addLeave = useStore(s => s.addLeave)
   const hostelAlertMobiles = useStore(s => s.hostelAlertMobiles)
   const setHostelAlertMobiles = useStore(s => s.setHostelAlertMobiles)
+  // Settings → WhatsApp. The server refuses too (api/_flowGate.js).
+  const alertFlowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'hostelAlert'))
 
   const [view, setView] = useState('mark')          // 'mark' | 'chain' | 'leave'
   const [date, setDate] = useState(todayDmy)
@@ -662,7 +666,8 @@ export default function HostelTab() {
             <button
               type="button"
               onClick={sendWardenAlert}
-              disabled={alerting || anomalies.length === 0 || hostelAlertMobiles.length === 0}
+              disabled={alerting || anomalies.length === 0 || hostelAlertMobiles.length === 0 || alertFlowOff}
+              title={alertFlowOff ? flowOffMessage('hostelAlert') : undefined}
               className="btn btn-primary min-h-[44px] px-5"
             >
               {alerting ? <Spinner size="sm" /> : `📣 Alert warden${anomalies.length ? ` (${anomalies.length})` : ''}`}
@@ -674,6 +679,7 @@ export default function HostelTab() {
             >
               Warden numbers ({hostelAlertMobiles.length})
             </button>
+            {alertFlowOff && <FlowOffNote flow="hostelAlert" />}
             {anomalies.length > 0 && hostelAlertMobiles.length === 0 && (
               <span className="text-[12px] text-yellow-400">Add a warden number to enable alerts</span>
             )}

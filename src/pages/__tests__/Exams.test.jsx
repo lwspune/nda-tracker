@@ -11,6 +11,7 @@ const mockStore = {
   studentProfiles: {},
   whatsappSendHistory: {},
   examAbsenceSendHistory: {},
+  whatsappFlows: {},
   deleteExam: vi.fn(),
   openUploadModal: vi.fn(),
   bulkUpdateStudentContacts: vi.fn(),
@@ -116,6 +117,7 @@ function getSubjectSelect() {
 beforeEach(() => {
   _id = 0
   mockStore.exams = []
+  mockStore.whatsappFlows = {}
   vi.clearAllMocks()
   useMode.mockReturnValue('admin')
 })
@@ -729,5 +731,41 @@ describe('Exams page — scanning answer sheets', () => {
     setExams([makeExam()])
     renderExams()
     expect(screen.queryByRole('button', { name: /scan sheets/i })).not.toBeInTheDocument()
+  })
+})
+
+// ── Per-flow WhatsApp switch (Settings → WhatsApp) ────────────────────────────
+// Disabled, never hidden: a hidden button reads as a removed feature.
+describe('Exams page — WhatsApp switch', () => {
+  const resultsBtn = () => screen.getByRole('button', { name: /whatsapp results/i })
+  const absentBtn  = () => screen.getByRole('button', { name: /send absent alert/i })
+
+  it('both send buttons are enabled while their flows are on', () => {
+    setExams([makeExam()])
+    renderExams()
+    expect(resultsBtn()).toBeEnabled()
+    expect(absentBtn()).toBeEnabled()
+  })
+
+  it('disables WhatsApp Results, with the reason, when exam results is switched off', async () => {
+    mockStore.whatsappFlows = { examResults: { enabled: false } }
+    setExams([makeExam()])
+    renderExams()
+    const btn = resultsBtn()
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', expect.stringMatching(/exam results is switched off in Settings/i))
+    expect(within(btn).getByText(/off/i)).toBeInTheDocument()
+    await userEvent.click(btn)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(absentBtn()).toBeEnabled()
+  })
+
+  it('disables Send Absent Alert, with the reason, when exam absence is switched off', () => {
+    mockStore.whatsappFlows = { examAbsence: { enabled: false } }
+    setExams([makeExam()])
+    renderExams()
+    expect(absentBtn()).toBeDisabled()
+    expect(absentBtn()).toHaveAttribute('title', expect.stringMatching(/exam absence is switched off in Settings/i))
+    expect(resultsBtn()).toBeEnabled()
   })
 })

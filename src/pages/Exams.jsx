@@ -21,6 +21,7 @@ import { downloadStudentReportsPdf } from '../lib/studentReportPdf'
 import ExportMenu from './Exams/ExportMenu'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../lib/chunkError'
 import { parseFailedNames } from '../lib/sendLog'
+import { isFlowEnabled, flowOffMessage } from '../lib/whatsappFlows'
 
 export default function ExamsPage() {
   const exams = useStore(s => s.exams)
@@ -45,6 +46,10 @@ export default function ExamsPage() {
     return email => byEmail.get(String(email ?? '').trim().toLowerCase()) || email
   }, [timetableTeachers])
   const examAbsenceSendHistory     = useStore(s => s.examAbsenceSendHistory)
+  // Settings → WhatsApp. Disabled, never hidden; the server refuses too
+  // (api/_flowGate.js).
+  const resultsFlowOff             = useStore(s => !isFlowEnabled(s.whatsappFlows, 'examResults'))
+  const absenceFlowOff             = useStore(s => !isFlowEnabled(s.whatsappFlows, 'examAbsence'))
   const setExamAbsenceSendHistory  = useStore(s => s.setExamAbsenceSendHistory)
   const markExamAbsencesNotified   = useStore(s => s.markExamAbsencesNotified)
   const mode = useMode()
@@ -507,13 +512,17 @@ export default function ExamsPage() {
                           return (
                             <button
                               onClick={() => setWhatsappPreviewExam(exam)}
+                              disabled={resultsFlowOff}
                               className="btn btn-sm btn-secondary text-[11px] min-h-[44px]
-                                         hover:bg-green-50 hover:text-green-700 hover:border-green-300"
-                              title={history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp results to students and parents'}
+                                         hover:bg-green-50 hover:text-green-700 hover:border-green-300
+                                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface disabled:hover:text-ink-2"
+                              title={resultsFlowOff ? flowOffMessage('examResults')
+                                : history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp results to students and parents'}
                             >
                               {history
                                 ? `💬 Sent ${history.sent}✓ ${history.skipped}✗ · Resend`
                                 : '💬 WhatsApp Results'}
+                              {resultsFlowOff && <span> · off</span>}
                             </button>
                           )
                         })()}
@@ -522,13 +531,17 @@ export default function ExamsPage() {
                           return (
                             <button
                               onClick={() => setExamAbsencePreviewExam(exam)}
+                              disabled={absenceFlowOff}
                               className="btn btn-sm btn-secondary text-[11px] min-h-[44px]
-                                         hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-                              title={history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp absence alert to parents'}
+                                         hover:bg-red-50 hover:text-red-700 hover:border-red-300
+                                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface disabled:hover:text-ink-2"
+                              title={absenceFlowOff ? flowOffMessage('examAbsence')
+                                : history ? `Last sent: ${new Date(history.sentAt).toLocaleString()}` : 'WhatsApp absence alert to parents'}
                             >
                               {history
                                 ? `📵 Sent ${history.sent}✓ ${history.skipped}✗ · Resend`
                                 : '📵 Send Absent Alert'}
+                              {absenceFlowOff && <span> · off</span>}
                             </button>
                           )
                         })()}

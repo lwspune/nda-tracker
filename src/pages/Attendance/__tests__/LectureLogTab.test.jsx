@@ -60,6 +60,7 @@ const PROFILES = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockStore.whatsappFlows = {}
   mockStore.studentProfiles = PROFILES
   mockStore.timetables = [TIMETABLE]
   mockStore.timetableMappings = MAPPINGS
@@ -479,5 +480,24 @@ describe('LectureLogTab — pooled roster + leave-awareness', () => {
     // THURSDAY = 2026-05-21 → leave closes end of 2026-05-20 (IST), i.e. the
     // day before, so the student is expected present on THURSDAY itself.
     await waitFor(() => expect(mockStore.endLeave).toHaveBeenCalledWith('lv1', expect.stringContaining('2026-05-20')))
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('LectureLogTab — WhatsApp switch', () => {
+  it('disables the send button and says why when the lecture-miss flow is off', async () => {
+    mockStore.whatsappFlows = { lectureMiss: { enabled: false } }
+    mockStore.getLectureAbsencesForDate.mockResolvedValue([
+      { lws_id: 'LWS-001', date: THURSDAY, slot_id: 's1', subject: 'Maths' },
+    ])
+    const onSend = vi.fn()
+    render(<LectureLogTab initialDate={THURSDAY} initialBatch="LWS_NDA_2Y_(25-27)_A" onSend={onSend} />)
+    await screen.findByText(/1 absent/i)
+    const btn = screen.getByRole('button', { name: /send lecture-miss notifications/i })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', expect.stringMatching(/switched off in Settings/))
+    expect(screen.getByText(/lecture missed is switched off in settings/i)).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onSend).not.toHaveBeenCalled()
   })
 })
