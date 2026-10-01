@@ -79,7 +79,7 @@ function FlowSwitch({ label, enabled, onToggle }) {
       aria-checked={enabled}
       aria-label={`${label} WhatsApp messages`}
       onClick={onToggle}
-      className="inline-flex items-center gap-2 min-h-[44px] min-w-[44px] px-1 rounded-lg
+      className="inline-flex shrink-0 items-center gap-2 min-h-[44px] min-w-[44px] px-1 rounded-lg
                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
     >
       <span className={`text-[12px] font-semibold ${enabled ? 'text-accent' : 'text-ink-2'}`}>
@@ -101,7 +101,10 @@ function Detail({ term, children }) {
   return (
     <div className="flex flex-col sm:flex-row sm:gap-3">
       <dt className="text-[11px] font-bold text-ink-2 uppercase tracking-wide sm:w-40 sm:flex-shrink-0 sm:pt-0.5">{term}</dt>
-      <dd className="text-[13px] text-ink min-w-0 break-words">{children}</dd>
+      {/* overflow-wrap:anywhere, not break-words: env var names have no break
+          points, and break-words does not lower a flex item's min-content, so
+          the card overflowed a 390px phone. */}
+      <dd className="text-[13px] text-ink min-w-0 [overflow-wrap:anywhere]">{children}</dd>
     </div>
   )
 }
