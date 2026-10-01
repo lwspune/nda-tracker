@@ -66,15 +66,18 @@ function Ring({
   homeworkCount, homeworkItems,
   expandedKind, onToggle,
 }) {
-  const filled = (pct / 100) * C
-  const color  = pct < 75 ? '#f87171' : pct < 85 ? '#facc15' : '#4ade80'
+  // pct === null: no register was taken that month (only incidents), so there
+  // is no percentage to show. Rendering 0% read as "missed the whole month".
+  const noRegister = pct === null
+  const filled = noRegister ? 0 : (pct / 100) * C
+  const color  = noRegister ? '#9ca3af' : pct < 75 ? '#f87171' : pct < 85 ? '#facc15' : '#4ade80'
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div data-testid={`ring-${month}`} className="flex flex-col items-center gap-2">
       <div className="relative" style={{ width: SIZE, height: SIZE }}>
         <svg width={SIZE} height={SIZE} className="-rotate-90">
           <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={STROKE} />
-          <circle
+          {!noRegister && <circle
             cx={CX} cy={CY} r={R}
             fill="none"
             stroke={color}
@@ -82,14 +85,21 @@ function Ring({
             strokeLinecap="round"
             strokeDasharray={`${filled} ${C}`}
             style={{ transition: 'stroke-dasharray 0.6s ease' }}
-          />
+          />}
         </svg>
-        <div
-          className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold"
-          style={{ color }}
-        >
-          {pct}%
-        </div>
+        {noRegister ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-ink-3 leading-tight">
+            <span aria-hidden="true" className="text-[14px] font-extrabold">—</span>
+            <span className="text-[10px] font-mono">no register</span>
+          </div>
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold"
+            style={{ color }}
+          >
+            {pct}%
+          </div>
+        )}
       </div>
       <span data-testid="ring-month-label" className="text-[11px] font-mono text-ink-3 tracking-wide">
         {label}
@@ -203,7 +213,7 @@ function buildMonthStats(attendance, lectureAbsences, examMissesEnriched, homewo
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([month, b]) => {
       const total = b.p + b.a
-      const pct   = total > 0 ? Math.round((b.p / total) * 100) : 0
+      const pct   = total > 0 ? Math.round((b.p / total) * 100) : null
       const [year, mo] = month.split('-')
       const label = new Date(+year, +mo - 1, 1).toLocaleString('en-US', { month: 'short', year: '2-digit' })
       const lateDates     = [...b.lateDates].sort((x, y) => y.localeCompare(x))

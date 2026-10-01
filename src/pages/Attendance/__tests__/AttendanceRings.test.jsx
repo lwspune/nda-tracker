@@ -117,12 +117,33 @@ describe('AttendanceRings', () => {
     expect(screen.getByTestId('late-dates-list-2026-04')).toBeInTheDocument()
   })
 
-  it('a month with only L rows still renders a ring (denominator P+A = 0 → 0%)', () => {
+  it('a month with only L rows still renders a ring', () => {
     // Ensures L months are not filtered out of the rings list entirely
     const data = [{ date: '2026-05-05', status: 'L' }]
     render(<AttendanceRings attendance={data} />)
     expect(screen.getByText(/May/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /days late: 1/i })).toBeInTheDocument()
+  })
+
+  // ── Months with no register ────────────────────────────────────
+
+  it('a month with no P/A days reads "no register", never 0%', () => {
+    // Only an exam absence: no register was taken, so there is no percentage to show.
+    // Rendering 0% told students they had missed the whole month.
+    const attendance = [{ date: '2026-05-01', status: 'P' }]
+    const examAbsences = [{ exam_id: 'e1', exam_name: 'Mock #1', exam_date: '2025-09-14' }]
+    render(<AttendanceRings attendance={attendance} examAbsences={examAbsences} />)
+    const sep = screen.getByTestId('ring-2025-09')
+    expect(sep).toHaveTextContent(/no register/i)
+    expect(sep).not.toHaveTextContent('0%')
+    // the absence itself is real and stays visible
+    expect(screen.getByRole('button', { name: /missed exams: 1/i })).toBeInTheDocument()
+  })
+
+  it('a month where every register day was absent still reads 0%', () => {
+    render(<AttendanceRings attendance={[{ date: '2026-05-01', status: 'A' }, { date: '2026-05-02', status: 'A' }]} />)
+    expect(screen.getByTestId('ring-2026-05')).toHaveTextContent('0%')
+    expect(screen.queryByText(/no register/i)).not.toBeInTheDocument()
   })
 
   // ── Missed Lectures badge ──────────────────────────────────────
