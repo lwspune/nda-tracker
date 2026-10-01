@@ -49,6 +49,11 @@ export const DEFAULTS = {
   // Hostel & Mess tab. NOT the same channel as monitorMobiles (safety, not
   // pipeline observability).
   hostelAlertMobiles: [],
+  // Per-flow WhatsApp on/off switches, { [flowKey]: { enabled } }. Deliberately
+  // EMPTY: an absent entry means on (src/lib/whatsappFlows.js). Seeding seven
+  // `enabled: true` entries here would let a stale tab's whole-blob save write
+  // them back over a newer `false`. Edited in Settings → WhatsApp.
+  whatsappFlows: {},
 }
 
 // Merge saved data with defaults (handles missing keys from old versions)

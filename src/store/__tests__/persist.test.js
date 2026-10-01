@@ -313,6 +313,11 @@ describe('saveToStorage allow-list (dev path)', () => {
     expect(saved.examAbsenceSendHistory).toEqual(state.examAbsenceSendHistory)
   })
 
+  it('persists whatsappFlows (the per-flow WhatsApp switch would silently reset on reload)', () => {
+    const saved = captureSavedPayload({ whatsappFlows: { late: { enabled: false } } })
+    expect(saved.whatsappFlows).toEqual({ late: { enabled: false } })
+  })
+
   it('persists archivedBatches (a missed allow-list entry vanishes silently on reload)', () => {
     const saved = captureSavedPayload({
       syllabusBatches: ['LWS_NDA_6M_(Sep26)', 'LWS_NDA_2Y_(26-28)_A'],

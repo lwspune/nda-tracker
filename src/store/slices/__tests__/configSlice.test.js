@@ -611,3 +611,45 @@ describe('setBatchArchived', () => {
     expect(saves).toHaveLength(0)
   })
 })
+
+describe('setWhatsappFlowEnabled', () => {
+  it('switches one flow off and saves', () => {
+    const { slice, saves, state } = makeStore({ whatsappFlows: {} })
+    expect(slice.setWhatsappFlowEnabled('late', false)).toEqual({ ok: true })
+    expect(state().whatsappFlows).toEqual({ late: { enabled: false } })
+    expect(saves).toHaveLength(1)
+  })
+
+  it('switches it back on without disturbing the other flows', () => {
+    const { slice, state } = makeStore({
+      whatsappFlows: { late: { enabled: false }, homework: { enabled: false } },
+    })
+    slice.setWhatsappFlowEnabled('late', true)
+    expect(state().whatsappFlows).toEqual({ late: { enabled: true }, homework: { enabled: false } })
+  })
+
+  it('works when the key has never been written (legacy blob)', () => {
+    const { slice, state } = makeStore()
+    slice.setWhatsappFlowEnabled('mentorNudge', false)
+    expect(state().whatsappFlows).toEqual({ mentorNudge: { enabled: false } })
+  })
+
+  it('rejects an unknown flow without saving', () => {
+    const { slice, saves, state } = makeStore({ whatsappFlows: {} })
+    expect(slice.setWhatsappFlowEnabled('schedule', false)).toEqual({ ok: false, reason: 'unknown_flow' })
+    expect(state().whatsappFlows).toEqual({})
+    expect(saves).toHaveLength(0)
+  })
+
+  it('does not save when the flow is already in the requested state', () => {
+    const { slice, saves } = makeStore({ whatsappFlows: {} })
+    expect(slice.setWhatsappFlowEnabled('late', true)).toEqual({ ok: true })
+    expect(saves).toHaveLength(0)
+  })
+
+  it('coerces the flag to a real boolean', () => {
+    const { slice, state } = makeStore({ whatsappFlows: {} })
+    slice.setWhatsappFlowEnabled('late', 0)
+    expect(state().whatsappFlows.late.enabled).toBe(false)
+  })
+})

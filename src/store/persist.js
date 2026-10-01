@@ -248,7 +248,7 @@ export function saveToStorage(state) {
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
     whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
-    monitorMobiles, hostelAlertMobiles,
+    monitorMobiles, hostelAlertMobiles, whatsappFlows,
   } = state
   const data = {
     exams, quizzes, studentProfiles, savedInsights, ndaFreqBySubject, ndaMarksBySubject, lastDeployedAt,
@@ -256,7 +256,7 @@ export function saveToStorage(state) {
     batchChapterTimelines,
     timetableTeachers, timetableMappings, timetables, examSchedules,
     whatsappSendHistory, lateSendHistory, lectureMissSendHistory, examAbsenceSendHistory, homeworkSendHistory, branches,
-    monitorMobiles, hostelAlertMobiles,
+    monitorMobiles, hostelAlertMobiles, whatsappFlows,
   }
 
   if (IS_DEV) {
