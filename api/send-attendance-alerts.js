@@ -5,6 +5,7 @@ import { isTeacherUser } from './_authRole.js'
 import { bearerFrom, getUserOrNull } from './_auth.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
+import { refuseIfFlowOff } from './_flowGate.js'
 
 // Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
 // deployment at 12). Dispatched by `kind` in the POST body:
@@ -98,6 +99,13 @@ async function handleLectureAbsences(req, res) {
   const startIso = `${date}T00:00:00+05:30`
   const endIso = `${date}T23:59:59+05:30`
   const authed = createClient(supabaseUrl, supabaseAnon, { global: { headers: { Authorization: `Bearer ${jwt}` } } })
+  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+
+  // Per-flow switch (Settings → WhatsApp), checked before the leaves read so a
+  // switched-off flow fails fast. A redirected test send reaches no recipient
+  // and bypasses it — keyed on the PARSED redirect. See api/_flowGate.js.
+  if (!redirectNorm && await refuseIfFlowOff(authed, 'lectureMiss', res)) return
+
   const { data: leaveRows, error: lErr } = await authed
     .from('leaves').select('lws_id')
     .lte('from_ts', endIso)
@@ -106,7 +114,6 @@ async function handleLectureAbsences(req, res) {
   const onLeaveIds = new Set((leaveRows || []).map(r => r.lws_id))
 
   const dateLabel = fmtDate(date)
-  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
 
   const lines = []
   let sent = 0, skipped = 0, onLeaveSkipped = 0
@@ -190,8 +197,9 @@ async function handleHostelAlert(req, res) {
 
   // ── Auth: cron secret OR admin JWT (teachers rejected) ──
   const bearer = bearerFrom(req)
+  let isCron = false
   if (cronSecret && bearer === cronSecret) {
-    // cron
+    isCron = true
   } else {
     if (!bearer) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
     const anon = createClient(supabaseUrl, supabaseAnon)
@@ -211,6 +219,13 @@ async function handleHostelAlert(req, res) {
   const day = date || istTodayDmy()
   const { startIso, endIso, startMs, endMs } = dayBounds(day)
   const svc = createClient(supabaseUrl, serviceKey)
+  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+
+  // Per-flow switch (Settings → WhatsApp), checked before the chain's five
+  // reads so a switched-off alert fails fast. A dry run and a redirected test
+  // send reach no warden and bypass it. A cron trigger gets 200 skipped, not
+  // 409: an intended stop must not read as an outage. See api/_flowGate.js.
+  if (!dryRun && !redirectNorm && await refuseIfFlowOff(svc, 'hostelAlert', res, { cron: isCron })) return
 
   // ── Load roster + the three exception sources + recipients ──
   const { data: roster, error: rErr } = await svc.from('students')
@@ -257,7 +272,6 @@ async function handleHostelAlert(req, res) {
     return
   }
 
-  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
   const destinations = redirectNorm ? [redirectNorm] : recipientsRaw.map(normMobile).filter(Boolean)
   if (destinations.length === 0) {
     res.status(200).json({ ok: true, date: day, count: alert.count, sent: 0, skipped: 0, message: 'No warden alert numbers configured — add one in the Hostel & Mess tab.', lines: [] })

@@ -39,12 +39,13 @@ function setEnv({ cronSecret } = {}) {
 
 // One mock client serving both the anon (auth.getUser) and service (from) roles.
 const insertSpy = vi.fn()
-function mockDb({ assignments = [], students = [], nudges = [], teachers = [], role = null } = {}) {
+function mockDb({ assignments = [], students = [], nudges = [], teachers = [], role = null, whatsappFlows, stateError = null } = {}) {
   const resultFor = t =>
     t === 'mentor_assignments' ? { data: assignments, error: null }
     : t === 'students' ? { data: students, error: null }
     : t === 'mentor_nudges' ? { data: nudges, error: null }
-    : t === 'faculty_state' ? { data: { data: { timetableTeachers: teachers } }, error: null }
+    : t === 'faculty_state'
+      ? (stateError ? { data: null, error: stateError } : { data: { data: { timetableTeachers: teachers, whatsappFlows } }, error: null })
     : { data: null, error: null }
   createClient.mockImplementation(() => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', app_metadata: role ? { role } : {} } } }) },
@@ -224,5 +225,73 @@ describe('send-mentor-nudges — rotation send', () => {
     expect(res.statusCode).toBe(200)
     expect(res.body.mode).toBe('cron')
     expect(res.body.sent).toBe(1)
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+// The one flow on a live cron, so the one where the server gate is the ONLY
+// thing that can stop a send: no browser is in the path.
+describe('send-mentor-nudges — flow switch', () => {
+  const DB = {
+    assignments: [A('LWS-1', 't1'), A('LWS-2', 't1')],
+    students: [S('LWS-1', 'Aaa'), S('LWS-2', 'Bbb')],
+    teachers: [{ id: 't1', name: 'Vilas Sir', mobile: '9021869427' }],
+  }
+  const OFF = { mentorNudge: { enabled: false } }
+
+  it('cron: switched off → 200 skipped, nothing sent, rotation NOT advanced', async () => {
+    setEnv({ cronSecret: 'cron-secret' }); mockWabridge(true)
+    mockDb({ ...DB, whatsappFlows: OFF })
+    const { res } = await call(undefined, { method: 'GET', jwt: 'cron-secret' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ ok: true, skipped: 'disabled', flow: 'mentorNudge', sent: 0 })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(insertSpy).not.toHaveBeenCalled()
+  })
+
+  it('cron: never switched (absent = on) still sends and advances the rotation', async () => {
+    setEnv({ cronSecret: 'cron-secret' }); mockWabridge(true)
+    mockDb(DB)
+    const { res } = await call(undefined, { method: 'GET', jwt: 'cron-secret' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.sent).toBe(1)
+    expect(insertSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('admin manual send: switched off → 409 disabled, nothing sent', async () => {
+    setEnv(); mockWabridge(true)
+    mockDb({ ...DB, whatsappFlows: OFF })
+    const { res } = await call({ force: true })
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toMatchObject({ ok: false, disabled: true, flow: 'mentorNudge' })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(insertSpy).not.toHaveBeenCalled()
+  })
+
+  it('dry run still previews while switched off', async () => {
+    setEnv(); mockWabridge(true)
+    mockDb({ ...DB, whatsappFlows: OFF })
+    const { res } = await call({ dryRun: true, force: true })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.dryRun).toBe(true)
+    expect(res.body.planned).toHaveLength(1)
+  })
+
+  it('redirected test send still works while switched off', async () => {
+    setEnv(); mockWabridge(true)
+    mockDb({ ...DB, whatsappFlows: OFF })
+    const { res } = await call({ redirectTo: '7777777777', force: true })
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).destination_number).toBe('917777777777')
+    expect(insertSpy).not.toHaveBeenCalled()
+  })
+
+  it('cron: switch unreadable → 500, nothing sent', async () => {
+    setEnv({ cronSecret: 'cron-secret' }); mockWabridge(true)
+    mockDb({ ...DB, stateError: { message: 'boom' } })
+    const { res } = await call(undefined, { method: 'GET', jwt: 'cron-secret' })
+    expect(res.statusCode).toBe(500)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(insertSpy).not.toHaveBeenCalled()
   })
 })

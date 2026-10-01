@@ -1,12 +1,16 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
+import { newFlowState, facultyStateTable } from './_flowState.js'
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }))
 vi.mock('fs', () => ({ readFileSync: vi.fn(() => { throw new Error('no .env.local') }) }))
 
 const ORIGINAL_ENV = { ...process.env }
-beforeEach(() => { vi.clearAllMocks() })
+// The per-flow WhatsApp switch (api/_flowGate.js) reads faculty_state before
+// any send. Every client mock below serves it from here; on by default.
+let flowState = newFlowState()
+beforeEach(() => { vi.clearAllMocks(); flowState = newFlowState() })
 afterEach(() => { process.env = { ...ORIGINAL_ENV } })
 
 function makeRes() {
@@ -42,7 +46,7 @@ function setEnv() {
 function setAuthOk(leaveRows = []) {
   createClient.mockImplementation(() => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
-    from: () => ({
+    from: t => t === 'faculty_state' ? facultyStateTable(flowState) : ({
       select: () => ({
         lte: () => ({ or: () => Promise.resolve({ data: leaveRows, error: null }) }),
       }),
@@ -174,7 +178,8 @@ describe('send-lecture-absences', () => {
     setEnv(); mockWabridge(true)
     createClient.mockImplementation(() => ({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-uid' } } }) },
-      from: () => ({ select: () => ({ lte: () => ({ or: () => Promise.resolve({ data: null, error: { message: 'boom' } }) }) }) }),
+      from: t => t === 'faculty_state' ? facultyStateTable(flowState)
+        : ({ select: () => ({ lte: () => ({ or: () => Promise.resolve({ data: null, error: { message: 'boom' } }) }) }) }),
     }))
     const { res } = await call({
       date: '2026-07-10',
@@ -204,7 +209,7 @@ describe('send-lecture-absences', () => {
 function setAuthAs(user) {
   createClient.mockImplementation(() => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user } }) },
-    from: () => ({
+    from: t => t === 'faculty_state' ? facultyStateTable(flowState) : ({
       select: () => ({ lte: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }),
     }),
   }))
@@ -247,5 +252,62 @@ describe('send-attendance-alerts (lecture) — the auth door', () => {
     const { res } = await call(BODY)
     expect(res.statusCode).not.toBe(401)
     expect(res.statusCode).not.toBe(403)
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('send-attendance-alerts (lecture) — flow switch', () => {
+  const body = () => ({
+    date: '2026-10-01',
+    students: [{ lwsId: 'S1', name: 'Arjun', mobile: '9876543210', parentMobiles: [], subjects: ['Maths'] }],
+  })
+
+  it('sends normally when the flow has never been switched (absent = on)', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    const { res } = await call(body())
+    expect(res.statusCode).toBe(200)
+    expect(fetch).toHaveBeenCalled()
+  })
+
+  it('refuses with 409 disabled:true and sends nothing when switched off', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    flowState.flows = { lectureMiss: { enabled: false } }
+    const { res } = await call(body())
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toMatchObject({ ok: false, disabled: true, flow: 'lectureMiss', sent: 0 })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('lets a redirected test send through while switched off', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    flowState.flows = { lectureMiss: { enabled: false } }
+    const { res } = await call({ ...body(), redirectTo: '9000000001' })
+    expect(res.statusCode).toBe(200)
+    for (const [, init] of fetch.mock.calls) {
+      expect(JSON.parse(init.body).destination_number).toBe('919000000001')
+    }
+  })
+
+  it('does not treat an unparseable redirect as a test send', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    flowState.flows = { lectureMiss: { enabled: false } }
+    const { res } = await call({ ...body(), redirectTo: '12' })
+    expect(res.statusCode).toBe(409)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('refuses with 500 and sends nothing when the switch cannot be read', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    flowState.error = { message: 'boom' }
+    const { res } = await call(body())
+    expect(res.statusCode).toBe(500)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('is not switched off by the hostel alert sharing this endpoint', async () => {
+    setEnv(); setAuthOk(); mockWabridge(true)
+    flowState.flows = { hostelAlert: { enabled: false } }
+    const { res } = await call(body())
+    expect(res.statusCode).toBe(200)
   })
 })

@@ -5,6 +5,7 @@ import { isTeacherUser } from './_authRole.js'
 import { bearerFrom, getUserOrNull } from './_auth.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge } from './_wabridge.js'
+import { refuseIfFlowOff } from './_flowGate.js'
 
 
 // Wabridge/Meta drop messages whose variables contain unicode dashes, newlines,
@@ -71,6 +72,13 @@ export default async function handler(req, res) {
 
   const svc = createClient(supabaseUrl, serviceKey)
   const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+
+  // Per-flow switch (Settings → WhatsApp). This flow runs from a cron with no
+  // browser in the path, so this check is the only thing that can stop it. A
+  // dry run and a redirected test send neither message a mentor nor advance
+  // the rotation, so they bypass it. The cron gets 200 skipped, not 409: an
+  // intended stop must not read as an outage. See api/_flowGate.js.
+  if (!dryRun && !redirectNorm && await refuseIfFlowOff(svc, 'mentorNudge', res, { cron: mode === 'cron' })) return
 
   // ── Load assignments, student names/status, teacher mobiles, nudge history ──
   const { data: assignments, error: aErr } = await svc.from('mentor_assignments').select('lws_id, teacher_id')

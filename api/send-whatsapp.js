@@ -6,6 +6,7 @@ import { examScoreBasis, resultScore } from '../src/lib/whatsappResultScore.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
+import { refuseIfFlowOff } from './_flowGate.js'
 
 const TRACKER_BASE = 'https://nda-tracker.vercel.app/'
 
@@ -66,6 +67,14 @@ export default async function handler(req, res) {
   })
 
   const { examName, redirectTo, students, monitorMobiles } = req.body
+  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+
+  // Per-flow switch (Settings → WhatsApp), checked before the exam, its
+  // results and the roster are loaded. A redirected test send reaches no
+  // student or parent (and sends no monitoring copy), so it bypasses the
+  // switch — keyed on the PARSED redirect, since an unparseable one falls
+  // through to the real numbers. See api/_flowGate.js.
+  if (!redirectNorm && await refuseIfFlowOff(supabase, 'examResults', res)) return
 
   // ── Load exam from normalised exams table ──────────────────────────────────
 
@@ -159,7 +168,6 @@ export default async function handler(req, res) {
 
   const lines = []
   let sent = 0, skipped = 0, monitor = 0
-  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
   const examDate = fmtDate(exam.date || '')
 
   // Scoring is shared with WhatsAppPreviewModal so the preview shows exactly
