@@ -5,6 +5,7 @@ import BatchesTab from './BatchesTab'
 import TeachersTab from './TeachersTab'
 import NdaWeightageTab from './NdaWeightageTab'
 import MonitoringTab from './MonitoringTab'
+import WhatsAppTab from './WhatsAppTab'
 import MentorshipTab from './MentorshipTab'
 
 const TABS = [
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'teachers',  label: 'Teachers' },
   { id: 'weightage', label: 'NDA Weightage' },
   { id: 'monitoring', label: 'Monitoring' },
+  { id: 'whatsapp',  label: 'WhatsApp' },
   { id: 'mentorship', label: 'Mentorship' },
 ]
 
@@ -21,7 +23,7 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" sub="Manage branches, batches, and teachers" />
+      <PageHeader title="Settings" sub="Manage branches, batches, teachers, and WhatsApp messages" />
 
       <div className="flex gap-1 border-b border-border mb-6">
         {TABS.map(t => (
@@ -42,6 +44,7 @@ export default function SettingsPage() {
       {tab === 'teachers'  && <TeachersTab />}
       {tab === 'weightage' && <NdaWeightageTab />}
       {tab === 'monitoring' && <MonitoringTab />}
+      {tab === 'whatsapp'  && <WhatsAppTab onSwitchTab={setTab} />}
       {tab === 'mentorship' && <MentorshipTab />}
     </div>
   )
