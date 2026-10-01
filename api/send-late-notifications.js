@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { isTeacherUser } from './_authRole.js'
 import { bearerFrom, getUserOrNull } from './_auth.js'
 import { partitionBlocked } from './_blockGate.js'
+import { refuseIfFlowOff } from './_flowGate.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
@@ -54,6 +55,12 @@ export default async function handler(req, res) {
   const db = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   })
+
+  // Per-flow switch (Settings → WhatsApp). A redirected test send reaches no
+  // recipient, so it bypasses the switch — keyed on the PARSED redirect, since
+  // an unparseable one falls through to the real numbers. See api/_flowGate.js.
+  if (!redirectNorm && await refuseIfFlowOff(db, 'late', res)) return
+
   let recipients, blockedRows
   try {
     ({ allowed: recipients, blocked: blockedRows } = await partitionBlocked(db, students))

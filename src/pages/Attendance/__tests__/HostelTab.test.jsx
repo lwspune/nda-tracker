@@ -40,6 +40,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockStore.studentProfiles = PROFILES
   mockStore.hostelAlertMobiles = []
+  mockStore.whatsappFlows = {}
   mockStore.getCheckpointExceptionsForDate.mockResolvedValue([])
   mockStore.fetchDailyAttendance.mockResolvedValue({ date: null, rows: [] })
   mockStore.getConfirmationsForDate.mockResolvedValue([])
@@ -272,5 +273,28 @@ describe('HostelTab — date format per table', () => {
     // Same calendar day, expressed both ways.
     const [d, m, y] = checkpointArg.split('-')
     expect(attendanceArg).toBe(`${y}-${m}-${d}`)
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('HostelTab — WhatsApp switch', () => {
+  it('disables the warden alert and says why when the hostel flow is off', async () => {
+    mockStore.whatsappFlows = { hostelAlert: { enabled: false } }
+    mockStore.hostelAlertMobiles = ['9021869427']
+    mockStore.getCheckpointExceptionsForDate.mockResolvedValue([
+      { lws_id: 'APJ-1', checkpoint: 'dinner', status: 'absent' },
+    ])
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
+    const alertBtn = await screen.findByRole('button', { name: /Alert warden \(1\)/ })
+    expect(alertBtn).toBeDisabled()
+    expect(alertBtn).toHaveAttribute('title', expect.stringMatching(/switched off in Settings/))
+    expect(screen.getByText(/hostel warden alert is switched off in settings/i)).toBeInTheDocument()
+    fireEvent.click(alertBtn)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

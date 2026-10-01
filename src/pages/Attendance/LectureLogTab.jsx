@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
+import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
+import FlowOffNote from '../../components/ui/FlowOffNote'
 import { getTodaysLectures } from '../../lib/timetable'
 import { resolveOnLeave } from '../../lib/analytics/chain'
 import { buildAbsentRoster, buildSlotTimeIndex } from '../../lib/absentRoster'
@@ -41,6 +43,9 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
   // batches sent on the same day stay independent. Read here to render the
   // contextual send-button label; AttendancePage writes it after each send.
   const lectureMissSendHistory = useStore(s => s.lectureMissSendHistory)
+  // Settings → WhatsApp. The server refuses too (api/_flowGate.js).
+  const flowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'lectureMiss'))
+  const offTitle = flowOff ? flowOffMessage('lectureMiss') : undefined
 
   const [date, setDate]           = useState(initialDate ?? todayIso())
   const [batchName, setBatchName] = useState(initialBatch ?? '')
@@ -374,7 +379,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
         <div className="ml-auto">
           {(() => {
             const history = batchName ? lectureMissSendHistory?.[`${date}|${batchName}`] : null
-            const disabled = totalAbsences === 0
+            const disabled = totalAbsences === 0 || flowOff
             const notifiedSet = new Set(history?.notifiedLwsIds || [])
             const absentIds = Object.keys(absencesByLwsId)
             const pendingCount = absentIds.filter(id => !notifiedSet.has(id)).length
@@ -385,6 +390,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
                   type="button"
                   onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                   disabled={disabled}
+                  title={offTitle}
                   className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Send Lecture-Miss Notifications"
                 >
@@ -400,6 +406,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
                   type="button"
                   onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                   disabled={disabled}
+                  title={offTitle}
                   className="btn btn-primary text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label={`Notify ${pendingCount} pending`}
                 >
@@ -413,6 +420,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
                 type="button"
                 onClick={() => onSend?.(absencesByLwsId, date, batchName)}
                 disabled={disabled}
+                title={offTitle}
                 className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="All notified · Resend all"
               >
@@ -420,6 +428,7 @@ export default function LectureLogTab({ initialDate, initialBatch, onSend }) {
               </button>
             )
           })()}
+          {flowOff && <FlowOffNote flow="lectureMiss" className="block mt-1 text-right" />}
         </div>
       </div>
 

@@ -12,6 +12,7 @@
 
 import { supabase } from '../../lib/supabase'
 import { cascadeBatchRenameToSupabase } from './batchSupabase'
+import { isKnownFlow, isFlowEnabled } from '../../lib/whatsappFlows'
 
 export const createConfigSlice = (set, get) => ({
   branches: [],
@@ -37,6 +38,25 @@ export const createConfigSlice = (set, get) => ({
       .filter(n => n.length === 10)
     set({ hostelAlertMobiles: [...new Set(clean)] })
     get()._save()
+  },
+
+  // ── WhatsApp flow switches ──────────────────────────────────
+  // Writes ONE entry of `whatsappFlows`, leaving the others untouched. Only the
+  // explicit choice is stored: an entry is absent until faculty first flips it,
+  // and absent means on (see src/lib/whatsappFlows.js). The server re-reads the
+  // live row before every send (api/_flowGate.js), so this is the record, not
+  // the enforcement.
+  //
+  // Returns { ok: true } | { ok: false, reason: 'unknown_flow' }.
+  setWhatsappFlowEnabled(key, enabled) {
+    if (!isKnownFlow(key)) return { ok: false, reason: 'unknown_flow' }
+    const next = Boolean(enabled)
+    if (isFlowEnabled(get().whatsappFlows, key) === next) return { ok: true }
+    set(s => ({
+      whatsappFlows: { ...(s.whatsappFlows ?? {}), [key]: { enabled: next } },
+    }))
+    get()._save()
+    return { ok: true }
   },
 
   // ── Branch CRUD ─────────────────────────────────────────────

@@ -2,6 +2,8 @@
 
 > Extracted from [`CLAUDE.md`](./CLAUDE.md) on 2026-06-05 to keep that file lean. These are the end-to-end walkthroughs for the parent-/student-facing feature flows. The **invariants** for all of them live in [`GUARDRAILS.md`](./GUARDRAILS.md) (and the *why* trail in [`DECISIONS.md`](./DECISIONS.md)) — read those before changing any flow here. Column-level schema is in [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md).
 
+> **Every WhatsApp flow below can be switched off in Settings → WhatsApp (2026-10-01).** The switch is enforced on the server for every caller, including the mentorship cron; the trigger button renders disabled. Redirected test sends and dry runs still go through. See [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md).
+
 ### WhatsApp Results flow
 `💬 WhatsApp Results` button (admin, Exams page) → `WhatsAppPreviewModal` (review + edit) → `POST /api/send-whatsapp` → `WhatsAppResultsModal` (log).
 

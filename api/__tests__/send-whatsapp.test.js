@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
+import { facultyStateTable } from './_flowState.js'
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }))
 vi.mock('fs', () => ({ readFileSync: vi.fn(() => { throw new Error('no .env.local') }) }))
@@ -55,6 +56,8 @@ function makeQueryClient({
   students    = MOCK_STUDENTS,
   examsError  = null,
   resultsError = null,
+  whatsappFlows,          // the per-flow switch; absent = on
+  stateError  = null,
 } = {}) {
   // Hoisted so a test can assert which columns the results query asked for.
   const resultsSelect = vi.fn().mockReturnValue({
@@ -68,6 +71,9 @@ function makeQueryClient({
       }
       if (table === 'exam_results') {
         return { select: resultsSelect }
+      }
+      if (table === 'faculty_state') {
+        return facultyStateTable({ flows: whatsappFlows, error: stateError, extra: {} })
       }
       // students
       return { select: vi.fn().mockResolvedValue({ data: students, error: null }) }
@@ -155,13 +161,17 @@ describe('POST /api/send-whatsapp', () => {
 
   // ── Exam lookup (from exams table, not faculty_state) ──────────────────────
 
-  it('queries exams table — not faculty_state — to find the exam', async () => {
+  // faculty_state IS read once now, for the per-flow WhatsApp switch
+  // (api/_flowGate.js). What this pins is that the EXAM never comes from it:
+  // the mocked blob carries no exams, so a successful send proves the source.
+  it('queries exams table — not the faculty_state blob — to find the exam', async () => {
     const queryClient = makeQueryClient()
     setupMocks({ queryClient })
-    await call({ examName: 'NDA Test 1' })
+    const res = await call({ examName: 'NDA Test 1' })
     const tablesCalled = queryClient.from.mock.calls.map(c => c[0])
     expect(tablesCalled).toContain('exams')
-    expect(tablesCalled).not.toContain('faculty_state')
+    expect(tablesCalled.filter(t => t === 'faculty_state')).toHaveLength(1)
+    expect(res.status).toHaveBeenCalledWith(200)
   })
 
   it('returns 404 if exam name not found in exams table', async () => {
@@ -526,5 +536,51 @@ describe('send-whatsapp — the auth door', () => {
     mockWabridge(true)
     const res = await call({ examName: 'NDA Test 1' })
     expect(res.status).not.toHaveBeenCalledWith(403)
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('send-whatsapp — flow switch', () => {
+  const OFF = { examResults: { enabled: false } }
+
+  it('refuses with 409 disabled:true when switched off — no student, parent or monitor message', async () => {
+    setupMocks({ queryClient: makeQueryClient({ whatsappFlows: OFF }) })
+    const res = await call({ examName: 'NDA Test 1', monitorMobiles: ['9021869427'] })
+    expect(res.status).toHaveBeenCalledWith(409)
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: false, disabled: true, flow: 'examResults' }))
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  // Fail fast: a switched-off send should not load the exam, its results and
+  // the whole roster only to refuse.
+  it('refuses before loading the exam', async () => {
+    const queryClient = makeQueryClient({ whatsappFlows: OFF })
+    setupMocks({ queryClient })
+    await call({ examName: 'NDA Test 1' })
+    expect(queryClient.from.mock.calls.map(c => c[0])).toEqual(['faculty_state'])
+  })
+
+  it('lets a redirected test send through while switched off', async () => {
+    setupMocks({ queryClient: makeQueryClient({ whatsappFlows: OFF }) })
+    const res = await call({ examName: 'NDA Test 1', redirectTo: '9000000001' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(globalThis.fetch).toHaveBeenCalled()
+    for (const [, init] of globalThis.fetch.mock.calls) {
+      expect(JSON.parse(init.body).destination_number).toBe('919000000001')
+    }
+  })
+
+  it('does not treat an unparseable redirect as a test send', async () => {
+    setupMocks({ queryClient: makeQueryClient({ whatsappFlows: OFF }) })
+    const res = await call({ examName: 'NDA Test 1', redirectTo: '12' })
+    expect(res.status).toHaveBeenCalledWith(409)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  it('refuses with 500 when the switch cannot be read', async () => {
+    setupMocks({ queryClient: makeQueryClient({ stateError: { message: 'boom' } }) })
+    const res = await call({ examName: 'NDA Test 1' })
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 })

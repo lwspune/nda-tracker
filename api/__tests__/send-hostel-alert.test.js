@@ -37,13 +37,14 @@ function setEnv({ template = false } = {}) {
   if (template) process.env.WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID = 'hostel-template'
 }
 
-function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], hostelAlertMobiles = [], role = null } = {}) {
+function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], hostelAlertMobiles = [], role = null, whatsappFlows, stateError = null } = {}) {
   const resultFor = t =>
     t === 'students' ? { data: roster, error: null }
     : t === 'student_attendance' ? { data: attendance, error: null }
     : t === 'checkpoint_absences' ? { data: checkpoints, error: null }
     : t === 'leaves' ? { data: leaves, error: null }
-    : t === 'faculty_state' ? { data: { data: { hostelAlertMobiles } }, error: null }
+    : t === 'faculty_state'
+      ? (stateError ? { data: null, error: stateError } : { data: { data: { hostelAlertMobiles, whatsappFlows } }, error: null })
     : { data: null, error: null }
   createClient.mockImplementation(() => ({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u', app_metadata: role ? { role } : {} } } }) },
@@ -189,5 +190,67 @@ describe('send-attendance-alerts (hostel) — date format per table', () => {
 
     expect(eqCalls.student_attendance?.date).toBe('2026-07-13')
     expect(eqCalls.checkpoint_absences?.date).toBe('13-07-2026')
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('send-attendance-alerts (hostel) — flow switch', () => {
+  const ANOMALY = { roster: ROSTER, checkpoints: [{ lws_id: 'APJ-1', checkpoint: 'dinner', status: 'absent' }], hostelAlertMobiles: ['9021869427'] }
+
+  it('refuses a manual send with 409 when switched off, sending nothing', async () => {
+    setEnv({ template: true })
+    mockDb({ ...ANOMALY, whatsappFlows: { hostelAlert: { enabled: false } } })
+    const fetchSpy = mockWabridge(true)
+    const res = await call({ date: '08-07-2026' })
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toMatchObject({ ok: false, disabled: true, flow: 'hostelAlert' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('answers a cron trigger with 200 skipped when switched off', async () => {
+    setEnv({ template: true }); process.env.CRON_SECRET = 'cron-secret'
+    mockDb({ ...ANOMALY, whatsappFlows: { hostelAlert: { enabled: false } } })
+    const fetchSpy = mockWabridge(true)
+    const res = await call({}, { method: 'GET', jwt: 'cron-secret' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ ok: true, skipped: 'disabled', sent: 0 })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('still previews a dry run while switched off', async () => {
+    setEnv({ template: true })
+    mockDb({ ...ANOMALY, whatsappFlows: { hostelAlert: { enabled: false } } })
+    const res = await call({ date: '08-07-2026', dryRun: true })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.dryRun).toBe(true)
+    expect(res.body.count).toBe(1)
+  })
+
+  it('lets a redirected test send through while switched off', async () => {
+    setEnv({ template: true })
+    mockDb({ ...ANOMALY, whatsappFlows: { hostelAlert: { enabled: false } } })
+    const fetchSpy = mockWabridge(true)
+    const res = await call({ date: '08-07-2026', redirectTo: '9000000001' })
+    expect(res.statusCode).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body).destination_number).toBe('919000000001')
+  })
+
+  it('refuses with 500 when the switch cannot be read', async () => {
+    setEnv({ template: true })
+    mockDb({ ...ANOMALY, stateError: { message: 'boom' } })
+    const fetchSpy = mockWabridge(true)
+    const res = await call({ date: '08-07-2026' })
+    expect(res.statusCode).toBe(500)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('is not switched off by the lecture-miss flow sharing this endpoint', async () => {
+    setEnv({ template: true })
+    mockDb({ ...ANOMALY, whatsappFlows: { lectureMiss: { enabled: false } } })
+    mockWabridge(true)
+    const res = await call({ date: '08-07-2026' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.sent).toBe(1)
   })
 })

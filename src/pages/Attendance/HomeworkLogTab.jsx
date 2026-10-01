@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
+import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
+import FlowOffNote from '../../components/ui/FlowOffNote'
 import { formatHomeworkItem, homeworkTypeLabel, homeworkItemKey, homeworkNotifyKey } from '../../lib/homework'
 import MarkDefaultersModal from './MarkDefaultersModal'
 import { fmtDateShort as fmtDate } from '../../lib/dates'
@@ -28,6 +30,8 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
   const getOpenForBatch  = useStore(s => s.getOpenHomeworkForBatch)
   const resolveItem      = useStore(s => s.resolveHomeworkItem)
   const homeworkSendHistory = useStore(s => s.homeworkSendHistory)
+  // Settings → WhatsApp. The server refuses too (api/_flowGate.js).
+  const flowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'homework'))
 
   const [date, setDate]           = useState(initialDate ?? todayIso())
   const [batchName, setBatchName] = useState(initialBatch ?? '')
@@ -151,7 +155,7 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
 
   const sendKey = batchName ? `${date}|${batchName}` : null
   const history = sendKey ? homeworkSendHistory?.[sendKey] : null
-  const sendDisabled = totalUnresolved === 0
+  const sendDisabled = totalUnresolved === 0 || flowOff
   const recipientCount = Object.keys(itemsByLwsId).length
   // Students with at least one unresolved item that hasn't been notified yet
   // (added after the send, or a failed leg). Item-level granularity.
@@ -191,6 +195,7 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
             type="button"
             onClick={() => onSend?.(itemsByLwsId, date, batchName)}
             disabled={sendDisabled}
+            title={flowOff ? flowOffMessage('homework') : undefined}
             className={`btn ${history && pendingStudentCount === 0 ? '' : 'btn-primary'} text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed`}
             aria-label={
               !history ? 'Send homework notifications'
@@ -205,6 +210,7 @@ export default function HomeworkLogTab({ initialDate, initialBatch, onSend }) {
                 : '✓ All notified · Resend all'}
             {!history && recipientCount > 0 && <span className="ml-2 opacity-80">({recipientCount})</span>}
           </button>
+          {flowOff && <FlowOffNote flow="homework" className="block mt-1 text-right" />}
         </div>
       </div>
 

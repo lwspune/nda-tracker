@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { homeworkNotifyKey } from '../../../lib/homework'
 
@@ -32,6 +32,7 @@ beforeEach(() => {
   mockStore.studentProfiles = PROFILES
   mockStore.timetableMappings = []
   mockStore.homeworkSendHistory = {}
+  mockStore.whatsappFlows = {}
   mockStore.getHomeworkForDate.mockResolvedValue([ROW])
   mockStore.getOpenHomeworkForBatch.mockResolvedValue([ROW])
   mockStore.setHomeworkDefaultersForItem.mockResolvedValue(true)
@@ -64,5 +65,27 @@ describe('HomeworkLogTab — pending-aware send states', () => {
     render(<HomeworkLogTab initialDate={DATE} initialBatch={BATCH} onSend={vi.fn()} />)
     await waitFor(() => expect(mockStore.getHomeworkForDate).toHaveBeenCalled())
     expect(await screen.findByRole('button', { name: /all notified · resend all/i })).toBeInTheDocument()
+  })
+})
+
+// ── Per-flow switch (Settings → WhatsApp) ────────────────────────────────────
+describe('HomeworkLogTab — WhatsApp switch', () => {
+  it('is enabled with an open item while the flow is on', async () => {
+    render(<HomeworkLogTab initialDate={DATE} initialBatch={BATCH} onSend={vi.fn()} />)
+    const btn = await screen.findByRole('button', { name: /send homework notifications/i })
+    await waitFor(() => expect(btn).not.toBeDisabled())
+  })
+
+  it('disables the send button and says why when the homework flow is off', async () => {
+    mockStore.whatsappFlows = { homework: { enabled: false } }
+    const onSend = vi.fn()
+    render(<HomeworkLogTab initialDate={DATE} initialBatch={BATCH} onSend={onSend} />)
+    await waitFor(() => expect(mockStore.getHomeworkForDate).toHaveBeenCalled())
+    const btn = await screen.findByRole('button', { name: /send homework notifications/i })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', expect.stringMatching(/switched off in Settings/))
+    expect(screen.getByText(/homework \/ notes pending is switched off in settings/i)).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onSend).not.toHaveBeenCalled()
   })
 })
