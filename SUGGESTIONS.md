@@ -6,6 +6,24 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-01
+
+### Let a switched-off flow still send a redirected test from its preview modal
+
+The server lets a redirected test send through a switched-off flow, but for five flows the redirect field lives inside the preview modal, and the trigger that opens it is now disabled. So faculty cannot test a template before switching its flow on, except for the mentorship nudge (whose test send lives in its own tab). Fix: leave the trigger enabled while off, and have the modal require a redirect number before Confirm. Touches five modals and their tests; deliberately not done in the switch's first cut, which followed the spec's "disabled, never hidden".
+
+### Enforce the exam-results switch in `npm run dev`
+
+The dev server serves `/api/send-whatsapp` by spawning `send_results_whatsapp.py`, not the JS handler, so the switch is not enforced there (the other six run the real handler through `makeApiShim`). Fix: read `whatsappFlows` from `data/faculty-data.json` in the plugin before spawning. Editing `vite.config.js` breaks every shim until a clean restart, which is why it was left out.
+
+### Backfill ledger — fold Monitoring into the WhatsApp tab (decision D3 of `WHATSAPP_FLOWS.md`)
+
+Monitoring numbers only affect the exam-results flow, and now sit one tab away from its switch. Folding them in is rework of shipped UI, so it needs the 360 analysis and an explicit go-ahead first. Logged, not started.
+
+### `<main>` has no `min-w-0`, so any wide child widens every page on a phone
+
+Found while fitting the Settings tab row to 390px: `<main className="flex-1 …">` in `App.jsx` grows to its widest child, so one overflowing element pushes the whole page sideways instead of scrolling itself. The Settings row was capped locally. Adding `min-w-0` to `<main>` is the general fix but changes every page's phone layout, so audit pages with wide tables first.
+
 ## 2026-09-14
 
 ### Nobody has scanned a real answer sheet with a real phone

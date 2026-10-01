@@ -1,6 +1,6 @@
 # WhatsApp flows — surface in Settings + per-flow on/off switch
 
-> **Status: SPEC, not yet built.** Written 2026-10-01 for the implementing session. Read
+> **Status: Shipped 2026-10-01** on `feat/whatsapp-flow-switch`; this file is the spec of record. Deviations from the original text are listed in §11. Read
 > [`CLAUDE.md`](./CLAUDE.md) first (routing, invariants, the 12-function cap, TDD rule), then this
 > file end to end before touching code. Everything here was verified against the codebase on the
 > date above; re-check line numbers, they drift.
@@ -288,3 +288,21 @@ each commit message with the attribution line the session reminder gives you.
 - **Do not hide buttons**; disable with a title.
 - **Do not refactor the seven endpoints' auth preambles** while in there — the inline 401/403 lines
   are deliberate (see `CLAUDE.md` → teacher-filed school attendance).
+
+## 11. As built — where it differs from the text above
+
+- **`cron` is `'live' | 'ready' | null`, not a boolean**, so the hostel alert can say "schedule ready, not running" honestly.
+- **Every disabled response carries `sent: 0` and `lines: []`**, so clients that read those fields unconditionally still render.
+- **The test-send bypass keys on the parsed redirect (`redirectNorm`)**, not `redirectTo`. Not in §3.3's wording; found while wiring it, pinned by a test per endpoint.
+- **The gate runs before the expensive reads where it could**: before the exam/results/roster loads in `send-whatsapp.js`, before the leaves read on the lecture path, before the chain's five reads on the hostel path.
+- **Disabled buttons also show visible text** (`FlowOffNote`, or `· off` inside the exam card buttons), because some browsers show no tooltip on a disabled button.
+- **Configured badge has three states plus unknown**: Configured / Not configured / Credentials missing (template set but shared Wabridge keys absent) / Status unknown.
+- **Phone layout:** the Settings tab row scrolls on its own below `md`. It already overflowed a 390px phone before this work (616px); the new tab made it 716px.
+- **Gap left open:** five flows keep their redirect field inside the preview modal, which the disabled trigger no longer opens, so those templates cannot be test-sent while switched off. Logged in `SUGGESTIONS.md`.
+
+## 12. Verification record (2026-10-01)
+
+- Full suite green; `npm run lint` identical to `main` (all problems pre-existing).
+- The gate was run read-only against the live `faculty_state` row: every flow reads on (no key yet), and a read without a session is refused rather than read as on.
+- Golden path driven in headless Chrome against `npm run dev`: seven switches; switching exam results off disables all ten WhatsApp Results buttons with the reason while Send Absent Alert stays live; survives a reload; switching back re-enables; Tab reaches the switch with a visible ring; Space and Enter both toggle; no sideways scroll at 390px.
+- **Not verified in a browser:** a 409 from a real send. Localhost has no admin session, so the endpoints answer 401 before the gate. Covered by the endpoint tests; verify on a branch preview with an admin login.
