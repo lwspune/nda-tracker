@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
-// SVG donut ring: circumference of r=40 circle = 2π×40 ≈ 251.3
+// SVG donut ring: circumference of r=40 circle = 2π×40 ≈ 251.3. Drawn in a
+// 100×100 viewBox and sized by CSS, so it shrinks on a phone.
 const R = 40
 const C = 2 * Math.PI * R
 const SIZE = 100
@@ -16,56 +17,31 @@ function fmtDayMonth(iso) {
   return `${Number(m[3])} ${MONTHS_SHORT[Number(m[2]) - 1]}`
 }
 
-function Chip({ label, expanded, onToggle, listTestId, items, tone }) {
-  // tone: 'late' (yellow) | 'lecture' (red) | 'exam' (red darker).
-  // Light-mode tuned — the app's surface is white/pale; earlier dark-mode
-  // greys made these chips unreadable.
-  const tones = {
-    late:     'bg-yellow-50 border-yellow-200 text-warning hover:bg-yellow-100',
-    lecture:  'bg-red-50 border-red-200 text-danger hover:bg-red-100',
-    exam:     'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
-    homework: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100',
-  }
-  const listColor = {
-    late:     'text-yellow-800',
-    lecture:  'text-red-800',
-    exam:     'text-red-900',
-    homework: 'text-orange-800',
-  }
-  return (
-    <>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-label={label}
-        aria-expanded={expanded}
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono
-                    border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40
-                    min-h-[28px] ${tones[tone]}`}
-      >
-        <span>{label}</span>
-        <span className="opacity-70">{expanded ? '▴' : '▾'}</span>
-      </button>
-      {expanded && (
-        <div
-          data-testid={listTestId}
-          className={`text-[11px] font-mono ${listColor[tone]} max-w-[160px] text-center leading-tight`}
-        >
-          {items.join(' · ')}
-        </div>
-      )}
-    </>
-  )
-}
+// One entry per chip, in display order. `short` is what fits under a phone-sized
+// ring; `full` stays the chip's accessible name and heads its opened list.
+// Tones are light-mode tuned — earlier dark-mode greys made these unreadable.
+const KINDS = [
+  { kind: 'late', short: 'Late', full: 'Days late', listId: 'late-dates-list',
+    count: s => s.lateCount, items: s => s.lateDates.map(fmtDayMonth),
+    chip: 'bg-yellow-50 border-yellow-200 text-warning hover:bg-yellow-100',
+    panel: 'bg-yellow-50 border-yellow-200 text-yellow-800' },
+  { kind: 'lecture', short: 'Lec', full: 'Missed Lectures', listId: 'lecture-misses-list',
+    count: s => s.lectureMissCount, items: s => s.lectureMisses.map(r => `${fmtDayMonth(r.date)} ${r.subject}`),
+    chip: 'bg-red-50 border-red-200 text-danger hover:bg-red-100',
+    panel: 'bg-red-50 border-red-200 text-red-800' },
+  { kind: 'exam', short: 'Exam', full: 'Missed Exams', listId: 'exam-misses-list',
+    count: s => s.examMissCount, items: s => s.examMisses.map(r => `${fmtDayMonth(r.date)} ${r.examName}`),
+    chip: 'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
+    panel: 'bg-red-50 border-red-300 text-red-900' },
+  { kind: 'homework', short: 'HW', full: 'Homework', listId: 'homework-list',
+    count: s => s.homeworkCount,
+    items: s => s.homeworkItems.map(r => `${fmtDayMonth(r.date)} ${r.subject}${r.chapter ? ' · ' + r.chapter : ''}`),
+    chip: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100',
+    panel: 'bg-orange-50 border-orange-200 text-orange-800' },
+]
 
-function Ring({
-  month, pct, label,
-  lateCount, lateDates,
-  lectureMissCount, lectureMisses,
-  examMissCount, examMisses,
-  homeworkCount, homeworkItems,
-  expandedKind, onToggle,
-}) {
+function Ring({ stat, expandedKind, onToggle, panelId }) {
+  const { month, pct, label } = stat
   // pct === null: no register was taken that month (only incidents), so there
   // is no percentage to show. Rendering 0% read as "missed the whole month".
   const noRegister = pct === null
@@ -73,9 +49,9 @@ function Ring({
   const color  = noRegister ? '#9ca3af' : pct < 75 ? '#f87171' : pct < 85 ? '#facc15' : '#4ade80'
 
   return (
-    <div data-testid={`ring-${month}`} className="flex flex-col items-center gap-2">
-      <div className="relative" style={{ width: SIZE, height: SIZE }}>
-        <svg width={SIZE} height={SIZE} className="-rotate-90">
+    <div data-testid={`ring-${month}`} className="flex flex-col items-center gap-1.5 min-w-0">
+      <div className="relative w-16 h-16 md:w-[100px] md:h-[100px]">
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90 w-full h-full">
           <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={STROKE} />
           {!noRegister && <circle
             cx={CX} cy={CY} r={R}
@@ -87,67 +63,39 @@ function Ring({
             style={{ transition: 'stroke-dasharray 0.6s ease' }}
           />}
         </svg>
-        {noRegister ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-ink-3 leading-tight">
-            <span aria-hidden="true" className="text-[14px] font-extrabold">—</span>
-            <span className="text-[10px] font-mono">no register</span>
-          </div>
-        ) : (
-          <div
-            className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold"
-            style={{ color }}
-          >
-            {pct}%
-          </div>
-        )}
+        <div
+          className="absolute inset-0 flex items-center justify-center text-[12px] md:text-[14px] font-extrabold"
+          style={{ color: noRegister ? undefined : color }}
+        >
+          {noRegister ? <span aria-hidden="true" className="text-ink-3">—</span> : `${pct}%`}
+        </div>
       </div>
       <span data-testid="ring-month-label" className="text-[11px] font-mono text-ink-3 tracking-wide">
         {label}
       </span>
-
-      {lateCount > 0 && (
-        <Chip
-          label={`Days late: ${lateCount}`}
-          expanded={expandedKind === 'late'}
-          onToggle={() => onToggle('late')}
-          listTestId={`late-dates-list-${month}`}
-          items={lateDates.map(fmtDayMonth)}
-          tone="late"
-        />
+      {noRegister && (
+        <span className="-mt-1 text-[10px] font-mono text-ink-3 whitespace-nowrap">no register</span>
       )}
 
-      {lectureMissCount > 0 && (
-        <Chip
-          label={`Missed Lectures: ${lectureMissCount}`}
-          expanded={expandedKind === 'lecture'}
-          onToggle={() => onToggle('lecture')}
-          listTestId={`lecture-misses-list-${month}`}
-          items={lectureMisses.map(r => `${fmtDayMonth(r.date)} ${r.subject}`)}
-          tone="lecture"
-        />
-      )}
-
-      {examMissCount > 0 && (
-        <Chip
-          label={`Missed Exams: ${examMissCount}`}
-          expanded={expandedKind === 'exam'}
-          onToggle={() => onToggle('exam')}
-          listTestId={`exam-misses-list-${month}`}
-          items={examMisses.map(r => `${fmtDayMonth(r.date)} ${r.examName}`)}
-          tone="exam"
-        />
-      )}
-
-      {homeworkCount > 0 && (
-        <Chip
-          label={`Homework: ${homeworkCount}`}
-          expanded={expandedKind === 'homework'}
-          onToggle={() => onToggle('homework')}
-          listTestId={`homework-list-${month}`}
-          items={homeworkItems.map(r => `${fmtDayMonth(r.date)} ${r.subject}${r.chapter ? ' · ' + r.chapter : ''}`)}
-          tone="homework"
-        />
-      )}
+      {KINDS.filter(k => k.count(stat) > 0).map(k => {
+        const open = expandedKind === k.kind
+        return (
+          <button
+            key={k.kind}
+            type="button"
+            onClick={() => onToggle(k.kind)}
+            aria-label={`${k.full}: ${k.count(stat)}`}
+            aria-expanded={open}
+            aria-controls={panelId(k, month)}
+            className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] font-mono whitespace-nowrap
+                        border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40
+                        min-h-[28px] ${k.chip}`}
+          >
+            <span>{k.short} {k.count(stat)}</span>
+            <span aria-hidden="true" className="opacity-70">{open ? '▴' : '▾'}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -243,10 +191,13 @@ export default function AttendanceRings({
 }) {
   const examMissesEnriched = enrichExamAbsences(examAbsences, exams)
   const stats = buildMonthStats(attendance, lectureAbsences, examMissesEnriched, homework)
+  const baseId = useId()
+  const panelId = (k, month) => `${baseId}-${k.listId}-${month}`
 
   // Single-open across the whole component: clicking a chip in any month sets
-  // (month, kind); a second click on the same chip (or any other chip in any
-  // month) toggles or replaces. Matches the existing late-chip behaviour.
+  // (month, kind); a second click on the same chip toggles it closed, and any
+  // other chip replaces it. The list renders once, below the grid, at full
+  // width — inside a phone-sized ring column it had ~75px to wrap into.
   const [expanded, setExpanded] = useState(null) // { month, kind } | null
 
   if (!stats.length) {
@@ -259,32 +210,35 @@ export default function AttendanceRings({
     )
   }
 
+  const openStat = expanded && stats.find(s => s.month === expanded.month)
+  const openKind = openStat && KINDS.find(k => k.kind === expanded.kind)
+
   return (
-    <div className="py-4">
-      <div className="text-[13px] font-semibold text-ink-3 mb-6">My Attendance</div>
-      <div className="flex flex-wrap gap-8 justify-start">
+    <div className="pt-1">
+      <div className="grid grid-cols-4 gap-x-2 gap-y-4 md:flex md:flex-wrap md:gap-8">
         {stats.map(s => (
-          <div key={s.month} className="relative flex flex-col items-center">
-            <Ring
-              month={s.month}
-              pct={s.pct}
-              label={s.label}
-              lateCount={s.lateCount}
-              lateDates={s.lateDates}
-              lectureMissCount={s.lectureMissCount}
-              lectureMisses={s.lectureMisses}
-              examMissCount={s.examMissCount}
-              examMisses={s.examMisses}
-              homeworkCount={s.homeworkCount}
-              homeworkItems={s.homeworkItems}
-              expandedKind={expanded?.month === s.month ? expanded.kind : null}
-              onToggle={(kind) => setExpanded(prev =>
-                prev?.month === s.month && prev?.kind === kind ? null : { month: s.month, kind }
-              )}
-            />
-          </div>
+          <Ring
+            key={s.month}
+            stat={s}
+            panelId={panelId}
+            expandedKind={expanded?.month === s.month ? expanded.kind : null}
+            onToggle={(kind) => setExpanded(prev =>
+              prev?.month === s.month && prev?.kind === kind ? null : { month: s.month, kind }
+            )}
+          />
         ))}
       </div>
+
+      {openKind && (
+        <div
+          id={panelId(openKind, openStat.month)}
+          data-testid={`${openKind.listId}-${openStat.month}`}
+          className={`mt-4 rounded-lg border px-3 py-2 ${openKind.panel}`}
+        >
+          <div className="text-[11px] font-bold mb-1">{openKind.full} · {openStat.label}</div>
+          <div className="text-[12px] font-mono leading-relaxed">{openKind.items(openStat).join(' · ')}</div>
+        </div>
+      )}
     </div>
   )
 }

@@ -270,6 +270,40 @@ describe('AttendanceRings', () => {
     expect(text).toMatch(/12 Jun.*Physics.*Laws.+4 Jun.*Maths.*Statistic/)
   })
 
+  // ── Compact layout ─────────────────────────────────────────────
+
+  it('chips show a short label and keep the full wording as their accessible name', () => {
+    const attendance = [
+      { date: '2026-05-01', status: 'P' },
+      { date: '2026-05-02', status: 'L' },
+    ]
+    const lectureAbsences = [{ date: '2026-05-03', subject: 'Maths' }, { date: '2026-05-04', subject: 'Maths' }]
+    const examAbsences = [{ exam_id: 'e1', exam_name: 'Mock #1', exam_date: '2026-05-08' }]
+    const homework = [{ date: '2026-05-04', subject: 'Maths', chapter: 'Sets' }]
+    render(<AttendanceRings attendance={attendance} lectureAbsences={lectureAbsences}
+                            examAbsences={examAbsences} homework={homework} />)
+    expect(screen.getByRole('button', { name: /days late: 1/i })).toHaveTextContent(/^Late 1/)
+    expect(screen.getByRole('button', { name: /missed lectures: 2/i })).toHaveTextContent(/^Lec 2/)
+    expect(screen.getByRole('button', { name: /missed exams: 1/i })).toHaveTextContent(/^Exam 1/)
+    expect(screen.getByRole('button', { name: /homework: 1/i })).toHaveTextContent(/^HW 1/)
+  })
+
+  it('an opened list renders below the grid, named by kind and month, not inside the ring column', () => {
+    const lectureAbsences = [{ date: '2026-05-03', subject: 'Maths' }]
+    render(<AttendanceRings attendance={[{ date: '2026-05-01', status: 'P' }]} lectureAbsences={lectureAbsences} />)
+    const chip = screen.getByRole('button', { name: /missed lectures: 1/i })
+    fireEvent.click(chip)
+    const list = screen.getByTestId('lecture-misses-list-2026-05')
+    expect(screen.getByTestId('ring-2026-05')).not.toContainElement(list)
+    expect(list).toHaveTextContent(/missed lectures · May 26/i)
+    expect(chip).toHaveAttribute('aria-controls', list.id)
+  })
+
+  it('has no second "My Attendance" heading under the card title', () => {
+    render(<AttendanceRings attendance={ATTENDANCE} />)
+    expect(screen.queryByText(/my attendance/i)).not.toBeInTheDocument()
+  })
+
   // ── Single-open expansion (B1) ─────────────────────────────────
 
   it('opening Missed Lectures auto-collapses Days Late in the same month', () => {
