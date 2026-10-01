@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import useStore from '../../store/useStore'
-import { Card, Badge } from '../../components/ui'
+import { Card } from '../../components/ui'
+import { supabase } from '../../lib/supabase'
 import { WHATSAPP_FLOWS, isFlowEnabled } from '../../lib/whatsappFlows'
 
 // Admin-only list of every WhatsApp send flow, with a per-flow on/off switch.
@@ -15,8 +17,54 @@ const RELATED_TAB = {
 }
 
 const CRON_BADGE = {
-  live:  { text: 'Runs automatically', variant: 'blue' },
-  ready: { text: 'Schedule ready, not running', variant: 'gray' },
+  live:  { text: 'Runs automatically', tone: 'blue' },
+  ready: { text: 'Schedule ready, not running', tone: 'gray' },
+}
+
+// Darker text than the shared <Badge>, whose amber and accent variants fall
+// below WCAG AA contrast at this size.
+const PILL_TONE = {
+  green: 'bg-green-50 text-green-800 border-green-200',
+  amber: 'bg-amber-50 text-amber-800 border-amber-200',
+  blue:  'bg-accent-soft text-indigo-800 border-indigo-200',
+  gray:  'bg-surface-2 text-ink-2 border-border',
+}
+
+function Pill({ tone = 'gray', children }) {
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full border text-[11px] font-semibold ${PILL_TONE[tone]}`}>
+      {children}
+    </span>
+  )
+}
+
+// Is each flow's template ID set in Vercel? Only the server can tell; it answers
+// with booleans (api/send-attendance-alerts.js, kind:'whatsapp-status'). Any
+// failure resolves to null, rendered as "Status unknown" — never as "Not
+// configured", which would be a claim the page cannot back.
+async function fetchWhatsappStatus() {
+  if (!supabase) return null
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return null
+    const r = await fetch('/api/send-attendance-alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ kind: 'whatsapp-status' }),
+    })
+    const data = await r.json()
+    return r.ok && data?.ok ? data : null
+  } catch {
+    return null
+  }
+}
+
+function configPill(status, key) {
+  if (status === 'checking') return { text: 'Checking…', tone: 'gray' }
+  if (!status) return { text: 'Status unknown', tone: 'gray' }
+  if (!status.configured?.[key]) return { text: 'Not configured', tone: 'amber' }
+  if (!status.shared) return { text: 'Credentials missing', tone: 'amber' }
+  return { text: 'Configured', tone: 'green' }
 }
 
 function variableText(variables) {
@@ -58,10 +106,11 @@ function Detail({ term, children }) {
   )
 }
 
-function FlowCard({ flow, enabled, onToggle, onSwitchTab }) {
+function FlowCard({ flow, enabled, onToggle, onSwitchTab, status }) {
   const titleId = `wa-flow-${flow.key}`
   const cron = CRON_BADGE[flow.cron]
   const related = RELATED_TAB[flow.settingsTab]
+  const config = configPill(status, flow.key)
 
   return (
     <Card
@@ -73,7 +122,10 @@ function FlowCard({ flow, enabled, onToggle, onSwitchTab }) {
         <div className="min-w-0">
           <h3 id={titleId} className="text-[15px] font-bold text-ink">{flow.label}</h3>
           <p className="text-[13px] text-ink-2 mt-0.5">{flow.description}</p>
-          {cron && <div className="mt-1.5"><Badge variant={cron.variant}>{cron.text}</Badge></div>}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <Pill tone={config.tone}>{config.text}</Pill>
+            {cron && <Pill tone={cron.tone}>{cron.text}</Pill>}
+          </div>
         </div>
         <FlowSwitch label={flow.label} enabled={enabled} onToggle={onToggle} />
       </div>
@@ -122,6 +174,14 @@ export default function WhatsAppTab({ onSwitchTab }) {
 
   const onCount = WHATSAPP_FLOWS.filter(f => isFlowEnabled(whatsappFlows, f.key)).length
 
+  // 'checking' until the server answers; then its answer, or null for unknown.
+  const [status, setStatus] = useState('checking')
+  useEffect(() => {
+    let live = true
+    fetchWhatsappStatus().then(s => { if (live) setStatus(s) })
+    return () => { live = false }
+  }, [])
+
   return (
     <div className="space-y-4">
       <Card>
@@ -145,6 +205,7 @@ export default function WhatsAppTab({ onSwitchTab }) {
             enabled={enabled}
             onToggle={() => setWhatsappFlowEnabled(flow.key, !enabled)}
             onSwitchTab={onSwitchTab}
+            status={status}
           />
         )
       })}

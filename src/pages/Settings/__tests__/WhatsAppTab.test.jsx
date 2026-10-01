@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockStore = {
@@ -10,12 +10,21 @@ vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
 }))
 
+// The configured badge asks the server (kind:'whatsapp-status'). `client` is
+// swapped per test: null = no Supabase configured (local without env).
+const supabaseMock = vi.hoisted(() => ({ client: null }))
+vi.mock('../../../lib/supabase', () => ({
+  get supabase() { return supabaseMock.client },
+}))
+
 import WhatsAppTab from '../WhatsAppTab'
 import { WHATSAPP_FLOWS } from '../../../lib/whatsappFlows'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
   mockStore.whatsappFlows = {}
+  supabaseMock.client = null
 })
 
 const card = label => screen.getByRole('region', { name: label })
@@ -88,5 +97,69 @@ describe('WhatsAppTab', () => {
     render(<WhatsAppTab onSwitchTab={onSwitchTab} />)
     fireEvent.click(within(card('Mentorship nudge')).getByRole('button', { name: /mentorship tab/i }))
     expect(onSwitchTab).toHaveBeenCalledWith('mentorship')
+  })
+})
+
+describe('WhatsAppTab — configured badge', () => {
+  function signedIn() {
+    supabaseMock.client = {
+      auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'tok' } } }) },
+    }
+  }
+  function serverSays(body, ok = true) {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok, json: async () => body })
+    vi.stubGlobal('fetch', fetchSpy)
+    return fetchSpy
+  }
+  const ALL_OFF = {
+    examResults: false, late: false, lectureMiss: false, examAbsence: false,
+    homework: false, mentorNudge: false, hostelAlert: false,
+  }
+
+  it('asks the server with the admin session, and never for a value', async () => {
+    signedIn()
+    const fetchSpy = serverSays({ ok: true, shared: true, configured: ALL_OFF })
+    render(<WhatsAppTab />)
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe('/api/send-attendance-alerts')
+    expect(JSON.parse(init.body)).toEqual({ kind: 'whatsapp-status' })
+    expect(init.headers.Authorization).toBe('Bearer tok')
+  })
+
+  it('marks a flow configured only when its template AND the shared credentials are set', async () => {
+    signedIn()
+    serverSays({ ok: true, shared: true, configured: { ...ALL_OFF, late: true } })
+    render(<WhatsAppTab />)
+    expect(await within(card('Late to first lecture')).findByText('Configured')).toBeInTheDocument()
+    expect(within(card('Hostel warden alert')).getByText('Not configured')).toBeInTheDocument()
+  })
+
+  it('says credentials are missing when the template is set but the shared keys are not', async () => {
+    signedIn()
+    serverSays({ ok: true, shared: false, configured: { ...ALL_OFF, late: true } })
+    render(<WhatsAppTab />)
+    expect(await within(card('Late to first lecture')).findByText('Credentials missing')).toBeInTheDocument()
+  })
+
+  it('says status unknown, without asking, when there is no Supabase client', async () => {
+    const fetchSpy = serverSays({})
+    render(<WhatsAppTab />)
+    expect(await within(card('Late to first lecture')).findByText('Status unknown')).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('says status unknown when the server refuses', async () => {
+    signedIn()
+    serverSays({ ok: false, error: 'Forbidden' }, false)
+    render(<WhatsAppTab />)
+    expect(await within(card('Late to first lecture')).findByText('Status unknown')).toBeInTheDocument()
+  })
+
+  it('says status unknown when the request throws', async () => {
+    signedIn()
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    render(<WhatsAppTab />)
+    expect(await within(card('Late to first lecture')).findByText('Status unknown')).toBeInTheDocument()
   })
 })

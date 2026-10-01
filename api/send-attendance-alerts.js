@@ -1,4 +1,4 @@
-import { readEnvLocal } from './_env.js'
+import { readEnvLocal, envReader } from './_env.js'
 import { createClient } from '@supabase/supabase-js'
 import { buildDailyChain, resolveOnLeave, buildWardenAlert } from '../src/lib/analytics/chain.js'
 import { isTeacherUser } from './_authRole.js'
@@ -6,11 +6,15 @@ import { bearerFrom, getUserOrNull } from './_auth.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
 import { refuseIfFlowOff } from './_flowGate.js'
+import { WHATSAPP_FLOWS } from '../src/lib/whatsappFlows.js'
 
 // Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
 // deployment at 12). Dispatched by `kind` in the POST body:
-//   • kind: 'lecture' (default) — per-student lecture-miss alerts to student + parents.
-//   • kind: 'hostel'            — warden alert for APJ boarders who fell off the daily chain.
+//   • kind: 'lecture' (default)    — per-student lecture-miss alerts to student + parents.
+//   • kind: 'hostel'               — warden alert for APJ boarders who fell off the daily chain.
+//   • kind: 'whatsapp-status'      — which WhatsApp flows have a template ID set, for the
+//                                    Settings → WhatsApp badge. Booleans only; sends nothing.
+//                                    Lodged here only because of the function cap.
 // A bare GET (Vercel cron, Bearer CRON_SECRET) routes to the hostel handler.
 
 
@@ -51,6 +55,7 @@ function dayBounds(dmy) {
 export default async function handler(req, res) {
   const kind = req.body?.kind || req.query?.kind || (req.method === 'GET' ? 'hostel' : 'lecture')
   if (kind === 'hostel') return handleHostelAlert(req, res)
+  if (kind === 'whatsapp-status') return handleWhatsappStatus(req, res)
   return handleLectureAbsences(req, res)
 }
 
@@ -287,4 +292,30 @@ async function handleHostelAlert(req, res) {
   }
   lines.push(`Done. Alerted ${sent}${redirectNorm ? ' (test redirect)' : ''}  Failed: ${skipped}`)
   res.status(200).json({ ok: true, date: day, count: alert.count, sent, skipped, message: alert.message, lines })
+}
+
+// ── kind: 'whatsapp-status' — is each flow's template ID set? ───────────────
+// Feeds the "Configured" badge in Settings → WhatsApp. The env vars are
+// server-only, so the browser cannot tell on its own. Answers with BOOLEANS:
+// the template IDs and Wabridge keys are secrets and must never reach a client.
+// `shared` covers the three credentials every flow needs; a flow with its own
+// template ID set still cannot send while `shared` is false.
+async function handleWhatsappStatus(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' }); return
+  }
+
+  const pick = envReader()
+  const jwt = bearerFrom(req)
+  if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
+  const anonClient = createClient(pick('VITE_SUPABASE_URL'), pick('VITE_SUPABASE_ANON_KEY'))
+  const user = await getUserOrNull(anonClient, jwt)
+  if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Settings is admin-only; which messaging channels are live is office
+  // configuration, not something a teacher session needs.
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+  const shared = Boolean(pick('WABRIDGE_APP_KEY') && pick('WABRIDGE_AUTH_KEY') && pick('WABRIDGE_DEVICE_ID'))
+  const configured = Object.fromEntries(WHATSAPP_FLOWS.map(f => [f.key, Boolean(pick(f.envVar))]))
+  res.status(200).json({ ok: true, shared, configured })
 }
