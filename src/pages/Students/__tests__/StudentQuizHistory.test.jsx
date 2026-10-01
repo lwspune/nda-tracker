@@ -112,6 +112,18 @@ describe('StudentQuizHistory', () => {
     expect(screen.getByText(/avg 50% correct/i)).toBeInTheDocument()
   })
 
+  it('dates each attempt in IST, so the order is legible', async () => {
+    mockStore.quizzes = [{ id: 'q1', title: 'Quiz 1', questions: [{}] }]
+    // 20:00 UTC on the 12th is 01:30 IST on the 13th — the day the student sat it.
+    mockStore.getQuizAttemptsForStudent.mockResolvedValue([
+      { quizId: 'q1', score: 1, correct: 1, submittedAt: '2026-06-12T20:00:00+00:00' },
+    ])
+    render(<StudentQuizHistory lwsId="LWS-001" />)
+    await waitFor(() => toggle())
+    fireEvent.click(toggle())
+    expect(screen.getByTestId('quiz-row')).toHaveTextContent('13 Jun 2026')
+  })
+
   it('returns to the first page when a different student is shown', async () => {
     const { rerender } = await renderExpanded(12)
     fireEvent.click(screen.getByRole('button', { name: /next/i }))

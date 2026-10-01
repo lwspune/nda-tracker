@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import useStore from '../../store/useStore'
 import { Card } from '../../components/ui'
+import { fmtTimestamp } from '../../lib/dates'
 
 const PAGE_SIZE = 5
 
@@ -77,6 +78,7 @@ export default function StudentQuizHistory({ lwsId }) {
             {visible.map(r => (
               <div key={r.quizId} data-testid="quiz-row" className="py-2 flex items-center gap-3 text-[13px]">
                 <div data-title className="flex-1 min-w-0 truncate font-medium text-ink">{r.title}</div>
+                <div className="text-ink-3 font-mono text-[11px] whitespace-nowrap">{fmtTimestamp(r.submittedAt)}</div>
                 <div className="text-ink-3 font-mono text-[11px]">{r.correct}/{r.total} correct</div>
                 <div className="font-bold text-accent w-10 text-right">{r.score}</div>
               </div>
