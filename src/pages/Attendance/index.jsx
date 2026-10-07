@@ -11,6 +11,7 @@ import LateMarkingWidget from './LateMarkingWidget'
 import LectureLogTab from './LectureLogTab'
 import HomeworkLogTab from './HomeworkLogTab'
 import HostelTab from './HostelTab'
+import HolidaysTab from './HolidaysTab'
 import LateNotificationPreviewModal from './LateNotificationPreviewModal'
 import LectureMissPreviewModal from './LectureMissPreviewModal'
 import HomeworkPreviewModal from './HomeworkPreviewModal'
@@ -414,6 +415,18 @@ export default function AttendancePage() {
             Hostel &amp; Mess
           </button>
         )}
+        {mode === 'admin' && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'holidays'}
+            onClick={() => openTab('holidays')}
+            className={`px-4 py-2.5 text-[13px] font-semibold min-h-[44px] border-b-2 transition-colors
+              ${activeTab === 'holidays' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
+          >
+            Holidays
+          </button>
+        )}
       </div>
 
       {mode === 'admin' && visitedTabs.has('lecture-log') && (
@@ -429,6 +442,11 @@ export default function AttendancePage() {
       {mode === 'admin' && visitedTabs.has('hostel') && (
         <div role="tabpanel" data-testid="tabpanel-hostel" hidden={activeTab !== 'hostel'}>
           <HostelTab />
+        </div>
+      )}
+      {mode === 'admin' && visitedTabs.has('holidays') && (
+        <div role="tabpanel" data-testid="tabpanel-holidays" hidden={activeTab !== 'holidays'}>
+          <HolidaysTab />
         </div>
       )}
 

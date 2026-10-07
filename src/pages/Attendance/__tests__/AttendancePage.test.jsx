@@ -35,6 +35,16 @@ const mockStore = {
   timetableTeachers: [],
   submitLecture: vi.fn().mockResolvedValue(true),
   getSubmissionsForDate: vi.fn().mockResolvedValue([]),
+  // Holidays — read by class metrics; the Holidays tab adds/deletes
+  holidays: [],
+  holidaysLoaded: true,
+  loadHolidays: vi.fn(),
+  addHolidays: vi.fn().mockResolvedValue({ ok: true }),
+  deleteHoliday: vi.fn().mockResolvedValue(true),
+  branches: ['LWS Pune', 'APJ'],
+  syllabusBatches: [],
+  archivedBatches: [],
+  syllabusBatchBranches: {},
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -161,5 +171,19 @@ describe('AttendancePage — tab state is preserved across switches', () => {
 
     expect(panel('class-metrics').hasAttribute('hidden')).toBe(true)
     expect(panel('lecture-log').hasAttribute('hidden')).toBe(false)
+  })
+})
+
+describe('AttendancePage — Holidays tab', () => {
+  beforeEach(() => mockAttendanceRecords([]))
+
+  it('opens the holidays panel from its own tab', () => {
+    render(<AttendancePage />)
+    expect(document.querySelector('[data-testid="tabpanel-holidays"]')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Holidays' }))
+    const panel = document.querySelector('[data-testid="tabpanel-holidays"]')
+    expect(panel).toBeInTheDocument()
+    expect(panel.hasAttribute('hidden')).toBe(false)
+    expect(screen.getByRole('button', { name: /add holiday/i })).toBeInTheDocument()
   })
 })
