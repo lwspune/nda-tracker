@@ -13,6 +13,8 @@ import { OPEN_LEAVE_TO_TS } from '../../store/slices/leavesSlice'
 import { buildBoarderRoster, HOSTEL_BRANCHES } from '../../lib/hostelRoster'
 import { downloadHostelLeaveReportPdf } from '../../lib/hostelLeaveReportPdf'
 import { isStaleChunkError, STALE_CHUNK_MESSAGE } from '../../lib/chunkError'
+import useHolidays from '../../store/useHolidays'
+import { makeDayOff, studentIndexFromProfiles, filterWorkingDaysByStudent } from '../../lib/holidays'
 
 // Hostel + mess attendance board for APJ boarders. Exception-only capture
 // (default-present); roll checkpoints add a reconciliation gate. Admin-only,
@@ -64,6 +66,7 @@ export default function HostelTab() {
   const setHostelAlertMobiles = useStore(s => s.setHostelAlertMobiles)
   // Settings → WhatsApp. The server refuses too (api/_flowGate.js).
   const alertFlowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'hostelAlert'))
+  const holidays = useHolidays()
 
   const [view, setView] = useState('mark')          // 'mark' | 'chain' | 'leave'
   const [date, setDate] = useState(todayDmy)
@@ -315,9 +318,16 @@ export default function HostelTab() {
   }
 
   // ── Chain / anomaly board ───────────────────────────────────
+  // No class on a Sunday or a holiday, yet the register marks every boarder
+  // 'A' — drop those rows so the derived class checkpoint is not an anomaly.
+  // Same rule the warden alert applies server-side.
+  const classRows = useMemo(() => {
+    const dayOff = makeDayOff(holidays, studentIndexFromProfiles(studentProfiles))
+    return filterWorkingDaysByStudent(attendanceRows, dayOff, dmyToIso(date))
+  }, [holidays, studentProfiles, attendanceRows, date])
   const chain = useMemo(
-    () => buildDailyChain({ roster, attendanceRows, checkpointRows, onLeaveIds }),
-    [roster, attendanceRows, checkpointRows, onLeaveIds],
+    () => buildDailyChain({ roster, attendanceRows: classRows, checkpointRows, onLeaveIds }),
+    [roster, classRows, checkpointRows, onLeaveIds],
   )
   const anomalies = chain.filter(r => r.anomaly)
   const openRolls = ROLL_CHECKPOINTS.filter(cp => {

@@ -7,6 +7,7 @@ import { normMobile } from './_mobile.js'
 import { sendWabridge, fmtDate } from './_wabridge.js'
 import { refuseIfFlowOff } from './_flowGate.js'
 import { WHATSAPP_FLOWS } from '../src/lib/whatsappFlows.js'
+import { makeDayOff, normalizeHolidayRow, filterWorkingDaysByStudent } from '../src/lib/holidays.js'
 
 // Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
 // deployment at 12). Dispatched by `kind` in the POST body:
@@ -234,13 +235,21 @@ async function handleHostelAlert(req, res) {
 
   // ── Load roster + the three exception sources + recipients ──
   const { data: roster, error: rErr } = await svc.from('students')
-    .select('lws_id, canonical_name')
+    .select('lws_id, canonical_name, student_batches(batch_name)')
     .eq('branch', 'APJ').eq('account_status', 'Active').eq('residential', true)
   if (rErr) { res.status(500).json({ ok: false, error: 'Failed to load roster: ' + rErr.message }); return }
 
   // ISO here — student_attendance does not use the hostel DMY format.
   const { data: attendanceRows, error: aErr } = await svc.from('student_attendance').select('lws_id, status').eq('date', dmyToIso(day))
   if (aErr) { res.status(500).json({ ok: false, error: 'Failed to load attendance: ' + aErr.message }); return }
+
+  // No class on a Sunday or an APJ holiday, but the register still marks every
+  // boarder 'A' — so those rows must not reach the chain's class checkpoint.
+  // Fails closed like every other read here: a guessed alert is worse than none.
+  const { data: holidayRows, error: hErr } = await svc.from('attendance_holidays')
+    .select('name, from_date, to_date, branch, batch_names')
+    .eq('branch', 'APJ').lte('from_date', dmyToIso(day)).gte('to_date', dmyToIso(day))
+  if (hErr) { res.status(500).json({ ok: false, error: 'Failed to load holidays: ' + hErr.message }); return }
 
   const { data: checkpointRows, error: cErr } = await svc.from('checkpoint_absences').select('lws_id, checkpoint, status').eq('date', day)
   if (cErr) { res.status(500).json({ ok: false, error: 'Failed to load checkpoints: ' + cErr.message }); return }
@@ -257,13 +266,18 @@ async function handleHostelAlert(req, res) {
 
   // ── Recompute the chain + shape the alert ──
   const rosterMapped = (roster || []).map(s => ({ lwsId: s.lws_id, name: s.canonical_name }))
+  const dayOff = makeDayOff(
+    (holidayRows || []).map(normalizeHolidayRow),
+    new Map((roster || []).map(s => [s.lws_id, { branch: 'APJ', batches: (s.student_batches || []).map(b => b.batch_name) }])),
+  )
+  const classRows = filterWorkingDaysByStudent(attendanceRows || [], dayOff, dmyToIso(day))
   const onLeaveIds = resolveOnLeave(
     // to_ts null → toMs null (open-ended); Date.parse(null) is NaN, which would
     // break the overlap test, so map it explicitly.
     (leaveRows || []).map(r => ({ lwsId: r.lws_id, fromMs: Date.parse(r.from_ts), toMs: r.to_ts == null ? null : Date.parse(r.to_ts) })),
     startMs, endMs,
   )
-  const chain = buildDailyChain({ roster: rosterMapped, attendanceRows: attendanceRows || [], checkpointRows: checkpointRows || [], onLeaveIds })
+  const chain = buildDailyChain({ roster: rosterMapped, attendanceRows: classRows, checkpointRows: checkpointRows || [], onLeaveIds })
   const alert = buildWardenAlert(chain, day)
   const variables = [asciiClean(day), asciiClean(alert.listText)]
 

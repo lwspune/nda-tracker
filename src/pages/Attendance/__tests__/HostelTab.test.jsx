@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const mockStore = {
   studentProfiles: {},
@@ -14,6 +14,9 @@ const mockStore = {
   addLeave: vi.fn(),
   hostelAlertMobiles: [],
   setHostelAlertMobiles: vi.fn(),
+  holidays: [],
+  holidaysLoaded: true,
+  loadHolidays: vi.fn(),
 }
 
 vi.mock('../../../store/useStore', () => ({
@@ -296,5 +299,34 @@ describe('HostelTab — WhatsApp switch', () => {
     expect(screen.getByText(/hostel warden alert is switched off in settings/i)).toBeInTheDocument()
     fireEvent.click(alertBtn)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+// The register marks every boarder 'A' on a day with no class; the derived
+// class checkpoint must not turn that into a "fell off the chain" alert.
+describe('HostelTab — days off', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 6, 10, 0)) // Tue 6 Oct 2026
+    mockStore.fetchDailyAttendance.mockResolvedValue({ date: '2026-10-06', rows: [{ lws_id: 'APJ-1', status: 'A' }] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    mockStore.holidays = []
+  })
+
+  it('a class absence on a working day is an anomaly', async () => {
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
+    expect(await screen.findByRole('button', { name: /Alert warden \(1\)/ })).toBeInTheDocument()
+  })
+
+  it('on an APJ holiday it is not', async () => {
+    mockStore.holidays = [{ id: 'h', name: 'Dasara', fromDate: '2026-10-06', toDate: '2026-10-06', branch: 'APJ', batchNames: [] }]
+    render(<HostelTab />)
+    await screen.findByText('Aarav Nair')
+    fireEvent.click(screen.getByRole('button', { name: /^Chain/ }))
+    expect(await screen.findByText(/every boarder is accounted for/i)).toBeInTheDocument()
   })
 })

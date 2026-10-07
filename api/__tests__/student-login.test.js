@@ -74,6 +74,9 @@ function makeMockClient({
   examsError       = null,
   stateError       = null,
   loginInsertError = null,
+  attendance       = [],
+  holidays         = [],
+  holidaysError    = null,
 } = {}) {
   // Track sequential `exams` table calls — first call resolves attended-exam ids,
   // second call resolves absent-exam metadata. Tests can pass `absentExamMeta`
@@ -120,7 +123,16 @@ function makeMockClient({
         const builder = {
           select: vi.fn(() => builder),
           eq:     vi.fn(() => builder),
-          then:   (resolve) => Promise.resolve({ data: [], error: null }).then(resolve),
+          then:   (resolve) => Promise.resolve({ data: attendance, error: null }).then(resolve),
+        }
+        return builder
+      }
+      if (table === 'attendance_holidays') {
+        // chain: .select(...).eq('branch', X) — await this
+        const builder = {
+          select: vi.fn(() => builder),
+          eq:     vi.fn(() => builder),
+          then:   (resolve) => Promise.resolve({ data: holidaysError ? null : holidays, error: holidaysError }).then(resolve),
         }
         return builder
       }
@@ -692,5 +704,47 @@ describe('POST /api/student-login — inactive account gating', () => {
     }))
     const res = await call({ mobile: '9876543210', lwsId: 'LWS001' })
     expect(res.status).toHaveBeenCalledWith(403)
+  })
+})
+
+// ── Days off ─────────────────────────────────────────────────────────────────
+// The register marks everyone 'A' on a holiday; the portal's rings must not
+// read those as absences. Filtered here because the student session cannot
+// read attendance_holidays itself.
+describe('student-login — attendance skips days off', () => {
+  const ROWS = [
+    { date: '2026-01-25', status: 'A' }, // Sunday
+    { date: '2026-01-26', status: 'A' }, // Republic Day (Pune)
+    { date: '2026-01-27', status: 'P' },
+  ]
+
+  it("drops the student's Sundays and branch holidays from the attendance it sends", async () => {
+    const client = makeMockClient({
+      attendance: ROWS,
+      holidays: [{ name: 'Republic Day', from_date: '2026-01-26', to_date: '2026-01-26', branch: 'Pune', batch_names: [] }],
+    })
+    createClient.mockReturnValue(client)
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.json.mock.calls[0][0].attendance).toEqual([{ date: '2026-01-27', status: 'P' }])
+  })
+
+  it('a batch-scoped holiday for another batch leaves the day in', async () => {
+    const client = makeMockClient({
+      attendance: ROWS,
+      holidays: [{ name: 'Trip', from_date: '2026-01-26', to_date: '2026-01-26', branch: 'Pune', batch_names: ['OTHER'] }],
+    })
+    createClient.mockReturnValue(client)
+    const res = await call({ mobile: '9876543210' })
+    expect(res.json.mock.calls[0][0].attendance.map(r => r.date)).toEqual(['2026-01-26', '2026-01-27'])
+  })
+
+  it('a failed holiday read still logs the student in, skipping only Sundays', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = makeMockClient({ attendance: ROWS, holidaysError: { message: 'boom' } })
+    createClient.mockReturnValue(client)
+    const res = await call({ mobile: '9876543210' })
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.json.mock.calls[0][0].attendance.map(r => r.date)).toEqual(['2026-01-26', '2026-01-27'])
   })
 })

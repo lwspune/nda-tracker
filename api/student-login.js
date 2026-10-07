@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
+import { filterWorkingDays, normalizeHolidayRow } from '../src/lib/holidays.js'
 
 // Account statuses that revoke portal access. The gate fails CLOSED on these
 // explicit values but fails OPEN on blank/unknown — many legacy rows have no
@@ -214,6 +215,24 @@ export default async function handler(req, res) {
     .select('date, status')
     .eq('lws_id', student.lws_id)
 
+  // Days off (Sundays + the branch/batch holidays) are dropped here: the
+  // register marks everyone 'A' on them, and the student session cannot read
+  // attendance_holidays to filter them client-side. A failed holiday read must
+  // not block a login, so it degrades to Sundays-only and is logged.
+  let holidays = []
+  if (student.branch) {
+    const { data: holidayRows, error: holidayErr } = await supabase
+      .from('attendance_holidays')
+      .select('name, from_date, to_date, branch, batch_names')
+      .eq('branch', student.branch)
+    if (holidayErr) console.error('[student-login] holiday read failed:', holidayErr.message)
+    else holidays = (holidayRows || []).map(normalizeHolidayRow)
+  }
+  const workingAttendance = filterWorkingDays(attendanceRows || [], holidays, {
+    branch: student.branch || '',
+    batches: (student.student_batches || []).map(b => b.batch_name),
+  })
+
   // ── 5a. Load lecture + exam absences for the last 12 months ──────────────
   // 12-month window matches AttendanceRings' monthly chips; RecentIncidents
   // narrows to 30 days client-side.
@@ -301,7 +320,7 @@ export default async function handler(req, res) {
     viaParent,
     profile,
     exams: [...exams, ...absentExams],
-    attendance:       attendanceRows || [],
+    attendance:       workingAttendance,
     lectureAbsences:  (lectureRows || []).map(r => ({ lws_id: student.lws_id, date: r.date, subject: r.subject })),
     homeworkPending:  (homeworkRows || []).map(r => ({ lws_id: student.lws_id, ...r })),
     examAbsences:     (examAbsenceRows || []).map(r => {

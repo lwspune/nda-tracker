@@ -37,12 +37,13 @@ function setEnv({ template = false } = {}) {
   if (template) process.env.WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID = 'hostel-template'
 }
 
-function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], hostelAlertMobiles = [], role = null, whatsappFlows, stateError = null } = {}) {
+function mockDb({ roster = [], attendance = [], checkpoints = [], leaves = [], hostelAlertMobiles = [], role = null, whatsappFlows, stateError = null, holidays = [], holidaysError = null } = {}) {
   const resultFor = t =>
     t === 'students' ? { data: roster, error: null }
     : t === 'student_attendance' ? { data: attendance, error: null }
     : t === 'checkpoint_absences' ? { data: checkpoints, error: null }
     : t === 'leaves' ? { data: leaves, error: null }
+    : t === 'attendance_holidays' ? (holidaysError ? { data: null, error: holidaysError } : { data: holidays, error: null })
     : t === 'faculty_state'
       ? (stateError ? { data: null, error: stateError } : { data: { data: { hostelAlertMobiles, whatsappFlows } }, error: null })
     : { data: null, error: null }
@@ -252,5 +253,53 @@ describe('send-attendance-alerts (hostel) — flow switch', () => {
     const res = await call({ date: '08-07-2026' })
     expect(res.statusCode).toBe(200)
     expect(res.body.sent).toBe(1)
+  })
+})
+
+// The register marks everyone 'A' on a day with no class, so without this the
+// chain's derived class checkpoint flagged every boarder on every holiday.
+describe('send-hostel-alert — days off', () => {
+  // 06-10-2026 is a Tuesday; 04-10-2026 a Sunday.
+  const ABSENT = [{ lws_id: 'APJ-1', status: 'A' }]
+  const DASARA = { name: 'Dasara', from_date: '2026-10-06', to_date: '2026-10-06', branch: 'APJ', batch_names: [] }
+
+  it('a class absence on a working day is still an anomaly', async () => {
+    setEnv(); mockDb({ roster: ROSTER, attendance: ABSENT })
+    const res = await call({ date: '06-10-2026', dryRun: true })
+    expect(res.body.count).toBe(1)
+  })
+
+  it('a class absence on an APJ holiday is not', async () => {
+    setEnv(); mockDb({ roster: ROSTER, attendance: ABSENT, holidays: [DASARA] })
+    const res = await call({ date: '06-10-2026', dryRun: true })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.count).toBe(0)
+  })
+
+  it('nor is one on a Sunday', async () => {
+    setEnv(); mockDb({ roster: ROSTER, attendance: ABSENT })
+    const res = await call({ date: '04-10-2026', dryRun: true })
+    expect(res.body.count).toBe(0)
+  })
+
+  it("a batch-scoped holiday excuses only that batch's boarders", async () => {
+    setEnv()
+    mockDb({
+      roster: [
+        { lws_id: 'APJ-1', canonical_name: 'Aarav Nair', student_batches: [{ batch_name: 'APJ_12th' }] },
+        { lws_id: 'APJ-2', canonical_name: 'Bhavya Rao', student_batches: [{ batch_name: 'APJ_11th_A' }] },
+      ],
+      attendance: [{ lws_id: 'APJ-1', status: 'A' }, { lws_id: 'APJ-2', status: 'A' }],
+      holidays: [{ ...DASARA, batch_names: ['APJ_12th'] }],
+    })
+    const res = await call({ date: '06-10-2026', dryRun: true })
+    expect(res.body.listText).toBe('Bhavya Rao - Class')
+  })
+
+  it('500s on a failed holiday read rather than alerting on a guess', async () => {
+    setEnv(); mockDb({ roster: ROSTER, attendance: ABSENT, holidaysError: { message: 'boom' } })
+    const res = await call({ date: '06-10-2026', dryRun: true })
+    expect(res.statusCode).toBe(500)
+    expect(res.body.error).toMatch(/holidays/i)
   })
 })
