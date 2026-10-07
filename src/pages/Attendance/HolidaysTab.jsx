@@ -32,12 +32,13 @@ function HolidayList({ title, items, onDelete, busyId }) {
       ) : (
         <ul className="divide-y divide-border border border-border rounded-lg">
           {items.map(h => (
-            <li key={h.id} className="flex items-center gap-3 px-3 py-2 flex-wrap">
-              <div className="min-w-0 flex-1">
+            <li key={h.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+              {/* Phone: name + dates get their own line; scope and Delete below. */}
+              <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
                 <div className="text-[13px] font-semibold text-ink">{h.name}</div>
                 <div className="text-[11.5px] font-mono text-ink-3">{rangeLabel(h)}</div>
               </div>
-              <div className="text-[11.5px] text-ink-2 min-w-0">
+              <div className="text-[11.5px] text-ink-2 min-w-0 flex-1 sm:flex-none">
                 <span className="font-semibold">{h.branch}</span>
                 {' · '}
                 {h.batchNames.length ? h.batchNames.join(', ') : 'All batches'}
