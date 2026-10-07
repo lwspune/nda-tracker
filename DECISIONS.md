@@ -181,3 +181,19 @@ Seven WhatsApp flows existed with no surface listing them, and the only way to s
 **Why test sends bypass it.** A redirected send reaches no recipient, and a dry run sends nothing; faculty need both to check a template before switching its flow on. The bypass keys on the **parsed** redirect, because an unparseable `redirectTo` falls through to the real numbers in every endpoint.
 
 **Rejected:** a separate `whatsapp_flows` table (the switch is configuration, the same tier as `monitorMobiles`); hiding switched-off buttons (reads as a removed feature); a 13th serverless function for the status probe (at the Hobby cap — it is a `kind` on `send-attendance-alerts.js`). Spec: [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md).
+
+## Holidays are skipped at read time, per branch and batch (2026-10-07)
+
+The LWS register export marks **every** student `A` on a holiday, so each holiday counted as a day the whole branch skipped. Measured on live data: in Jan 2026 the LWS Pune average fell from 82% to 68% across three such days, and 46 students showed under 75% instead of 12. Holidays differ between LWS Pune and APJ, and sometimes between batches.
+
+**What shipped:** an `attendance_holidays` table (one row per branch, from/to range, optional batch list), edited in Attendance → Holidays, and one shared rule in `src/lib/holidays.js` that every attendance reader applies. Sundays are off for everyone by rule.
+
+**Why filter at read time, not delete the rows.** A holiday marked by mistake must be reversible; deleting the holiday restores the numbers exactly. It also works for months already imported, without re-importing.
+
+**Why no automatic detection.** The data has 33 "nobody present" days, but some are probably exam days, not holidays. Faculty mark each one; nothing is guessed or backfilled.
+
+**Why "every batch" for a student in two batches.** If one of their batches still had class, they were expected in class.
+
+**Why a table and not a `faculty_state` key.** Two server paths (student login, warden alert) need holidays, and `faculty_state` is a whole-blob write that stale tabs can clobber.
+
+**Rejected:** treating a `P` on a holiday as bonus attendance (the user decides holidays day by day; a marked day is simply not a working day); a separate auth role or teacher write access (holidays are admin configuration).

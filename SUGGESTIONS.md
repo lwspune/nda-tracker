@@ -6,6 +6,16 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-07
+
+### The rings and the report card disagree on Late days
+
+`AttendanceRings` computes `P / (P + A)` and ignores `L` entirely, while the monthly report computes `(P + L) / (P + A + L)`. The same student and month can therefore show two percentages. Raised while building holidays and deliberately deferred by the user. Fix: pick one rule (the report's treats a late arrival as attendance) and use it in both, plus the Attendance page's per-student table, which follows the rings.
+
+### The Attendance tab strip wraps to three lines on a phone
+
+Measured at 390px on 2026-10-07: with **Holidays** added, "Hostel & Mess" wraps to three lines. The page was already ~490px wide on a 390px phone **before** this change (main, same data), because `<main>` has no `min-w-0` (entry below) — so a non-wrapping `overflow-x-auto` strip would only widen the page further until that is fixed. Fix `<main>` first, then make the strip scroll.
+
 ## 2026-10-01
 
 ### Let a switched-off flow still send a redirected test from its preview modal
@@ -300,6 +310,8 @@ The Google Calendar sync feature shipped (commit `48f37c3`) and was verified loc
 Two follow-ups remain after the bounded-window change.
 
 **Why:** the window now **must be re-synced periodically** to roll forward (it's no longer fire-and-forget). Today that's a manual click each Sunday — easy to forget, leaving stale/empty calendars. Separately, blocks still recur through holidays/exam days within the window (phantom classes on off days).
+
+**Update 2026-10-07:** a holiday source now exists — `attendance_holidays`, per branch/batch, with `dayOffReason` in `src/lib/holidays.js`. Exam days are still not in it.
 
 ### "Reconcile names against roster" as an admin action
 

@@ -13,7 +13,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 |---|---|---|
 | Admin workspace | `faculty_state` (kept for compatibility) | 1 |
 | Students | `students`, `student_batches`, `students_meta` | 281 + 493 + 1 |
-| Activity logs | `student_attendance`, `student_logins` | 2402 + 193 |
+| Activity logs | `student_attendance`, `student_logins`, `attendance_holidays` | 2402 + 193 + 0 (holidays new 2026-10-07) |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
 | Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
@@ -24,7 +24,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 | **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-24 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+25 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -103,11 +103,28 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 |---|---|---|---|
 | `id` | int4 PK (serial) | nextval | |
 | `lws_id` | text | — | FK → `students(lws_id)` |
-| `date` | text | — | `DD-MM-YYYY` format (from XLS header) |
-| `status` | text | `''` | `P` / `A` / `-` |
+| `date` | text | — | `YYYY-MM-DD` (the XLS header's `DD-MM-YYYY` is converted on import; re-checked against live rows 2026-10-07) |
+| `status` | text | `''` | `P` / `A` from the import, `L` from late-marking (`-` cells are not stored) |
 | **UNIQUE** | `(lws_id, date)` | | Upsert conflict target |
 
 Original schema had `batch` + `eis_reg_no`; dropped 2026-05-07. UNIQUE was `(lws_id, date, batch)` originally.
+
+**The register marks every student `A` on a holiday.** Rows on a student's day off are never deleted — every reader skips them via `src/lib/holidays.js` (see `attendance_holidays` below).
+
+### `attendance_holidays` — days with no class, per branch/batch (2026-10-07)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` | |
+| `name` | text | — | NOT NULL, CHECK non-blank |
+| `from_date` | date | — | NOT NULL |
+| `to_date` | date | — | NOT NULL, CHECK `to_date >= from_date` and `to_date - from_date <= 92` (year-typo guard) |
+| `branch` | text | — | NOT NULL, CHECK non-blank. Free text, no FK — branches live in `faculty_state` |
+| `batch_names` | text[] | `'{}'` | Empty = the whole branch. CHECK no blank element |
+| `created_by` | text | — | Admin email |
+| `created_at` | timestamptz | `now()` | |
+
+One row per branch: a holiday ticked for both branches is two rows. A holiday covers a student when it is for their `branch` and either the whole branch or **every** batch they are in. **Sundays are off by rule in code and are never stored here.** Index on `(branch, from_date, to_date)`. Edited in Attendance → Holidays (admin).
 
 ### `student_logins` — login audit (⚠️ RLS DISABLED)
 
@@ -553,6 +570,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
 | `lecture_absences`, `lecture_submissions`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) — teachers write `lecture_absences` + `lecture_submissions` from `/school-attendance` |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
+| **`attendance_holidays`** | ✓ | `holidays_read` — authenticated `SELECT`. `holidays_write_insert/update/delete` — authenticated **except** `app_metadata.role = 'teacher'` (same predicate as `faculty_state`). The student portal never reads it: `api/student-login.js` filters server-side with the service role. |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'` (migrated from the self-editable `user_metadata` on 2026-09-10). |
 | **`student_fee_plans`, `fee_installments`, `fee_payments`** | ✓ | **Superadmin only** — same `app_metadata` predicate, one `fees_superadmin_all` policy each. The plain admin login is excluded by design. See §11. |
 | **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |
