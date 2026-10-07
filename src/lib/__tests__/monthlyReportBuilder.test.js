@@ -232,7 +232,7 @@ describe('buildMonthlyReport — attendance', () => {
       attendance: [
         { date: '2026-01-02', status: 'P' },
         { date: '2026-01-03', status: 'P' },
-        { date: '2026-01-04', status: 'A' },
+        { date: '2026-01-07', status: 'A' },          // (4 Jan is a Sunday — not a working day)
         { date: '2026-01-05', status: 'L' },
         { date: '2026-01-06', status: '-' },          // skip — not counted
       ],
@@ -251,8 +251,12 @@ describe('buildMonthlyReport — attendance', () => {
       ...JAN,
       exams: [],
       attendance: [
-        ...Array(22).fill({ status: 'P' }).map((row, i) => ({ ...row, date: `2026-01-${String(i + 1).padStart(2, '0')}` })),
-        { date: '2026-01-23', status: 'A' },
+        // 22 working days (Sundays 4/11/18/25 Jan are not working days)
+        ...Array.from({ length: 31 }, (_, i) => `2026-01-${String(i + 1).padStart(2, '0')}`)
+          .filter(d => !['04', '11', '18', '25'].includes(d.slice(8)))
+          .slice(0, 22)
+          .map(date => ({ date, status: 'P' })),
+        { date: '2026-01-27', status: 'A' },
       ],
       lectureAbsences: [], examAbsences: [],
       batchChapterTimelines: {}, syllabusPrograms: [],
@@ -570,5 +574,50 @@ describe('buildMonthlyReport — exam format tagging', () => {
       ...base, exams, examAbsences: [{ exam_id: 'e5', lws_id: 'LWS-1' }],
     }).examTable
     expect(rows[0]).toMatchObject({ attended: false, format: 'written' })
+  })
+})
+
+describe('buildMonthlyReport — days off', () => {
+  const HOLIDAYS = [
+    { id: 'r', name: 'Republic Day', fromDate: '2026-01-26', toDate: '2026-01-26', branch: 'LWS Pune', batchNames: [] },
+    { id: 'n', name: 'New Year', fromDate: '2025-12-31', toDate: '2026-01-01', branch: 'LWS Pune', batchNames: [] },
+    { id: 'a', name: 'APJ only', fromDate: '2026-01-27', toDate: '2026-01-27', branch: 'APJ', batchNames: [] },
+  ]
+  function build(attendance, holidays = HOLIDAYS) {
+    return buildMonthlyReport({
+      profile: profile(), ...JAN, exams: [], attendance, holidays,
+      lectureAbsences: [], examAbsences: [], batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+  }
+
+  it("leaves Sundays and the student's holidays out of working days", () => {
+    const r = build([
+      { date: '2026-01-01', status: 'A' }, // New Year (range clipped to Jan)
+      { date: '2026-01-02', status: 'P' },
+      { date: '2026-01-04', status: 'A' }, // Sunday
+      { date: '2026-01-26', status: 'A' }, // Republic Day
+      { date: '2026-01-27', status: 'A' }, // APJ's holiday — a working day here
+    ])
+    expect(r.attendance.present).toBe(1)
+    expect(r.attendance.absent).toBe(1)
+    expect(r.attendance.totalWorkingDays).toBe(2)
+    expect(r.attendance.attendancePercentage).toBe(50)
+  })
+
+  it("lists the student's holidays in the range, clipped to it", () => {
+    expect(build([]).attendance.holidays).toEqual([
+      { name: 'New Year', fromDate: '2026-01-01', toDate: '2026-01-01' },
+      { name: 'Republic Day', fromDate: '2026-01-26', toDate: '2026-01-26' },
+    ])
+  })
+
+  it('works without holidays (Sundays still skipped)', () => {
+    const r = buildMonthlyReport({
+      profile: profile(), ...JAN, exams: [],
+      attendance: [{ date: '2026-01-04', status: 'A' }, { date: '2026-01-05', status: 'P' }],
+      lectureAbsences: [], examAbsences: [], batchChapterTimelines: {}, syllabusPrograms: [],
+    })
+    expect(r.attendance.totalWorkingDays).toBe(1)
+    expect(r.attendance.holidays).toEqual([])
   })
 })

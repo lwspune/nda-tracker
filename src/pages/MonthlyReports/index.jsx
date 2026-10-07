@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import useStore from '../../store/useStore'
 import { buildMonthlyReport, getMonthlyReportCohort } from '../../lib/monthlyReportBuilder'
+import useHolidays from '../../store/useHolidays'
 import { downloadMonthlyReportPdf } from '../../lib/monthlyReportPdf'
 import { downloadMonthlyReportsZip, zipFilename } from '../../lib/monthlyReportZip'
 import { downloadMonthlyReportDocx, docxFilename, hasNonLatinExamTitle } from '../../lib/monthlyReportDocx'
@@ -52,6 +53,7 @@ export default function MonthlyReportsPage() {
   const syllabusPrograms       = useStore(s => s.syllabusPrograms)
   const batchChapterTimelines  = useStore(s => s.batchChapterTimelines)
   const fetchMonthlyReportData = useStore(s => s.fetchMonthlyReportData)
+  const holidays               = useHolidays()
 
   const defaultRange = previousMonthRange()
   const [from, setFrom] = useState(defaultRange.from)
@@ -124,6 +126,7 @@ export default function MonthlyReportsPage() {
       homework:        generated?.homeworkByLwsId?.[lwsId]        || [],
       batchChapterTimelines,
       syllabusPrograms,
+      holidays,
     })
   }
 

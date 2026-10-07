@@ -3,7 +3,8 @@
 // transient remark. Async because jsPDF + autotable are dynamic imports
 // (smaller initial bundle).
 
-import { pdfSafeExamLabel } from './pdfSafeText'
+import { pdfSafeExamLabel, isWinAnsiSafe } from './pdfSafeText'
+import { formatHolidayList } from './holidays'
 import { downloadBlob } from './download'
 import { safeFilename } from './download'
 
@@ -151,11 +152,16 @@ async function drawExamTable(doc, y, report, autoTable) {
 //     omitted at 0/0. Numerator = present + late (they showed up, some late).
 //     The omission is deliberate: a batch with no register (APJ 9th, 11th_B) is
 //     an internal gap, and this card goes to parents. Do not print it here.
+//   • Holidays — the student's holidays in the range, listed under the
+//     attendance line so the parent can see why there were fewer working days.
+//     Rides with the attendance line: omitted whenever it is. Sundays unlisted.
+//     `winAnsiOnly` (the PDF) prints the date alone for a name its fonts cannot
+//     draw — see pdfSafeText.js; the Word file keeps every name.
 //   • Late days — omitted at zero (same source as attendance).
 //   • Missed lectures / Homework incomplete — exception logs; omitted when empty.
 //     Homework counts ONLY unresolved items.
 // Exported for unit testing; drawn by drawConduct.
-export function conductBlocks(report) {
+export function conductBlocks(report, { winAnsiOnly = false } = {}) {
   const a = report.attendance || {}
   const blocks = []
 
@@ -164,6 +170,12 @@ export function conductBlocks(report) {
       label: 'ATTENDANCE',
       value: `${a.present + a.late} / ${a.totalWorkingDays} days present (${a.attendancePercentage}%)`,
     })
+    if (a.holidays?.length) {
+      const list = winAnsiOnly
+        ? a.holidays.map(h => (isWinAnsiSafe(h.name) ? h : { ...h, name: '' }))
+        : a.holidays
+      blocks.push({ label: 'HOLIDAYS', value: formatHolidayList(list) })
+    }
   }
   if (a.late > 0) {
     blocks.push({ label: `LATE DAYS (${a.late})`, value: (a.lateDates || []).join(', ') })
@@ -192,7 +204,7 @@ export function conductBlocks(report) {
 // data on the line below. The Attendance value is colour-coded by percentage;
 // the rest are plain. Draws nothing when there are no blocks.
 function drawConduct(doc, y, report) {
-  const blocks = conductBlocks(report)
+  const blocks = conductBlocks(report, { winAnsiOnly: true })
   if (blocks.length === 0) return y
   const W = doc.internal.pageSize.getWidth()
   const maxW = W - M.left - M.right

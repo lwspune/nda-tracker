@@ -130,7 +130,7 @@ export function formatHolidayList(list, { names = true } = {}) {
     if (h.fromDate === h.toDate) when = `${a.d} ${a.mon}`
     else if (a.mon === b.mon) when = `${a.d}-${b.d} ${a.mon}`
     else when = `${a.d} ${a.mon}-${b.d} ${b.mon}`
-    return names ? `${when} ${h.name}` : when
+    return names && h.name ? `${when} ${h.name}` : when
   }).join(', ')
 }
 

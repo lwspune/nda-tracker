@@ -259,3 +259,20 @@ describe('MonthlyReportsPage', () => {
     expect(screen.getByRole('button', { name: /^generate$/i })).toBeDisabled()
   })
 })
+
+describe('MonthlyReportsPage — holidays', () => {
+  it("builds each report with the student's holidays", async () => {
+    // Spans any default range, so the test does not depend on today's date.
+    mockState.holidays = [
+      { id: 'h', name: 'Long break', fromDate: '2000-01-01', toDate: '2099-12-31', branch: 'LWS Pune', batchNames: [] },
+    ]
+    mockState.holidaysLoaded = true
+    const user = userEvent.setup()
+    render(<MonthlyReportsPage />)
+    await user.click(screen.getByRole('button', { name: /^generate$/i }))
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+    await user.click(screen.getAllByRole('button', { name: /download pdf/i })[0])
+    await waitFor(() => expect(mockDownload).toHaveBeenCalledTimes(1))
+    expect(mockDownload.mock.calls[0][0].attendance.holidays.map(h => h.name)).toEqual(['Long break'])
+  })
+})

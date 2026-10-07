@@ -9,6 +9,7 @@
 // default previous-month report is visually unchanged.
 
 import { examMaxMarks, examFormat } from './analyticsHelpers'
+import { filterWorkingDays, holidaysInRange } from './holidays'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -85,6 +86,7 @@ export function buildMonthlyReport({
   homework,
   batchChapterTimelines,
   syllabusPrograms,
+  holidays = [],
 }) {
   const batch = (profile.batches || [])[0] || ''
   const regDate = profile.regDate || ''
@@ -132,9 +134,11 @@ export function buildMonthlyReport({
   tableRows.sort((a, b) => a.date.localeCompare(b.date))
 
   // ── attendance ─────────────────────────────────────────────────────────
+  // Sundays and the student's branch/batch holidays are not working days: the
+  // register marks everyone 'A' on them, so they would read as absences.
   let present = 0, absent = 0, late = 0
   const lateDates = []
-  for (const row of attendance || []) {
+  for (const row of filterWorkingDays(attendance, holidays, profile)) {
     if (!inRange(row.date, from, to)) continue
     if (row.status === 'P') present++
     else if (row.status === 'A') absent++
@@ -209,6 +213,7 @@ export function buildMonthlyReport({
       attendancePercentage,
       lateDates,
       missedLectureDetails: missedLectureRows,
+      holidays: holidaysInRange(holidays, profile, from, to),
     },
     homeworkFlagged,
     nextMonthFocus,

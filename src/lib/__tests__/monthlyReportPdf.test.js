@@ -176,3 +176,38 @@ describe('PDF smoke — Roll No removed', () => {
     expect(blob.size).toBeGreaterThan(800)
   })
 })
+
+describe('conductBlocks — holidays', () => {
+  const att = (over = {}) => ({
+    present: 10, absent: 1, late: 0, missedLectures: 0,
+    totalWorkingDays: 11, attendancePercentage: 91,
+    lateDates: [], missedLectureDetails: [], holidays: [], ...over,
+  })
+  const report = attendance => ({ attendance, homeworkFlagged: [] })
+  const HOLS = [
+    { name: 'Independence Day', fromDate: '2026-08-15', toDate: '2026-08-15' },
+    { name: 'Ganesh', fromDate: '2026-08-27', toDate: '2026-08-28' },
+  ]
+
+  it('lists the holidays right after the attendance line', () => {
+    const blocks = conductBlocks(report(att({ holidays: HOLS })))
+    expect(blocks[1]).toEqual({ label: 'HOLIDAYS', value: '15 Aug Independence Day, 27-28 Aug Ganesh' })
+  })
+
+  it('omits the block when there were no holidays', () => {
+    expect(conductBlocks(report(att())).map(b => b.label)).not.toContain('HOLIDAYS')
+  })
+
+  it('omits it with the attendance line (no register taken)', () => {
+    const blocks = conductBlocks(report(att({ present: 0, absent: 0, totalWorkingDays: 0, attendancePercentage: 0, holidays: HOLS })))
+    expect(blocks.map(b => b.label)).not.toContain('HOLIDAYS')
+  })
+
+  it('for the PDF, prints the date alone for a name its fonts cannot draw', () => {
+    const blocks = conductBlocks(
+      report(att({ holidays: [{ name: 'दिवाळी', fromDate: '2026-11-09', toDate: '2026-11-09' }, HOLS[0]] })),
+      { winAnsiOnly: true },
+    )
+    expect(blocks[1].value).toBe('9 Nov, 15 Aug Independence Day')
+  })
+})
