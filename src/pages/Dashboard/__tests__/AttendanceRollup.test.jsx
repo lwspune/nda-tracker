@@ -170,3 +170,24 @@ describe('AttendanceRollup — batch ordering', () => {
     ])
   })
 })
+
+describe('AttendanceRollup — holidays', () => {
+  const HOLIDAYS = [
+    { id: 'h', name: 'Diwali', fromDate: '2026-06-05', toDate: '2026-06-05', branch: 'LWS Pune', batchNames: [] },
+  ]
+
+  it("labels a branch's batches Holiday instead of counting everyone absent", async () => {
+    renderWidget({ holidays: HOLIDAYS })
+    const cell = await screen.findByTestId('holiday-LWS Pune-LWS_A')
+    expect(cell).toHaveTextContent('Holiday · Diwali')
+    expect(screen.queryByTestId('cell-LWS Pune-LWS_A-absent-male')).not.toBeInTheDocument()
+    // The other branch is a normal day
+    expect(screen.getByTestId('cell-APJ-APJ_1-present-male')).toHaveTextContent('1')
+  })
+
+  it('a Sunday is a holiday for every batch', async () => {
+    const fetchFn = makeFetch({ '2026-06-07': ROWS_0605 }, '2026-06-07')
+    renderWidget({ fetchDailyAttendance: fetchFn })
+    expect(await screen.findByTestId('holiday-APJ-APJ_1')).toHaveTextContent('Holiday · Sunday')
+  })
+})

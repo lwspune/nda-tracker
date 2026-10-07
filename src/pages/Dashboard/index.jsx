@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import useStore from '../../store/useStore'
+import useHolidays from '../../store/useHolidays'
 import { EmptyState, PageHeader, Card, CardTitle, Badge } from '../../components/ui'
 import {
   getHardestQuestions, getValidStudentNames,
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const fetchAttendanceLeadersData = useStore(s => s.fetchAttendanceLeadersData)
   const getAllIntegrityIncidents   = useStore(s => s.getAllIntegrityIncidents)
   const fetchStudentLoginIds       = useStore(s => s.fetchStudentLoginIds)
+  const holidays                   = useHolidays()
 
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [branchFilter, setBranchFilter]   = useState('all')
@@ -157,6 +159,7 @@ export default function DashboardPage() {
         branches={branches}
         syllabusBatchBranches={syllabusBatchBranches}
         fetchDailyAttendance={fetchDailyAttendance}
+        holidays={holidays}
       />
 
       {/* Attendance leaders — top-5 absent / late / lecture-miss / homework-miss (class-wide) */}
@@ -164,6 +167,7 @@ export default function DashboardPage() {
         studentProfiles={studentProfiles}
         fetchAttendanceLeadersData={fetchAttendanceLeadersData}
         setActiveStudent={setActiveStudent}
+        holidays={holidays}
       />
 
       {/* Integrity incidents rollup — repeat-offender view; hidden when none */}

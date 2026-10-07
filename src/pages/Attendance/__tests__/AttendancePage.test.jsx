@@ -3,7 +3,7 @@
 // Students page when a profile-backed name is clicked.
 
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── Mocks ────────────────────────────────────────────────────────
 
@@ -185,5 +185,33 @@ describe('AttendancePage — Holidays tab', () => {
     expect(panel).toBeInTheDocument()
     expect(panel.hasAttribute('hidden')).toBe(false)
     expect(screen.getByRole('button', { name: /add holiday/i })).toBeInTheDocument()
+  })
+})
+
+describe('AttendancePage — class metrics skip days off', () => {
+  afterEach(() => { mockStore.holidays = [] })
+
+  it("leaves Sundays and the student's branch holidays out of present/absent/%", async () => {
+    mockStore.studentProfiles = { 'Arjun Sharma': { ...PROFILE_ARJUN, branch: 'LWS Pune' } }
+    mockStore.holidays = [
+      { id: 'h', name: 'Maharashtra Day', fromDate: '2026-05-01', toDate: '2026-05-01', branch: 'LWS Pune', batchNames: [] },
+      { id: 'o', name: 'APJ only', fromDate: '2026-05-04', toDate: '2026-05-04', branch: 'APJ', batchNames: [] },
+    ]
+    mockAttendanceRecords([
+      { lws_id: 'LWS-001', date: '2026-05-01', status: 'A' }, // holiday → skipped
+      { lws_id: 'LWS-001', date: '2026-05-02', status: 'P' },
+      { lws_id: 'LWS-001', date: '2026-05-03', status: 'A' }, // Sunday → skipped
+      { lws_id: 'LWS-001', date: '2026-05-04', status: 'A' }, // other branch's holiday → counts
+    ])
+    render(<AttendancePage />)
+    const row = (await screen.findByRole('button', { name: 'Arjun Sharma' })).closest('tr')
+    const cells = [...row.querySelectorAll('td')].map(td => td.textContent)
+    expect(cells.slice(1)).toEqual(['1', '1', '2', '50%'])
+  })
+
+  it('says the streak skips holidays as well as Sundays', async () => {
+    mockAttendanceRecords([{ lws_id: 'LWS-001', date: '2026-05-02', status: 'P' }])
+    render(<AttendancePage />)
+    expect(await screen.findByText(/excl\. Sundays & holidays/)).toBeInTheDocument()
   })
 })

@@ -177,7 +177,7 @@ export const createAttendanceSlice = (set, get) => ({
     }
 
     const attendanceRows = await readAll(() => supabase
-      .from('student_attendance').select('lws_id, status')
+      .from('student_attendance').select('lws_id, date, status')
       .in('status', ['A', 'L']).gte('date', sinceIso))
     const lectureRows = await readAll(() => supabase
       .from('lecture_absences').select('lws_id').gte('date', sinceIso))

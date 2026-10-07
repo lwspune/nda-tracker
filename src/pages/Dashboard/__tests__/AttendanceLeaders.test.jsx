@@ -65,3 +65,25 @@ describe('AttendanceLeaders', () => {
     expect(second > first).toBe(true)
   })
 })
+
+describe('AttendanceLeaders — holidays', () => {
+  it("does not count absences on a student's branch holiday", async () => {
+    const fetch = vi.fn(async () => ({
+      attendanceRows: [
+        { lws_id: 'L1', date: '2026-10-02', status: 'A' }, // APJ holiday
+        { lws_id: 'L1', date: '2026-10-05', status: 'A' },
+      ],
+      lectureRows: [], homeworkRows: [],
+    }))
+    render(
+      <AttendanceLeaders
+        studentProfiles={profiles}
+        fetchAttendanceLeadersData={fetch}
+        setActiveStudent={vi.fn()}
+        holidays={[{ id: 'h', name: 'Gandhi Jayanti', fromDate: '2026-10-02', toDate: '2026-10-02', branch: 'APJ', batchNames: [] }]}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+    expect(screen.getByText('1 days')).toBeInTheDocument()
+  })
+})

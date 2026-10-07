@@ -13,7 +13,12 @@
 // to profile.branch when a batch isn't mapped. A multi-batch student is counted
 // under each of their batches. Variant-keyed profile entries are skipped via
 // `p.name === key` (same guard as getExamAbsentees) so each student counts once.
-export function buildAttendanceRollup({ attendanceRows = [], studentProfiles = {}, syllabusBatchBranches = {} }) {
+//
+// `offReason(lwsId)` → holiday name | null for this date (src/lib/holidays.js).
+// A member on their day off is in neither bucket — the register marks everyone
+// 'A' on a holiday. Each batch carries `holiday`: the name when EVERY member is
+// off (the row then reads "Holiday"), else null.
+export function buildAttendanceRollup({ attendanceRows = [], studentProfiles = {}, syllabusBatchBranches = {}, offReason = null }) {
   const absentSet = new Set(
     attendanceRows.filter(r => r.status === 'A').map(r => r.lws_id)
   )
@@ -25,6 +30,7 @@ export function buildAttendanceRollup({ attendanceRows = [], studentProfiles = {
       rollup[branch][batch] = {
         male:   { present: [], absent: [] },
         female: { present: [], absent: [] },
+        holiday: undefined, // undefined = no member yet; resolved to name | null below
       }
     }
     return rollup[branch][batch]
@@ -38,10 +44,14 @@ export function buildAttendanceRollup({ attendanceRows = [], studentProfiles = {
 
     const gender = p.gender === 'Female' ? 'female' : 'male'
     const bucket = absentSet.has(p.lwsId) ? 'absent' : 'present'
+    const off = offReason ? offReason(p.lwsId) : null
 
     for (const batch of batches) {
       const branch = syllabusBatchBranches[batch] || p.branch || 'Unknown'
-      slot(branch, batch)[gender][bucket].push(p.name)
+      const s = slot(branch, batch)
+      // A batch is a holiday only while every member seen so far is off.
+      s.holiday = s.holiday === undefined ? (off || null) : (s.holiday && off ? s.holiday : null)
+      if (!off) s[gender][bucket].push(p.name)
     }
   }
 

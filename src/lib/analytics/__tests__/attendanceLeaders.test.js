@@ -70,3 +70,18 @@ describe('buildAttendanceLeaders', () => {
     expect(empty).toEqual({ absentees: [], late: [], homeworkMiss: [], lectureMiss: [] })
   })
 })
+
+describe('buildAttendanceLeaders — days off', () => {
+  it("does not count a student's absences on their days off", () => {
+    const rows = [
+      { lws_id: 'L1', date: '2026-10-02', status: 'A' }, // Alice's holiday
+      { lws_id: 'L1', date: '2026-10-04', status: 'A' }, // Sunday
+      { lws_id: 'L1', date: '2026-10-05', status: 'A' },
+      { lws_id: 'L2', date: '2026-10-02', status: 'A' }, // not Bob's holiday
+      { lws_id: 'L2', date: '2026-10-05', status: 'A' },
+    ]
+    const dayOff = (id, date) => (date === '2026-10-04' ? 'Sunday' : id === 'L1' && date === '2026-10-02' ? 'Holiday' : null)
+    const out = buildAttendanceLeaders({ attendanceRows: rows, studentProfiles: profiles, dayOff })
+    expect(out.absentees.map(r => [r.name, r.count])).toEqual([['Bob', 2], ['Alice', 1]])
+  })
+})

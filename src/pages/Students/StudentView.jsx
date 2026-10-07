@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import useStore from '../../store/useStore'
 import { Card, CardTitle, StatCard, EmptyState } from '../../components/ui'
 import { useMode } from '../../context/ModeContext'
 import { supabase } from '../../lib/supabase'
 import AttendanceRings from '../Attendance/AttendanceRings'
+import useHolidays from '../../store/useHolidays'
+import { filterWorkingDays } from '../../lib/holidays'
 import RecentIncidents from './RecentIncidents'
 import MissedExams from './MissedExams'
 import IntegrityIncidents from './IntegrityIncidents'
@@ -33,6 +35,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const ndaFreqBySubject   = useStore(s => s.ndaFreqBySubject)
   const ndaMarksBySubject  = useStore(s => s.ndaMarksBySubject)
   const isSuperadmin       = useStore(s => s.isSuperadmin)
+  const holidays           = useHolidays()
   const mode               = useMode()
 
   const [subjectFilter, setSubjectFilter] = useState('Maths')
@@ -66,7 +69,13 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       .then(({ data }) => { if (!cancelled) setFetchedAttendance(data || []) })
     return () => { cancelled = true }
   }, [profile?.lwsId, attendanceProp])
-  const attendance = attendanceProp !== null ? attendanceProp : fetchedAttendance
+  // Sundays and the student's branch/batch holidays are not working days. The
+  // student portal's rows arrive already filtered by student-login (holidays
+  // stay [] there); filtering again only re-drops Sundays, so it is harmless.
+  const attendance = useMemo(
+    () => filterWorkingDays(attendanceProp !== null ? attendanceProp : fetchedAttendance, holidays, profile),
+    [attendanceProp, fetchedAttendance, holidays, profile],
+  )
 
   // Lecture absences + exam absences — admin/teacher fetch from slice, student
   // portal supplies via prop (no Supabase session). Full history; consumers

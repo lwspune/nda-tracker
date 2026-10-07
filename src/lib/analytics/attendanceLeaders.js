@@ -34,18 +34,21 @@ function rank(rows, byLwsId, topN) {
 
 /**
  * @param {Object} args
- * @param {Array}  args.attendanceRows  [{ lws_id, status }]  (status 'A' = absent, 'L' = late)
+ * @param {Array}  args.attendanceRows  [{ lws_id, date, status }]  (status 'A' = absent, 'L' = late)
  * @param {Array}  args.lectureRows     [{ lws_id }]          one row per missed lecture-period
  * @param {Array}  args.homeworkRows    [{ lws_id }]          one row per flagged homework/notes item
  * @param {Object} args.studentProfiles canonical+variant keyed profile map
+ * @param {Function} [args.dayOff]     (lwsId, date) → reason | null (src/lib/holidays.js);
+ *                                      attendance rows on a student's day off are not counted
  * @param {number} [args.topN=5]
  * @returns {{ absentees, late, homeworkMiss, lectureMiss }} each [{ lwsId, name, branch, count }]
  */
-export function buildAttendanceLeaders({ attendanceRows = [], lectureRows = [], homeworkRows = [], studentProfiles = {}, topN = 5 }) {
+export function buildAttendanceLeaders({ attendanceRows = [], lectureRows = [], homeworkRows = [], studentProfiles = {}, dayOff = null, topN = 5 }) {
   const byLwsId = activeProfilesByLwsId(studentProfiles)
+  const working = dayOff ? attendanceRows.filter(r => !dayOff(r?.lws_id, r?.date)) : attendanceRows
   return {
-    absentees:    rank(attendanceRows.filter(r => r?.status === 'A'), byLwsId, topN),
-    late:         rank(attendanceRows.filter(r => r?.status === 'L'), byLwsId, topN),
+    absentees:    rank(working.filter(r => r?.status === 'A'), byLwsId, topN),
+    late:         rank(working.filter(r => r?.status === 'L'), byLwsId, topN),
     lectureMiss:  rank(lectureRows,  byLwsId, topN),
     homeworkMiss: rank(homeworkRows, byLwsId, topN),
   }

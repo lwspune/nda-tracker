@@ -16,6 +16,8 @@ import LateNotificationPreviewModal from './LateNotificationPreviewModal'
 import LectureMissPreviewModal from './LectureMissPreviewModal'
 import HomeworkPreviewModal from './HomeworkPreviewModal'
 import { fmtDateShort as fmtDate } from '../../lib/dates'
+import useHolidays from '../../store/useHolidays'
+import { makeDayOff, studentIndexFromProfiles, filterWorkingDaysByStudent } from '../../lib/holidays'
 
 function todayIso() {
   const d = new Date()
@@ -71,6 +73,7 @@ export default function AttendancePage() {
   const setHomeworkSendHistory  = useStore(s => s.setHomeworkSendHistory)
   const markHomeworkNotified    = useStore(s => s.markHomeworkNotified)
   const getHomeworkForDate      = useStore(s => s.getHomeworkForDate)
+  const holidays                = useHolidays()
   const mode = useMode()
 
   const [consecutiveDays, setConsecutiveDays] = useState(3)
@@ -283,14 +286,25 @@ export default function AttendancePage() {
     return () => { cancelled = true }
   }, [refreshKey])
 
+  // Sundays and each student's branch/batch holidays are not working days, so
+  // their rows (the register marks everyone 'A') stay out of every figure here.
+  const dayOff = useMemo(
+    () => makeDayOff(holidays, studentIndexFromProfiles(studentProfiles)),
+    [holidays, studentProfiles]
+  )
+  const workingRecords = useMemo(
+    () => filterWorkingDaysByStudent(records, dayOff),
+    [records, dayOff]
+  )
+
   const studentStats = useMemo(
-    () => buildStudentStats(records, lwsIdToName),
-    [records, lwsIdToName]
+    () => buildStudentStats(workingRecords, lwsIdToName),
+    [workingRecords, lwsIdToName]
   )
 
   const consecutiveAbsent = useMemo(
-    () => buildConsecutiveAbsent(records, lwsIdToName, consecutiveDays),
-    [records, lwsIdToName, consecutiveDays]
+    () => buildConsecutiveAbsent(records, lwsIdToName, consecutiveDays, dayOff),
+    [records, lwsIdToName, consecutiveDays, dayOff]
   )
 
   const classAvg = studentStats.length
@@ -470,7 +484,7 @@ export default function AttendancePage() {
               className="form-input w-14 text-center text-[13px] min-h-[44px] px-2"
             />
             <span className="text-[12px] font-mono uppercase tracking-widest text-ink-3">
-              consecutive days (excl. Sundays)
+              consecutive days (excl. Sundays &amp; holidays)
             </span>
             {consecutiveAbsent.length > 0 && (
               <span className="ml-auto text-[12px] font-semibold text-danger">

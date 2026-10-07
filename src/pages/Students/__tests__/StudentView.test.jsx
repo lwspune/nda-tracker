@@ -3,7 +3,7 @@
 
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── Mock store ────────────────────────────────────────────────────────────────
 
@@ -598,5 +598,26 @@ describe('StudentView — no Improvement Plan card', () => {
     renderView()
     expect(screen.queryByText(/improvement plan/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/your Maths game plan/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('StudentView — attendance rings skip days off', () => {
+  afterEach(() => { mockStore.holidays = [] })
+
+  it("leaves Sundays and the student's holidays out of the month's %", () => {
+    mockStore.studentProfiles = {
+      Alice: { name: 'Alice', lwsId: 'S1', branch: 'APJ', batches: ['APJ_12th'], nameVariants: [] },
+    }
+    mockStore.holidays = [
+      { id: 'h', name: 'Diwali', fromDate: '2026-11-09', toDate: '2026-11-09', branch: 'APJ', batchNames: [] },
+    ]
+    setExams([makeExam()])
+    render(<StudentView name="Alice" attendance={[
+      { date: '2026-11-08', status: 'A' }, // Sunday
+      { date: '2026-11-09', status: 'A' }, // Diwali
+      { date: '2026-11-10', status: 'P' },
+      { date: '2026-11-12', status: 'A' },
+    ]} />)
+    expect(screen.getByTestId('ring-2026-11')).toHaveTextContent('50%')
   })
 })

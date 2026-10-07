@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardTitle, Badge } from '../../components/ui'
 import { buildAttendanceLeaders } from '../../lib/analytics/attendanceLeaders'
+import { makeDayOff, studentIndexFromProfiles } from '../../lib/holidays'
 
 // Date N days ago as YYYY-MM-DD (local). Window options for the leaderboards.
 function isoDaysAgo(n) {
@@ -23,7 +24,7 @@ const BOARDS = [
  * window. Class-wide + Active-only (ignores the page's subject/branch/batch
  * filter chain, like the roll-up). Fetch-on-demand; not stored.
  */
-export default function AttendanceLeaders({ studentProfiles, fetchAttendanceLeadersData, setActiveStudent }) {
+export default function AttendanceLeaders({ studentProfiles, fetchAttendanceLeadersData, setActiveStudent, holidays = [] }) {
   const [windowDays, setWindowDays] = useState(30)
   const [rows, setRows] = useState({ attendanceRows: [], lectureRows: [], homeworkRows: [] })
 
@@ -36,7 +37,9 @@ export default function AttendanceLeaders({ studentProfiles, fetchAttendanceLead
     return () => { cancelled = true }
   }, [windowDays, fetchAttendanceLeadersData])
 
-  const leaders = buildAttendanceLeaders({ ...rows, studentProfiles })
+  // Absences/lates on a student's Sunday or holiday are not counted.
+  const dayOff = makeDayOff(holidays, studentIndexFromProfiles(studentProfiles))
+  const leaders = buildAttendanceLeaders({ ...rows, studentProfiles, dayOff })
 
   return (
     <div className="mb-4 md:mb-5">

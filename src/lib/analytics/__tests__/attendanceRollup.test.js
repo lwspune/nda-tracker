@@ -100,3 +100,41 @@ describe('buildAttendanceRollup', () => {
     expect(buildAttendanceRollup({ attendanceRows: [], studentProfiles: {}, syllabusBatchBranches: BRANCHES })).toEqual({})
   })
 })
+
+describe('buildAttendanceRollup — days off', () => {
+  // LWS Pune is off; APJ is not.
+  const offReason = id => (['L1', 'L2', 'L3'].includes(id) ? 'Diwali' : null)
+  const ROWS = [
+    { lws_id: 'L1', status: 'A' }, { lws_id: 'L2', status: 'A' },
+    { lws_id: 'L3', status: 'A' }, { lws_id: 'L4', status: 'A' },
+  ]
+
+  it('a member on their day off is neither present nor absent', () => {
+    const r = buildAttendanceRollup({ attendanceRows: ROWS, studentProfiles: PROFILES, syllabusBatchBranches: BRANCHES, offReason })
+    const a = r['LWS Pune']['LWS_A']
+    expect([...a.male.present, ...a.male.absent, ...a.female.present, ...a.female.absent]).toEqual([])
+    expect(r['APJ']['APJ_1'].male.absent).toEqual(['Dave'])
+  })
+
+  it('marks a batch as on holiday when every member is off, naming the holiday', () => {
+    const r = buildAttendanceRollup({ attendanceRows: ROWS, studentProfiles: PROFILES, syllabusBatchBranches: BRANCHES, offReason })
+    expect(r['LWS Pune']['LWS_A'].holiday).toBe('Diwali')
+    expect(r['LWS Pune']['LWS_B'].holiday).toBe('Diwali')
+    expect(r['APJ']['APJ_1'].holiday).toBeNull()
+  })
+
+  it('a batch with only some members off is not a holiday', () => {
+    const r = buildAttendanceRollup({
+      attendanceRows: ROWS, studentProfiles: PROFILES, syllabusBatchBranches: BRANCHES,
+      offReason: id => (id === 'L1' ? 'Diwali' : null),
+    })
+    expect(r['LWS Pune']['LWS_A'].holiday).toBeNull()
+    expect(r['LWS Pune']['LWS_A'].male.absent).toEqual(['Bob'])
+    expect(r['LWS Pune']['LWS_A'].female.absent).toEqual([])
+  })
+
+  it('without offReason every batch is a working day', () => {
+    const r = buildAttendanceRollup({ attendanceRows: ROWS, studentProfiles: PROFILES, syllabusBatchBranches: BRANCHES })
+    expect(r['LWS Pune']['LWS_A'].holiday).toBeNull()
+  })
+})

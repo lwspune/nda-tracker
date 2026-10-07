@@ -4,7 +4,10 @@
 // `since` is the earliest 'A' in the actual streak (may go back further than n).
 // `count` is the streak length — recorded non-Sunday days marked 'A'.
 // Results are sorted by `count` descending (ties: name ascending).
-export function buildConsecutiveAbsent(records, lwsIdToName, n) {
+// `dayOff(lwsId, date)` (src/lib/holidays.js makeDayOff) names a student's
+// holiday: that day is stepped over — it neither counts nor breaks the streak.
+// Holidays differ by branch/batch, so this is per student, not a date filter.
+export function buildConsecutiveAbsent(records, lwsIdToName, n, dayOff = null) {
   if (n < 1 || !records.length) return []
 
   const allDates = [...new Set(records.map(r => r.date))]
@@ -26,6 +29,7 @@ export function buildConsecutiveAbsent(records, lwsIdToName, n) {
     let streak = 0
     let since = null
     for (const d of allDates) {              // latest → oldest
+      if (dayOff?.(lwsId, d)) continue       // their day off — step over it
       if (dateMap[d] === 'A') {
         streak++
         since = d                            // earliest A so far in the streak

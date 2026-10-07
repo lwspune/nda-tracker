@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardTitle } from '../../components/ui'
 import { buildAttendanceRollup } from '../../lib/analytics'
+import { makeDayOff, studentIndexFromProfiles } from '../../lib/holidays'
 
 // Branch-wise attendance roll-up for one recorded day. One table per branch,
 // side by side. Rows = batches; columns = Present / Absent / Total, each split
@@ -10,6 +11,8 @@ import { buildAttendanceRollup } from '../../lib/analytics'
 // Absent = status 'A'; Present = everyone else (P / L / '-' / no record).
 // Cohort is Active-only (enforced in buildAttendanceRollup). Class-wide — the
 // roll-up deliberately ignores the Dashboard's subject/branch/batch filters.
+// A batch whose members are all on a day off (Sunday or a holiday) reads
+// "Holiday · <name>" — the register marks everyone 'A' on those days.
 
 const COLS = [
   { key: 'present', gender: 'male',   group: 'present' },
@@ -55,7 +58,7 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
   }
 
   const rows = [
-    ...batchNames.map(b => ({ label: b, idBatch: b, data: batches[b], isTotal: false })),
+    ...batchNames.map(b => ({ label: b, idBatch: b, data: batches[b], isTotal: false, holiday: batches[b].holiday })),
     { label: 'Total', idBatch: '__total__', data: totalData, isTotal: true },
   ]
 
@@ -95,6 +98,7 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
                 idBatch={r.idBatch}
                 data={r.data}
                 isTotal={r.isTotal}
+                holiday={r.holiday}
                 expanded={expanded}
                 onToggle={onToggle}
               />
@@ -106,10 +110,21 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
   )
 }
 
-function BatchRows({ branch, label, idBatch, data, isTotal, expanded, onToggle }) {
+function BatchRows({ branch, label, idBatch, data, isTotal, holiday, expanded, onToggle }) {
   const openCol = expanded && expanded.branch === branch && expanded.batch === idBatch ? expanded : null
   const openNames = openCol ? cellNames(data, openCol) : []
   const rowCls = isTotal ? 'border-t-2 border-border' : 'border-b border-border/50'
+  if (holiday) {
+    return (
+      <tr className={rowCls}>
+        <td className="py-1.5 pr-3 text-ink font-medium">{label}</td>
+        <td colSpan={6} data-testid={`holiday-${branch}-${idBatch}`}
+            className="text-center text-[11px] font-semibold text-ink-3">
+          Holiday · {holiday}
+        </td>
+      </tr>
+    )
+  }
   return (
     <>
       <tr className={rowCls}>
@@ -153,7 +168,7 @@ function BatchRows({ branch, label, idBatch, data, isTotal, expanded, onToggle }
   )
 }
 
-export default function AttendanceRollup({ studentProfiles, branches, syllabusBatchBranches, fetchDailyAttendance }) {
+export default function AttendanceRollup({ studentProfiles, branches, syllabusBatchBranches, fetchDailyAttendance, holidays = [] }) {
   const [date, setDate]       = useState(null)
   const [rows, setRows]       = useState([])
   const [loaded, setLoaded]   = useState(false)
@@ -179,10 +194,13 @@ export default function AttendanceRollup({ studentProfiles, branches, syllabusBa
     if (res) setRows(res.rows)
   }
 
-  const rollup = useMemo(
-    () => buildAttendanceRollup({ attendanceRows: rows, studentProfiles, syllabusBatchBranches }),
-    [rows, studentProfiles, syllabusBatchBranches],
-  )
+  const rollup = useMemo(() => {
+    const dayOff = makeDayOff(holidays, studentIndexFromProfiles(studentProfiles))
+    return buildAttendanceRollup({
+      attendanceRows: rows, studentProfiles, syllabusBatchBranches,
+      offReason: date ? id => dayOff(id, date) : null,
+    })
+  }, [rows, studentProfiles, syllabusBatchBranches, holidays, date])
 
   // Branch order: configured branches first, then any extras present in the data.
   const dataBranches = Object.keys(rollup)

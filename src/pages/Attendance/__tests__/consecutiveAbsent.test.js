@@ -254,3 +254,37 @@ describe('buildConsecutiveAbsent', () => {
     expect(result[0].count).toBe(2)
   })
 })
+
+describe('buildConsecutiveAbsent — holidays', () => {
+  // 2026-05-04 Mon, 05 Tue, 06 Wed. L001's branch is off on Tue; L002's is not.
+  const dayOff = (lwsId, date) => (lwsId === 'L001' && date === '2026-05-05' ? 'Holiday' : null)
+
+  it("steps over the student's holiday — it neither counts nor breaks the streak", () => {
+    const records = [
+      ...rec('L001', [['2026-05-04', 'A'], ['2026-05-05', 'A'], ['2026-05-06', 'A']]),
+      ...rec('L002', [['2026-05-04', 'P'], ['2026-05-05', 'P'], ['2026-05-06', 'P']]),
+    ]
+    expect(buildConsecutiveAbsent(records, NAMES, 2, dayOff)).toEqual([
+      { lwsId: 'L001', name: 'Alice', since: '2026-05-04', count: 2 },
+    ])
+  })
+
+  it('a holiday with no register row for the student does not break the streak either', () => {
+    const records = [
+      ...rec('L001', [['2026-05-04', 'A'], ['2026-05-06', 'A']]),
+      ...rec('L002', [['2026-05-04', 'P'], ['2026-05-05', 'P'], ['2026-05-06', 'P']]),
+    ]
+    expect(buildConsecutiveAbsent(records, NAMES, 2, dayOff)).toEqual([
+      { lwsId: 'L001', name: 'Alice', since: '2026-05-04', count: 2 },
+    ])
+  })
+
+  it("another branch's holiday leaves a student's working day in place", () => {
+    const records = [
+      ...rec('L002', [['2026-05-04', 'A'], ['2026-05-05', 'P'], ['2026-05-06', 'A']]),
+      ...rec('L001', [['2026-05-04', 'A'], ['2026-05-05', 'A'], ['2026-05-06', 'A']]),
+    ]
+    // L002 was present on Tue, a working day for them, so their streak is just Wed.
+    expect(buildConsecutiveAbsent(records, NAMES, 2, dayOff).map(r => r.lwsId)).toEqual(['L001'])
+  })
+})
