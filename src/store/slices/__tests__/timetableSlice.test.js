@@ -65,6 +65,24 @@ describe('updateTimetableTeacher', () => {
       name: 'Vilas Sir', email: 'v@example.com', mobile: '9021869427',
     })
   })
+
+  // The patch is an allow-list; a permission field it doesn't name is dropped
+  // silently and the Settings switch would appear to do nothing.
+  it('persists every staff-permission field, coerced to a real boolean', () => {
+    const { get, slice, saves } = makeStore()
+    const id = slice.addTimetableTeacher('Asha Bade Mam', 'asha@lwspune.com')
+    slice.updateTimetableTeacher(id, { timetableAccess: true, hostelAccess: 'yes' })
+    expect(get().timetableTeachers[0]).toMatchObject({ timetableAccess: true, hostelAccess: false })
+    expect(saves.length).toBe(2)
+  })
+
+  it('turns a permission off without touching the other', () => {
+    const { get, slice } = makeStore({
+      timetableTeachers: [{ id: 't1', name: 'Asha', email: 'a@b.c', timetableAccess: true, hostelAccess: true }],
+    })
+    slice.updateTimetableTeacher('t1', { timetableAccess: false })
+    expect(get().timetableTeachers[0]).toMatchObject({ timetableAccess: false, hostelAccess: true })
+  })
 })
 
 describe('deleteTimetableTeacher', () => {

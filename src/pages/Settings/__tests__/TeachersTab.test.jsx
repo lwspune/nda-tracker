@@ -260,3 +260,40 @@ describe('TeachersTab — Add Teacher with inline Create-login checkbox', () => 
     expect(createCalls).toHaveLength(0)
   })
 })
+
+describe('TeachersTab — staff permissions', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', makeFetch({ list: [] }))
+    mockStore.timetableTeachers = [
+      { id: 't1', name: 'Asha Bade Mam', email: 'asha@x.com', hostelAccess: true },
+    ]
+  })
+
+  it('shows a switch per permission in the row editor, reflecting the record', async () => {
+    render(<TeachersTab />)
+    fireEvent.click(screen.getByText('Edit'))
+    const group = screen.getByRole('group', { name: /permissions/i })
+    expect(group).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /hostel & mess attendance/i })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /edit timetable/i })).not.toBeChecked()
+  })
+
+  it('saves every permission field alongside the contact details', async () => {
+    render(<TeachersTab />)
+    fireEvent.click(screen.getByText('Edit'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /edit timetable/i }))
+    fireEvent.click(screen.getByText('✓ Save'))
+    expect(mockStore.updateTimetableTeacher).toHaveBeenCalledWith('t1', expect.objectContaining({
+      name: 'Asha Bade Mam', hostelAccess: true, timetableAccess: true,
+    }))
+  })
+
+  it('badges each granted permission on the row', async () => {
+    mockStore.timetableTeachers = [
+      { id: 't1', name: 'Asha Bade Mam', email: 'asha@x.com', timetableAccess: true },
+    ]
+    render(<TeachersTab />)
+    expect(screen.getByText(/edits timetable/i)).toBeInTheDocument()
+    expect(screen.queryByText(/hostel & mess/i)).not.toBeInTheDocument()
+  })
+})

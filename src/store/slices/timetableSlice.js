@@ -1,3 +1,5 @@
+import { STAFF_PERMISSIONS } from '../../lib/staffPermissions'
+
 let _seq = Date.now()
 const uid = (prefix) => `${prefix}_${(++_seq).toString(36)}`
 
@@ -19,10 +21,11 @@ export const createTimetableSlice = (set, get) => ({
     return id
   },
 
-  // patch: { name?, email?, mobile?, hostelAccess? }
+  // patch: { name?, email?, mobile?, ...one boolean per STAFF_PERMISSIONS field }
   // NOTE: this is an explicit allow-list — a field not named here is silently
   // dropped (same footgun as persist.js saveToStorage). Add new teacher-record
-  // fields here or they will never persist.
+  // fields here or they will never persist. Permission fields come from the
+  // registry, so a new permission needs no edit here.
   updateTimetableTeacher(id, patch) {
     const update = {}
     if (patch.name !== undefined) {
@@ -32,8 +35,10 @@ export const createTimetableSlice = (set, get) => ({
     }
     if (patch.email !== undefined) update.email = patch.email.trim()
     if (patch.mobile !== undefined) update.mobile = patch.mobile.trim()
-    // Coerced to a real boolean — hasHostelAccess only honours `=== true`.
-    if (patch.hostelAccess !== undefined) update.hostelAccess = patch.hostelAccess === true
+    // Coerced to a real boolean — hasPermission only honours `=== true`.
+    for (const { field } of STAFF_PERMISSIONS) {
+      if (patch[field] !== undefined) update[field] = patch[field] === true
+    }
     if (!Object.keys(update).length) return
     set(s => ({
       timetableTeachers: s.timetableTeachers.map(t =>

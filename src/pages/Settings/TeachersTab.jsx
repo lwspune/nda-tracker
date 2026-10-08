@@ -3,6 +3,7 @@ import useStore from '../../store/useStore'
 import { Card } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import { sortTeachersByName } from '../../lib/timetable'
+import { STAFF_PERMISSIONS } from '../../lib/staffPermissions'
 
 const MIN_PASSWORD = 8
 
@@ -44,7 +45,8 @@ export default function TeachersTab() {
   const [editingName,   setEditingName]   = useState('')
   const [editingEmail,  setEditingEmail]  = useState('')
   const [editingMobile, setEditingMobile] = useState('')
-  const [editingHostelAccess, setEditingHostelAccess] = useState(false)
+  // { [permission field]: boolean } — one entry per STAFF_PERMISSIONS row
+  const [editingPermissions, setEditingPermissions] = useState({})
 
   // Login-management state
   const [authEmails,   setAuthEmails]   = useState(new Set()) // lowercase emails with login accounts
@@ -111,11 +113,11 @@ export default function TeachersTab() {
     setEditingName(t.name)
     setEditingEmail(t.email ?? '')
     setEditingMobile(t.mobile ?? '')
-    setEditingHostelAccess(t.hostelAccess === true)
+    setEditingPermissions(Object.fromEntries(STAFF_PERMISSIONS.map(p => [p.field, t[p.field] === true])))
   }
 
   function handleSaveEdit(id) {
-    updateTimetableTeacher(id, { name: editingName, email: editingEmail, mobile: editingMobile, hostelAccess: editingHostelAccess })
+    updateTimetableTeacher(id, { name: editingName, email: editingEmail, mobile: editingMobile, ...editingPermissions })
     setEditingId(null)
   }
 
@@ -285,20 +287,29 @@ export default function TeachersTab() {
                             if (e.key === 'Escape') setEditingId(null)
                           }}
                         />
-                        {/* Opens the /hostel-mess-attendance capture surface for
-                            this person. A flag on the teacher record, NOT a new
-                            auth role — every permission gate in the codebase is
-                            a deny-list on role='teacher', so a new role would
-                            inherit admin defaults. See lib/teacherDay.js. */}
-                        <label className="flex items-center gap-2 text-[12px] text-ink-2 py-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4"
-                            checked={editingHostelAccess}
-                            onChange={e => setEditingHostelAccess(e.target.checked)}
-                          />
-                          Hostel &amp; mess attendance access
-                        </label>
+                        {/* Per-person switches. Flags on the teacher record, NOT
+                            new auth roles — every permission gate in the codebase
+                            is a deny-list on role='teacher', so a new role would
+                            inherit admin defaults. See lib/staffPermissions.js. */}
+                        <fieldset className="border border-border rounded-md px-3 py-2">
+                          <legend className="text-[10px] font-bold text-ink-3 uppercase tracking-wide px-1">Permissions</legend>
+                          {STAFF_PERMISSIONS.map(p => (
+                            <label key={p.key} className="flex items-start gap-2 py-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 mt-0.5 shrink-0"
+                                checked={editingPermissions[p.field] === true}
+                                onChange={e => setEditingPermissions(prev => ({ ...prev, [p.field]: e.target.checked }))}
+                                aria-labelledby={`perm-${t.id}-${p.key}-label`}
+                                aria-describedby={`perm-${t.id}-${p.key}-desc`}
+                              />
+                              <span>
+                                <span id={`perm-${t.id}-${p.key}-label`} className="block text-[12px] text-ink-2">{p.label}</span>
+                                <span id={`perm-${t.id}-${p.key}-desc`} className="block text-[11px] text-ink-3">{p.description}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </fieldset>
                         <div className="flex gap-2">
                           <button className="text-[11px] px-2 py-1 rounded bg-accent text-white" onClick={() => handleSaveEdit(t.id)}>✓ Save</button>
                           <button className="text-[11px] px-2 py-1 rounded border border-border text-ink-3" onClick={() => setEditingId(null)}>✕ Cancel</button>
@@ -315,11 +326,11 @@ export default function TeachersTab() {
                               🔐 has login
                             </span>
                           )}
-                          {t.hostelAccess === true && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                              🏠 hostel &amp; mess
+                          {STAFF_PERMISSIONS.filter(p => t[p.field] === true).map(p => (
+                            <span key={p.key} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                              {p.badge}
                             </span>
-                          )}
+                          ))}
                         </div>
                         {t.email
                           ? <div className="text-[11px] text-ink-3 truncate">{t.email}</div>
