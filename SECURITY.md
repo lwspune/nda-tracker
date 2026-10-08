@@ -39,10 +39,23 @@ Four distinct auth paths, each with different trust assumptions.
 |---|---|---|
 | Admin | Supabase Auth — email + password, JWT, no `app_metadata.role` | The session holder is a designated admin. Single shared account today. |
 | Superadmin | Supabase Auth — email + password, JWT, `app_metadata.role = 'superadmin'` | Admin powers **plus** access to teacher feedback (HR-sensitive). Single account (`vilas11shinde@gmail.com`). Routes through the admin portal; the extra surface is gated by the `isSuperadmin` flag + the `teacher_feedback` RLS role check. |
-| Teacher | Supabase Auth — email + password, JWT, `app_metadata.role = 'teacher'` | The session holder is a designated teacher. Individual accounts. Read-only across the analytics portal; **may write attendance capture** for their own periods at `/school-attendance` (2026-07-27). |
+| Teacher | Supabase Auth — email + password, JWT, `app_metadata.role = 'teacher'` | The session holder is a designated teacher. Individual accounts. Read-only across the analytics portal; **may write attendance capture** for their own periods at `/school-attendance` (2026-07-27); **may edit the timetable** only when their teacher record carries `timetableAccess` (2026-10-08, see below). |
 | Student | `POST /api/student-login` with mobile number, returns a session token stored in `localStorage` | The caller knows a mobile number that exists in `students.mobile` **or any `students.parent_mobiles[]`**. No Supabase Auth session. |
 
 **Teacher write surface (2026-07-27).** Teachers were never blocked at the DB — the capture tables' RLS is `authenticated`, so "read-only teacher" was always a UI convention. Giving them capture UI makes that explicit and adds the boundary that was missing: `faculty_state` **writes** are now denied to `role='teacher'` at the DB (`faculty_write_insert/update/delete`; reads stay open), because `saveToStorage` serialises the whole blob and one stray mutation from a teacher client would rewrite syllabus, timetable and send history wholesale. All parent-facing send endpoints 403 teachers. What a compromised teacher password still reaches: read of everything the teacher portal loads (incl. student mobiles), and writes to the capture tables + `quizzes`. Scoping to "your own lectures" on the page is **convenience, not a boundary** — RLS does not partition by teacher.
+
+**Per-person staff permissions (2026-10-08).** Extra capabilities are boolean flags on the teacher record (`timetableTeachers[]` in `faculty_state`), switched in Settings → Teachers and listed in `src/lib/staffPermissions.js`. They are never a new auth role: every gate here is a deny-list on `role='teacher'`, so a new role would inherit admin rights. Teachers can't grant themselves anything: they can't write `faculty_state`, and the one function that lets them write part of it refuses the teacher list. There are two flags:
+- `hostelAccess` is a **visibility** gate only; capture-table RLS is `authenticated`.
+- `timetableAccess` is a **real database boundary**, enforced by the function below.
+
+- **`public.save_timetable(p_patch, p_known_version)`** is the project's **first `SECURITY DEFINER` function**, and the only way a teacher can change `faculty_state`. It:
+  - admits only callers with `app_metadata.role='teacher'` whose teacher record has `timetableAccess: true`. The record is matched by the JWT email and read from the **live** row, so switching the permission off takes effect on the next save;
+  - accepts only `timetables`, `timetableMappings` and `examSchedules`;
+  - refuses creating, deleting, renaming or re-branching a timetable, and refuses retiming or deleting an existing slot;
+  - applies the same `updated_at` version guard as the admin save.
+
+  `search_path` is pinned to `''`. `EXECUTE` is revoked from `public`/`anon` and granted to `authenticated` only. Migration: `supabase/migrations/20261008064944_create_save_timetable.sql`. A test pins its key list and permission field to the client's. Supabase's advisor reports it as a WARN (`authenticated_security_definer_function_executable`, lint 0029). **That is intentional; do not revoke `EXECUTE`.** Signed-in teachers must be able to call it, and its own checks are the boundary.
+- **What a compromised teacher password with `timetableAccess` reaches**, beyond a plain teacher: it can rewrite the timetable grid, the mappings (which teacher teaches what) and the exam schedule. It can't touch the syllabus, settings, teacher list, send history, or any past absence's clock time.
 
 The student "auth" is mobile-number-only — there is no password and no OTP. Anyone who knows or guesses a student's mobile number can read their data via the student portal. This is an accepted trade-off for the coaching context (mobile numbers are not secret, and students should not need to remember a password).
 
@@ -54,7 +67,7 @@ A login number may be the student's **own** mobile or any entry in their `parent
 
 | Table | RLS | Policy |
 |---|---|---|
-| `faculty_state` | Enabled | Authenticated users only (admin + teacher) |
+| `faculty_state` | Enabled | Read: authenticated. Write: authenticated **except** `role='teacher'`. A teacher with `timetableAccess` writes the three timetable keys only, through the `save_timetable` `SECURITY DEFINER` function (2026-10-08). |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | Enabled | Authenticated users only |
 | `exams`, `exam_results` | Enabled | Authenticated users only |
 | `class_reports`, `student_plans` | Enabled | Authenticated read / insert / delete |
@@ -170,6 +183,7 @@ There is no automated "right-to-be-forgotten" tool today. If this becomes a recu
 | No rate limiting on `/api/student-login` | **Medium→High** | **OPEN.** No throttle anywhere in `api/`. Responses distinguish hit (200 + name) from miss (404), so a known-prefix scan enumerates the roster cheaply. Materially worse while any copy of the 493-number list may already be out. Fix belongs in a shared `api/_rateLimit.js` (underscore-prefixed helpers do not count against the 12-function cap). |
 | Student payload discloses more than the portal renders | Low→Medium | **OPEN.** `api/student-login.js` returns `parentMobiles`, `dob`, `gender`, and `integrity_incidents.counterpart_name` — the last discloses *another* student's name through a mobile-only gate. Shrinking it reduces the blast radius of every threat at once at zero friction. |
 | Student auth is mobile-only (no OTP, no password) | Medium | Accepted, re-affirmed 2026-08-11. Mobile numbers are not secret; the coaching context tolerates this. Note the ceiling: any classmate with your number (every batch WhatsApp group lists them) can open your portal, and only OTP or a real second factor changes that. Throttling makes it non-scalable and detectable, which is the chosen posture. |
+| A login with **no role claim is a full admin** | Medium | **OPEN.** Admin is defined by the *absence* of `app_metadata.role`. An account created outside Settings → Teachers, or one the 2026-09-10 backfill had nothing to copy for, silently gets the admin portal and can write `faculty_state`. Found 2026-10-08: `ashabadhe15@gmail.com`, a teacher, had been an admin since 25 May; fixed by hand. A periodic check that lists role-less accounts other than `official.lwspune@gmail.com` is in `SUGGESTIONS.md`. |
 | The admin account is a single shared login | Medium | Accepted today (one institute, two staff members who trust each other). Becomes a problem if expanded. |
 | The Supabase anon key is in the browser bundle | Low | Inherent to Supabase architecture. RLS is the enforcement layer; the anon key is not a secret. |
 | No CI gate on lint/tests before deploy | Low | Vercel auto-deploys from `main`. Discipline is to run `npm test && npm run lint` locally before pushing. |

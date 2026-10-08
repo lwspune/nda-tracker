@@ -40,6 +40,14 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 
 **Stripped from `data`:** `exams` (Phase 5), `savedInsights` (Phase 6). Re-introducing either field would double-write and drift from the normalised tables.
 
+**Teacher-record permission flags** (`timetableTeachers[]`): `hostelAccess` and `timetableAccess`. Both are booleans, honoured only when literally `true`. The list of permissions lives in `src/lib/staffPermissions.js`.
+
+**`public.save_timetable(p_patch jsonb, p_known_version timestamptz) → timestamptz`** (2026-10-08). `SECURITY DEFINER`, `search_path=''`, `EXECUTE` granted to `authenticated` only. The only path by which a teacher can write to this row.
+- **Who:** a `role='teacher'` caller whose live teacher record has `timetableAccess: true`.
+- **What:** merges `p_patch` into `data`. Keys are limited to `timetables`, `timetableMappings` and `examSchedules`.
+- **Returns:** the new `updated_at`; the unchanged one for a no-op; **NULL** when `p_known_version` doesn't match (lost race).
+- **Raises:** `42501` when the caller isn't permitted. `22023` for a change it refuses: a key outside the list, a timetable added, removed, renamed or re-branched, or an existing slot retimed or deleted.
+
 **Inside `data`:** `syllabusPrograms`, `syllabusBatches`, `syllabusBatchBranches`, `batchProgramAssignments`, `batchSyllabusProgress`, `batchChapterTimelines`, `timetableTeachers`, `timetableMappings`, `timetables`, `examSchedules`, `whatsappSendHistory`, `studentProfiles` (cached — overwritten on load by `loadStudentsFromSupabase()`), `ndaFreqBySubject`, `ndaMarksBySubject`, `lastDeployedAt`.
 
 ---
@@ -564,7 +572,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 
 | Table | RLS | Policy |
 |---|---|---|
-| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** `(auth.jwt() -> 'app_metadata' ->> 'role') = 'teacher'` (migrated from the self-editable `user_metadata` on 2026-09-10). Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. |
+| **`faculty_state`** | ✓ | **Split read/write (2026-07-27).** `faculty_read` — authenticated `SELECT`. `faculty_write_insert/update/delete` — authenticated **except** `(auth.jwt() -> 'app_metadata' ->> 'role') = 'teacher'` (migrated from the self-editable `user_metadata` on 2026-09-10). Teachers gained write UI at `/school-attendance`, and any store mutation from any client rewrites this whole blob; admin (no role claim) and superadmin both pass. A teacher with `timetableAccess` writes only the timetable keys, through the `save_timetable` function, which runs as its owner (past RLS) and enforces its own rules (2026-10-08). |
 | `students`, `student_batches`, `student_attendance`, `students_meta` | ✓ | Authenticated only (policy named `faculty_rw` for historical reasons) |
 | `exams`, `exam_results` | ✓ | Authenticated only |
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |

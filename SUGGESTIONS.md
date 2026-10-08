@@ -6,6 +6,20 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-08
+
+### Flag logins that have no role claim
+
+Admin is defined by the *absence* of `app_metadata.role`, so an account made outside Settings → Teachers is silently a full admin. `ashabadhe15@gmail.com` (a teacher) was one from 25 May until 2026-10-08: the 2026-09-10 move from `user_metadata` to `app_metadata` copied roles across, and her `user_metadata` never had one. Fix: a check (Settings → Teachers banner, or a test against a list query in `api/teacher-account.js`) naming every role-less account other than `official.lwspune@gmail.com`. Today that list is empty.
+
+### Timetable grid cells can't be reached by keyboard
+
+`TimetableGrid` makes cells clickable with `onClick` on a `<td>`. There's no `tabIndex`, no role, and no key handler, so editing a cell needs a mouse. This was already true for admins. Per-person permissions now expose the same grid to delegated teachers, so it affects more people. Fix: render each editable cell's content as a `<button>` with an `aria-label` such as "Edit Monday 9:00 AM". Not done here because it changes a shipped component's markup and every grid test.
+
+### Teacher timetable edits don't reach Google Calendar until an admin syncs
+
+Calendar sync is a manual admin button (Timetable → Teacher Schedule → Sync calendars), and its endpoint 403s teachers. When a delegated editor moves a lecture, the affected teachers' calendars stay stale until the office clicks Sync. Options: a "timetable changed since last sync" hint on the admin button, or a daily cron sync (we're at the 12-function cap, so it would fold into an existing endpoint).
+
 ## 2026-10-07
 
 ### The rings and the report card disagree on Late days

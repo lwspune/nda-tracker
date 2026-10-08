@@ -293,10 +293,13 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | WhatsApp flow switches (Settings → WhatsApp) — enforced server-side for every caller, the mentorship cron included | ✓ | — | — |
 | Mentorship nudge — dry-run preview / test send (Settings → Mentorship) | ✓ | — | — |
 | Teacher Feedback page (view + import) | superadmin only (admin without role claim: hidden + RLS-blocked) | — | — |
-| Timetable (edit cells, add slots) | ✓ | — | — |
+| Timetable — edit cells, mappings, add new slots, notes, reorder batch tabs | ✓ | ✓ only when `timetableAccess` is set on their teacher record (saves via `save_timetable`) | — |
+| Timetable — create / rename / delete a timetable, retime or delete an existing slot | ✓ | — (refused by `save_timetable` too) | — |
 | Send Schedule email button | ✓ | — | — |
 | Sync teacher calendars (Timetable → Teacher Schedule) | ✓ | — | — |
-| Exam Schedule (add/edit/delete, status cycle, send reminders) | ✓ | — | — |
+| Exam Schedule (add/edit/delete, status cycle) | ✓ | ✓ only when `timetableAccess` is set | — |
+| Exam Schedule — send reminders | ✓ | — | — |
+| Staff permission switches (Settings → Teachers → Edit → Permissions) | ✓ | — | — |
 | Exam Schedule (view) | ✓ | ✓ | — |
 | Sidebar | ✓ | ✓ | — |
 

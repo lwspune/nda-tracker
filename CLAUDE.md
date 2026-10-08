@@ -19,9 +19,9 @@ When a section here starts growing a running narrative or a current count, that'
 A React + Vite faculty tool for LWS Pune to track NDA Maths exam performance. Runtime modes:
 
 - **Admin** (`localhost` / LAN): full read-write. Data in `data/faculty-data.json` via Vite plugin.
-- **Online Admin** (Vercel + Supabase): full read-write. `faculty_state` JSONB row. Supabase Auth (email/password), no `role` metadata. Live at `nda-tracker.vercel.app`.
-- **Superadmin**: Online Admin **plus** Teacher Feedback. Supabase account with `user_metadata.role='superadmin'`; gated by `isSuperadmin` + `teacher_feedback` RLS.
-- **Teacher** (Vercel + Supabase): read-only across the analytics portal, **plus own-lecture attendance capture** at `/school-attendance` (2026-07-27). Account with `user_metadata.role='teacher'`. Same login form as Admin — role is server-side metadata, not a UI choice.
+- **Online Admin** (Vercel + Supabase): full read-write. `faculty_state` JSONB row. Supabase Auth (email/password), no `role` metadata. Live at `nda-tracker.vercel.app`. **Admin = the ABSENCE of a role claim**, so an account created outside Settings → Teachers is silently a full admin (found 2026-10-08; see `SECURITY.md` → Known gaps).
+- **Superadmin**: Online Admin **plus** Teacher Feedback. Supabase account with `app_metadata.role='superadmin'`; gated by `isSuperadmin` + `teacher_feedback` RLS.
+- **Teacher** (Vercel + Supabase): read-only across the analytics portal, **plus own-lecture attendance capture** at `/school-attendance` (2026-07-27). Account with `app_metadata.role='teacher'`. Same login form as Admin — role is server-side metadata, not a UI choice. **Per-person permissions** (Settings → Teachers, `src/lib/staffPermissions.js`) add capabilities as flags on the teacher record, never as new roles: `hostelAccess` and `timetableAccess` (2026-10-08). Timetable edits save through the `save_timetable` `SECURITY DEFINER` function, which is the boundary: timetable keys only, no retiming or deleting an existing slot. Rules in [`GUARDRAILS.md`](./GUARDRAILS.md) → *Per-person staff permissions*.
 - **Student** (Vercel): read-only, mobile-number login (own **or parent** number) via `/api/student-login`, one student's data only.
 - **Demo** (`?demo=true`): NOT YET IMPLEMENTED — see memory `project_demo_mode.md`.
 
@@ -102,10 +102,10 @@ Direct SQL edits to `faculty_state.data` still need **write → every open admin
 - **Component visibility** — use `useMode()` (`'admin' | 'teacher' | 'student'`), **never** `IS_READ_ONLY`.
 - **Dev-vs-prod data-path branching** — use `IS_READ_ONLY` (or `IS_DEV = !IS_READ_ONLY` in `persist.js`). **Do NOT use `import.meta.env.DEV`** — Vercel's Vite 8.0.3 substitutes it incorrectly. See [[project_vite_dev_substitution_bug]].
 
-`ModeContext` (`src/context/ModeContext.jsx`) defaults to `'admin'` so tests work without a Provider. `src/App.jsx` routes by `user_metadata.role` (`'teacher'` → `TeacherPortal`, other session → `OnlineAdminPortal`, `studentData` → `StudentPortal`). **Hooks must be called before any early returns** — store is empty at first render in teacher mode; all `useMemo` in Dashboard/Toppers sits before early returns (prevents React error #310).
+`ModeContext` (`src/context/ModeContext.jsx`) defaults to `'admin'` so tests work without a Provider. `src/App.jsx` routes by `app_metadata.role` (`'teacher'` → `TeacherPortal`, other session → `OnlineAdminPortal`, `studentData` → `StudentPortal`). **Hooks must be called before any early returns** — store is empty at first render in teacher mode; all `useMemo` in Dashboard/Toppers sits before early returns (prevents React error #310).
 
 ### Login (`src/components/auth/LoginPage.jsx`)
-Two tabs. **Admin · Teacher**: one Supabase form, routed by `user_metadata.role`. **Student**: mobile → `POST /api/student-login`; the number may be the student's own OR any `parent_mobiles[]` entry. Siblings sharing a parent number → `{ multiple, candidates[] }` sibling picker; chosen `lwsId` re-sent, response carries `viaParent`. `?mobile=` pre-fills; `?exam=<id>` (WhatsApp deep-link) → `FocusedExamResult` for that exam + "View full performance" reveal. **Inactive-account gate:** login is denied (`403`) when `account_status ∈ {Block, Quit, Inactive}` — fails **closed** on those, **open** on blank (legacy rows still log in). Blocking/unblocking is done in-app via the Block/Unblock control on the Students page (`setAccountStatus`) — reversible, keeps history, unlike hard-delete. See `api/student-login.js` guardrails in [`GUARDRAILS.md`](./GUARDRAILS.md).
+Two tabs. **Admin · Teacher**: one Supabase form, routed by `app_metadata.role`. **Student**: mobile → `POST /api/student-login`; the number may be the student's own OR any `parent_mobiles[]` entry. Siblings sharing a parent number → `{ multiple, candidates[] }` sibling picker; chosen `lwsId` re-sent, response carries `viaParent`. `?mobile=` pre-fills; `?exam=<id>` (WhatsApp deep-link) → `FocusedExamResult` for that exam + "View full performance" reveal. **Inactive-account gate:** login is denied (`403`) when `account_status ∈ {Block, Quit, Inactive}` — fails **closed** on those, **open** on blank (legacy rows still log in). Blocking/unblocking is done in-app via the Block/Unblock control on the Students page (`setAccountStatus`) — reversible, keeps history, unlike hard-delete. See `api/student-login.js` guardrails in [`GUARDRAILS.md`](./GUARDRAILS.md).
 
 ### Store (`src/store/useStore.js`)
 Slices under `src/store/slices/`; all mutations call `get()._save()` immediately. `loadStudentData(data)` = student portal; `loadRemoteData(data)` = teacher portal (sets all six syllabus keys from the decrypted payload). Persisted state keys are the allow-list in `persist.js` `saveToStorage` — **a new persisted key must be added there or it silently vanishes on reload** ([[feedback_persist_allowlist_footgun]]). Session-derived flags like `isSuperadmin` are not persisted — recompute on every `onAuthStateChange` AND re-apply through every `set({...DEFAULTS})` ([[feedback_session_flag_clobber]]). `studentList` (raw snake_case array) is not persisted; required by `FindDuplicatesTab` so same-`canonical_name` duplicates stay visible.
@@ -261,8 +261,9 @@ Use `useMode()` — never `IS_READ_ONLY` — for component visibility. **Full pe
 
 | File | Purpose |
 |---|---|
-| `src/App.jsx` | Top-level mode dispatcher (routes by `user_metadata.role` + `studentData`) |
+| `src/App.jsx` | Top-level mode dispatcher (routes by `app_metadata.role` + `studentData`) |
 | `src/config.js` | `IS_READ_ONLY`, session keys, `BASE_URL`, app info |
+| `src/lib/staffPermissions.js` | The per-person permission list (`STAFF_PERMISSIONS`), `hasPermission`, and `TIMETABLE_EDIT_KEYS`. The database function `save_timetable` holds the same key list; a test pins the two together |
 | `src/context/ModeContext.jsx` | `ModeContext` + `useMode()` |
 | `src/store/useStore.js` | Zustand store assembler; slices in `src/store/slices/` |
 | `src/store/persist.js` | Dev disk / Supabase load+save dispatcher + the `saveToStorage` allow-list |
