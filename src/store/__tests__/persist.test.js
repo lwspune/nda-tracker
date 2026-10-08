@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     from: vi.fn(),
+    rpc: vi.fn(),
     auth: { getSession: vi.fn() },
   },
 }))
@@ -271,6 +272,140 @@ describe('saveToSupabase — optimistic concurrency guard', () => {
     await persist.saveToSupabase({ a: 1 })
 
     expect(retry.chain.eq).toHaveBeenCalledWith('updated_at', 'v1')
+  })
+})
+
+// ── Teacher saves: the timetable-only path ───────────────────────────────────
+// Teachers can never write the whole blob (RLS denies it). A teacher whose
+// record carries timetableAccess saves through the save_timetable database
+// function instead, sending ONLY the timetable keys — the function is the
+// boundary; this is just the client choosing what to send.
+describe('saveToSupabase — teacher with timetable access', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const ASHA = 'asha@lwspune.com'
+  const TEACHERS = [{ id: 't1', name: 'Asha Bade Mam', email: ASHA, timetableAccess: true }]
+  const STATE = {
+    timetableTeachers: TEACHERS,
+    timetables: [{ id: 'tt1', timeSlots: [], grid: {} }],
+    timetableMappings: [{ id: 'm1' }],
+    examSchedules: [],
+    syllabusPrograms: [{ id: 'p1' }],
+    branches: ['APJ'],
+  }
+
+  function teacherSession(sb, email = ASHA) {
+    sb.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'asha-id', email, app_metadata: { role: 'teacher' } } } },
+    })
+  }
+
+  async function loaded() {
+    const { persist, sb } = await freshPersist()
+    sb.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: { data: {}, updated_at: 'v1' }, error: null }),
+        }),
+      }),
+    })
+    await persist.loadFromSupabase()
+    sb.from.mockReset()
+    return { persist, sb }
+  }
+
+  it('sends only the three timetable keys to save_timetable, guarded on the loaded version', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb)
+    sb.rpc.mockResolvedValue({ data: 'v2', error: null })
+
+    await persist.saveToSupabase(STATE)
+
+    expect(sb.from).not.toHaveBeenCalled()
+    expect(sb.rpc).toHaveBeenCalledWith('save_timetable', {
+      p_patch: {
+        timetables: STATE.timetables,
+        timetableMappings: STATE.timetableMappings,
+        examSchedules: STATE.examSchedules,
+      },
+      p_known_version: 'v1',
+    })
+  })
+
+  it('advances the version to what the function returned', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb)
+    sb.rpc.mockResolvedValueOnce({ data: 'v2', error: null })
+    await persist.saveToSupabase(STATE)
+    sb.rpc.mockResolvedValueOnce({ data: 'v3', error: null })
+    await persist.saveToSupabase(STATE)
+
+    expect(sb.rpc.mock.calls[1][1].p_known_version).toBe('v2')
+  })
+
+  it('treats a null return as a lost race: conflict fires, saving stops', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb)
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+    sb.rpc.mockResolvedValue({ data: null, error: null })
+
+    await persist.saveToSupabase(STATE)
+    await persist.saveToSupabase(STATE)
+
+    expect(onConflict).toHaveBeenCalledTimes(1)
+    expect(sb.rpc).toHaveBeenCalledTimes(1)
+  })
+
+  // e.g. the office switched the permission off while the page was open, or a
+  // change the function refuses. The local copy now holds edits that will never
+  // save — only a reload shows the truth.
+  it('treats a database refusal as stale too', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb)
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+    sb.rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'no timetable access' } })
+
+    await persist.saveToSupabase(STATE)
+
+    expect(onConflict).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the version alone on a transport error so a retry is still guarded', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb)
+    const onConflict = vi.fn()
+    persist.onSaveConflict(onConflict)
+    sb.rpc.mockResolvedValueOnce({ data: null, error: { message: 'Failed to fetch' } })
+    await persist.saveToSupabase(STATE)
+    sb.rpc.mockResolvedValueOnce({ data: 'v2', error: null })
+    await persist.saveToSupabase(STATE)
+
+    expect(onConflict).not.toHaveBeenCalled()
+    expect(sb.rpc.mock.calls[1][1].p_known_version).toBe('v1')
+  })
+
+  it('writes nothing for a teacher without the permission', async () => {
+    const { persist, sb } = await loaded()
+    teacherSession(sb, 'someone.else@lwspune.com')
+
+    await persist.saveToSupabase(STATE)
+
+    expect(sb.rpc).not.toHaveBeenCalled()
+    expect(sb.from).not.toHaveBeenCalled()
+  })
+
+  it('never routes an admin through the function', async () => {
+    const { persist, sb } = await loaded()
+    sb.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'admin', email: ASHA, app_metadata: {} } } } })
+    const { update } = makeUpdateChain()
+    sb.from.mockReturnValue({ update })
+
+    await persist.saveToSupabase(STATE)
+
+    expect(update).toHaveBeenCalled()
+    expect(sb.rpc).not.toHaveBeenCalled()
   })
 })
 

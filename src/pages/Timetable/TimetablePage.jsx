@@ -30,9 +30,15 @@ function currentMondayISO() {
 
 // ── Component ─────────────────────────────────────────────
 
-export default function TimetablePage() {
+// canEdit: a teacher the office has given the "Edit timetable" permission
+// (Settings → Teachers). They get exactly the edits the save_timetable database
+// function accepts — never one it refuses, or the click would look saved and be
+// thrown away. Timetable create/rename/delete, retiming or deleting an existing
+// slot, sends and calendar sync stay admin-only.
+export default function TimetablePage({ canEdit: staffCanEdit = false }) {
   const mode      = useMode()
   const isAdmin = mode === 'admin'
+  const canEdit = isAdmin || staffCanEdit === true
 
   const isSuperadmin  = useStore(s => s.isSuperadmin)
   const timetables    = useStore(s => s.timetables)
@@ -204,7 +210,7 @@ export default function TimetablePage() {
   }
 
   function handleCellClick(slotId, day, currentCell) {
-    if (!isAdmin || !activeTT) return
+    if (!canEdit || !activeTT) return
     setEditCell({ timetableId: activeTT.id, slotId, day, cell: currentCell ?? null })
   }
 
@@ -218,14 +224,16 @@ export default function TimetablePage() {
           : view === 'subjects' ? 'Subject Hours — weekly load by batch'
           : 'Exam Schedule'
         }
-        actions={isAdmin && (
+        actions={canEdit && (
           <div className="flex gap-2 flex-wrap">
             <button className="btn text-[12px] px-3 py-1.5 border border-border" onClick={() => setMappingsModalOpen(true)}>
               Mappings
             </button>
-            <button className="btn btn-primary text-[12px] px-3 py-1.5" onClick={() => setAddTTModal('new')}>
-              + Timetable
-            </button>
+            {isAdmin && (
+              <button className="btn btn-primary text-[12px] px-3 py-1.5" onClick={() => setAddTTModal('new')}>
+                + Timetable
+              </button>
+            )}
           </div>
         )}
       />
@@ -292,7 +300,7 @@ export default function TimetablePage() {
                             : 'border-transparent text-ink-3 hover:text-ink'
                         }`}
                       >{tt.batchName}</button>
-                      {isAdmin && tt.id === selectedTTId && (
+                      {canEdit && tt.id === selectedTTId && (
                         <>
                           <button
                             className="ml-0.5 mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors disabled:opacity-25 disabled:hover:bg-transparent disabled:cursor-default"
@@ -308,12 +316,14 @@ export default function TimetablePage() {
                             aria-label={`Move ${tt.batchName} right`}
                             title="Move right"
                           >▶</button>
-                          <button
-                            className="mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
-                            onClick={() => setAddTTModal(tt)}
-                            aria-label={`Edit ${tt.batchName} timetable`}
-                            title="Edit timetable"
-                          >⚙</button>
+                          {isAdmin && (
+                            <button
+                              className="mb-0.5 p-1 rounded text-ink-3 hover:text-ink hover:bg-surface-2 text-[12px] transition-colors"
+                              onClick={() => setAddTTModal(tt)}
+                              aria-label={`Edit ${tt.batchName} timetable`}
+                              title="Edit timetable"
+                            >⚙</button>
+                          )}
                         </>
                       )}
                     </div>
@@ -349,8 +359,8 @@ export default function TimetablePage() {
                       timetable={activeTT}
                       mappings={mappings}
                       teachers={teachers}
-                      onCellClick={isAdmin ? handleCellClick : undefined}
-                      readOnly={!isAdmin}
+                      onCellClick={canEdit ? handleCellClick : undefined}
+                      readOnly={!canEdit}
                       weekDates={weekDates}
                     />
                     {activeTT.footnotes?.trim() && (
@@ -367,7 +377,7 @@ export default function TimetablePage() {
                     )}
                   </div>
 
-                  {isAdmin && (
+                  {canEdit && (
                     footnotesDraft === null ? (
                       <button
                         className="mt-3 text-[11px] px-2 py-1 rounded border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
@@ -405,7 +415,7 @@ export default function TimetablePage() {
                   )}
 
                   <div className="mt-4 flex flex-wrap gap-2 items-center">
-                    {isAdmin && (
+                    {canEdit && (
                       <>
                         <button
                           className="btn text-[12px] px-3 py-1.5 border border-dashed border-border text-ink-3 hover:border-accent/50 hover:text-ink transition-colors"
@@ -737,7 +747,7 @@ export default function TimetablePage() {
       })()}
 
       {/* ── Exam Schedule view ───────────────────────────── */}
-      {view === 'exam' && <ExamScheduleView />}
+      {view === 'exam' && <ExamScheduleView canEdit={canEdit} />}
 
       {/* ── Modals ───────────────────────────────────────── */}
       {mappingsModalOpen && <ManageMappingsModal onClose={() => setMappingsModalOpen(false)} />}

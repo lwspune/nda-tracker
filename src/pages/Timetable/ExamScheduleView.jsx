@@ -11,9 +11,13 @@ const STATUS_COLOUR = {
   Cancelled: 'bg-red-100 text-red-500',
 }
 
-export default function ExamScheduleView() {
+// canEdit: admin, or a teacher with the "Edit timetable" permission — entries
+// live in examSchedules, which save_timetable accepts. Reminders are a send, so
+// they stay admin-only.
+export default function ExamScheduleView({ canEdit: staffCanEdit = false }) {
   const mode      = useMode()
   const isAdmin = mode === 'admin'
+  const canEdit = isAdmin || staffCanEdit === true
 
   const timetables     = useStore(s => s.timetables)
   const teachers       = useStore(s => s.timetableTeachers)
@@ -109,7 +113,7 @@ export default function ExamScheduleView() {
 
           {/* Action bar */}
           <div className="flex flex-wrap gap-2 items-center">
-            {isAdmin && (
+            {canEdit && (
               <button
                 onClick={() => setAddModal(true)}
                 className="btn btn-primary text-[12px] px-3 py-1.5"
@@ -145,7 +149,7 @@ export default function ExamScheduleView() {
               <div className="text-2xl mb-2 opacity-30">📅</div>
               <div className="text-[14px] font-bold mb-1">No exams scheduled</div>
               <div className="text-[12px] text-ink-3">
-                {isAdmin ? 'Click "+ Add Exam" to schedule one.' : 'No exams have been scheduled yet.'}
+                {canEdit ? 'Click "+ Add Exam" to schedule one.' : 'No exams have been scheduled yet.'}
               </div>
             </div>
           ) : (
@@ -158,7 +162,7 @@ export default function ExamScheduleView() {
                         {h}
                       </th>
                     ))}
-                    {isAdmin && <th className="border border-border bg-surface-2 px-2 py-2.5 w-8" />}
+                    {canEdit && <th className="border border-border bg-surface-2 px-2 py-2.5 w-8" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -177,15 +181,15 @@ export default function ExamScheduleView() {
                       <td className="border border-border px-3 py-2.5 text-ink-2">{teacherName(e.teacherId)}</td>
                       <td className="border border-border px-3 py-2.5">
                         <button
-                          onClick={() => isAdmin && cycleExamStatus(e.id)}
-                          disabled={!isAdmin}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLOUR[e.status] ?? 'bg-surface text-ink-3'} ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
-                          title={isAdmin ? 'Click to change status' : undefined}
+                          onClick={() => canEdit && cycleExamStatus(e.id)}
+                          disabled={!canEdit}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLOUR[e.status] ?? 'bg-surface text-ink-3'} ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                          title={canEdit ? 'Click to change status' : undefined}
                         >
                           {e.status}
                         </button>
                       </td>
-                      {isAdmin && (
+                      {canEdit && (
                         <td className="border border-border px-2 py-2.5 text-center">
                           <button
                             onClick={() => setEditExam(e)}

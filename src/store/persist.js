@@ -2,11 +2,13 @@
 // Dev mode  (npm run dev):  reads/writes data/faculty-data.json via the Vite
 //                           dev plugin. No size limit. Survives browser clears.
 // Prod mode (Vercel):       reads/writes Supabase faculty_state table when a
-//                           faculty session is active (teacher/student skipped).
+//                           faculty session is active (student skipped; teachers
+//                           only via save_timetable, and only with the permission).
 // ──────────────────────────────────────────────────────────────
 
 import { supabase } from '../lib/supabase'
 import { isTeacherSession } from '../lib/authRole'
+import { hasPermission, TIMETABLE_EDIT_KEYS } from '../lib/staffPermissions'
 import { IS_READ_ONLY } from '../config'
 
 // `IS_READ_ONLY` is a runtime hostname check — `true` on Vercel/GitHub Pages, `false` on localhost.
@@ -186,7 +188,12 @@ async function doSave(data) {
   // write policies exclude role='teacher'), but stopping here matters for UX: an
   // RLS-blocked UPDATE matches zero rows, which the version guard below would
   // read as a lost race and show a teacher the "your data is out of date" banner.
-  if (isTeacherSession(session)) return
+  // The one exception is a teacher the office has given the timetable
+  // permission: they save the timetable keys only, through save_timetable.
+  if (isTeacherSession(session)) {
+    if (!hasPermission(data.timetableTeachers, session.user?.email, 'timetable')) return
+    return saveTimetableKeys(data)
+  }
   // exams + quizzes + savedInsights live in normalised tables — exclude from the JSONB blob
   const { exams: _exams, quizzes: _quizzes, savedInsights: _insights, ...rest } = data
 
@@ -203,14 +210,49 @@ async function doSave(data) {
   if (error) { console.error('[persist] Supabase save failed:', error); return }
 
   if (knownVersion && (!rows || rows.length === 0)) {
-    staleLock = true
-    console.error('[persist] Save rejected — faculty_state changed in another session. Reload required.')
-    for (const cb of conflictListeners) {
-      try { cb() } catch (e) { console.error('[persist] onSaveConflict listener threw:', e) }
-    }
+    markStale('Save rejected — faculty_state changed in another session.')
     return
   }
   knownVersion = nextVersion
+}
+
+function markStale(reason) {
+  staleLock = true
+  console.error(`[persist] ${reason} Reload required.`)
+  for (const cb of conflictListeners) {
+    try { cb() } catch (e) { console.error('[persist] onSaveConflict listener threw:', e) }
+  }
+}
+
+// A teacher with the timetable permission. The database function is the
+// boundary — it re-checks the permission against the live row, accepts only
+// TIMETABLE_EDIT_KEYS, refuses retiming/deleting an existing slot, and applies
+// the same version guard as the admin path. This only chooses what to send.
+async function saveTimetableKeys(data) {
+  const patch = {}
+  for (const key of TIMETABLE_EDIT_KEYS) {
+    if (data[key] !== undefined) patch[key] = data[key]
+  }
+  const { data: version, error } = await supabase.rpc('save_timetable', {
+    p_patch: patch,
+    p_known_version: knownVersion,
+  })
+
+  if (error) {
+    // No Postgres code means the request never reached the database: leave the
+    // version alone so a retry is still guarded.
+    if (!error.code) { console.error('[persist] Timetable save failed:', error); return }
+    // The database refused (permission switched off, or a change it does not
+    // allow). This tab now holds edits that will never save; only a reload
+    // shows what is actually stored.
+    markStale(`Timetable save refused (${error.code}: ${error.message}).`)
+    return
+  }
+  if (!version) {
+    markStale('Timetable save rejected — faculty_state changed in another session.')
+    return
+  }
+  knownVersion = version
 }
 
 // ── Sync load (unused in prod — kept for legacy LS migration guard) ──────────

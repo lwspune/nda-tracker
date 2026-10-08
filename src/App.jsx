@@ -31,6 +31,7 @@ import ScanSheetsPage from './pages/ScanSheets'
 import HostelAttendancePage from './pages/HostelAttendance'
 import { isSchoolAttendancePath, isHostelAttendancePath, isScanPath, scanExamIdFromSearch } from './lib/routing'
 import { hasHostelAccess } from './lib/teacherDay'
+import { hasPermission } from './lib/staffPermissions'
 
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -311,6 +312,9 @@ function TeacherPortal({ session, onLogout }) {
   const [loaded, setLoaded]     = useState(false)
   // Nav entry only for staff the office has flagged in Settings → Teachers.
   const hostelAccess = hasHostelAccess(teachers, session?.user?.email)
+  // Settings → Teachers → "Edit timetable". Saves go through save_timetable,
+  // which re-checks this against the live row — this only shows the controls.
+  const timetableAccess = hasPermission(teachers, session?.user?.email, 'timetable')
 
   useEffect(() => {
     async function loadAll() {
@@ -337,7 +341,7 @@ function TeacherPortal({ session, onLogout }) {
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
     syllabus:   <SyllabusPage />,
-    timetable:  <TimetablePage />,
+    timetable:  <TimetablePage canEdit={timetableAccess} />,
     errorSets:  <ErrorSetsPage />,
   }
 
@@ -352,6 +356,8 @@ function TeacherPortal({ session, onLogout }) {
   return (
     <ModeContext.Provider value="teacher">
       <div className="flex min-h-screen bg-bg">
+        {/* Only a teacher with timetable access ever saves, so only they can go stale. */}
+        {timetableAccess && <StaleDataBanner />}
         <Sidebar onLogout={onLogout} hostelAccess={hostelAccess} />
         <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
