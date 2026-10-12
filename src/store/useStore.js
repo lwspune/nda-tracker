@@ -19,6 +19,7 @@ import { createCheckpointSlice }     from './slices/checkpointSlice'
 import { createLeavesSlice }         from './slices/leavesSlice'
 import { createHolidaysSlice }       from './slices/holidaysSlice'
 import { createHomeworkSlice }       from './slices/homeworkSlice'
+import { createHomeworkAssignmentSlice } from './slices/homeworkAssignmentSlice'
 import { createTeacherFeedbackSlice } from './slices/teacherFeedbackSlice'
 import { createExamAbsenceSlice }    from './slices/examAbsenceSlice'
 import { createConfigSlice } from './slices/configSlice'
@@ -286,6 +287,7 @@ const useStore = create((set, get) => ({
   ...createLeavesSlice(set, get),
   ...createHolidaysSlice(set, get),
   ...createHomeworkSlice(set, get),
+  ...createHomeworkAssignmentSlice(set, get),
   ...createTeacherFeedbackSlice(set, get),
   ...createExamAbsenceSlice(set, get),
   ...createConfigSlice(set, get),

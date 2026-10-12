@@ -10,6 +10,7 @@ import StaleDataBanner from './components/layout/StaleDataBanner'
 import UploadModal from './components/upload/UploadModal'
 import ExamsPage from './pages/Exams'
 import QuizzesPage from './pages/Quizzes'
+import HomeworkPage from './pages/Homework'
 import DashboardPage from './pages/Dashboard'
 import StudentsPage from './pages/Students'
 import ToppersPage from './pages/Toppers'
@@ -164,6 +165,7 @@ export default function App() {
     exams:      <ExamsPage />,
     scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
+    homework:   <HomeworkPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
@@ -270,6 +272,7 @@ function OnlineAdminPortal({ session, onLogout }) {
     exams:      <ExamsPage />,
     scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
+    homework:   <HomeworkPage />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,
@@ -337,6 +340,7 @@ function TeacherPortal({ session, onLogout }) {
     exams:      <ExamsPage />,
     scan:       <ScanSheetsPage />,
     quizzes:    <QuizzesPage />,
+    homework:   <HomeworkPage email={session?.user?.email} />,
     students:   <StudentsPage />,
     attendance: <AttendancePage />,
     toppers:    <ToppersPage />,

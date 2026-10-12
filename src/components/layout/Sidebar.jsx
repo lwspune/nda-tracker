@@ -20,6 +20,9 @@ const NAV = [
   // The exam card's own Scan sheets button lands you there with the paper set,
   // next to the Export menu that printed the sheet in the first place.
   { id: 'quizzes',   icon: '❓', label: 'Daily Quiz' },
+  // Set homework with a question paper; students hand in photos. Not adminOnly:
+  // teachers set their own (the page and the database scope them to it).
+  { id: 'homework',  icon: '📤', label: 'Homework' },
   { id: 'students',   icon: '👤', label: 'Students' },
   { id: 'attendance', icon: '📋', label: 'Attendance' },
   { id: 'toppers',    icon: '🏆', label: 'Toppers' },
