@@ -61,3 +61,6 @@ item-stats.json
 
 # Homework grading inbox (scripts/grading/pull.js) - students' pages and grades. Never commit.
 grading-inbox/
+
+# Before/after screenshot sheets and the scripts that drive them (local review only)
+screenshots/
