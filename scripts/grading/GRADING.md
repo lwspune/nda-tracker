@@ -121,6 +121,13 @@ identifying into the repo, this file or a commit. Ledger entries are general
 
 Newest first. One line each: date, rule or learning, and why.
 
+- 2026-10-13: An incomplete hand-in (some questions missing) before the deadline:
+  reject it, naming what is missing. A waiting submission blocks a second upload,
+  and a rejection reopens it until the deadline. After the deadline, grade what is
+  there and mark the missing questions `not_attempted`.
+- 2026-10-13: "Prove …, hence find …" questions: split the marks between the proof
+  and the "hence" part, so a student who skips the second part keeps the proof marks.
+
 - 2026-10-12: Playbook adapted from PYQ Vault's `scripts/grading/GRADING.md`
   (board answer sheets). Dropped its OR-choice and attempt-any-N rules (homework
   has neither); added description-only homework and auto-release (no teacher
