@@ -122,14 +122,14 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
       <Card className="flex flex-col gap-4 max-w-3xl">
         <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
           Title
-          <input className="input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)}
+          <input className="form-input" value={title} maxLength={200} onChange={e => setTitle(e.target.value)}
                  placeholder="e.g. Limits — exercise 2.3" />
         </label>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
             Subject
-            <select className="input" value={subject} disabled={published}
+            <select className="form-input" value={subject} disabled={published}
                     onChange={e => { setSubject(e.target.value); setBatches([]) }}>
               <option value="">Choose…</option>
               {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
@@ -137,7 +137,7 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
           </label>
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
             Deadline (IST)
-            <input className="input" type="datetime-local" value={dueLocal} onChange={e => setDueLocal(e.target.value)} />
+            <input className="form-input" type="datetime-local" value={dueLocal} onChange={e => setDueLocal(e.target.value)} />
           </label>
         </div>
 
@@ -165,7 +165,7 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
             What to do. Enough on its own for homework announced in class — the question paper below is then optional.
           </p>
           <textarea id="homework-description" aria-describedby="homework-description-hint"
-                    className="input min-h-[70px]" maxLength={2000} value={instructions}
+                    className="form-input min-h-[70px]" maxLength={2000} value={instructions}
                     onChange={e => setInstructions(e.target.value)}
                     placeholder="e.g. RD Sharma Exercise 3.2, Q1–10, as announced in class. Show all working." />
         </div>
@@ -173,7 +173,7 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
             Total marks
-            <input className="input" type="number" min="0.5" step="0.5" value={maxMarks} disabled={published}
+            <input className="form-input" type="number" min="0.5" step="0.5" value={maxMarks} disabled={published}
                    onChange={e => setMaxMarks(e.target.value)} />
           </label>
         </div>
@@ -275,9 +275,9 @@ function QuestionBreakdown({ questions, onChange, locked }) {
       )}
       {questions.map((q, i) => (
         <div key={i} className="flex items-center gap-2">
-          <input className="input w-28" aria-label={`Question ${i + 1} label`} value={q.label} disabled={locked}
+          <input className="form-input w-28" aria-label={`Question ${i + 1} label`} value={q.label} disabled={locked}
                  onChange={e => update(i, { label: e.target.value })} placeholder={`Q${i + 1}`} />
-          <input className="input w-24" type="number" min="0.5" step="0.5" aria-label={`Question ${i + 1} marks`}
+          <input className="form-input w-24" type="number" min="0.5" step="0.5" aria-label={`Question ${i + 1} marks`}
                  value={q.marks ?? ''} disabled={locked}
                  onChange={e => update(i, { marks: e.target.value === '' ? null : Number(e.target.value) })} />
           {!locked && (
