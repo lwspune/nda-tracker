@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripAnswerKey } from '../src/lib/quiz.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
+import { handleStudentHomework } from './_studentHomework.js'
 
 function quizBatches(batchStr) {
   if (!batchStr) return []
@@ -39,6 +40,10 @@ export default async function handler(req, res) {
   }
 
   const supabase = createClient(supabaseUrl, serviceKey)
+
+  // Homework requests (list / start an upload / submit) share this endpoint
+  // behind `kind` — we are at the 12-function cap. No kind = the quiz list.
+  if (req.body?.kind) return handleStudentHomework(supabase, req.body, res)
 
   // ── 1. Identify the student + their batches ──────────────────────────────
   const { data: students, error: studentsErr } = await supabase
