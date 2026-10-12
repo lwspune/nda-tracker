@@ -25,6 +25,7 @@ import LoginPage, { clearStudentSession } from './components/auth/LoginPage'
 import StudentView from './pages/Students/StudentView'
 import FocusedExamResult from './pages/Students/FocusedExamResult'
 import StudentQuizzes from './pages/Quizzes/StudentQuizzes'
+import StudentHomework from './pages/Homework/StudentHomework'
 import QuizLinkPage from './pages/Quizzes/QuizLinkPage'
 import AttendancePage from './pages/Attendance'
 import SchoolAttendancePage from './pages/SchoolAttendance'
@@ -447,6 +448,7 @@ export function StudentPortal({ data, onLogout }) {
           ) : (
             <>
               <StudentQuizzes mobile={data.profile?.mobile} />
+              <StudentHomework mobile={data.profile?.mobile} lwsId={data.lwsId} />
               <StudentView name={data.name} attendance={data.attendance || []} lectureAbsencesProp={data.lectureAbsences || []} examAbsencesProp={data.examAbsences || []} homeworkPendingProp={data.homeworkPending || []} integrityIncidentsProp={data.integrityIncidents || []} />
             </>
           )}
