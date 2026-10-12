@@ -1,7 +1,7 @@
 // The teacher side of homework assignments: who may set what, what each staff
 // member sees, deadlines, file uploads and the row shape. PURE.
-import { assignmentFilePath, validateUploadFiles } from './upload'
-import { fmtDate } from '../dates'
+import { assignmentFilePath, validateUploadFiles } from './upload.js'
+import { fmtDate } from '../dates.js'
 
 const IST_OFFSET_MIN = 330
 
