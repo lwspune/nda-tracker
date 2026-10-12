@@ -12,6 +12,27 @@ not here; the 2026-09-12 review promoted **six** such remainders back out before
 
 Grouped by the date the entry was *filed*, newest first.
 
+## 2026-10-12
+
+### ~~Backfill ledger — `className="input"` styles nothing; 17 screens render bare inputs~~ — **DONE 2026-10-12** (63 fields in 17 files; before/after sheets reviewed)
+
+Found while taking the Homework before/after screenshots: there is **no `.input` class**. The app's text-field class is `.form-input` (`src/index.css`). Inputs, selects and textareas marked `input` render with no border, background or focus style. In the screenshots they look like plain text, and keyboard focus has no visible indicator, which breaks our accessibility rule. The Homework page was fixed before it shipped. These 17 files were already like this:
+
+`Quizzes/index.jsx`, `Quizzes/QuizEditor.jsx`, `Quizzes/QuizLinkPage.jsx` (student-facing), `Settings/{Batches,Branches,Mentorship,Monitoring,Teachers}Tab.jsx`, `Syllabus/{AssignPrograms,ManageProgram,ManageSubject}Modal.jsx`, `Timetable/{AddExamSchedule,AddTimetable,EditCell,ManageMappings,SyncCalendar}Modal.jsx`, `Timetable/TimetablePage.jsx`.
+
+**360 analysis (not yet applied; needs confirmation):**
+- **Scope:** class-name swaps only, `input` → `form-input`, in those 17 files. No logic changes.
+- **Blast radius:** `.form-input` adds `w-full` and `min-h-[44px]`. Compact controls (the Quizzes filter row, the inline `text-[12px] py-1` selects) will grow, and anything that relied on intrinsic width will stretch to its container. Each screen needs a look, so this is not a blind find-and-replace.
+- **Does it really apply:** yes. Every use intends a styled field; none is deliberate.
+- **Risk and reversibility:** visual only, and reverts with a single commit. Tests select by role or label, not by class, so they won't catch a layout regression; only screenshots will.
+- **Cost:** about an hour, mostly before/after screenshots across 17 screens at phone and desktop width.
+- **Recommendation:** do it, batched by page, with screenshots. Start with `QuizLinkPage.jsx`, the one students see. Where a compact control needs it, keep its size with `w-auto min-h-0`.
+
+The ratchet test `src/__tests__/cssClassRatchet.test.js` stops new files picking up the missing class. Remove each file from its allow-list as it's fixed.
+
+**Closed 2026-10-12:** every `input` became `form-input`, plus `min-h-0` on compact controls (`py-1`/`py-0.5`) and `w-auto` where no width was set. Only class strings changed. The ratchet allow-list is now empty. The phone width of Manage Mappings was already clipped before this change (a separate issue), and dialogs that grew taller (Add Exam) now need a short scroll to reach their button at 900px; both are visible in the sheets.
+
+
 ---
 
 ## 2026-09-12
