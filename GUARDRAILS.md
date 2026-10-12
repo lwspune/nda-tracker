@@ -287,3 +287,15 @@ The gap analysis behind these: capture belongs with the person who physically se
 - **The streak steps over a day off; it must not treat it as a missing record.** Filtering the rows first and walking the dates would end every streak at the first branch holiday.
 - **Failure modes differ on purpose:** `student-login` degrades to Sundays-only on a failed holiday read (a login must not fail over it); the warden alert 500s, like its other reads (a guessed alert is worse than none).
 - **The PDF report prints a date alone for a holiday name it cannot draw** (`conductBlocks(..., { winAnsiOnly: true })`); the Word report keeps every name. Do not drop `winAnsiOnly` from `drawConduct`.
+
+## Homework assignments (Homework page + student portal, 2026-10-12)
+
+- **The answer key never reaches a student, not even its name.** Student responses are built only by `studentHomeworkList` (`src/lib/assignments/studentHomework.js`), which drops `answer_key_files`/`created_by`, and question links are signed only for paths `isQuestionFilePath` accepts (`<id>/questions/NN.ext`). A test asserts the key's name and path are absent from the payload. Do not return raw assignment rows from `api/_studentHomework.js`.
+- **The batch check lives ONLY in `api/_studentHomework.js`.** The database functions check the deadline and one-submission-per-student but not membership; students have no session, so the endpoint is the only door. Any new student path must make the same `batch_names` ∩ student batches check.
+- **Grades are written only through `homework_grade_commit`, after `validateGrade`.** Never insert `homework_grades` or set `total_awarded` directly: the function sums the total and refuses a breakdown that doesn't add up to `max_marks`. Grades auto-release, so the checker IS the review. Automatic (API) grading must take the same path with `grader:'api'`.
+- **A submission is sent only when every page is in storage** (`homework-submit` lists the folder first). Don't skip the check to make submitting faster — a half-sent set would be graded.
+- **Publishing needs batches and a question paper OR a description.** JS (`validateAssignmentForPublish`) and SQL (`homework_assignments_publishable`) hold the same rule; a test pins the SQL. Relax both together or neither.
+- **Marks are locked once published.** Grades are checked against `max_marks` and the breakdown; changing them under graded work leaves grades that no longer add up.
+- **`homeworkAssignmentSlice` is session-only and never calls `_save()`;** its keys are not in persist.js's allow-list. A teacher's save must not round-trip the `faculty_state` blob.
+- **`homework_pending` is a different feature** (the incomplete-work defaulter log behind the parent WhatsApp). Nothing in homework assignments writes to it; linking non-submitters to that flow is a separate decision.
+- **The grading inbox holds students' pages** — `grading-inbox/` is git-ignored, and `brief.md` deliberately names no student. Keep both true.

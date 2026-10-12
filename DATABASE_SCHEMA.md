@@ -19,12 +19,13 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
 | Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
+| Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades` + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 (new 2026-10-12) |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 | **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-25 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+28 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -414,6 +415,63 @@ Indexes: `(lws_id)`, `(quiz_id)`. RLS ✓ authenticated. Graded server-side by `
 
 ---
 
+## 7b. Homework assignments (2026-10-12)
+
+Teacher-set homework (a question paper and/or a description) for batches, with a deadline; students hand in photos or a PDF from the portal; graded in a Claude Code session (`scripts/grading/`, later also by API) and shown to the student as soon as the grade is saved. Migrations `20261012084500_create_homework_assignments.sql` + `20261012090744_homework_publish_with_description.sql`. **Separate from `homework_pending`** (the defaulter log behind the WhatsApp flow) — nothing here writes to it. Flow: [`FLOWS.md`](./FLOWS.md) → Homework assignments; rules: [`GUARDRAILS.md`](./GUARDRAILS.md).
+
+### `homework_assignments`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `title` / `subject` | text NOT NULL | title 1–200 chars |
+| `branch` | text | optional |
+| `batch_names` | text[] NOT NULL `'{}'` | **an array, not quizzes' comma string** — `overlaps` can't confuse `12th_A` with `12th_A2`; no blank entries |
+| `instructions` | text | the **Description**; ≤2000 chars |
+| `question_files` / `answer_key_files` | jsonb `[{path,name,type,size}]` | paths `<id>/questions/NN.ext` and `<id>/key/NN.ext` in `homework-files` |
+| `questions` | jsonb `[{label,marks}]` | optional breakdown; empty = grader splits the total |
+| `max_marks` | numeric NOT NULL | > 0, in halves |
+| `due_at` | timestamptz NOT NULL | upload closes AT this moment |
+| `status` | text | `draft` \| `published` |
+| `created_by` | text NOT NULL | login email; RLS uses it |
+| `created_at` / `updated_at` | timestamptz | |
+
+`homework_assignments_publishable`: a published row needs ≥1 batch **and** a question file **or** a non-blank description (relaxed, not dropped, on 2026-10-12). Mirrors `validateAssignmentForPublish`.
+
+### `homework_submissions`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | minted by the endpoint so file paths can be built first |
+| `assignment_id` | uuid FK → `homework_assignments` **ON DELETE RESTRICT** | homework with submissions can't be deleted |
+| `lws_id` | text FK → `students` ON DELETE CASCADE | |
+| `student_name` | text NOT NULL | snapshot from `students.canonical_name` |
+| `status` | text | `uploading` → `submitted` → `graded` \| `rejected` |
+| `files` | jsonb `[path]` | 1–20 pages, `<assignment>/<lws_id>/<id>/NN.ext` in `homework-submissions` |
+| `submitted_at` / `graded_at` / `regraded_at` | timestamptz | |
+| `grader` | text | `session` \| `api` |
+| `total_awarded` / `total_max` | numeric | **summed by the database**, never sent in |
+| `went_well` / `next_steps` | text | 1–1500 chars each, required when graded |
+| `rejected_reason` | text | 1–300 chars |
+| `scans_deleted_at` | timestamptz | set by `grading:purge` 30 days after grading |
+
+`homework_submissions_state` CHECK: each status carries exactly its fields. Unique index `(assignment_id, lws_id) WHERE status <> 'rejected'` — one submission per student; a rejection frees the slot.
+
+### `homework_grades`
+
+PK `(submission_id, position)`, UNIQUE `(submission_id, label)`. `label` (1–40), `max_marks` (> 0, halves), `outcome` `scored` \| `not_attempted`, `awarded` (0..max, halves, only when scored), `earned` / `missing` (1–1000). Replaced as a whole on every (re)grade.
+
+### Functions (service role only — `REVOKE` from `PUBLIC, anon, authenticated`)
+
+- `homework_submission_start(p_id, p_assignment, p_lws_id, p_files)` — published + before `due_at` (database clock), no live submission; clears a stale `uploading` row.
+- `homework_submission_submit(p_id, p_lws_id)` — the student's own upload, still before `due_at`.
+- `homework_grade_commit(p_submission, p_grades, p_went_well, p_next_steps, p_grader)` — replaces the rows, refuses a breakdown whose maximums don't add up to `max_marks`, sums the total, marks graded (accepts a regrade).
+- `homework_submission_reject(p_submission, p_reason)` — only a `submitted` row.
+
+**The batch check is NOT in these functions** — `api/_studentHomework.js` makes it. A test (`src/lib/assignments/__tests__/migration.test.js`) pins the migration's limits and grants to the JS constants.
+
+---
+
 ## 8. Teacher feedback
 
 ### `teacher_feedback` — one row per (form submission × teacher)
@@ -578,6 +636,10 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 | `class_reports`, `student_plans` | ✓ | Authenticated read/insert/delete (Phase 6) |
 | `lecture_absences`, `lecture_submissions`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) — teachers write `lecture_absences` + `lecture_submissions` from `/school-attendance` |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
+| **`homework_assignments`** | ✓ | Read: authenticated. Write: authenticated **except** a `role='teacher'` row whose `created_by` ≠ their JWT email (a teacher writes only their own). |
+| **`homework_submissions`, `homework_grades`** | ✓ | **Read-only** to authenticated (staff). No write policy: the student endpoint and the grading scripts write as the service role. |
+| Storage `homework-files` | — | Staff read; staff write only into an assignment folder whose row they could write. Students get signed links to `questions/` only. |
+| Storage `homework-submissions` | — | Staff read. **No write policy**: students upload through signed upload links the service role issues. |
 | **`attendance_holidays`** | ✓ | `holidays_read` — authenticated `SELECT`. `holidays_write_insert/update/delete` — authenticated **except** `app_metadata.role = 'teacher'` (same predicate as `faculty_state`). The student portal never reads it: `api/student-login.js` filters server-side with the service role. |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'` (migrated from the self-editable `user_metadata` on 2026-09-10). |
 | **`student_fee_plans`, `fee_installments`, `fee_payments`** | ✓ | **Superadmin only** — same `app_metadata` predicate, one `fees_superadmin_all` policy each. The plain admin login is excluded by design. See §11. |
