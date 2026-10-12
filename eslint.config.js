@@ -41,6 +41,7 @@ export default defineConfig([
       'migrate_*.js',
       'sync_*.js',
       'create_teacher_account.js',
+      'scripts/**/*.js',
     ],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
