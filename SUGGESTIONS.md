@@ -6,6 +6,24 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-12
+
+### Backfill ledger — `className="input"` styles nothing; 17 screens render bare inputs
+
+Found while taking the Homework before/after screenshots: there is **no `.input` class**. The app's text-field class is `.form-input` (`src/index.css`). Inputs, selects and textareas marked `input` render with no border, background or focus style. In the screenshots they look like plain text, and keyboard focus has no visible indicator, which breaks our accessibility rule. The Homework page was fixed before it shipped. These 17 files were already like this:
+
+`Quizzes/index.jsx`, `Quizzes/QuizEditor.jsx`, `Quizzes/QuizLinkPage.jsx` (student-facing), `Settings/{Batches,Branches,Mentorship,Monitoring,Teachers}Tab.jsx`, `Syllabus/{AssignPrograms,ManageProgram,ManageSubject}Modal.jsx`, `Timetable/{AddExamSchedule,AddTimetable,EditCell,ManageMappings,SyncCalendar}Modal.jsx`, `Timetable/TimetablePage.jsx`.
+
+**360 analysis (not yet applied; needs confirmation):**
+- **Scope:** class-name swaps only, `input` → `form-input`, in those 17 files. No logic changes.
+- **Blast radius:** `.form-input` adds `w-full` and `min-h-[44px]`. Compact controls (the Quizzes filter row, the inline `text-[12px] py-1` selects) will grow, and anything that relied on intrinsic width will stretch to its container. Each screen needs a look, so this is not a blind find-and-replace.
+- **Does it really apply:** yes. Every use intends a styled field; none is deliberate.
+- **Risk and reversibility:** visual only, and reverts with a single commit. Tests select by role or label, not by class, so they won't catch a layout regression; only screenshots will.
+- **Cost:** about an hour, mostly before/after screenshots across 17 screens at phone and desktop width.
+- **Recommendation:** do it, batched by page, with screenshots. Start with `QuizLinkPage.jsx`, the one students see. Where a compact control needs it, keep its size with `w-auto min-h-0`.
+
+The ratchet test `src/__tests__/cssClassRatchet.test.js` stops new files picking up the missing class. Remove each file from its allow-list as it's fixed.
+
 ## 2026-10-08
 
 ### Flag logins that have no role claim
