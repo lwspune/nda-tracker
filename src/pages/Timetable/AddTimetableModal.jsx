@@ -139,7 +139,7 @@ export default function AddTimetableModal({ timetable, onClose }) {
             <p className="text-[12px] text-amber-600 italic">No batches on this branch — add one in <strong>Settings → Batches</strong>.</p>
           ) : (
             <select
-              className="input w-full text-[13px]"
+              className="form-input w-full text-[13px]"
               value={batchName}
               onChange={e => setBatchName(e.target.value)}
             >
@@ -159,7 +159,7 @@ export default function AddTimetableModal({ timetable, onClose }) {
           </label>
           <input
             type="text"
-            className="input w-full text-[13px]"
+            className="form-input w-full text-[13px]"
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder={`e.g. ${branch || 'APJ'} — NDA ${batchName || '12th'} Class Schedule`}

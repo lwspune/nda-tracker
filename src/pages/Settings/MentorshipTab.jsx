@@ -72,7 +72,7 @@ export default function MentorshipTab() {
 
           <span className="text-ink-3 text-[12px] mx-1">or send a real test message to:</span>
           <input
-            className="input text-[13px] w-40"
+            className="form-input text-[13px] w-40"
             placeholder="10-digit mobile"
             type="tel"
             inputMode="numeric"
@@ -210,7 +210,7 @@ function MenteeAssignments() {
 
   const MentorSelect = ({ lwsId, value }) => (
     <select
-      className="input text-[12px] py-0.5 px-1 w-36"
+      className="form-input text-[12px] py-0.5 px-1 w-36 min-h-0"
       value={value || ''}
       disabled={busy}
       onChange={e => reassign(lwsId, e.target.value)}
@@ -237,7 +237,7 @@ function MenteeAssignments() {
       ) : (
         <>
           <input
-            className="input w-full text-[13px] mb-3"
+            className="form-input w-full text-[13px] mb-3"
             placeholder="Filter by student name…"
             value={search}
             onChange={e => setSearch(e.target.value)}

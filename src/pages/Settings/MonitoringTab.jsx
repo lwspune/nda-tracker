@@ -34,7 +34,7 @@ export default function MonitoringTab() {
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">Add monitoring number</div>
         <div className="flex gap-2">
           <input
-            className="input flex-1 text-[13px] font-mono"
+            className="form-input flex-1 text-[13px] font-mono"
             placeholder="10-digit mobile"
             value={newNumber}
             onChange={e => { setNewNumber(e.target.value); setError('') }}

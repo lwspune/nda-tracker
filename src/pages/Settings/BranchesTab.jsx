@@ -50,7 +50,7 @@ export default function BranchesTab() {
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">Add branch</div>
         <div className="flex gap-2">
           <input
-            className="input flex-1 text-[13px]"
+            className="form-input flex-1 text-[13px]"
             placeholder="e.g. LWS Mumbai"
             value={newName}
             onChange={e => { setNewName(e.target.value); setError('') }}
@@ -82,7 +82,7 @@ export default function BranchesTab() {
                     <>
                       <input
                         autoFocus
-                        className="input flex-1 text-[13px] py-1"
+                        className="form-input flex-1 text-[13px] py-1 min-h-0"
                         value={editing.draft}
                         onChange={e => setEditing({ ...editing, draft: e.target.value })}
                         onKeyDown={e => {

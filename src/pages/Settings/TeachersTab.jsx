@@ -184,7 +184,7 @@ export default function TeachersTab() {
         <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wide mb-2">Add teacher</div>
         <div className="flex gap-2 mb-2">
           <input
-            className="input flex-1 text-[13px]"
+            className="form-input flex-1 text-[13px]"
             placeholder="Name  e.g. Navneet Sir"
             value={newName}
             onChange={e => setNewName(e.target.value)}
@@ -197,7 +197,7 @@ export default function TeachersTab() {
           >Add</button>
         </div>
         <input
-          className="input w-full text-[13px] mb-2"
+          className="form-input w-full text-[13px] mb-2"
           placeholder="Email address (used for schedule emails)"
           type="email"
           value={newEmail}
@@ -215,7 +215,7 @@ export default function TeachersTab() {
         </label>
         {addCreateLogin && (
           <input
-            className="input w-full text-[13px]"
+            className="form-input w-full text-[13px]"
             placeholder={`Password (min ${MIN_PASSWORD} chars) — you'll share this with the teacher`}
             type="text"
             autoComplete="off"
@@ -255,7 +255,7 @@ export default function TeachersTab() {
                       <div className="flex-1 space-y-1.5">
                         <input
                           autoFocus
-                          className="input w-full text-[13px] py-1"
+                          className="form-input w-full text-[13px] py-1 min-h-0"
                           placeholder="Name"
                           value={editingName}
                           onChange={e => setEditingName(e.target.value)}
@@ -265,7 +265,7 @@ export default function TeachersTab() {
                           }}
                         />
                         <input
-                          className="input w-full text-[13px] py-1"
+                          className="form-input w-full text-[13px] py-1 min-h-0"
                           placeholder="Email address"
                           type="email"
                           value={editingEmail}
@@ -276,7 +276,7 @@ export default function TeachersTab() {
                           }}
                         />
                         <input
-                          className="input w-full text-[13px] py-1"
+                          className="form-input w-full text-[13px] py-1 min-h-0"
                           placeholder="WhatsApp mobile (for mentorship nudges)"
                           type="tel"
                           inputMode="numeric"
@@ -385,7 +385,7 @@ export default function TeachersTab() {
                           autoFocus
                           type="text"
                           autoComplete="off"
-                          className="input flex-1 text-[13px] py-1"
+                          className="form-input flex-1 text-[13px] py-1 min-h-0"
                           placeholder={`Password (min ${MIN_PASSWORD} chars)`}
                           value={form.password}
                           onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}

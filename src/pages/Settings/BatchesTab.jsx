@@ -149,7 +149,7 @@ export default function BatchesTab() {
           <>
             <input
               autoFocus
-              className="input flex-1 text-[13px] py-1"
+              className="form-input flex-1 text-[13px] py-1 min-h-0"
               value={editing.draft}
               onChange={e => setEditing({ ...editing, draft: e.target.value })}
               onKeyDown={e => {
@@ -215,7 +215,7 @@ export default function BatchesTab() {
             </div>
             {meta.inSyllabus && (
               <select
-                className="input text-[12px] py-1 min-w-[120px]"
+                className="form-input text-[12px] py-1 min-w-[120px] min-h-0 w-auto"
                 value={meta.branch ?? ''}
                 onChange={e => handleSetBranch(b, e.target.value)}
                 aria-label={`Branch for ${b}`}
@@ -265,14 +265,14 @@ export default function BatchesTab() {
           <>
             <div className="flex gap-2 mb-2">
               <input
-                className="input flex-1 text-[13px]"
+                className="form-input flex-1 text-[13px]"
                 placeholder="e.g. LWS_NDA_2Y_(26-28)_C"
                 value={newName}
                 onChange={e => { setNewName(e.target.value); setError('') }}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
               <select
-                className="input text-[13px] min-w-[140px]"
+                className="form-input text-[13px] min-w-[140px] w-auto"
                 value={newBranch}
                 onChange={e => setNewBranch(e.target.value)}
                 aria-label="Branch for the new batch"

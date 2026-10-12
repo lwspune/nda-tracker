@@ -68,7 +68,7 @@ export default function AssignProgramsModal({ batchName: initialBatch, batches, 
               Batch
             </label>
             <select
-              className="input w-full"
+              className="form-input w-full"
               value={selectedBatch}
               onChange={e => setSelectedBatch(e.target.value)}
             >
@@ -129,7 +129,7 @@ export default function AssignProgramsModal({ batchName: initialBatch, batches, 
                 <p className="text-[11px] font-bold uppercase tracking-wide text-ink-3">New Program</p>
                 <input
                   autoFocus
-                  className="input w-full"
+                  className="form-input w-full"
                   placeholder="Program name, e.g. CDS Program"
                   value={newProgName}
                   onChange={e => setNewProgName(e.target.value)}
@@ -139,7 +139,7 @@ export default function AssignProgramsModal({ batchName: initialBatch, batches, 
                     Tracking columns (comma-separated)
                   </label>
                   <input
-                    className="input w-full text-[12px]"
+                    className="form-input w-full text-[12px]"
                     value={newProgCols}
                     onChange={e => setNewProgCols(e.target.value)}
                   />

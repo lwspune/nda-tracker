@@ -89,7 +89,7 @@ export default function ManageProgramModal({ programId, onClose }) {
         </label>
         <div className="flex gap-2">
           <input
-            className="input flex-1"
+            className="form-input flex-1"
             value={progName}
             onChange={e => setProgName(e.target.value)}
             onBlur={saveProgramName}
@@ -109,7 +109,7 @@ export default function ManageProgramModal({ programId, onClose }) {
               {editingColIdx === idx ? (
                 <input
                   autoFocus
-                  className="input flex-1 text-[12px]"
+                  className="form-input flex-1 text-[12px]"
                   value={editingColName}
                   onChange={e => setEditingColName(e.target.value)}
                   onBlur={saveColumnName}
@@ -136,7 +136,7 @@ export default function ManageProgramModal({ programId, onClose }) {
         </div>
         <div className="flex gap-2">
           <input
-            className="input flex-1 text-[12px]"
+            className="form-input flex-1 text-[12px]"
             placeholder="New column name"
             value={newColName}
             onChange={e => setNewColName(e.target.value)}
@@ -160,7 +160,7 @@ export default function ManageProgramModal({ programId, onClose }) {
               {editingSubjId === subj.id ? (
                 <input
                   autoFocus
-                  className="input flex-1 text-[12px]"
+                  className="form-input flex-1 text-[12px]"
                   value={editingSubjName}
                   onChange={e => setEditingSubjName(e.target.value)}
                   onBlur={saveSubjectName}
@@ -185,7 +185,7 @@ export default function ManageProgramModal({ programId, onClose }) {
         </div>
         <div className="flex gap-2">
           <input
-            className="input flex-1 text-[12px]"
+            className="form-input flex-1 text-[12px]"
             placeholder="New subject name"
             value={newSubjName}
             onChange={e => setNewSubjName(e.target.value)}

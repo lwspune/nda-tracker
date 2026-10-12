@@ -116,7 +116,7 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
             Subject / Teacher
           </label>
           <select
-            className="input w-full text-[13px]"
+            className="form-input w-full text-[13px]"
             value={selectedMappingId}
             onChange={e => setSelectedMappingId(e.target.value)}
           >
@@ -143,7 +143,7 @@ export default function EditCellModal({ timetableId, slotId, day, currentCell, o
           </label>
           <input
             autoFocus
-            className="input w-full text-[13px]"
+            className="form-input w-full text-[13px]"
             placeholder="e.g. Lunch Break"
             value={breakLabel}
             onChange={e => setBreakLabel(e.target.value)}

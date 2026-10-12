@@ -64,7 +64,7 @@ export default function SyncCalendarModal({ onClose, teachers = [] }) {
       <div className="mb-4">
         <label className="block text-[10px] font-bold text-ink-3 uppercase tracking-wide mb-1">Scope</label>
         <select
-          className="input w-full text-[12px]"
+          className="form-input w-full text-[12px]"
           value={teacherId}
           onChange={e => setTeacherId(e.target.value)}
           disabled={phase === 'applying'}

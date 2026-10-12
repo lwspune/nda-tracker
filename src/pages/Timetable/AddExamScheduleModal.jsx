@@ -132,7 +132,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="input w-full"
+            className="form-input w-full"
           />
         </div>
 
@@ -147,7 +147,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
               placeholder="9:00 AM"
               value={startTime}
               onChange={e => setStartTime(e.target.value)}
-              className="input w-full"
+              className="form-input w-full"
             />
           </div>
           <div>
@@ -159,7 +159,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
               placeholder="11:00 AM"
               value={endTime}
               onChange={e => setEndTime(e.target.value)}
-              className="input w-full"
+              className="form-input w-full"
             />
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
             placeholder="e.g. Maths"
             value={subject}
             onChange={e => setSubject(e.target.value)}
-            className="input w-full"
+            className="form-input w-full"
           />
         </div>
 
@@ -188,7 +188,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
             placeholder="e.g. Trigonometry"
             value={chapter}
             onChange={e => setChapter(e.target.value)}
-            className="input w-full"
+            className="form-input w-full"
           />
         </div>
 
@@ -200,7 +200,7 @@ export default function AddExamScheduleModal({ exam, onClose }) {
           <select
             value={teacherId}
             onChange={e => setTeacherId(e.target.value)}
-            className="input w-full"
+            className="form-input w-full"
           >
             <option value="">— Unassigned —</option>
             {sortTeachersByName(teachers).map(t => (

@@ -343,7 +343,7 @@ export default function TimetablePage({ canEdit: staffCanEdit = false }) {
                       type="date"
                       value={weekAnchor}
                       onChange={e => setWeekAnchor(e.target.value)}
-                      className="input text-[12px] px-2 py-1"
+                      className="form-input text-[12px] px-2 py-1 min-h-0 w-auto"
                     />
                     {weekAnchor && (
                       <button
@@ -391,7 +391,7 @@ export default function TimetablePage({ canEdit: staffCanEdit = false }) {
                           Notes (one per line)
                         </label>
                         <textarea
-                          className="input w-full text-[12px] min-h-[88px]"
+                          className="form-input w-full text-[12px] min-h-[88px]"
                           autoFocus
                           value={footnotesDraft}
                           onChange={e => setFootnotesDraft(e.target.value)}

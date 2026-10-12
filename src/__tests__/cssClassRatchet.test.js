@@ -7,25 +7,8 @@ import { join, relative } from 'node:path'
 // focus ring, which looks like plain text and fails our visible-focus rule.
 // Found 2026-10-12 in 17 already-shipped files (SUGGESTIONS.md backfill ledger);
 // this ratchet stops new code joining them. Remove a file from KNOWN as it is fixed.
-const KNOWN = new Set([
-  'pages/Quizzes/index.jsx',
-  'pages/Quizzes/QuizEditor.jsx',
-  'pages/Quizzes/QuizLinkPage.jsx',
-  'pages/Settings/BatchesTab.jsx',
-  'pages/Settings/BranchesTab.jsx',
-  'pages/Settings/MentorshipTab.jsx',
-  'pages/Settings/MonitoringTab.jsx',
-  'pages/Settings/TeachersTab.jsx',
-  'pages/Syllabus/AssignProgramsModal.jsx',
-  'pages/Syllabus/ManageProgramModal.jsx',
-  'pages/Syllabus/ManageSubjectModal.jsx',
-  'pages/Timetable/AddExamScheduleModal.jsx',
-  'pages/Timetable/AddTimetableModal.jsx',
-  'pages/Timetable/EditCellModal.jsx',
-  'pages/Timetable/ManageMappingsModal.jsx',
-  'pages/Timetable/SyncCalendarModal.jsx',
-  'pages/Timetable/TimetablePage.jsx',
-])
+// Emptied 2026-10-12 when the 17 files were fixed. Keep it empty.
+const KNOWN = new Set([])
 
 const SRC = join(process.cwd(), 'src')
 

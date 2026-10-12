@@ -106,7 +106,7 @@ export default function QuizzesPage() {
             return (
               <select
                 key={f.key}
-                className="input text-[12px] py-1"
+                className="form-input text-[12px] py-1 min-h-0 w-auto"
                 value={filters[f.key]}
                 onChange={e => setFilter(f.key, e.target.value)}
               >

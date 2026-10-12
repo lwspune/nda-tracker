@@ -64,7 +64,7 @@ export default function ManageMappingsModal({ onClose }) {
           <div>
             <label className="block text-[10px] text-ink-3 mb-1">Label *</label>
             <input
-              className="input w-full text-[12px]"
+              className="form-input w-full text-[12px]"
               placeholder="e.g. Maths (Vilas Sir)"
               value={label}
               onChange={e => setLabel(e.target.value)}
@@ -74,7 +74,7 @@ export default function ManageMappingsModal({ onClose }) {
           <div>
             <label className="block text-[10px] text-ink-3 mb-1">Subject</label>
             <input
-              className="input w-full text-[12px]"
+              className="form-input w-full text-[12px]"
               placeholder="e.g. Maths"
               value={subject}
               onChange={e => setSubject(e.target.value)}
@@ -83,7 +83,7 @@ export default function ManageMappingsModal({ onClose }) {
           <div>
             <label className="block text-[10px] text-ink-3 mb-1">Teacher</label>
             <select
-              className="input w-full text-[12px]"
+              className="form-input w-full text-[12px]"
               value={teacherId}
               onChange={e => setTeacherId(e.target.value)}
             >
@@ -119,7 +119,7 @@ export default function ManageMappingsModal({ onClose }) {
                         <label className="block text-[10px] text-ink-3 mb-1">Label</label>
                         <input
                           autoFocus
-                          className="input w-full text-[12px]"
+                          className="form-input w-full text-[12px]"
                           value={editLabel}
                           onChange={e => setEditLabel(e.target.value)}
                         />
@@ -127,7 +127,7 @@ export default function ManageMappingsModal({ onClose }) {
                       <div>
                         <label className="block text-[10px] text-ink-3 mb-1">Subject</label>
                         <input
-                          className="input w-full text-[12px]"
+                          className="form-input w-full text-[12px]"
                           value={editSubject}
                           onChange={e => setEditSubject(e.target.value)}
                         />
@@ -135,7 +135,7 @@ export default function ManageMappingsModal({ onClose }) {
                       <div>
                         <label className="block text-[10px] text-ink-3 mb-1">Teacher</label>
                         <select
-                          className="input w-full text-[12px]"
+                          className="form-input w-full text-[12px]"
                           value={editTeacherId}
                           onChange={e => setEditTeacherId(e.target.value)}
                         >

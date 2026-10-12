@@ -95,7 +95,7 @@ export default function ManageSubjectModal({ program, subject, onClose }) {
           Subject Name
         </label>
         <input
-          className="input w-full"
+          className="form-input w-full"
           value={subjName}
           onChange={e => setSubjName(e.target.value)}
           onBlur={saveSubjName}
@@ -120,7 +120,7 @@ export default function ManageSubjectModal({ program, subject, onClose }) {
                 <div className="bg-accent-soft/20 border border-accent/20 rounded-lg p-2.5 space-y-2">
                   <input
                     autoFocus
-                    className="input w-full text-[12px]"
+                    className="form-input w-full text-[12px]"
                     placeholder="Chapter name"
                     value={editChName}
                     onChange={e => setEditChName(e.target.value)}
@@ -128,7 +128,7 @@ export default function ManageSubjectModal({ program, subject, onClose }) {
                   />
                   <div className="flex gap-2">
                     <input
-                      className="input flex-1 text-[12px]"
+                      className="form-input flex-1 text-[12px]"
                       placeholder="Group (optional, e.g. Class 11)"
                       value={editChGroup}
                       onChange={e => setEditChGroup(e.target.value)}
@@ -180,7 +180,7 @@ export default function ManageSubjectModal({ program, subject, onClose }) {
         <div className="border-t border-border pt-3 space-y-2">
           <p className="text-[11px] font-bold uppercase tracking-wide text-ink-3">Add Chapter</p>
           <input
-            className="input w-full text-[12px]"
+            className="form-input w-full text-[12px]"
             placeholder="Chapter name"
             value={newChName}
             onChange={e => setNewChName(e.target.value)}
@@ -188,7 +188,7 @@ export default function ManageSubjectModal({ program, subject, onClose }) {
           />
           <div className="flex gap-2">
             <input
-              className="input flex-1 text-[12px]"
+              className="form-input flex-1 text-[12px]"
               placeholder="Group (optional)"
               value={newChGroup}
               onChange={e => setNewChGroup(e.target.value)}

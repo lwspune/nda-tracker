@@ -76,7 +76,7 @@ export default function QuizLinkPage({ quizId }) {
             <div className="text-[12px] text-ink-3 mb-3">The same number registered with LWS Pune. No password — you'll only do this once on this device.</div>
             <div className="flex gap-2">
               <input
-                className="input flex-1 text-[15px]"
+                className="form-input flex-1 text-[15px]"
                 type="tel"
                 inputMode="numeric"
                 placeholder="10-digit mobile number"

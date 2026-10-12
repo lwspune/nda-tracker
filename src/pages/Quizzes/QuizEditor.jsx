@@ -139,7 +139,7 @@ export default function QuizEditor({ quiz, onDone }) {
           <div>
             <label className="text-[11px] font-semibold text-ink-2 block mb-1">Title</label>
             <input
-              className="input w-full text-[14px]"
+              className="form-input w-full text-[14px]"
               placeholder="e.g. Daily Maths Quiz — 5 Jun"
               value={draft.title}
               onChange={e => patch({ title: e.target.value })}
@@ -149,13 +149,13 @@ export default function QuizEditor({ quiz, onDone }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Subject</label>
-              <input className="input w-full text-[13px]" value={draft.subject || ''} onChange={e => patch({ subject: e.target.value })} />
+              <input className="form-input w-full text-[13px]" value={draft.subject || ''} onChange={e => patch({ subject: e.target.value })} />
             </div>
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Closes at</label>
               <input
                 type="datetime-local"
-                className="input w-full text-[13px]"
+                className="form-input w-full text-[13px]"
                 value={toLocalInput(draft.closesAt)}
                 onChange={e => patch({ closesAt: fromLocalInput(e.target.value) })}
               />
@@ -167,7 +167,7 @@ export default function QuizEditor({ quiz, onDone }) {
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Exam</label>
               <select
-                className="input w-full text-[13px]"
+                className="form-input w-full text-[13px]"
                 value={draft.exam || ''}
                 onChange={e => patch({ exam: e.target.value || null })}
                 aria-label="Exam"
@@ -179,7 +179,7 @@ export default function QuizEditor({ quiz, onDone }) {
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Chapter</label>
               <input
-                className="input w-full text-[13px]"
+                className="form-input w-full text-[13px]"
                 placeholder="e.g. Probability"
                 value={draft.chapter || ''}
                 onChange={e => patch({ chapter: e.target.value })}
@@ -188,7 +188,7 @@ export default function QuizEditor({ quiz, onDone }) {
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Theme</label>
               <select
-                className="input w-full text-[13px]"
+                className="form-input w-full text-[13px]"
                 value={draft.theme || ''}
                 onChange={e => patch({ theme: e.target.value || null })}
                 aria-label="Theme"
@@ -232,7 +232,7 @@ export default function QuizEditor({ quiz, onDone }) {
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Marks per correct</label>
               <input
-                type="number" className="input w-full text-[13px]"
+                type="number" className="form-input w-full text-[13px]"
                 value={draft.marking.correct}
                 onChange={e => patch({ marking: { ...draft.marking, correct: Number(e.target.value) } })}
               />
@@ -240,7 +240,7 @@ export default function QuizEditor({ quiz, onDone }) {
             <div>
               <label className="text-[11px] font-semibold text-ink-2 block mb-1">Marks per wrong (negative if any)</label>
               <input
-                type="number" className="input w-full text-[13px]"
+                type="number" className="form-input w-full text-[13px]"
                 value={draft.marking.wrong}
                 onChange={e => patch({ marking: { ...draft.marking, wrong: Number(e.target.value) } })}
               />
@@ -294,7 +294,7 @@ function QuestionForm({ q, index, canRemove, onChange, onRemove }) {
       </div>
 
       <textarea
-        className="input w-full text-[13px] min-h-[60px]"
+        className="form-input w-full text-[13px] min-h-[60px]"
         placeholder="Question text (supports \( LaTeX \) )"
         value={q.question}
         onChange={e => onChange({ question: e.target.value })}
@@ -320,7 +320,7 @@ function QuestionForm({ q, index, canRemove, onChange, onRemove }) {
                 />
                 <span className="text-[12px] font-bold text-ink-3 w-4">{letter}</span>
                 <input
-                  className="input flex-1 text-[13px] py-1"
+                  className="form-input flex-1 text-[13px] py-1 min-h-0"
                   placeholder={`Option ${letter}`}
                   value={q[key] || ''}
                   onChange={e => onChange({ [key]: e.target.value })}
@@ -337,11 +337,11 @@ function QuestionForm({ q, index, canRemove, onChange, onRemove }) {
 
       <div className="grid grid-cols-2 gap-2 mt-2">
         <input
-          className="input text-[12px]" placeholder="Chapter (optional)"
+          className="form-input text-[12px] w-auto" placeholder="Chapter (optional)"
           value={q.chapter || ''} onChange={e => onChange({ chapter: e.target.value })}
         />
         <select
-          className="input text-[12px]" value={q.difficulty || ''}
+          className="form-input text-[12px] w-auto" value={q.difficulty || ''}
           onChange={e => onChange({ difficulty: e.target.value })}
           aria-label="Difficulty"
         >
