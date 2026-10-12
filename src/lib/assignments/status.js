@@ -69,7 +69,12 @@ export function validateAssignmentForPublish(a, now = new Date()) {
   if (!Number.isFinite(due) || due <= now.getTime()) errors.push('Set a deadline in the future.')
   const max = a?.maxMarks
   if (typeof max !== 'number' || !(max > 0) || !isHalf(max)) errors.push('Set the total marks (in halves).')
-  if (!Array.isArray(a?.questionFiles) || a.questionFiles.length === 0) errors.push('Upload the question paper.')
+  // A question paper OR a description: homework is often just "Exercise 3.2,
+  // Q1–10, as announced in class". The database holds the same rule
+  // (homework_assignments_publishable).
+  const hasPaper = Array.isArray(a?.questionFiles) && a.questionFiles.length > 0
+  const hasDescription = String(a?.instructions ?? '').trim().length > 0
+  if (!hasPaper && !hasDescription) errors.push('Describe the homework or upload the question paper.')
 
   const qs = Array.isArray(a?.questions) ? a.questions : []
   if (qs.length > 0) {

@@ -121,6 +121,21 @@ describe('validateAssignmentForPublish', () => {
     expect(r.errors).toHaveLength(5)
   })
 
+  // Homework is often just "Exercise 3.2, Q1–10, as announced in class" — a
+  // description with no paper to upload. Either one is enough; neither is not.
+  it('accepts a description in place of a question paper', () => {
+    const r = validateAssignmentForPublish(
+      { ...good, questionFiles: [], instructions: 'Exercise 3.2, Q1-10 from RD Sharma' }, NOW,
+    )
+    expect(r).toEqual({ ok: true, errors: [] })
+  })
+
+  it('refuses homework with neither a description nor a question paper', () => {
+    const r = validateAssignmentForPublish({ ...good, questionFiles: [], instructions: '   ' }, NOW)
+    expect(r.ok).toBe(false)
+    expect(r.errors).toEqual(['Describe the homework or upload the question paper.'])
+  })
+
   it('needs marks in halves', () => {
     expect(validateAssignmentForPublish({ ...good, maxMarks: 7.3 }, NOW).ok).toBe(false)
     expect(validateAssignmentForPublish({ ...good, maxMarks: 7.5 }, NOW).ok).toBe(true)

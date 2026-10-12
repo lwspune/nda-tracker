@@ -136,6 +136,27 @@ describe('HomeworkPage', () => {
       expect(opts.questionFiles.map(f => f.name)).toEqual(['set.pdf'])
     })
 
+    it('publishes a description-only homework with no file', async () => {
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /new homework/i }))
+      fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Exercise 3.2' } })
+      fireEvent.change(screen.getByLabelText(/subject/i), { target: { value: 'Maths' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: '12th_A' }))
+      fireEvent.change(screen.getByLabelText(/total marks/i), { target: { value: '10' } })
+      fireEvent.change(screen.getByLabelText(/deadline/i), { target: { value: '2099-01-01T18:00' } })
+      fireEvent.change(screen.getByLabelText(/description/i), {
+        target: { value: 'RD Sharma Exercise 3.2, Q1-10, as announced in class' },
+      })
+      // Without a paper, the grader has only the description: nudge for a key.
+      expect(screen.getByText(/upload an answer key/i)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: /^publish/i }))
+      await waitFor(() => expect(mockStore.saveHomeworkAssignment).toHaveBeenCalled())
+      const [draft, opts] = mockStore.saveHomeworkAssignment.mock.calls[0]
+      expect(draft.instructions).toBe('RD Sharma Exercise 3.2, Q1-10, as announced in class')
+      expect(opts.questionFiles).toEqual([])
+    })
+
     it('refuses an unreadable file type at pick time', () => {
       renderAs('teacher', 'asha@lws.com')
       fireEvent.click(screen.getByRole('button', { name: /new homework/i }))

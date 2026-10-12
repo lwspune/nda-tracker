@@ -159,12 +159,16 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
           )}
         </fieldset>
 
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
-          Instructions (optional)
-          <textarea className="input min-h-[70px]" maxLength={2000} value={instructions}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="homework-description" className="text-[12px] font-semibold text-ink-2">Description</label>
+          <p id="homework-description-hint" className="text-[11px] text-ink-3">
+            What to do. Enough on its own for homework announced in class — the question paper below is then optional.
+          </p>
+          <textarea id="homework-description" aria-describedby="homework-description-hint"
+                    className="input min-h-[70px]" maxLength={2000} value={instructions}
                     onChange={e => setInstructions(e.target.value)}
-                    placeholder="e.g. Show all working. Write your name on every page." />
-        </label>
+                    placeholder="e.g. RD Sharma Exercise 3.2, Q1–10, as announced in class. Show all working." />
+        </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
@@ -178,7 +182,7 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
 
         <FileField
           label="Question paper"
-          hint="PDF or photos of the questions. Students can open these."
+          hint="PDF or photos of the questions. Students can open these. Optional if the description says what to do."
           saved={current.questionFiles}
           picked={newQuestionFiles}
           onPick={pick(setNewQuestionFiles, newQuestionFiles)}
@@ -195,6 +199,16 @@ export default function HomeworkEditor({ assignment, email, onDone }) {
           onRemoveSaved={path => dropSaved('key', path)}
         />
         {fileError && <Alert type="error">{fileError}</Alert>}
+        {/* Without a paper the grader has only the description and the student's
+            pages; an answer key is what keeps the marking consistent. */}
+        {current.questionFiles.length + newQuestionFiles.length === 0
+          && current.answerKeyFiles.length + newKeyFiles.length === 0
+          && instructions.trim() && (
+          <Alert type="info">
+            No question paper: upload an answer key (a photo of the worked solutions is enough) so every
+            student is marked the same way.
+          </Alert>
+        )}
 
         {!publishCheck.ok && (
           <ul className="text-[12px] text-ink-3 list-disc pl-5" aria-label="Still needed before publishing">

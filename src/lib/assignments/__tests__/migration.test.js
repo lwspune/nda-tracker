@@ -81,3 +81,25 @@ describe('homework assignments migration', () => {
     for (const w of writes) expect(w[0]).not.toContain(SUBMISSIONS_BUCKET)
   })
 })
+
+// 2026-10-12: homework may be a description alone (an announcement in class).
+// The database relaxes the publish rule to match validateAssignmentForPublish,
+// without dropping it: a published homework still needs batches, and a
+// question paper OR a non-blank description.
+describe('publish-with-description migration', () => {
+  const descFile = readdirSync(dir).find(f => f.endsWith('_homework_publish_with_description.sql'))
+  const desc = descFile ? readFileSync(join(dir, descFile), 'utf8').replace(/\s+/g, ' ') : ''
+
+  it('exists and sorts after the table migration', () => {
+    expect(descFile).toBeTruthy()
+    expect(descFile > file).toBe(true)
+  })
+
+  it('re-creates the publish check with a description as the alternative', () => {
+    expect(desc).toContain('DROP CONSTRAINT homework_assignments_publishable')
+    expect(desc).toContain('ADD CONSTRAINT homework_assignments_publishable CHECK')
+    expect(desc).toContain("status = 'draft'")
+    expect(desc).toContain('cardinality(batch_names) >= 1')
+    expect(desc).toMatch(/jsonb_array_length\(question_files\) >= 1 OR length\(btrim\(coalesce\(instructions, ''\)\)\) > 0/)
+  })
+})
