@@ -15,10 +15,12 @@
 
 import { readFileSync } from 'fs'
 
-export function readEnvLocal() {
+// `path` defaults to this repo's .env.local; the grading scripts also read PYQ
+// Vault's (scripts/grading/vault.js), a separate project with its own keys.
+export function readEnvLocal(path = '.env.local') {
   try {
     return Object.fromEntries(
-      readFileSync('.env.local', 'utf-8')
+      readFileSync(path, 'utf-8')
         .split('\n')
         // [A-Z0-9_] — digits allowed. The eleven private copies disagreed here:
         // eight used [A-Z_], three (sync-calendar, send-mentor-nudges,

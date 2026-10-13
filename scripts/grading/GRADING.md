@@ -32,7 +32,12 @@ same way as the 5th.
    handwriting check (see "Handwriting check" below).
 5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
-   note it in the ledger if the key was wrong.
+   note it in the ledger if the key was wrong. **No key?** Look the question up
+   in PYQ Vault: `npm run grading:vault -- "phrase from the question" ["another"]`
+   prints matching board questions with their stored solutions (plain words work
+   best; maths is stored as LaTeX). Treat a vault solution like a teacher's key:
+   it shows the steps and conditions a board answer is expected to state, but it
+   can be wrong, and any correct method still gets full marks.
 6. Fill `grade.json`.
 7. `npm run grading:commit -- <id> --dry` until the check passes, then
    `npm run grading:commit -- <id>`. The student sees it immediately — or, on a
@@ -181,6 +186,11 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-13: Homework with no answer key can be checked against PYQ Vault's stored
+  board solutions (`npm run grading:vault`, routine step 5). Daily Homework #1's
+  angle-between-lines proof is there as a 2023 board question, with the
+  conditions a full answer states.
 
 - 2026-10-13: Questions are worth 5 marks by default (the editor starts each row
   at 5), with a fixed split per question type (marking rule 2). At 2 marks the

@@ -50,6 +50,14 @@ describe('readEnvLocal', () => {
 
   // On Vercel there is no .env.local at all. This must be silent, not a throw:
   // it runs at the top of every handler.
+  it('reads .env.local by default, or another env file when given its path', () => {
+    vi.mocked(readFileSync).mockReturnValue('A=1\r\n')
+    expect(readEnvLocal()).toEqual({ A: '1' })
+    expect(vi.mocked(readFileSync)).toHaveBeenLastCalledWith('.env.local', 'utf-8')
+    readEnvLocal('../Question_Bank/.env.local')
+    expect(vi.mocked(readFileSync)).toHaveBeenLastCalledWith('../Question_Bank/.env.local', 'utf-8')
+  })
+
   it('returns an empty object when the file is absent', () => {
     vi.mocked(readFileSync).mockImplementation(() => { throw new Error('ENOENT') })
     expect(readEnvLocal()).toEqual({})
