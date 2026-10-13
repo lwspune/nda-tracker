@@ -48,6 +48,27 @@ describe('buildHomeworkBrief', () => {
     expect(t).toMatch(/no answer key/i)
   })
 
+  it('points the grader at the student\'s reference pages for the handwriting check', () => {
+    const t = buildHomeworkBrief({
+      submission: submission(), assignment: assignment(),
+      files: { questions: [], key: [], scans: ['scans/01.jpg'], reference: ['reference/01.jpg', 'reference/02.jpg'] },
+    })
+    expect(t).toMatch(/## Handwriting check/)
+    expect(t).toMatch(/reference\/01\.jpg[\s\S]*reference\/02\.jpg/)
+    expect(t).toMatch(/match.*mismatch.*unclear/s)
+    expect(t).not.toMatch(/no_reference/)
+  })
+
+  it('says there is no reference yet, and that this one becomes it', () => {
+    const t = buildHomeworkBrief({
+      submission: submission(), assignment: assignment(),
+      files: { questions: [], key: [], scans: ['scans/01.jpg'], reference: [] },
+    })
+    expect(t).toMatch(/## Handwriting check/)
+    expect(t).toMatch(/no_reference/)
+    expect(t).toMatch(/becomes .*reference/i)
+  })
+
   it('lists a teacher-set breakdown, which the grade must follow exactly', () => {
     const t = buildHomeworkBrief({
       submission: submission(),
@@ -78,6 +99,10 @@ describe('gradeTemplate', () => {
     ])
   })
 
+  it('starts with an empty handwriting check to fill in', () => {
+    expect(gradeTemplate('s1', assignment()).handwriting).toEqual({ check: '', note: '' })
+  })
+
   it('leaves the rows to the grader when the teacher set no breakdown', () => {
     expect(gradeTemplate('s1', assignment()).grades).toEqual([])
   })
@@ -88,14 +113,33 @@ describe('savedGradeFile', () => {
   // re-typing the rest.
   it('turns a saved grade back into a grade.json that passes the checker unchanged', () => {
     const file = savedGradeFile({
-      ...submission({ status: 'graded', went_well: 'Good', next_steps: 'Revise' }),
+      ...submission({ status: 'graded', went_well: 'Good', next_steps: 'Revise', hand_check: 'match', hand_note: null }),
       homework_grades: [
         { position: 2, label: 'Q2', max_marks: '10', outcome: 'scored', awarded: '6', earned: 'Method', missing: 'Arithmetic' },
         { position: 1, label: 'Q1', max_marks: '10', outcome: 'not_attempted', awarded: null, earned: null, missing: null },
       ],
     })
     expect(file.grades.map(g => g.label)).toEqual(['Q1', 'Q2'])
+    expect(file.handwriting).toEqual({ check: 'match', note: '' })
     expect(validateGrade({ maxMarks: 20, file }).ok).toBe(true)
+  })
+
+  it('reloads a held grade with its handwriting note, for a regrade', () => {
+    const file = savedGradeFile({
+      ...submission({ status: 'held', went_well: 'Good', next_steps: 'Revise', hand_check: 'mismatch', hand_note: 'Different hand' }),
+      homework_grades: [{ position: 1, label: 'Q1', max_marks: '20', outcome: 'scored', awarded: '12', earned: 'e', missing: 'm' }],
+    })
+    expect(file.handwriting).toEqual({ check: 'mismatch', note: 'Different hand' })
+  })
+
+  // Grades saved before the check existed have none; a regrade must record one.
+  it('leaves the check empty for a grade saved before it existed, which the checker refuses', () => {
+    const file = savedGradeFile({
+      ...submission({ status: 'graded', went_well: 'Good', next_steps: 'Revise' }),
+      homework_grades: [{ position: 1, label: 'Q1', max_marks: '20', outcome: 'scored', awarded: '12', earned: 'e', missing: 'm' }],
+    })
+    expect(file.handwriting).toEqual({ check: '', note: '' })
+    expect(validateGrade({ maxMarks: 20, file }).ok).toBe(false)
   })
 
   it('is null for a submission that was never graded', () => {
@@ -107,7 +151,7 @@ describe('commitRows', () => {
   it('shapes checked rows for homework_grade_commit', () => {
     const check = validateGrade({
       maxMarks: 10,
-      file: { wentWell: 'w', nextSteps: 'n', grades: [{ label: 'Q1', max: 10, outcome: 'scored', awarded: 7, earned: 'e', missing: 'm' }] },
+      file: { wentWell: 'w', nextSteps: 'n', handwriting: { check: 'match', note: '' }, grades: [{ label: 'Q1', max: 10, outcome: 'scored', awarded: 7, earned: 'e', missing: 'm' }] },
     })
     expect(commitRows(check.rows)).toEqual([
       { position: 1, label: 'Q1', maxMarks: 10, outcome: 'scored', awarded: 7, earned: 'e', missing: 'm' },

@@ -2,6 +2,10 @@
 // grade stays. Also clears uploads abandoned for 2+ days (started, never sent)
 // and the local grading-inbox/<id>/ copy of every purged submission.
 //
+// NEVER a handwriting reference (homework_hand_references): it is kept until
+// faculty delete it by hand. A held grade is never purged either (it is not
+// graded until released).
+//
 //   npm run grading:purge             # DRY RUN: what would go
 //   npm run grading:purge -- --apply  # delete
 //
@@ -10,6 +14,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { serviceClient, INBOX, fail } from './_client.js'
 import { SUBMISSIONS_BUCKET } from '../../src/lib/assignments/upload.js'
+import { withoutReferences } from '../../src/lib/assignments/handwriting.js'
 
 const KEEP_DAYS = 30
 const ABANDONED_DAYS = 2
@@ -28,7 +33,7 @@ async function main() {
   const keepCutoff = new Date(Date.now() - KEEP_DAYS * DAY).toISOString()
   const abandonedCutoff = new Date(Date.now() - ABANDONED_DAYS * DAY).toISOString()
 
-  const { data: done, error } = await db
+  const { data: past, error } = await db
     .from('homework_submissions')
     .select('id, files')
     .in('status', ['graded', 'rejected'])
@@ -36,6 +41,10 @@ async function main() {
     .lt('graded_at', keepCutoff)
     .limit(1000)
   if (error) throw new Error(error.message)
+  // Fail closed: without the reference list, purge nothing.
+  const { data: refs, error: refErr } = await db.from('homework_hand_references').select('submission_id')
+  if (refErr) throw new Error(`references: ${refErr.message}`)
+  const done = withoutReferences(past, refs.map(r => r.submission_id))
   const { data: abandoned, error: abErr } = await db
     .from('homework_submissions')
     .select('id, files')
@@ -44,7 +53,7 @@ async function main() {
     .limit(1000)
   if (abErr) throw new Error(abErr.message)
 
-  console.log(`${done.length} graded submission(s) past ${KEEP_DAYS} days; ${abandoned.length} abandoned upload(s).`)
+  console.log(`${done.length} graded submission(s) past ${KEEP_DAYS} days (${past.length - done.length} kept as handwriting references); ${abandoned.length} abandoned upload(s).`)
   if (!apply) { console.log('Dry run. Add -- --apply to delete.'); return }
 
   for (const s of done) {

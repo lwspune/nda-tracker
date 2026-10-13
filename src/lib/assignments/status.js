@@ -14,10 +14,16 @@ export function assignmentState(assignment, now = new Date()) {
   return now.getTime() < due ? 'open' : 'closed'
 }
 
-// The submission that counts: submitted or graded. An abandoned upload and a
-// rejected sheet do not — the student may try again while the assignment is open.
+// Every state a submission can be in; the database allows exactly these.
+// `held` (2026-10-13) is a saved grade kept from the student until faculty
+// release it — the handwriting did not match the student's reference.
+export const SUBMISSION_STATUSES = ['uploading', 'submitted', 'held', 'graded', 'rejected']
+const LIVE = new Set(['submitted', 'held', 'graded'])
+
+// The submission that counts: submitted, held or graded. An abandoned upload and
+// a rejected sheet do not — the student may try again while the assignment is open.
 export function liveSubmission(submissions) {
-  return (submissions ?? []).find(s => s?.status === 'submitted' || s?.status === 'graded') ?? null
+  return (submissions ?? []).find(s => LIVE.has(s?.status)) ?? null
 }
 
 // May this student start an upload now? `submissions` is theirs, for this assignment.

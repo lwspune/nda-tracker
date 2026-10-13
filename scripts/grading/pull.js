@@ -9,6 +9,7 @@
 // Per submission, grading-inbox/<submission id>/ gets:
 //   paper/   the question paper (if any)        key/  the answer key (if any)
 //   scans/   the student's pages, in order       brief.md  what to read and how it's marked
+//   reference/  the student's handwriting reference (their first graded homework), if any
 //   grade.json  the template to fill — its outcomes start empty, which the checker
 //               refuses, so nothing passes unread
 //
@@ -55,11 +56,24 @@ async function main() {
     const { data: a, error: aErr } = await db.from('homework_assignments').select('*').eq('id', s.assignment_id).single()
     if (aErr) throw new Error(`assignment ${s.assignment_id}: ${aErr.message}`)
 
-    const files = { questions: [], key: [], scans: [] }
+    // The handwriting reference: the student's first graded homework, unless
+    // this IS it (a regrade of the reference has nothing to compare against).
+    const { data: ref, error: refErr } = await db
+      .from('homework_hand_references')
+      .select('submission_id, homework_submissions(files, scans_deleted_at)')
+      .eq('lws_id', s.lws_id)
+      .maybeSingle()
+    if (refErr) throw new Error(`reference for ${s.id}: ${refErr.message}`)
+    const refPaths = ref && ref.submission_id !== s.id && !ref.homework_submissions?.scans_deleted_at
+      ? ref.homework_submissions?.files ?? []
+      : []
+
+    const files = { questions: [], key: [], scans: [], reference: [] }
     for (const [folder, list, bucket, paths] of [
       ['paper', files.questions, ASSIGNMENT_FILES_BUCKET, (a.question_files ?? []).map(f => f.path)],
       ['key', files.key, ASSIGNMENT_FILES_BUCKET, (a.answer_key_files ?? []).map(f => f.path)],
       ['scans', files.scans, SUBMISSIONS_BUCKET, s.files ?? []],
+      ['reference', files.reference, SUBMISSIONS_BUCKET, refPaths],
     ]) {
       if (!paths.length) continue
       mkdirSync(join(dir, folder), { recursive: true })
@@ -76,7 +90,8 @@ async function main() {
     if (saved) writeFileSync(gradePath, `${JSON.stringify(saved, null, 2)}\n`)
     else if (!existsSync(gradePath)) writeFileSync(gradePath, `${JSON.stringify(gradeTemplate(s.id, a), null, 2)}\n`)
 
-    console.log(`  ${s.id}  ${a.title}  ${files.scans.length} page(s)  (${hours} h waiting)${saved ? '  [saved grade loaded]' : ''}`)
+    const refNote = files.reference.length ? `  reference ${files.reference.length} page(s)` : '  no reference'
+    console.log(`  ${s.id}  ${a.title}  ${files.scans.length} page(s)${refNote}  (${hours} h waiting)${saved ? '  [saved grade loaded]' : ''}`)
   }
 }
 

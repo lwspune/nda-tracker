@@ -17,7 +17,9 @@ import {
 // Writes are guarded by RLS (a teacher writes only rows they created) and the
 // storage policy (a file only for an assignment that already exists, and only
 // the creator's). Submissions and grades are read-only here; they are written
-// by the student endpoint and the grading scripts.
+// by the student endpoint and the grading scripts — except a grade HELD for a
+// handwriting check, which staff release or send back through the
+// homework_held_resolve function (it checks who is asking).
 export const createHomeworkAssignmentSlice = (set, _get) => ({
   homeworkAssignments: [],
   homeworkAssignmentsLoaded: false,
@@ -148,6 +150,39 @@ export const createHomeworkAssignmentSlice = (set, _get) => ({
       .select('assignment_id, lws_id, status')
     if (error) { console.error('[homework] status read failed:', error); return null }
     return (data ?? []).map(r => ({ assignmentId: r.assignment_id, lwsId: r.lws_id, status: r.status }))
+  },
+
+  // A student's handwriting reference — their first graded homework — for
+  // comparing beside a held one. null when there is none (or the read failed).
+  async getHomeworkReferenceFiles(lwsId) {
+    const { data, error } = await supabase
+      .from('homework_hand_references')
+      .select('submission_id, homework_submissions(files, scans_deleted_at)')
+      .eq('lws_id', lwsId)
+      .maybeSingle()
+    if (error) { console.error('[homework] reference read failed:', error); return null }
+    if (!data) return null
+    return {
+      submissionId: data.submission_id,
+      files: data.homework_submissions?.files ?? [],
+      scansDeletedAt: data.homework_submissions?.scans_deleted_at ?? null,
+    }
+  },
+
+  // Release a grade held for a handwriting check, or send it back with a
+  // reason. The database function checks who is asking (a teacher only on
+  // homework they set) and passes its refusal back as the error.
+  async resolveHeldHomework(submissionId, action, reason) {
+    const { error } = await supabase.rpc('homework_held_resolve', {
+      p_submission: submissionId,
+      p_action: action,
+      p_reason: reason?.trim() || null,
+    })
+    if (error) {
+      console.error('[homework] resolve held grade failed:', error)
+      return { ok: false, error: error.message || 'Could not save. Try again.' }
+    }
+    return { ok: true }
   },
 
   // A 10-minute link to a private file, for viewing in a new tab.

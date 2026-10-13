@@ -123,6 +123,46 @@ describe('studentHomeworkList', () => {
     expect(hw.submission).not.toHaveProperty('files')
   })
 
+  // A grade held for a handwriting check must be indistinguishable from one
+  // not yet graded: no marks, no feedback, no flag. Telling the student their
+  // grade is held is telling them they were suspected.
+  it('shows a held grade exactly as waiting to be graded', () => {
+    const base = {
+      id: 's1', assignment_id: 'a1', files: ['a1/L1/s1/01.jpg'],
+      created_at: iso(NOW.getTime() - 3600e3), submitted_at: iso(NOW.getTime() - 3600e3),
+    }
+    const [waiting] = studentHomeworkList({
+      assignments: [row()], batches: ['12th_A'], urls, now: NOW,
+      submissions: [{ ...base, status: 'submitted', homework_grades: [] }],
+    })
+    const [held] = studentHomeworkList({
+      assignments: [row()], batches: ['12th_A'], urls, now: NOW,
+      submissions: [{
+        ...base, status: 'held', graded_at: iso(NOW.getTime() - 60e3), grader: 'session',
+        total_awarded: '7', total_max: '10', went_well: 'Good', next_steps: 'Revise',
+        hand_check: 'mismatch', hand_note: 'Different hand', hand_reference_id: 'r1',
+        homework_grades: [{ position: 1, label: 'Q1', max_marks: '10', outcome: 'scored', awarded: '7', earned: 'x', missing: 'y' }],
+      }],
+    })
+    expect(held).toEqual(waiting)
+    expect(held.canSubmit).toBe(false)
+  })
+
+  it('never sends a student any handwriting field, whatever the status', () => {
+    for (const status of ['submitted', 'held', 'graded', 'rejected']) {
+      const [hw] = studentHomeworkList({
+        assignments: [row()], batches: ['12th_A'], urls, now: NOW,
+        submissions: [{
+          id: 's1', assignment_id: 'a1', status, files: ['x'], created_at: iso(1), submitted_at: iso(1),
+          graded_at: iso(2), total_awarded: '7', total_max: '10', went_well: 'G', next_steps: 'N', rejected_reason: 'R',
+          hand_check: 'mismatch', hand_note: 'Different hand', hand_reference_id: 'r1', resolved_by: 'asha@lws.com',
+          homework_grades: [],
+        }],
+      })
+      expect(JSON.stringify(hw), status).not.toMatch(/hand|resolved|Different hand|asha/i)
+    }
+  })
+
   it('lets the student try again after a rejection while open, and shows why', () => {
     const [hw] = studentHomeworkList({
       assignments: [row()], batches: ['12th_A'], urls, now: NOW,

@@ -10,6 +10,11 @@
 //
 // Adapted from PYQ Vault's src/lib/answerSheets/grade.ts. Homework has no OR
 // choices, so there is no `not_counted`.
+//
+// 2026-10-13: every grade also carries a handwriting check (./handwriting.js).
+// It never changes the marks; a mismatch holds the grade from the student.
+
+import { validateHandwriting, holdsGrade } from './handwriting.js'
 
 export const OUTCOMES = ['scored', 'not_attempted']
 export const GRADERS = ['session', 'api']
@@ -22,13 +27,14 @@ const text = v => (typeof v === 'string' ? v.trim() : '')
 const isHalf = n => Math.round(n * 2) === n * 2
 const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-// { maxMarks, questions?: [{label, marks}], file } →
-//   { ok: true, rows, totalAwarded, wentWell, nextSteps } | { ok: false, errors }
+// { maxMarks, questions?: [{label, marks}], file, hasReference? } →
+//   { ok: true, rows, totalAwarded, wentWell, nextSteps, handwriting } | { ok: false, errors }
 //
-// `file` is { wentWell, nextSteps, grades: [{ label, max, outcome, awarded, earned, missing }] }.
+// `file` is { wentWell, nextSteps, handwriting: { check, note }, grades: [{ label, max, outcome, awarded, earned, missing }] }.
+// hasReference: whether the student has a handwriting reference (see validateHandwriting).
 // Rows come back numbered 1..n: in the teacher's question order when a
 // breakdown was set, else in the grade file's order.
-export function validateGrade({ maxMarks, questions, file }) {
+export function validateGrade({ maxMarks, questions, file, hasReference }) {
   if (!isObject(file) || !Array.isArray(file.grades)) {
     return { ok: false, errors: ['The grade file needs a `grades` list.'] }
   }
@@ -40,6 +46,8 @@ export function validateGrade({ maxMarks, questions, file }) {
   if (!nextSteps) errors.push('`nextSteps` is empty: name what to work on next.')
   if (wentWell.length > MAX_SUMMARY_CHARS) errors.push(`\`wentWell\` is over ${MAX_SUMMARY_CHARS} characters.`)
   if (nextSteps.length > MAX_SUMMARY_CHARS) errors.push(`\`nextSteps\` is over ${MAX_SUMMARY_CHARS} characters.`)
+  const hand = validateHandwriting(file.handwriting, { hasReference })
+  if (!hand.ok) errors.push(...hand.errors)
 
   const rows = []
   const seen = new Set()
@@ -128,5 +136,6 @@ export function validateGrade({ maxMarks, questions, file }) {
     totalAwarded,
     wentWell,
     nextSteps,
+    handwriting: { ...hand.value, holds: holdsGrade(hand.value.check) },
   }
 }

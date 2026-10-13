@@ -34,6 +34,13 @@ describe('liveSubmission', () => {
     expect(liveSubmission([])).toBeNull()
     expect(liveSubmission(undefined)).toBeNull()
   })
+
+  // A held grade (handwriting mismatch, waiting for faculty) is still the
+  // student's one hand-in: it must block a second upload like any other.
+  it('counts a held submission as live', () => {
+    expect(liveSubmission([{ status: 'rejected' }, { id: 's3', status: 'held' }])).toMatchObject({ id: 's3' })
+    expect(canStartSubmission(published(), [{ status: 'held' }], NOW)).toMatchObject({ ok: false })
+  })
 })
 
 describe('canStartSubmission', () => {
@@ -84,6 +91,11 @@ describe('submissionRoster', () => {
       { id: 'new', lwsId: 'L1', status: 'submitted' },
     ])
     expect(rows[0]).toMatchObject({ status: 'submitted', submission: { id: 'new' } })
+  })
+
+  it('shows faculty a held submission as held', () => {
+    const rows = submissionRoster([members[0]], [{ id: 'h', lwsId: 'L1', status: 'held' }])
+    expect(rows[0]).toMatchObject({ status: 'held', submission: { id: 'h' } })
   })
 
   // Batch membership is current; the assignment is historical. A student who has

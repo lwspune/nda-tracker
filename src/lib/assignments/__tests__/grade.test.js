@@ -8,6 +8,7 @@ const row = (over = {}) => ({
 const file = (grades, over = {}) => ({
   wentWell: 'Clear working on Q1.',
   nextSteps: 'Revise the chain rule.',
+  handwriting: { check: 'match', note: '' },
   grades,
   ...over,
 })
@@ -140,6 +141,43 @@ describe('validateGrade — against a teacher-set question breakdown', () => {
   it('keeps the teacher\'s question order, whatever order the grade file used', () => {
     const r = validateGrade({ maxMarks: 10, questions, file: file([row({ label: 'Q2' }), row()]) })
     expect(r.rows.map(x => x.label)).toEqual(['Q1', 'Q2'])
+  })
+})
+
+// 2026-10-13: every grade records a handwriting check against the student's
+// reference (their first graded homework). It never changes the marks; a
+// mismatch keeps the grade from the student until faculty release it.
+describe('validateGrade — the handwriting check', () => {
+  it('refuses a grade with no handwriting check, alongside any other problem', () => {
+    const r = validateGrade({ maxMarks: 5, file: file([row()], { handwriting: undefined, wentWell: '' }) })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toMatch(/handwriting/i)
+    expect(r.errors.join(' ')).toMatch(/wentWell/)
+  })
+
+  it('returns the check with the grade, and whether it holds the grade', () => {
+    const r = validateGrade({
+      maxMarks: 5, hasReference: true,
+      file: file([row()], { handwriting: { check: 'mismatch', note: 'Different letter shapes throughout.' } }),
+    })
+    expect(r.ok).toBe(true)
+    expect(r.handwriting).toEqual({ check: 'mismatch', note: 'Different letter shapes throughout.', holds: true })
+    expect(validateGrade({ maxMarks: 5, hasReference: true, file: file([row()]) }).handwriting.holds).toBe(false)
+  })
+
+  it('applies the reference rule when told the student has none', () => {
+    const r = validateGrade({ maxMarks: 5, hasReference: false, file: file([row()]) })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toMatch(/no reference/i)
+  })
+
+  it('never changes the marks', () => {
+    const plain = validateGrade({ maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.' })]) })
+    const held = validateGrade({
+      maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.' })], { handwriting: { check: 'mismatch', note: 'Differs.' } }),
+    })
+    expect(held.totalAwarded).toBe(plain.totalAwarded)
+    expect(held.rows).toEqual(plain.rows)
   })
 })
 

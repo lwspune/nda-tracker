@@ -9,12 +9,19 @@ import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignmen
 const STATUS = {
   not_submitted: { variant: 'gray',   label: 'Not submitted' },
   submitted:     { variant: 'yellow', label: 'Waiting to be graded' },
+  held:          { variant: 'red',    label: 'Held: handwriting check' },
   graded:        { variant: 'green',  label: 'Graded' },
   rejected:      { variant: 'red',    label: 'Sent back' },
 }
 
-// Who has handed in a homework, and what they got. Read-only: grades are
-// written by the grading session (scripts/grading/), never from this page.
+const HAND_FLAG = {
+  mismatch: 'Handwriting did not match',
+  unclear:  'Handwriting unclear',
+}
+
+// Who has handed in a homework, and what they got. Grades are written by the
+// grading session (scripts/grading/), never from this page — except that a
+// grade HELD for a handwriting check is released or sent back here.
 export default function HomeworkSubmissions({ assignment, onBack }) {
   const studentProfiles = useStore(s => s.studentProfiles)
   const getSubmissions  = useStore(s => s.getHomeworkSubmissions)
@@ -22,6 +29,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
   const [subs, setSubs] = useState(null)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(null)
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -31,7 +39,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
       else setSubs(r)
     })
     return () => { live = false }
-  }, [assignment.id, getSubmissions])
+  }, [assignment.id, getSubmissions, version])
 
   const rows = useMemo(
     () => submissionRoster(buildOfflineRoster(studentProfiles, assignment.batchNames), subs ?? []),
@@ -71,8 +79,9 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
       {subs && (
         <>
           <p className="text-[12px] text-ink-3 mb-3 font-mono">
-            {count('submitted') + count('graded')} of {rows.length} submitted · {count('graded')} graded ·{' '}
+            {count('submitted') + count('held') + count('graded')} of {rows.length} submitted · {count('graded')} graded ·{' '}
             {count('submitted')} waiting · {count('not_submitted')} not submitted
+            {count('held') ? ` · ${count('held')} held for a handwriting check` : ''}
             {assignmentState(assignment) === 'open' ? ' (still open)' : ''}
           </p>
           <Card className="p-0 divide-y divide-border">
@@ -81,8 +90,13 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[13px] font-semibold text-ink">{r.name}</span>
                   <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
-                  {r.status === 'graded' && (
+                  {(r.status === 'graded' || r.status === 'held') && (
                     <span className="text-[13px] font-mono text-ink-2">{r.submission.totalAwarded} / {r.submission.totalMax}</span>
+                  )}
+                  {r.status === 'graded' && HAND_FLAG[r.submission.handCheck] && (
+                    <span className="text-[12px] font-semibold text-warning">
+                      <span aria-hidden="true">⚠ </span>{HAND_FLAG[r.submission.handCheck]}
+                    </span>
                   )}
                   {r.submission && (
                     <button
@@ -96,7 +110,11 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
                   )}
                 </div>
                 {open === r.lwsId && r.submission && (
-                  <SubmissionDetail sub={r.submission} onOpenFile={path => openFile(SUBMISSIONS_BUCKET, path)} />
+                  <SubmissionDetail
+                    sub={r.submission}
+                    onOpenFile={path => openFile(SUBMISSIONS_BUCKET, path)}
+                    onResolved={() => setVersion(v => v + 1)}
+                  />
                 )}
               </div>
             ))}
@@ -107,7 +125,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
   )
 }
 
-function SubmissionDetail({ sub, onOpenFile }) {
+function SubmissionDetail({ sub, onOpenFile, onResolved }) {
   return (
     <div className="mt-3 flex flex-col gap-3 text-[12.5px]">
       {sub.scansDeletedAt ? (
@@ -119,8 +137,15 @@ function SubmissionDetail({ sub, onOpenFile }) {
           ))}
         </div>
       )}
+      {sub.status === 'held' && <HeldReview sub={sub} onOpenFile={onOpenFile} onResolved={onResolved} />}
+      {sub.status === 'graded' && HAND_FLAG[sub.handCheck] && (
+        <Alert type="warning">
+          {HAND_FLAG[sub.handCheck]}: {sub.handNote}
+          {sub.resolvedBy ? ` Released by ${sub.resolvedBy}.` : ''}
+        </Alert>
+      )}
       {sub.status === 'rejected' && <Alert type="warning">Sent back: {sub.rejectedReason}</Alert>}
-      {sub.status === 'graded' && (
+      {(sub.status === 'graded' || sub.status === 'held') && (
         <>
           <div className="grid sm:grid-cols-2 gap-3">
             <div><div className="font-semibold text-ink-2">What went well</div><p>{sub.wentWell}</p></div>
@@ -144,6 +169,84 @@ function SubmissionDetail({ sub, onOpenFile }) {
             </tbody>
           </table>
         </>
+      )}
+    </div>
+  )
+}
+
+// A grade held because the handwriting did not match the student's reference.
+// The teacher compares the pages, then releases the grade or sends it back.
+// The database function behind both re-checks who is asking.
+function HeldReview({ sub, onOpenFile, onResolved }) {
+  const getReference = useStore(s => s.getHomeworkReferenceFiles)
+  const resolve      = useStore(s => s.resolveHeldHomework)
+  const [reference, setReference] = useState(undefined) // undefined = loading, null = none
+  const [sending, setSending] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    getReference(sub.lwsId).then(r => { if (live) setReference(r) })
+    return () => { live = false }
+  }, [sub.lwsId, getReference])
+
+  async function act(action) {
+    setBusy(true)
+    setError('')
+    const r = await resolve(sub.id, action, action === 'reject' ? reason : undefined)
+    setBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    onResolved()
+  }
+
+  const reasonOk = reason.trim().length >= 10 && reason.trim().length <= 300
+  const reasonId = `held-reason-${sub.id}`
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+      <Alert type="warning">
+        Handwriting did not match the student&apos;s reference: {sub.handNote} The student has not seen this grade.
+      </Alert>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink-2">Reference (first graded homework):</span>
+        {reference === undefined && <span className="text-ink-3">Loading…</span>}
+        {reference === null && <span className="text-ink-3">No reference on file. The class-wide comparison flagged this one.</span>}
+        {reference && reference.scansDeletedAt && <span className="text-ink-3">The reference pages have been deleted.</span>}
+        {reference && !reference.scansDeletedAt && reference.files.map((path, i) => (
+          <button key={path} className="btn btn-secondary btn-sm" onClick={() => onOpenFile(path)}>Reference page {i + 1}</button>
+        ))}
+      </div>
+
+      {error && <Alert type="error">{error}</Alert>}
+
+      {!sending ? (
+        <div className="flex flex-wrap gap-2">
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => act('release')}>Release grade</button>
+          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setSending(true)}>Send back</button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <label htmlFor={reasonId} className="font-semibold text-ink-2">Reason for the student</label>
+          <textarea
+            id={reasonId}
+            className="form-input"
+            rows={2}
+            maxLength={300}
+            value={reason}
+            placeholder="Please redo this homework in your own handwriting."
+            onChange={e => setReason(e.target.value)}
+          />
+          <p className="text-[11px] text-ink-3">
+            The student sees only this reason; the marks are removed. After the deadline they cannot hand in again.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary btn-sm" disabled={busy || !reasonOk} onClick={() => act('reject')}>Confirm send back</button>
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => { setSending(false); setReason('') }}>Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   )

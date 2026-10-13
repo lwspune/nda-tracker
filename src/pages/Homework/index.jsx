@@ -15,6 +15,9 @@ const STATE_BADGE = {
   closed: { variant: 'red',   label: 'Closed' },
 }
 
+// A held grade (handwriting check) is handed in, just not released.
+const HANDED_IN = new Set(['submitted', 'held', 'graded'])
+
 // Homework with uploaded answers (2026-10-12). Separate from Attendance →
 // Homework, which records who DIDN'T do their homework for the parent WhatsApp;
 // this is where homework is set, handed in and graded.
@@ -91,9 +94,10 @@ export default function HomeworkPage({ email: emailProp }) {
             const badge = STATE_BADGE[state]
             const members = buildOfflineRoster(studentProfiles, a.batchNames).length
             const handedIn = new Set(
-              statuses.filter(s => s.assignmentId === a.id && (s.status === 'submitted' || s.status === 'graded')).map(s => s.lwsId),
+              statuses.filter(s => s.assignmentId === a.id && HANDED_IN.has(s.status)).map(s => s.lwsId),
             ).size
             const waiting = statuses.filter(s => s.assignmentId === a.id && s.status === 'submitted').length
+            const held = statuses.filter(s => s.assignmentId === a.id && s.status === 'held').length
             return (
               <Card key={a.id} className="flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
@@ -106,6 +110,7 @@ export default function HomeworkPage({ email: emailProp }) {
                 {state !== 'draft' && (
                   <div className="text-[12px] text-ink-2 font-semibold">
                     {handedIn} of {members} submitted{waiting ? ` · ${waiting} waiting to be graded` : ''}
+                    {held ? ` · ${held} held for a handwriting check` : ''}
                   </div>
                 )}
                 <div className="flex items-center gap-3 mt-auto pt-2 border-t border-border">

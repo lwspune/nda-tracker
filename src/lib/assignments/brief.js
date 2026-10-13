@@ -58,6 +58,25 @@ export function buildHomeworkBrief({ submission, assignment: a, files }) {
   out.push(`## The student's work (${files.scans.length} page${files.scans.length === 1 ? '' : 's'}, in order)`, '')
   for (const f of files.scans) out.push(`- ${f}`)
   out.push('')
+
+  // The handwriting check (2026-10-13). Never changes the marks; a mismatch
+  // keeps the grade from the student until faculty release it.
+  const reference = files.reference ?? []
+  out.push('## Handwriting check', '')
+  if (reference.length) {
+    out.push(
+      'Compare the student\'s pages with their reference (their first graded homework), BEFORE marking:',
+      '', ...reference.map(f => `- ${f}`), '',
+      'Set `handwriting.check` in grade.json to match, mismatch or unclear. A mismatch is held from',
+      'the student until their teacher releases it, so say in `handwriting.note` exactly what differs.', '',
+    )
+  } else {
+    out.push(
+      'This student has no reference yet. Record `no_reference` — or `mismatch`, with a note, if the',
+      'class-wide comparison (npm run grading:hand-compare) found this hand on another submission.',
+      'Once this grade is saved (and not held), this homework becomes the student\'s reference.', '',
+    )
+  }
   return out.join('\n')
 }
 
@@ -66,6 +85,7 @@ export function gradeTemplate(submissionId, assignment) {
     submissionId,
     wentWell: '',
     nextSteps: '',
+    handwriting: { check: '', note: '' },
     grades: (assignment.questions ?? []).map(q => ({
       label: q.label, max: num(q.marks), outcome: '', awarded: null, earned: '', missing: '',
     })),
@@ -74,12 +94,15 @@ export function gradeTemplate(submissionId, assignment) {
 
 // A graded submission's saved grade, as grade.json — the starting point for a
 // regrade. null when there is nothing saved.
+// A grade saved before the handwriting check existed comes back with an empty
+// check, which the checker refuses: a regrade records one.
 export function savedGradeFile(submission) {
-  if (submission.status !== 'graded') return null
+  if (submission.status !== 'graded' && submission.status !== 'held') return null
   return {
     submissionId: submission.id,
     wentWell: submission.went_well ?? '',
     nextSteps: submission.next_steps ?? '',
+    handwriting: { check: submission.hand_check ?? '', note: submission.hand_note ?? '' },
     grades: [...(submission.homework_grades ?? [])]
       .sort((a, b) => a.position - b.position)
       .map(g => ({

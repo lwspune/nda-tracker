@@ -26,6 +26,8 @@ function resetStore() {
         ] },
     ]),
     getHomeworkFileUrl: vi.fn(async () => 'https://signed/x'),
+    getHomeworkReferenceFiles: vi.fn(async () => ({ submissionId: 'r1', files: ['b/L2/r1/01.jpg', 'b/L2/r1/02.jpg'], scansDeletedAt: null })),
+    resolveHeldHomework: vi.fn(async () => ({ ok: true })),
     saveHomeworkAssignment: vi.fn(async (a) => ({ ok: true, assignment: { ...a, id: 'new' } })),
     deleteHomeworkAssignment: vi.fn(async () => ({ ok: true })),
     removeHomeworkFile: vi.fn(async () => ({ ok: true })),
@@ -184,6 +186,87 @@ describe('HomeworkPage', () => {
       expect(await screen.findByText('Method right')).toBeInTheDocument()
       expect(screen.getByText('Final answer')).toBeInTheDocument()
       expect(screen.getByText('Clear working')).toBeInTheDocument()
+    })
+  })
+
+  // 2026-10-13: a grade whose handwriting does not match the student's
+  // reference is held until the homework's teacher or an admin decides.
+  describe('held for a handwriting check', () => {
+    const held = {
+      id: 's2', assignmentId: 'a1', lwsId: 'L2', studentName: 'Bhavya Rao', status: 'held', files: ['a1/L2/s2/01.jpg'],
+      totalAwarded: 9, totalMax: 10, wentWell: 'Neat', nextSteps: 'Units', handCheck: 'mismatch',
+      handNote: 'Letter shapes differ from the reference throughout.', handReferenceId: 'r1',
+      grades: [{ position: 1, label: 'Q1', maxMarks: 10, outcome: 'scored', awarded: 9, earned: 'Right', missing: 'Units' }],
+    }
+    beforeEach(() => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [held])
+    })
+
+    async function openHeld() {
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
+      const row = (await screen.findByText('Bhavya Rao')).closest('[data-testid="roster-row"]')
+      expect(row).toHaveTextContent(/held: handwriting/i)
+      fireEvent.click(within(row).getByRole('button', { name: /view bhavya rao/i }))
+      return row
+    }
+
+    it('shows the note, the marks, and the reference pages to compare', async () => {
+      const row = await openHeld()
+      expect(await within(row).findByText(/letter shapes differ/i)).toBeInTheDocument()
+      expect(within(row).getByText(/student has not seen/i)).toBeInTheDocument()
+      expect(within(row).getAllByText('9 / 10').length).toBeGreaterThan(0)
+      expect(await within(row).findByRole('button', { name: /reference page 2/i })).toBeInTheDocument()
+      expect(mockStore.getHomeworkReferenceFiles).toHaveBeenCalledWith('L2')
+    })
+
+    it('releases the grade and reloads', async () => {
+      const row = await openHeld()
+      fireEvent.click(await within(row).findByRole('button', { name: /release grade/i }))
+      await waitFor(() => expect(mockStore.resolveHeldHomework).toHaveBeenCalledWith('s2', 'release', undefined))
+      await waitFor(() => expect(mockStore.getHomeworkSubmissions).toHaveBeenCalledTimes(2))
+    })
+
+    it('sends it back only with a reason the student can act on', async () => {
+      const row = await openHeld()
+      fireEvent.click(await within(row).findByRole('button', { name: /^send back/i }))
+      const reason = within(row).getByLabelText(/reason for the student/i)
+      const confirm = within(row).getByRole('button', { name: /confirm send back/i })
+      fireEvent.change(reason, { target: { value: 'Redo' } })
+      expect(confirm).toBeDisabled()
+      fireEvent.change(reason, { target: { value: 'Please redo this homework in your own handwriting.' } })
+      fireEvent.click(confirm)
+      await waitFor(() => expect(mockStore.resolveHeldHomework).toHaveBeenCalledWith(
+        's2', 'reject', 'Please redo this homework in your own handwriting.',
+      ))
+    })
+
+    it('says so when the release fails, and keeps the buttons', async () => {
+      mockStore.resolveHeldHomework = vi.fn(async () => ({ ok: false, error: 'This homework was set by another teacher.' }))
+      const row = await openHeld()
+      fireEvent.click(await within(row).findByRole('button', { name: /release grade/i }))
+      expect(await within(row).findByText(/set by another teacher/i)).toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: /release grade/i })).toBeInTheDocument()
+    })
+
+    it('flags an unclear check on a released grade without holding it', async () => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [{ ...held, status: 'graded', handCheck: 'unclear', handNote: 'Photo too blurry to compare.' }])
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
+      const row = (await screen.findByText('Bhavya Rao')).closest('[data-testid="roster-row"]')
+      expect(row).toHaveTextContent(/graded/i)
+      expect(row).toHaveTextContent(/handwriting unclear/i)
+      expect(within(row).queryByRole('button', { name: /release grade/i })).toBeNull()
+    })
+
+    it('counts a held submission as handed in on the homework list', async () => {
+      mockStore.getHomeworkSubmissionStatuses = vi.fn(async () => [
+        { assignmentId: 'a1', lwsId: 'L1', status: 'graded' },
+        { assignmentId: 'a1', lwsId: 'L2', status: 'held' },
+      ])
+      renderAs('teacher', 'asha@lws.com')
+      expect(await screen.findByText(/2 of 3 submitted/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 held for a handwriting check/i)).toBeInTheDocument()
     })
   })
 })

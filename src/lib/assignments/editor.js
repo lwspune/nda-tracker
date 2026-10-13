@@ -158,6 +158,12 @@ export function mapSubmissionRow(r) {
     nextSteps: r.next_steps ?? null,
     rejectedReason: r.rejected_reason ?? null,
     scansDeletedAt: r.scans_deleted_at ?? null,
+    // Faculty only (2026-10-13) — the student shape (studentHomework.js) never carries these.
+    handCheck: r.hand_check ?? null,
+    handNote: r.hand_note ?? null,
+    handReferenceId: r.hand_reference_id ?? null,
+    resolvedAt: r.resolved_at ?? null,
+    resolvedBy: r.resolved_by ?? null,
     grades: (r.homework_grades ?? [])
       .map(g => ({
         position: g.position,

@@ -5,6 +5,8 @@ import {
   ALLOWED_TYPES, MAX_FILE_BYTES, ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET,
 } from '../upload'
 import { OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, MAX_SUMMARY_CHARS } from '../grade'
+import { HAND_CHECKS, MAX_HAND_NOTE_CHARS } from '../handwriting'
+import { SUBMISSION_STATUSES } from '../status'
 
 // The database repeats the rules the JS checks, and is the actual boundary.
 // These tests keep the two copies from drifting apart.
@@ -101,5 +103,77 @@ describe('publish-with-description migration', () => {
     expect(desc).toContain("status = 'draft'")
     expect(desc).toContain('cardinality(batch_names) >= 1')
     expect(desc).toMatch(/jsonb_array_length\(question_files\) >= 1 OR length\(btrim\(coalesce\(instructions, ''\)\)\) > 0/)
+  })
+})
+
+// 2026-10-13: the handwriting check. A grade whose handwriting does not match
+// the student's reference (their first graded homework) is saved as `held` and
+// reaches the student only when the homework's teacher or an admin releases it.
+describe('handwriting-check migration', () => {
+  // Three files: one large migration was declined by the Supabase connector's
+  // confirmation step, so it was applied in parts. Read together, in order.
+  const handFiles = readdirSync(dir).filter(f => /_homework_handwriting_check_\d_\w+\.sql$/.test(f)).sort()
+  const hand = handFiles.map(f => readFileSync(join(dir, f), 'utf8')).join('\n').replace(/\s+/g, ' ')
+  const list = xs => xs.map(x => `'${x}'`).join(', ')
+
+  it('exists in three parts that sort after the earlier homework migrations, columns first', () => {
+    expect(handFiles.map(f => f.replace(/^\d+_/, ''))).toEqual([
+      'homework_handwriting_check_1_columns.sql',
+      'homework_handwriting_check_2_references.sql',
+      'homework_handwriting_check_3_functions.sql',
+    ])
+    expect(handFiles[0] > file).toBe(true)
+  })
+
+  it('allows exactly the JS submission statuses and handwriting checks', () => {
+    expect(hand).toContain(`status IN (${list(SUBMISSION_STATUSES)})`)
+    expect(hand).toContain(`hand_check IN (${list(HAND_CHECKS)})`)
+    expect(hand).toContain(`BETWEEN 1 AND ${MAX_HAND_NOTE_CHARS}`)
+  })
+
+  // The state check is the real boundary: a held row is a full grade that is
+  // not released, and a released mismatch says who released it.
+  it('defines held as an unreleased mismatch, and a graded mismatch as released', () => {
+    expect(hand).toContain('DROP CONSTRAINT homework_submissions_state')
+    expect(hand).toMatch(/status = 'held' AND [^;]*hand_check = 'mismatch'[^;]*resolved_at IS NULL/)
+    expect(hand).toMatch(/hand_check IS DISTINCT FROM 'mismatch' OR resolved_at IS NOT NULL/)
+  })
+
+  it('replaces the grade function rather than leaving the old one callable', () => {
+    expect(hand).toContain('DROP FUNCTION public.homework_grade_commit(uuid, jsonb, text, text, text)')
+    expect(hand).toMatch(/REVOKE ALL ON FUNCTION public\.homework_grade_commit\([^)]*\) FROM PUBLIC, anon, authenticated/)
+    expect(hand).toMatch(/GRANT EXECUTE ON FUNCTION public\.homework_grade_commit\([^)]*\) TO service_role/)
+    // The reference is looked up in the database, never named by the caller.
+    expect(hand).not.toMatch(/p_hand_reference/)
+  })
+
+  it('counts a held submission as handed in when a new upload starts', () => {
+    expect(hand).toContain("status IN ('submitted', 'held', 'graded')")
+  })
+
+  // The one function staff call. It must check, inside the database, that a
+  // teacher is acting on homework they set — the page hiding it is not enough.
+  it('lets signed-in staff resolve a held grade, a teacher only on their own homework', () => {
+    expect(hand).toMatch(/CREATE OR REPLACE FUNCTION public\.homework_held_resolve\([^)]*\) RETURNS \w+ LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''/)
+    expect(hand).toMatch(/REVOKE ALL ON FUNCTION public\.homework_held_resolve\([^)]*\) FROM PUBLIC, anon/)
+    expect(hand).toMatch(/GRANT EXECUTE ON FUNCTION public\.homework_held_resolve\([^)]*\) TO authenticated/)
+    expect(hand).toContain("(auth.jwt() -> 'app_metadata') ->> 'role'")
+    expect(hand).toMatch(/created_by\) <> lower\(v_email\)/)
+    expect(hand).toMatch(/v_sub\.status <> 'held'/)
+  })
+
+  it('keeps references in a read-only table, seeded from each student\'s first graded homework', () => {
+    expect(hand).toContain('CREATE TABLE public.homework_hand_references')
+    expect(hand).toContain('ALTER TABLE public.homework_hand_references ENABLE ROW LEVEL SECURITY')
+    const policies = [...hand.matchAll(/CREATE POLICY \w+ ON public\.homework_hand_references FOR (\w+)/g)]
+    expect(policies.length).toBeGreaterThan(0)
+    for (const p of policies) expect(p[1]).toBe('SELECT')
+    expect(hand).toMatch(/INSERT INTO public\.homework_hand_references[^;]*DISTINCT ON \(lws_id\)[^;]*status = 'graded'[^;]*ORDER BY lws_id, graded_at/)
+  })
+
+  it('pins search_path on every function', () => {
+    const fns = hand.match(/CREATE OR REPLACE FUNCTION/g) ?? []
+    expect(fns.length).toBeGreaterThan(0)
+    expect((hand.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
   })
 })

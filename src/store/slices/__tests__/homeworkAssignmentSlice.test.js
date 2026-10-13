@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../../lib/supabase', () => ({
-  supabase: { from: vi.fn(), storage: { from: vi.fn() }, auth: { getSession: vi.fn() } },
+  supabase: { from: vi.fn(), rpc: vi.fn(), storage: { from: vi.fn() }, auth: { getSession: vi.fn() } },
 }))
 
 import { supabase } from '../../../lib/supabase'
@@ -162,5 +162,62 @@ describe('homeworkAssignmentSlice', () => {
     fakeSupabase()
     const url = await makeStore().get().getHomeworkFileUrl('homework-submissions', 'a/L1/s/01.jpg')
     expect(url).toBe('https://signed/a/L1/s/01.jpg?ttl=600')
+  })
+
+  // 2026-10-13: a grade held for a handwriting check is released or sent back
+  // through one database function, which checks who is asking.
+  describe('resolveHeldHomework', () => {
+    beforeEach(() => { supabase.rpc.mockReset() })
+
+    it('releases through the database function', async () => {
+      supabase.rpc.mockResolvedValue({ data: 'graded', error: null })
+      const r = await makeStore().get().resolveHeldHomework('s2', 'release')
+      expect(r).toEqual({ ok: true })
+      expect(supabase.rpc).toHaveBeenCalledWith('homework_held_resolve', { p_submission: 's2', p_action: 'release', p_reason: null })
+    })
+
+    it('sends back with the reason', async () => {
+      supabase.rpc.mockResolvedValue({ data: 'rejected', error: null })
+      await makeStore().get().resolveHeldHomework('s2', 'reject', '  Redo it in your own handwriting.  ')
+      expect(supabase.rpc).toHaveBeenCalledWith('homework_held_resolve', {
+        p_submission: 's2', p_action: 'reject', p_reason: 'Redo it in your own handwriting.',
+      })
+    })
+
+    it('passes the database\'s refusal on to the page', async () => {
+      supabase.rpc.mockResolvedValue({ data: null, error: { message: 'This homework was set by another teacher.' } })
+      const r = await makeStore().get().resolveHeldHomework('s2', 'release')
+      expect(r).toEqual({ ok: false, error: 'This homework was set by another teacher.' })
+    })
+  })
+
+  describe('getHomeworkReferenceFiles', () => {
+    it('returns the reference submission\'s pages for a student', async () => {
+      supabase.from.mockImplementation(() => {
+        const b = {}
+        b.select = vi.fn(() => b)
+        b.eq = vi.fn(() => b)
+        b.maybeSingle = vi.fn(() => Promise.resolve({
+          data: { submission_id: 'r1', homework_submissions: { files: ['p/01.jpg'], scans_deleted_at: null } }, error: null,
+        }))
+        return b
+      })
+      const r = await makeStore().get().getHomeworkReferenceFiles('L2')
+      expect(supabase.from).toHaveBeenCalledWith('homework_hand_references')
+      expect(r).toEqual({ submissionId: 'r1', files: ['p/01.jpg'], scansDeletedAt: null })
+    })
+
+    it('is null when the student has no reference yet, and on a failed read', async () => {
+      for (const result of [{ data: null, error: null }, { data: null, error: { message: 'boom' } }]) {
+        supabase.from.mockImplementation(() => {
+          const b = {}
+          b.select = vi.fn(() => b)
+          b.eq = vi.fn(() => b)
+          b.maybeSingle = vi.fn(() => Promise.resolve(result))
+          return b
+        })
+        expect(await makeStore().get().getHomeworkReferenceFiles('L2')).toBeNull()
+      }
+    })
   })
 })

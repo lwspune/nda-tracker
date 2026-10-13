@@ -49,8 +49,18 @@ function pickSubmission(rows) {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] ?? null
 }
 
+// The ONLY student-facing shape of a submission: fields are listed, never
+// spread, so nothing added to the row (the handwriting check) can reach a
+// student by default. A `held` grade is shown exactly as one not yet graded —
+// telling a student their grade is held is telling them they were suspected.
 function shapeSubmission(s) {
   if (!s) return null
+  if (s.status === 'held') {
+    return shapeSubmission({
+      id: s.id, status: 'submitted', files: s.files,
+      submitted_at: s.submitted_at, homework_grades: [],
+    })
+  }
   return {
     id: s.id,
     status: s.status,

@@ -146,4 +146,14 @@ describe('row mapping', () => {
     expect(s).toMatchObject({ lwsId: 'L1', studentName: 'Aarav', totalAwarded: 7.5, totalMax: 10, files: ['p/01.jpg'] })
     expect(s.grades.map(g => [g.position, g.awarded])).toEqual([[1, null], [2, 2.5]])
   })
+
+  it('carries the handwriting check for faculty', () => {
+    const s = mapSubmissionRow({
+      id: 's', assignment_id: 'id1', lws_id: 'L1', student_name: 'Aarav', status: 'held', files: ['p/01.jpg'],
+      hand_check: 'mismatch', hand_note: 'Different hand', hand_reference_id: 'r1',
+      resolved_at: null, resolved_by: null, homework_grades: [],
+    })
+    expect(s).toMatchObject({ handCheck: 'mismatch', handNote: 'Different hand', handReferenceId: 'r1', resolvedAt: null, resolvedBy: null })
+    expect(mapSubmissionRow({ id: 's', status: 'graded', files: [], homework_grades: [] })).toMatchObject({ handCheck: null, handNote: null })
+  })
 })
