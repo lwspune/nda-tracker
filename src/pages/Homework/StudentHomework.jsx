@@ -3,7 +3,7 @@ import { Card, Badge, Alert, Spinner } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import { ACCEPT, CAMERA_ACCEPT, SUBMISSIONS_BUCKET, validateUploadFiles } from '../../lib/assignments/upload'
 import { fmtDeadline } from '../../lib/assignments/editor'
-import { sendHomework, readPickedFiles } from '../../lib/assignments/studentUpload'
+import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../../lib/assignments/studentUpload'
 
 // The student portal's homework (2026-10-12): see what is set, open the
 // question paper, hand in photos or a PDF before the deadline, and read the
@@ -121,7 +121,7 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
       )}
 
       {sub?.status === 'rejected' && hw.canSubmit && (
-        <Alert type="warning">Your last upload was sent back: {sub.rejectedReason} Please hand it in again.</Alert>
+        <Alert type="warning">Your last upload was sent back: {sub.rejectedReason} Please submit it again.</Alert>
       )}
 
       {hw.canSubmit && <HandIn hw={hw} mobile={mobile} lwsId={lwsId} onHandedIn={onHandedIn} />}
@@ -180,6 +180,8 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
   }
 
   async function send() {
+    if (needsSinglePageConfirm(pages) &&
+        !window.confirm("You're handing in only 1 page. You can't add more after this. Submit it?")) return
     setSendError('')
     setProgress({ done: 0, total: pages.length })
     const r = await sendHomework({
@@ -198,11 +200,14 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
 
   return (
     <div className="flex flex-col gap-2 pt-2 border-t border-border">
-      <div className="text-[12px] font-semibold text-ink-2">Hand in your work</div>
+      <div className="text-[12px] font-semibold text-ink-2">Submit your work</div>
       <div className="flex flex-wrap gap-2">
+        {/* Once a page is in, "Take photo page N" is the step students skipped (they
+            took Submit for "send this page"), so it is drawn to stand out. */}
         <label htmlFor={ids.camera}
-               className="btn btn-secondary btn-sm cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-accent">
-          📷 Take a photo
+               className={`btn cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent ${
+                 n === 0 ? 'btn-secondary btn-sm' : 'border-2 border-accent bg-accent-soft text-accent-hover font-bold shadow-sm'}`}>
+          {n === 0 ? '📷 Take a photo' : `📷 Take photo page ${n + 1}`}
           <input id={ids.camera} type="file" accept={CAMERA_ACCEPT} capture="environment" className="sr-only"
                  disabled={busy} onChange={add} />
         </label>
@@ -233,7 +238,7 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
       {n > 0 && (
         <div className="flex items-center gap-3">
           <button className="btn btn-primary text-[13px]" disabled={busy} onClick={send}>
-            Submit {n} page{n === 1 ? '' : 's'}
+            {n === 1 ? 'Submit 1 page (final)' : `Submit all ${n} pages (final)`}
           </button>
           {busy && (
             <span className="text-[12px] text-ink-3" role="status">
@@ -244,7 +249,7 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
       )}
       {sendError && <Alert type="error">{sendError}</Alert>}
       <p className="text-[11px] text-ink-3">
-        Photograph each page in good light, in order. You can hand in once, before the deadline.
+        Photograph each page in good light, in order. You can submit once, before the deadline.
       </p>
     </div>
   )

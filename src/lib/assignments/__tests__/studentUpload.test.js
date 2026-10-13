@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { sendHomework, readPickedFiles } from '../studentUpload'
+import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../studentUpload'
 
 const file = (name, type = 'image/jpeg', size = 100) => ({ name, type, size })
 
@@ -123,4 +123,15 @@ describe('readPickedFiles', () => {
     const r = await readPickedFiles([empty])
     expect(r.ok).toBe(false)
   })
+})
+
+// Submitting is final; a lone photo is the shape of "I thought Submit sent
+// this page". A lone PDF is a whole scanned answer and needs no question.
+describe('needsSinglePageConfirm', () => {
+  const img = { type: 'image/jpeg' }
+  const pdf = { type: 'application/pdf' }
+  it('asks for a single photo', () => expect(needsSinglePageConfirm([img])).toBe(true))
+  it('does not ask for a single PDF', () => expect(needsSinglePageConfirm([pdf])).toBe(false))
+  it('does not ask for several pages', () => expect(needsSinglePageConfirm([img, img])).toBe(false))
+  it('does not ask for nothing', () => expect(needsSinglePageConfirm([])).toBe(false))
 })

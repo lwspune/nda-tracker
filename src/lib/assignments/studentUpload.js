@@ -65,3 +65,10 @@ export async function readPickedFiles(picked) {
   }
   return { ok: true, files }
 }
+
+// Handing in is final. One photo is the shape of "I thought Submit sent this
+// page", the commonest incomplete hand-in on Daily Homework #1. One PDF is a
+// whole scanned answer.
+export function needsSinglePageConfirm(files) {
+  return files.length === 1 && files[0].type !== 'application/pdf'
+}

@@ -112,7 +112,7 @@ describe('StudentHomework', () => {
     fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: pages } })
     expect(await within(c).findByText('p1.jpg')).toBeInTheDocument()
 
-    fireEvent.click(within(c).getByRole('button', { name: /submit 2 pages/i }))
+    fireEvent.click(within(c).getByRole('button', { name: /submit all 2 pages \(final\)/i }))
     await waitFor(() => expect(calls.map(b => b.kind)).toEqual(['homework-list', 'homework-start', 'homework-submit', 'homework-list']))
     expect(uploadToSignedUrl.mock.calls.map(c2 => [c2[0], c2[1], c2[2].name])).toEqual([
       ['open1/L1/new/01.jpg', 't1', 'p1.jpg'], ['open1/L1/new/02.pdf', 't2', 'p2.pdf'],
@@ -134,18 +134,65 @@ describe('StudentHomework', () => {
     mockFetch({ 'homework-start': () => ({ status: 409, json: { error: 'The deadline for this homework has passed.' } }) })
     render(<StudentHomework mobile="9876543210" lwsId="L1" />)
     const c = await waitFor(() => card('Limits — Exercise 2.3'))
-    fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [new File(['a'], 'p1.jpg', { type: 'image/jpeg' })] } })
-    fireEvent.click(await within(c).findByRole('button', { name: /submit 1 page/i }))
+    fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [new File(['%PDF'], 'p1.pdf', { type: 'application/pdf' })] } })
+    fireEvent.click(await within(c).findByRole('button', { name: /submit 1 page \(final\)/i }))
     expect(await within(c).findByText('The deadline for this homework has passed.')).toBeInTheDocument()
   })
 
-  // 2026-10-13: a phone's picker hands back a link to the photo, which could
-  // be stale by Submit; one student retried eleven times and no page left.
-  describe('reading pages when they are picked', () => {
+  // 2026-10-13: students read "Submit 1 page" as "upload this page" and handed
+  // in one photo of five, then could not add the rest.
+  describe('handing in is final, and the screen says so', () => {
     const photo = name => new File(['a'], name, { type: 'image/jpeg' })
     const okHandlers = () => ({
       'homework-start': b => ({ status: 200, json: { submissionId: 'new', uploads: b.files.map((_, i) => ({ path: `open1/L1/new/0${i + 1}.jpg`, token: `t${i}` })) } }),
       'homework-submit': () => ({ status: 200, json: { ok: true } }),
+    })
+    afterEach(() => vi.restoreAllMocks())
+
+    it('turns the camera button into "Take photo page N" once a page is in', async () => {
+      mockFetch()
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      expect(within(c).getByLabelText(/take a photo/i)).toBeInTheDocument()
+      fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [photo('p1.jpg')] } })
+      expect(await within(c).findByLabelText(/take photo page 2/i)).toBeInTheDocument()
+      expect(within(c).getByText(/submit your work/i)).toBeInTheDocument()
+      expect(within(c).getByText(/you can submit once/i)).toBeInTheDocument()
+      fireEvent.change(within(c).getByLabelText(/take photo page 2/i), { target: { files: [photo('p2.jpg')] } })
+      expect(await within(c).findByLabelText(/take photo page 3/i)).toBeInTheDocument()
+    })
+
+    it('asks before handing in a single photo, and a "no" sends nothing', async () => {
+      const calls = mockFetch(okHandlers())
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [photo('p1.jpg')] } })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit 1 page \(final\)/i }))
+      expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/only 1 page.*can.t add more.*submit it\?/is))
+      expect(calls.map(b => b.kind)).toEqual(['homework-list'])
+      expect(within(c).getByText('p1.jpg')).toBeInTheDocument()
+    })
+
+    it('hands in a single photo once the student confirms', async () => {
+      const calls = mockFetch(okHandlers())
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [photo('p1.jpg')] } })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit 1 page/i }))
+      await waitFor(() => expect(calls.map(b => b.kind)).toContain('homework-submit'))
+    })
+
+    it('does not ask for several pages or a single PDF', async () => {
+      mockFetch(okHandlers())
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [photo('p1.jpg'), photo('p2.jpg')] } })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
+      await waitFor(() => expect(uploadToSignedUrl).toHaveBeenCalledTimes(2))
+      expect(confirm).not.toHaveBeenCalled()
     })
 
     it("uploads the copy read at pick time, not the phone's file link", async () => {
@@ -157,7 +204,7 @@ describe('StudentHomework', () => {
       await within(c).findByText('p2.jpg')
       // The phone's link goes stale after picking; the upload must not need it.
       picked.forEach(f => { f.arrayBuffer = () => Promise.reject(new Error('gone')) })
-      fireEvent.click(await within(c).findByRole('button', { name: /submit 2 pages/i }))
+      fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
       await waitFor(() => expect(uploadToSignedUrl).toHaveBeenCalledTimes(2))
       expect(uploadToSignedUrl.mock.calls[0][2]).not.toBe(picked[0])
       expect(await uploadToSignedUrl.mock.calls[0][2].text()).toBe('a')
@@ -172,7 +219,7 @@ describe('StudentHomework', () => {
       fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [bad] } })
       expect(await within(c).findByText(/IMG_7\.jpg.*again/i)).toBeInTheDocument()
       expect(within(c).queryByText('Page 1')).not.toBeInTheDocument()
-      expect(within(c).queryByRole('button', { name: /submit/i })).not.toBeInTheDocument()
+      expect(within(c).queryByRole('button', { name: /hand in|submit/i })).not.toBeInTheDocument()
     })
   })
 
