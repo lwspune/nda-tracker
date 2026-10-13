@@ -66,7 +66,8 @@ same way as the 5th.
 - `outcome`: `scored` (answered; 0 allowed) or `not_attempted` (nothing
   written for it).
 - `awarded`: halves only (0, 0.5, 1, …), never above `max`, `null` unless scored.
-- Marks lost → `missing` is required. Marks given → `earned` is required.
+- Marks lost → `missing` is required. Marks given → `earned` is required. Full
+  marks → `missing` must be empty.
 - The checker refuses an unfilled template, a breakdown that does not add up to
   the total, a missing handwriting check, and a submission with nothing scored
   (that is a rejection).
@@ -109,21 +110,43 @@ out yourself — without a paper there is often no key either.
 
 1. **Mark what is written, not what was meant.** Never fill in a skipped step
    because the next line implies it.
-2. **Steps carry the marks.** Split a question's marks across method (concept or
-   formula), working, and the final answer. A 1-mark question or an MCQ is right
-   or wrong.
+2. **Steps carry the marks.** A 1-mark question or an MCQ is right or wrong.
+   Every other question is split the same way, so two sessions give the same
+   answer the same mark. A 5-mark question (the default since 2026-10-13):
+
+   | Question | Split |
+   |---|---|
+   | Calculation | method 1 · working 2 · condition or check 1 · final answer with units 1 |
+   | Proof | setup (what is given, the right definition or formula) 1 · key steps 2 · the condition that makes a step legal 1 · conclusion 1 |
+   | Prove …, hence find … | proof 3 (setup 1, steps 1, condition 1) · hence 2 (working 1, answer 1) |
+
+   A "condition or check" is what makes the answer valid: dx/dt ≠ 0, δx → 0 as
+   δt → 0, "AR and RB point the same way", the second-derivative test for a
+   maximum. Where a question has none, its mark goes to working. A 2-mark
+   question: method and working 1 · condition or check 0.5 · final answer 0.5.
+   Any other maximum: keep these proportions, in halves.
 3. **A correct answer with no working**, on a question worth 2+ marks, gets the
-   final-answer share only, unless the question asks only for a value.
+   final-answer share only (1 of 5, 0.5 of 2), unless the question asks only for
+   a value.
 4. **Any correct method gets full marks**, even if it differs from the key.
 5. **Carry-forward:** a later step done correctly on an earlier wrong value gets
    its marks; the wrong step loses its own.
 6. **MCQ:** the option letter or its text is enough. Two options marked, or a
    letter contradicting the text written: 0.
 7. **Question numbers:** match an answer to its question by content when the
-   student numbered it wrongly, and say so in `missing`.
+   student numbered it wrongly. This costs no marks, so say so in `nextSteps`,
+   never in `missing`: the portal prints `missing` as a red ✗, and the checker
+   refuses it on a full-marks question.
 8. **A page that cannot be read:** mark what can be read; for questions on that
    page write "Page N could not be read" in `missing`. If a third or more is
    unreadable, reject instead (see below).
+9. **Units and labels:** a final answer with missing or wrong units ("9 m" for
+   9 cm) loses 0.5 from the final-answer share. A wrong label in the working (the
+   area written f′(x) instead of f(x)) costs nothing; mention it in `nextSteps`.
+10. **A condition left out costs the same as a condition written wrong.** The
+    condition or check is its own share (rule 2); leaving it out, or getting it
+    wrong ("dx/dt = 0", "δx = 0", dividing one vector by another), loses that
+    share even when the algebra reaches the right result.
 
 ## Feedback style
 
@@ -159,6 +182,25 @@ identifying into the repo, this file or a commit. Ledger entries are general
 
 Newest first. One line each: date, rule or learning, and why.
 
+- 2026-10-13: Questions are worth 5 marks by default (the editor starts each row
+  at 5), with a fixed split per question type (marking rule 2). At 2 marks the
+  split was too coarse to tell answers apart, and two sessions left the
+  final-answer share undefined. Daily Homework #1 was converted from 5 × 2 to
+  5 × 5 and every submission regraded on the new split.
+- 2026-10-13: Leaving out a condition costs the same as writing it wrong (marking
+  rule 10). The first batch was marked both ways: an omitted dx/dt ≠ 0 lost marks
+  on one question while an omitted "AR and RB point the same way" lost none on
+  another.
+- 2026-10-13: Units missing or wrong in a final answer cost 0.5; a wrong label in
+  the working costs nothing (rule 9). One answer lost marks for both before
+  there was a rule.
+- 2026-10-13: A renumbered answer's note goes in `nextSteps`, never `missing`: the
+  portal showed a student a red ✗ beside full marks. The checker now refuses
+  `missing` on a full-marks question.
+- 2026-10-13: In a proof, the condition that makes a step legal (dx/dt ≠ 0, δx → 0
+  as δt → 0, "AR and RB are in the same direction") carries half a mark. A slip there
+  ("dx/dt = 0", "δx = 0", or dividing one vector by another) loses that half, even
+  when the algebra reaches the right result. (At 5 marks it carries 1; see rule 2.)
 - 2026-10-13: Handwriting check added. Grades are no longer ALWAYS auto-released:
   a `mismatch` is saved held until the homework's teacher (or an admin) releases
   it or sends it back. References are each student's first graded homework, kept
