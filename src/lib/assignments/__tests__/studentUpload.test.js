@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { sendHomework } from '../studentUpload'
+import { sendHomework, readPickedFiles } from '../studentUpload'
 
 const file = (name, type = 'image/jpeg', size = 100) => ({ name, type, size })
 
@@ -62,6 +62,26 @@ describe('sendHomework', () => {
     expect(f.calls.some(c => c[1] === 'homework-submit')).toBe(false)
   })
 
+  // 2026-10-13: the real error was swallowed behind "check your connection",
+  // which sent a student round the same failing retry eleven times.
+  it('keeps the real error and says how to recover, without blaming the connection', async () => {
+    const f = fakes({ failPage: 2 })
+    const r = await sendHomework({ ...args(), post: f.post, upload: f.upload })
+    expect(r.error).toMatch(/network/)
+    expect(r.error).toMatch(/remove/i)
+    expect(r.error).toMatch(/then submit/i)
+    expect(r.error).not.toMatch(/check your connection/i)
+  })
+
+  it('treats a thrown upload as a failed page, not a crash', async () => {
+    const f = fakes()
+    const upload = vi.fn(async () => { throw new TypeError('Failed to fetch') })
+    const r = await sendHomework({ ...args(), post: f.post, upload })
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/page 1/i)
+    expect(r.error).toMatch(/Failed to fetch/)
+  })
+
   it('reports a refused submit', async () => {
     const f = fakes({ submitStatus: 409 })
     const r = await sendHomework({ ...args(), post: f.post, upload: f.upload })
@@ -73,5 +93,34 @@ describe('sendHomework', () => {
     const r = await sendHomework({ ...args({ files: [file('only.jpg')] }), post: f.post, upload: f.upload })
     expect(r.ok).toBe(false)
     expect(f.upload).not.toHaveBeenCalled()
+  })
+})
+
+// A phone's file picker hands back a link to the photo, not the photo; the
+// upload used to re-read it only at Submit, by which time it could be gone.
+describe('readPickedFiles', () => {
+  it('returns in-memory copies with the same name, type and contents', async () => {
+    const picked = [new File(['abc'], 'p1.jpg', { type: 'image/jpeg' }), new File(['%PDF'], 'p2.pdf', { type: 'application/pdf' })]
+    const r = await readPickedFiles(picked)
+    expect(r.ok).toBe(true)
+    expect(r.files.map(f => [f.name, f.type, f.size])).toEqual([['p1.jpg', 'image/jpeg', 3], ['p2.pdf', 'application/pdf', 4]])
+    expect(r.files[0]).not.toBe(picked[0])
+    expect(await r.files[0].text()).toBe('abc')
+  })
+
+  it('refuses at pick time a file the phone cannot read, naming it', async () => {
+    const bad = new File(['x'], 'IMG_2041.jpg', { type: 'image/jpeg' })
+    bad.arrayBuffer = () => Promise.reject(new DOMException('could not be read', 'NotReadableError'))
+    const r = await readPickedFiles([new File(['a'], 'ok.jpg', { type: 'image/jpeg' }), bad])
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/IMG_2041\.jpg/)
+    expect(r.error).toMatch(/again/i)
+  })
+
+  it('refuses a file that reads back empty', async () => {
+    const empty = new File(['abc'], 'p.jpg', { type: 'image/jpeg' })
+    empty.arrayBuffer = async () => new ArrayBuffer(0)
+    const r = await readPickedFiles([empty])
+    expect(r.ok).toBe(false)
   })
 })

@@ -3,7 +3,7 @@ import { Card, Badge, Alert, Spinner } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import { ACCEPT, CAMERA_ACCEPT, SUBMISSIONS_BUCKET, validateUploadFiles } from '../../lib/assignments/upload'
 import { fmtDeadline } from '../../lib/assignments/editor'
-import { sendHomework } from '../../lib/assignments/studentUpload'
+import { sendHomework, readPickedFiles } from '../../lib/assignments/studentUpload'
 
 // The student portal's homework (2026-10-12): see what is set, open the
 // question paper, hand in photos or a PDF before the deadline, and read the
@@ -167,14 +167,16 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
   const [sendError, setSendError] = useState('')
   const [progress, setProgress] = useState(null) // { done, total } while sending
 
-  function add(e) {
+  async function add(e) {
     const files = [...(e.target.files ?? [])]
     e.target.value = ''
     if (!files.length) return
     const check = validateUploadFiles([...pages, ...files])
     if (!check.ok) { setPickError(check.error); return }
+    const read = await readPickedFiles(files)
+    if (!read.ok) { setPickError(read.error); return }
     setPickError('')
-    setPages(p => [...p, ...files])
+    setPages(p => [...p, ...read.files])
   }
 
   async function send() {

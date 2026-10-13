@@ -110,7 +110,7 @@ describe('StudentHomework', () => {
     const c = await waitFor(() => card('Limits — Exercise 2.3'))
     const pages = [new File(['a'], 'p1.jpg', { type: 'image/jpeg' }), new File(['%PDF'], 'p2.pdf', { type: 'application/pdf' })]
     fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: pages } })
-    expect(within(c).getByText('p1.jpg')).toBeInTheDocument()
+    expect(await within(c).findByText('p1.jpg')).toBeInTheDocument()
 
     fireEvent.click(within(c).getByRole('button', { name: /submit 2 pages/i }))
     await waitFor(() => expect(calls.map(b => b.kind)).toEqual(['homework-list', 'homework-start', 'homework-submit', 'homework-list']))
@@ -135,8 +135,45 @@ describe('StudentHomework', () => {
     render(<StudentHomework mobile="9876543210" lwsId="L1" />)
     const c = await waitFor(() => card('Limits — Exercise 2.3'))
     fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [new File(['a'], 'p1.jpg', { type: 'image/jpeg' })] } })
-    fireEvent.click(within(c).getByRole('button', { name: /submit 1 page/i }))
+    fireEvent.click(await within(c).findByRole('button', { name: /submit 1 page/i }))
     expect(await within(c).findByText('The deadline for this homework has passed.')).toBeInTheDocument()
+  })
+
+  // 2026-10-13: a phone's picker hands back a link to the photo, which could
+  // be stale by Submit; one student retried eleven times and no page left.
+  describe('reading pages when they are picked', () => {
+    const photo = name => new File(['a'], name, { type: 'image/jpeg' })
+    const okHandlers = () => ({
+      'homework-start': b => ({ status: 200, json: { submissionId: 'new', uploads: b.files.map((_, i) => ({ path: `open1/L1/new/0${i + 1}.jpg`, token: `t${i}` })) } }),
+      'homework-submit': () => ({ status: 200, json: { ok: true } }),
+    })
+
+    it("uploads the copy read at pick time, not the phone's file link", async () => {
+      mockFetch(okHandlers())
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      const picked = [photo('p1.jpg'), photo('p2.jpg')]
+      fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: picked } })
+      await within(c).findByText('p2.jpg')
+      // The phone's link goes stale after picking; the upload must not need it.
+      picked.forEach(f => { f.arrayBuffer = () => Promise.reject(new Error('gone')) })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit 2 pages/i }))
+      await waitFor(() => expect(uploadToSignedUrl).toHaveBeenCalledTimes(2))
+      expect(uploadToSignedUrl.mock.calls[0][2]).not.toBe(picked[0])
+      expect(await uploadToSignedUrl.mock.calls[0][2].text()).toBe('a')
+    })
+
+    it('refuses a photo the phone cannot read the moment it is picked', async () => {
+      mockFetch()
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Limits — Exercise 2.3'))
+      const bad = photo('IMG_7.jpg')
+      bad.arrayBuffer = () => Promise.reject(new Error('NotReadableError'))
+      fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [bad] } })
+      expect(await within(c).findByText(/IMG_7\.jpg.*again/i)).toBeInTheDocument()
+      expect(within(c).queryByText('Page 1')).not.toBeInTheDocument()
+      expect(within(c).queryByRole('button', { name: /submit/i })).not.toBeInTheDocument()
+    })
   })
 
   it('renders nothing when there is no homework', async () => {
