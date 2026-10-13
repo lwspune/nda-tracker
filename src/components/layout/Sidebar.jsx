@@ -8,11 +8,13 @@ const NAV = [
   // other way in. Hidden from admins — an admin's email doesn't resolve to a
   // teacher record, so the page would be empty for them. Their view of the same
   // data is the filing board on Attendance → Lecture log.
-  { id: 'schoolAttendance', icon: '✍', label: 'My Lectures', teacherOnly: true },
+  // `mobile` marks the candidates for the phone's bottom bar, in order; the bar
+  // keeps the first MOBILE_LINKS that are visible and puts the rest behind More.
+  { id: 'schoolAttendance', icon: '✍', label: 'My Lectures', teacherOnly: true, mobile: true },
   // Only for staff flagged with hostelAccess in Settings → Teachers.
-  { id: 'hostelAttendance', icon: '🏠', label: 'Hostel & Mess', hostelOnly: true },
-  { id: 'dashboard', icon: '📊', label: 'Dashboard' },
-  { id: 'exams',     icon: '📝', label: 'Exams' },
+  { id: 'hostelAttendance', icon: '🏠', label: 'Hostel & Mess', hostelOnly: true, mobile: true },
+  { id: 'dashboard', icon: '📊', label: 'Dashboard', mobile: true },
+  { id: 'exams',     icon: '📝', label: 'Exams', mobile: true },
   // No 'scan' entry, deliberately. The scanner is still a page (`/scan`, and the
   // `?exam=` link an exam card hands out), but a NAV item is the one way in that
   // arrives with no exam chosen — and it cannot read a sheet without one, so it
@@ -23,8 +25,8 @@ const NAV = [
   // Set homework with a question paper; students hand in photos. Not adminOnly:
   // teachers set their own (the page and the database scope them to it).
   { id: 'homework',  icon: '📤', label: 'Homework' },
-  { id: 'students',   icon: '👤', label: 'Students' },
-  { id: 'attendance', icon: '📋', label: 'Attendance' },
+  { id: 'students',   icon: '👤', label: 'Students', mobile: true },
+  { id: 'attendance', icon: '📋', label: 'Attendance', mobile: true },
   { id: 'toppers',    icon: '🏆', label: 'Toppers' },
   { id: 'syllabus',   icon: '📚', label: 'Syllabus' },
   { id: 'timetable', icon: '🗓', label: 'Timetable' },
@@ -39,7 +41,12 @@ const NAV = [
   { id: 'teacherFeedback', icon: '🗣', label: 'Feedback', superadminOnly: true },
 ]
 
-// Returns true if exams exist that post-date the last deploy run.
+// Four links + More is what fits a 390px phone. Every page in one row (14 of
+// them) pushed the whole page sideways and the bar off-screen.
+const MOBILE_LINKS = 4
+
+const BAR_BUTTON = `flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg transition-all
+  min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300`
 
 export default function Sidebar({ onLogout, hostelAccess = false }) {
   const activePage    = useStore(s => s.activePage)
@@ -63,6 +70,8 @@ export default function Sidebar({ onLogout, hostelAccess = false }) {
     !(n.teacherOnly && mode !== 'teacher') &&
     !(n.hostelOnly && !hostelAccess)
   )
+  const quickNav = visibleNav.filter(n => n.mobile).slice(0, MOBILE_LINKS)
+  const onMorePage = !quickNav.some(n => n.id === activePage)
 
   function navigate(id) {
     setActivePage(id)
@@ -115,8 +124,12 @@ export default function Sidebar({ onLogout, hostelAccess = false }) {
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/50" />
+          {/* pb-24 clears the bottom bar, which sits above this layer */}
           <aside
-            className="absolute top-0 left-0 bottom-0 w-[min(85vw,260px)] bg-sidebar flex flex-col py-7 pt-16"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            className="absolute top-0 left-0 bottom-0 w-[min(85vw,260px)] bg-sidebar flex flex-col pt-16 pb-24"
             onClick={e => e.stopPropagation()}
           >
             <SidebarContent
@@ -135,22 +148,40 @@ export default function Sidebar({ onLogout, hostelAccess = false }) {
       )}
 
       {/* ── Mobile bottom nav ───────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/[0.07]
-                      flex items-center justify-around px-2 py-1 safe-area-bottom">
-        {visibleNav.map(item => (
+      <nav
+        aria-label="Quick links"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/[0.07]
+                   flex items-center px-2 py-1 safe-area-bottom"
+      >
+        {quickNav.map(item => (
           <button
             key={item.id}
             onClick={() => navigate(item.id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-3 rounded-lg transition-all min-h-[44px]
+            aria-current={activePage === item.id ? 'page' : undefined}
+            className={`${BAR_BUTTON}
               ${activePage === item.id
                 ? 'text-indigo-300'
                 : 'text-white/35 hover:text-white/60'
               }`}
           >
             <span className="text-[18px] leading-none">{item.icon}</span>
-            <span className="text-[10px] font-semibold tracking-wide">{item.label}</span>
+            <span className="max-w-full truncate text-[10px] font-semibold tracking-wide">{item.label}</span>
           </button>
         ))}
+        <button
+          onClick={() => setMobileOpen(o => !o)}
+          aria-expanded={mobileOpen}
+          aria-haspopup="dialog"
+          aria-current={onMorePage ? 'page' : undefined}
+          className={`${BAR_BUTTON}
+            ${onMorePage || mobileOpen
+              ? 'text-indigo-300'
+              : 'text-white/35 hover:text-white/60'
+            }`}
+        >
+          <span className="text-[18px] leading-none" aria-hidden="true">☰</span>
+          <span className="text-[10px] font-semibold tracking-wide">More</span>
+        </button>
       </nav>
     </>
   )
