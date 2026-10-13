@@ -27,8 +27,10 @@ same way as the 5th.
    scripts/grading/GRADING.md". Never grade two in one session: one student's
    answers must not colour another's grade.
 4. Read `brief.md`, then the question paper (if any), the answer key (if any),
-   then every page in `scans/` in order. Images with Read; a PDF 20 pages at a
-   time. **Before marking**, compare `scans/` with `reference/` and decide the
+   then every page in `scans/` in order. Images with Read. A PDF cannot be read
+   directly on this machine (no poppler): first run
+   `python -E -P scripts/grading/pdf2png.py grading-inbox/<id>/scans/01.pdf`,
+   which writes `01-p01.png`, `01-p02.png`, … beside it, then read those. **Before marking**, compare `scans/` with `reference/` and decide the
    handwriting check (see "Handwriting check" below).
 5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
@@ -186,6 +188,10 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-13: A PDF hand-in could not be opened at all (the reader needs poppler,
+  which is not installed). `scripts/grading/pdf2png.py` renders it with PyMuPDF;
+  routine step 4. Run it with `-E -P`, not `-I`: isolated mode hides PyMuPDF.
 
 - 2026-10-13: Homework with no answer key can be checked against PYQ Vault's stored
   board solutions (`npm run grading:vault`, routine step 5). Daily Homework #1's

@@ -12,7 +12,7 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 A review of the first six graded submissions found the same omission marked two ways (a left-out proof condition lost marks on Q2 but not on Q4), a units penalty with no rule behind it, and a full-marks question showing the student a red ✗. The rules are now fixed in `scripts/grading/GRADING.md` (marking rules 2, 9, 10), and at your request the homework moved from 5 × 2 to 5 × 5 = 25 marks.
 
-**360:** scope is 11 submissions of one homework: 6 graded (released) and 5 waiting. The students see their total change, from /10 to /25. Each grade is still visible as it was until its regrade is committed. Reversible: a regrade is another `grading:commit`, and `regraded_at` records it. Cost: one grading session per submission. **Approved 2026-10-13; in progress.**
+**360:** scope is 12 submissions of one homework: 6 graded (released) and 6 waiting. All 12 are pulled with fresh 5 × 5 templates (the 6 regrades' saved 2-mark grades were replaced, so the re-mark is not anchored to them). The cross-student handwriting check on the 6 waiting found no shared hand. The students see their total change, from /10 to /25. Each grade is still visible as it was until its regrade is committed. Reversible: a regrade is another `grading:commit`, and `regraded_at` records it. Cost: one grading session per submission. **Approved 2026-10-13; in progress.**
 
 **How to apply:** `npm run grading:pull -- --id=<id>` for each graded one (`npm run grading:pull` for the waiting ones), then one fresh session per submission: "Grade grading-inbox/<id> by scripts/grading/GRADING.md". Strike this entry once every submission of the homework shows `total_max = 25`.
 
