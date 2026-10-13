@@ -160,7 +160,7 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
   return (
     <>
       {/* Logo */}
-      <div className="px-5 pb-6 border-b border-white/[0.07] mb-5">
+      <div className="shrink-0 px-5 pb-6 border-b border-white/[0.07] mb-5">
         <div className="text-[17px] font-extrabold text-indigo-300 tracking-tight leading-snug">
           {APP_NAME}
         </div>
@@ -176,8 +176,10 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-2">
+      {/* Nav — the only part that scrolls. The sidebar is fixed to the window's
+          height, so without this a short window cuts off the last links and the
+          footer, and scrolling the page can't reach them. */}
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2">
         <div className="text-[9.5px] font-mono uppercase tracking-[1.8px] text-indigo-300/25 px-3 mb-2">
           Navigation
         </div>
@@ -202,7 +204,7 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
 
 
       {/* Footer stats + teacher logout */}
-      <div className="px-5 pt-4 border-t border-white/[0.07]">
+      <div className="shrink-0 px-5 pt-4 border-t border-white/[0.07]">
         <div className="text-[11px] font-mono text-indigo-300/30 leading-relaxed">
           <div>{exams.length} exam{exams.length !== 1 ? 's' : ''}</div>
           <div>{studentCount} student{studentCount !== 1 ? 's' : ''}</div>
