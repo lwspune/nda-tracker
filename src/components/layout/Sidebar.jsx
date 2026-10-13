@@ -210,7 +210,8 @@ function SidebarContent({ activePage, visibleNav, navigate, exams, studentCount,
       {/* Nav — the only part that scrolls. The sidebar is fixed to the window's
           height, so without this a short window cuts off the last links and the
           footer, and scrolling the page can't reach them. */}
-      <nav className="flex-1 min-h-0 overflow-y-auto px-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2
+                      [scrollbar-width:thin] [scrollbar-color:rgb(165_180_252/0.2)_transparent]">
         <div className="text-[9.5px] font-mono uppercase tracking-[1.8px] text-indigo-300/25 px-3 mb-2">
           Navigation
         </div>
