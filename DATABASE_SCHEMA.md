@@ -19,13 +19,13 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
 | Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
-| Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades` + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 (new 2026-10-12) |
+| Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades`, `homework_hand_references` + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 + 0 (new 2026-10-12; references 2026-10-13) |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 | **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-28 tables. All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+33 tables (live count, 2026-10-13). All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -446,16 +446,24 @@ Teacher-set homework (a question paper and/or a description) for batches, with a
 | `assignment_id` | uuid FK → `homework_assignments` **ON DELETE RESTRICT** | homework with submissions can't be deleted |
 | `lws_id` | text FK → `students` ON DELETE CASCADE | |
 | `student_name` | text NOT NULL | snapshot from `students.canonical_name` |
-| `status` | text | `uploading` → `submitted` → `graded` \| `rejected` |
+| `status` | text | `uploading` → `submitted` → `graded` \| `rejected`, or → **`held`** → `graded` \| `rejected` (handwriting mismatch, 2026-10-13) |
 | `files` | jsonb `[path]` | 1–20 pages, `<assignment>/<lws_id>/<id>/NN.ext` in `homework-submissions` |
 | `submitted_at` / `graded_at` / `regraded_at` | timestamptz | |
 | `grader` | text | `session` \| `api` |
 | `total_awarded` / `total_max` | numeric | **summed by the database**, never sent in |
 | `went_well` / `next_steps` | text | 1–1500 chars each, required when graded |
 | `rejected_reason` | text | 1–300 chars |
-| `scans_deleted_at` | timestamptz | set by `grading:purge` 30 days after grading |
+| `scans_deleted_at` | timestamptz | set by `grading:purge` 30 days after grading — **never on a handwriting reference** |
+| `hand_check` | text | `match` \| `mismatch` \| `unclear` \| `no_reference` (2026-10-13). **Faculty-only — never in the student payload.** NULL on grades saved before the check existed |
+| `hand_note` | text | 1–300 chars; required for `mismatch`/`unclear` |
+| `hand_reference_id` | uuid FK → `homework_submissions` ON DELETE SET NULL | the reference compared against — looked up by `homework_grade_commit`, never sent in |
+| `resolved_at` / `resolved_by` | timestamptz / text | who released or sent back a held grade (set together or not at all) |
 
-`homework_submissions_state` CHECK: each status carries exactly its fields. Unique index `(assignment_id, lws_id) WHERE status <> 'rejected'` — one submission per student; a rejection frees the slot.
+`homework_submissions_state` CHECK: each status carries exactly its fields; **`held` = a full grade with `hand_check='mismatch'`, a note, and no `resolved_at`**. `homework_submissions_mismatch_released`: a `graded` row with a mismatch must have `resolved_at` (a named person released it). Unique index `(assignment_id, lws_id) WHERE status <> 'rejected'` — one submission per student (a held one counts); a rejection frees the slot.
+
+### `homework_hand_references` (2026-10-13)
+
+One row per student: `lws_id` PK (FK → `students`, cascade), `submission_id` UNIQUE, `chosen_at`. Composite FK `(submission_id, lws_id)` → `homework_submissions (id, lws_id)`, so a reference provably belongs to the same student. **The student's first graded homework that was not held** — written only by `homework_grade_commit` (seeded from the 3 grades that existed on 2026-10-13). Kept until faculty delete the row by hand; `grading:purge` skips its pages. RLS: read-only to authenticated.
 
 ### `homework_grades`
 
@@ -465,8 +473,12 @@ PK `(submission_id, position)`, UNIQUE `(submission_id, label)`. `label` (1–40
 
 - `homework_submission_start(p_id, p_assignment, p_lws_id, p_files)` — published + before `due_at` (database clock), no live submission; clears a stale `uploading` row.
 - `homework_submission_submit(p_id, p_lws_id)` — the student's own upload, still before `due_at`.
-- `homework_grade_commit(p_submission, p_grades, p_went_well, p_next_steps, p_grader)` — replaces the rows, refuses a breakdown whose maximums don't add up to `max_marks`, sums the total, marks graded (accepts a regrade).
+- `homework_grade_commit(p_submission, p_grades, p_went_well, p_next_steps, p_grader, p_hand_check, p_hand_note) → {total, status}` — replaces the rows, refuses a breakdown whose maximums don't add up to `max_marks`, sums the total. Requires a handwriting check, applied against the reference **this database** holds (no `match`/`unclear` without one, no `no_reference` with one, a note for `mismatch`/`unclear`). `mismatch` → `held`, else `graded`; a graded (not held) first homework becomes the student's reference. Accepts a regrade, which clears any release. The five-argument version was dropped 2026-10-13.
 - `homework_submission_reject(p_submission, p_reason)` — only a `submitted` row.
+
+**Staff-callable (2026-10-13):** `homework_held_resolve(p_submission, p_action 'release'|'reject', p_reason)` — `SECURITY DEFINER`, `EXECUTE` to `authenticated` only. Checks inside: signed in; the row is `held`; a `role='teacher'` caller only on homework whose `created_by` is their email (case-insensitive). `release` → `graded` with `resolved_*`; `reject` (reason 10–300) → `rejected`, grade rows and marks removed.
+
+Migrations: `20261012193141_homework_handwriting_check_1_columns`, `…193148_…_2_references`, `20261013000000_…_3_functions` — one migration in three parts because the Supabase connector declined the whole (part 3 went in through the SQL editor and its history row was added by hand).
 
 **The batch check is NOT in these functions** — `api/_studentHomework.js` makes it. A test (`src/lib/assignments/__tests__/migration.test.js`) pins the migration's limits and grants to the JS constants.
 
@@ -637,7 +649,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 | `lecture_absences`, `lecture_submissions`, `homework_pending` | ✓ | Authenticated only (`faculty_rw`) — teachers write `lecture_absences` + `lecture_submissions` from `/school-attendance` |
 | `exam_absences`, `quizzes`, `quiz_attempts` | ✓ | Authenticated only (`*_authenticated_all`) |
 | **`homework_assignments`** | ✓ | Read: authenticated. Write: authenticated **except** a `role='teacher'` row whose `created_by` ≠ their JWT email (a teacher writes only their own). |
-| **`homework_submissions`, `homework_grades`** | ✓ | **Read-only** to authenticated (staff). No write policy: the student endpoint and the grading scripts write as the service role. |
+| **`homework_submissions`, `homework_grades`, `homework_hand_references`** | ✓ | **Read-only** to authenticated (staff). No write policy: the student endpoint and the grading scripts write as the service role; staff release/send back a held grade only through `homework_held_resolve`. |
 | Storage `homework-files` | — | Staff read; staff write only into an assignment folder whose row they could write. Students get signed links to `questions/` only. |
 | Storage `homework-submissions` | — | Staff read. **No write policy**: students upload through signed upload links the service role issues. |
 | **`attendance_holidays`** | ✓ | `holidays_read` — authenticated `SELECT`. `holidays_write_insert/update/delete` — authenticated **except** `app_metadata.role = 'teacher'` (same predicate as `faculty_state`). The student portal never reads it: `api/student-login.js` filters server-side with the service role. |

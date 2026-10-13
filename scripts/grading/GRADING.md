@@ -4,7 +4,9 @@ Teachers set homework on the **Homework** page (a question paper, or just a
 description such as "RD Sharma Ex 3.2, Q1–10, as announced in class"). Students
 hand in photos or a PDF from the portal before the deadline. A grade is shown to
 the student **the moment it is saved** — there is no review step, so the check in
-this file is the review.
+this file is the review. The one exception is a **handwriting mismatch** (below):
+that grade is saved *held*, and the student sees it only when their teacher
+releases it.
 
 Read this file in full at the start of every grading session. Every new rule or
 learning goes in the ledger at the bottom, so the 50th submission is graded the
@@ -13,23 +15,31 @@ same way as the 5th.
 ## The routine
 
 1. `npm run grading:pull` fetches every waiting submission into
-   `grading-inbox/<id>/` (git-ignored): `brief.md`, `paper/`, `key/`, `scans/`
-   and `grade.json`. Oldest first.
-2. **One submission per fresh session.** Say: "Grade grading-inbox/<id> by
+   `grading-inbox/<id>/` (git-ignored): `brief.md`, `paper/`, `key/`, `scans/`,
+   `reference/` (the student's handwriting reference, if any) and `grade.json`.
+   Oldest first.
+2. **Two or more submissions for one homework?** First run
+   `npm run grading:hand-compare -- --assignment=<homework id>` and, in a
+   session that does not grade, look through `grading-inbox/_hand/<id>/` for the
+   same hand under two submission ids. Note the pairs; they become `mismatch`
+   when those submissions are graded.
+3. **One submission per fresh session.** Say: "Grade grading-inbox/<id> by
    scripts/grading/GRADING.md". Never grade two in one session: one student's
    answers must not colour another's grade.
-3. Read `brief.md`, then the question paper (if any), the answer key (if any),
+4. Read `brief.md`, then the question paper (if any), the answer key (if any),
    then every page in `scans/` in order. Images with Read; a PDF 20 pages at a
-   time.
-4. Work out each answer yourself before marking. An answer key is the teacher's,
+   time. **Before marking**, compare `scans/` with `reference/` and decide the
+   handwriting check (see "Handwriting check" below).
+5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
    note it in the ledger if the key was wrong.
-5. Fill `grade.json`.
-6. `npm run grading:commit -- <id> --dry` until the check passes, then
-   `npm run grading:commit -- <id>`. The student sees it immediately.
-7. Anything new learned: add it to the ledger below, in general terms.
-8. Weekly: `npm run grading:purge -- --apply` (pages go 30 days after grading;
-   the grade stays).
+6. Fill `grade.json`.
+7. `npm run grading:commit -- <id> --dry` until the check passes, then
+   `npm run grading:commit -- <id>`. The student sees it immediately — or, on a
+   handwriting mismatch, it is saved HELD for their teacher (the script says so).
+8. Anything new learned: add it to the ledger below, in general terms.
+9. Weekly: `npm run grading:purge -- --apply` (pages go 30 days after grading;
+   the grade stays; handwriting references are never purged).
 
 ## grade.json
 
@@ -38,6 +48,7 @@ same way as the 5th.
   "submissionId": "…",
   "wentWell": "One or two specific things.",
   "nextSteps": "One or two concrete actions.",
+  "handwriting": { "check": "match", "note": "" },
   "grades": [
     { "label": "Q1", "max": 5, "outcome": "scored", "awarded": 5, "earned": "Correct factorisation and answer.", "missing": "" },
     { "label": "Q2", "max": 5, "outcome": "scored", "awarded": 2.5, "earned": "Right method.", "missing": "Sign slip in the last line; no final value." },
@@ -57,7 +68,34 @@ same way as the 5th.
 - `awarded`: halves only (0, 0.5, 1, …), never above `max`, `null` unless scored.
 - Marks lost → `missing` is required. Marks given → `earned` is required.
 - The checker refuses an unfilled template, a breakdown that does not add up to
-  the total, and a submission with nothing scored (that is a rejection).
+  the total, a missing handwriting check, and a submission with nothing scored
+  (that is a rejection).
+
+## Handwriting check
+
+Catches someone else writing a student's homework. Each student's **reference**
+is their first graded homework (`reference/` in the inbox folder). Compare the
+pages *before* marking, and record one of:
+
+| `check` | When | What happens |
+|---|---|---|
+| `match` | Same hand as the reference | Released as usual |
+| `unclear` | Can't tell: blurry, angled, too little writing | Released; the teacher sees your note |
+| `mismatch` | A different hand from the reference, or the same hand as another student's submission (step 2) | **Held**: the student sees "waiting to be graded" until their teacher releases it or sends it back |
+| `no_reference` | No `reference/` folder (their first graded homework) | Released; this one becomes their reference |
+
+- **Never let the check change the marks.** Grade the work as written either way.
+- **Compare letter shapes, not neatness**: how `a`, `g`, `y`, `t`, `f` and the
+  digits `4`, `7`, `9` are formed, slant, joins, how `=` and fractions are
+  drawn. Rushed and neat writing by the same person still share these.
+  Pen colour, paper and page layout prove nothing.
+- `mismatch` and `unclear` need a `note` (300 characters at most) the teacher
+  can check in a minute: name what differs ("g and y have closed loops here,
+  open tails in the reference; digits slant the other way").
+- It is a lead, never proof — the teacher decides. Mark `mismatch` only for a
+  clear difference; when unsure, `unclear`.
+- Without a reference the only finding possible is the class-wide one
+  (`mismatch`, "Same handwriting as another submission for this homework").
 
 ## Homework with no question paper
 
@@ -120,6 +158,11 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-13: Handwriting check added. Grades are no longer ALWAYS auto-released:
+  a `mismatch` is saved held until the homework's teacher (or an admin) releases
+  it or sends it back. References are each student's first graded homework, kept
+  until faculty delete them by hand.
 
 - 2026-10-13: An incomplete hand-in (some questions missing) before the deadline:
   reject it, naming what is missing. A waiting submission blocks a second upload,
