@@ -97,7 +97,8 @@ export default function DashboardPage() {
 
   const batchRows = getBatchComparison(prioritySubjectExams, studentProfiles, freq, totalMarks)
 
-  const selectCls = 'form-input w-auto text-[13px] pr-8 cursor-pointer'
+  // Phone: one full-width filter per row. sm+: today's minimum widths, side by side.
+  const selectCls = 'form-input w-full max-w-full sm:w-auto text-[13px] pr-8 cursor-pointer'
 
   return (
     <div>
@@ -107,12 +108,12 @@ export default function DashboardPage() {
           <h1 className="text-[24px] font-extrabold text-ink tracking-tight leading-tight">Dashboard</h1>
           <p className="text-[13px] text-ink-2 mt-1">Class performance overview</p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center w-full sm:w-auto min-w-0">
           <select
             aria-label="Subject filter"
             value={subjectFilter}
             onChange={e => { setSubjectFilter(e.target.value); setBranchFilter('all'); setBatchFilter('all'); setFilterVal('all') }}
-            className={selectCls} style={{ minWidth: '160px' }}
+            className={`${selectCls} sm:min-w-[160px]`}
           >
             <option value="all">All Subjects</option>
             {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
@@ -122,7 +123,7 @@ export default function DashboardPage() {
               aria-label="Branch filter"
               value={branchFilter}
               onChange={e => { setBranchFilter(e.target.value); setBatchFilter('all'); setFilterVal('all') }}
-              className={selectCls} style={{ minWidth: '160px' }}
+              className={`${selectCls} sm:min-w-[160px]`}
             >
               <option value="all">All Branches</option>
               {allBranches.map(b => <option key={b} value={b}>{b}</option>)}
@@ -133,7 +134,7 @@ export default function DashboardPage() {
               aria-label="Batch filter"
               value={batchFilter}
               onChange={e => { setBatchFilter(e.target.value); setFilterVal('all') }}
-              className={selectCls} style={{ minWidth: '180px' }}
+              className={`${selectCls} sm:min-w-[180px]`}
             >
               <option value="all">All Batches</option>
               {allBatches.map(b => <option key={b} value={b}>{b}</option>)}
@@ -143,7 +144,7 @@ export default function DashboardPage() {
             aria-label="Exam filter"
             value={filterVal}
             onChange={e => setFilterVal(e.target.value)}
-            className={selectCls} style={{ minWidth: '220px' }}
+            className={`${selectCls} sm:min-w-[220px]`}
           >
             <option value="all">All Exams</option>
             {[...batchFiltered].reverse().map(e => (

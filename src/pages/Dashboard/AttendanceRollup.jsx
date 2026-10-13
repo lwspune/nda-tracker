@@ -67,8 +67,10 @@ function BranchTable({ branch, batches, expanded, onToggle }) {
     (sum, g) => sum + totalData[g].present.length + totalData[g].absent.length, 0,
   )
 
+  // Side by side from 320px each; narrower than that (a phone) it shrinks and
+  // the table scrolls inside its own box instead of widening the page.
   return (
-    <div className="min-w-[320px] flex-1">
+    <div className="flex-[1_1_320px] min-w-0">
       <h3 className="text-[13px] font-bold text-ink mb-2">
         {branch} <span className="text-ink-3 font-semibold">({branchTotal})</span>
       </h3>
