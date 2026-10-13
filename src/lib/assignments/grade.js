@@ -87,6 +87,8 @@ export function validateGrade({ maxMarks, questions, file, hasReference }) {
       if (a > max) errors.push(`${label}: ${a} is more than its ${max} mark${max === 1 ? '' : 's'}.`)
       if (!isHalf(a)) errors.push(`${label}: marks go in halves (${a}).`)
       if (a < max && !missing) errors.push(`${label}: marks were lost, so say what was missing.`)
+      // The portal prints `missing` as a red ✗; beside full marks it reads as a lost mark.
+      if (a === max && missing) errors.push(`${label}: full marks, so \`missing\` must be empty. Put the note in \`earned\` or \`nextSteps\`.`)
       if (a > 0 && !earned) errors.push(`${label}: marks were given, so say what earned them.`)
       awarded = a
     } else if (raw.awarded !== null && raw.awarded !== undefined) {

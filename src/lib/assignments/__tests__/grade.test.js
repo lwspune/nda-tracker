@@ -78,6 +78,12 @@ describe('validateGrade — refusals name every problem at once', () => {
     expect(validateGrade({ maxMarks: 5, file: file([row({ awarded: 0, earned: '', missing: 'Wrong method.' })]) }).ok).toBe(true)
   })
 
+  it('refuses "missing" on a full-marks question — the student sees it as a red ✗ beside full marks', () => {
+    const r = validateGrade({ maxMarks: 5, file: file([row({ missing: 'You numbered this answer 3.' })]) })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toMatch(/Q1.*full marks/)
+  })
+
   it('refuses an unknown outcome', () => {
     expect(validateGrade({ maxMarks: 5, file: file([row({ outcome: 'not_counted' })]) }).ok).toBe(false)
   })
