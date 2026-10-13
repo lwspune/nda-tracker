@@ -183,7 +183,10 @@ export default function App() {
     <ModeContext.Provider value="admin">
       <div className="flex min-h-screen bg-bg">
         <Sidebar />
-        <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
+        {/* min-w-0 on the page column (all three portals): without it the column
+            can't shrink below its widest child, so one wide toolbar or table
+            stretches the whole page past a phone's width. */}
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}
           </main>
@@ -291,7 +294,7 @@ function OnlineAdminPortal({ session, onLogout }) {
       <div className="flex min-h-screen bg-bg">
         <StaleDataBanner />
         <Sidebar onLogout={onLogout} />
-        <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}
           </main>
@@ -364,7 +367,7 @@ function TeacherPortal({ session, onLogout }) {
         {/* Only a teacher with timetable access ever saves, so only they can go stale. */}
         {timetableAccess && <StaleDataBanner />}
         <Sidebar onLogout={onLogout} hostelAccess={hostelAccess} />
-        <div className="flex-1 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}
           </main>
