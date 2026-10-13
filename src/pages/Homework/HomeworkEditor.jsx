@@ -263,6 +263,10 @@ function FileField({ label, hint, saved, picked, onPick, onUnpick, onRemoveSaved
   )
 }
 
+// A new question starts at 5: the grading playbook's step split (method,
+// working, condition or check, answer) needs that many marks to tell answers apart.
+const DEFAULT_QUESTION_MARKS = 5
+
 // Optional per-question marks. Left empty, the grader splits the total as the
 // paper's questions go; set, every grade must use exactly these questions.
 function QuestionBreakdown({ questions, onChange, locked }) {
@@ -288,7 +292,7 @@ function QuestionBreakdown({ questions, onChange, locked }) {
       ))}
       {!locked && (
         <button className="text-[12px] font-semibold text-accent hover:underline self-start"
-                onClick={() => onChange([...questions, { label: `Q${questions.length + 1}`, marks: null }])}>
+                onClick={() => onChange([...questions, { label: `Q${questions.length + 1}`, marks: DEFAULT_QUESTION_MARKS }])}>
           + Add question
         </button>
       )}

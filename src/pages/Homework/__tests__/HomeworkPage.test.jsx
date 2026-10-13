@@ -105,6 +105,17 @@ describe('HomeworkPage', () => {
       expect(screen.getByText(/no classes in the timetable/i)).toBeInTheDocument()
     })
 
+    it('starts each added question at 5 marks, which the teacher can change', () => {
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /new homework/i }))
+      fireEvent.click(screen.getByRole('button', { name: /add question/i }))
+      fireEvent.click(screen.getByRole('button', { name: /add question/i }))
+      expect(screen.getByLabelText('Question 1 marks')).toHaveValue(5)
+      expect(screen.getByLabelText('Question 2 marks')).toHaveValue(5)
+      fireEvent.change(screen.getByLabelText('Question 2 marks'), { target: { value: '3' } })
+      expect(screen.getByLabelText('Question 2 marks')).toHaveValue(3)
+    })
+
     it('keeps Publish disabled and says why until the homework is complete', () => {
       renderAs('teacher', 'asha@lws.com')
       fireEvent.click(screen.getByRole('button', { name: /new homework/i }))
