@@ -192,6 +192,13 @@ too dark to read. Retake them in daylight, flat, one page per photo."
 closed. The commit script warns you. Then prefer grading what can be read over
 rejecting.
 
+## A replaced submission
+
+A student can replace a hand-in until it is graded (2026-10-14). If
+`grading:commit` says the submission **was replaced**, the student sent newer
+pages after you pulled it: delete `grading-inbox/<id>/`, run `npm run grading:pull`
+and grade the new one. Do not grade the old pages.
+
 ## Privacy
 
 Pages and grades are about a named student. `brief.md` deliberately names no
@@ -265,6 +272,10 @@ Newest first. One line each: date, rule or learning, and why.
   it or sends it back. References are each student's first graded homework, kept
   until faculty delete them by hand.
 
+- 2026-10-14: Students can replace a hand-in until it is graded (two replacements).
+  Grading whatever is waiting is still right — the newest is the one in the queue,
+  and committing a replaced one is refused. An incomplete hand-in is still rejected
+  as below; the student may also fix it themselves before you get to it.
 - 2026-10-13: An incomplete hand-in (some questions missing) before the deadline:
   reject it, naming what is missing. A waiting submission blocks a second upload,
   and a rejection reopens it until the deadline. After the deadline, grade what is

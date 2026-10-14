@@ -446,7 +446,7 @@ Teacher-set homework (a question paper and/or a description) for batches, with a
 | `assignment_id` | uuid FK → `homework_assignments` **ON DELETE RESTRICT** | homework with submissions can't be deleted |
 | `lws_id` | text FK → `students` ON DELETE CASCADE | |
 | `student_name` | text NOT NULL | snapshot from `students.canonical_name` |
-| `status` | text | `uploading` → `submitted` → `graded` \| `rejected`, or → **`held`** → `graded` \| `rejected` (handwriting mismatch, 2026-10-13) |
+| `status` | text | `uploading` → `submitted` → `graded` \| `rejected`, or → **`held`** → `graded` \| `rejected` (handwriting mismatch, 2026-10-13). A `submitted` or `held` row → **`replaced`** when the student sends a newer hand-in (2026-10-14) |
 | `files` | jsonb `[path]` | 1–20 pages, `<assignment>/<lws_id>/<id>/NN.ext` in `homework-submissions` |
 | `submitted_at` / `graded_at` / `regraded_at` | timestamptz | |
 | `grader` | text | `session` \| `api` |
@@ -458,8 +458,9 @@ Teacher-set homework (a question paper and/or a description) for batches, with a
 | `hand_note` | text | 1–300 chars; required for `mismatch`/`unclear` |
 | `hand_reference_id` | uuid FK → `homework_submissions` ON DELETE SET NULL | the reference compared against — looked up by `homework_grade_commit`, never sent in |
 | `resolved_at` / `resolved_by` | timestamptz / text | who released or sent back a held grade (set together or not at all) |
+| `replaced_at` | timestamptz | when the student replaced this hand-in (2026-10-14); set on `replaced` rows and only on them (`homework_submissions_replaced_at` CHECK). A replaced row keeps its pages until `grading:purge` (30 days) and any held grade + handwriting note it carried |
 
-`homework_submissions_state` CHECK: each status carries exactly its fields; **`held` = a full grade with `hand_check='mismatch'`, a note, and no `resolved_at`**. `homework_submissions_mismatch_released`: a `graded` row with a mismatch must have `resolved_at` (a named person released it). Unique index `(assignment_id, lws_id) WHERE status <> 'rejected'` — one submission per student (a held one counts); a rejection frees the slot.
+`homework_submissions_state` CHECK: each status carries exactly its fields; **`held` = a full grade with `hand_check='mismatch'`, a note, and no `resolved_at`**. `homework_submissions_mismatch_released`: a `graded` row with a mismatch must have `resolved_at` (a named person released it). Unique index `homework_submissions_one_per_student` `(assignment_id, lws_id) WHERE status IN ('submitted','held','graded')` — one live hand-in per student; a rejection or a replacement frees it. `homework_submissions_one_upload` `… WHERE status = 'uploading'` — at most one upload in progress beside it (2026-10-14: the replacement uploads while the old hand-in still counts).
 
 ### `homework_hand_references` (2026-10-13)
 
@@ -471,8 +472,8 @@ PK `(submission_id, position)`, UNIQUE `(submission_id, label)`. `label` (1–40
 
 ### Functions (service role only — `REVOKE` from `PUBLIC, anon, authenticated`)
 
-- `homework_submission_start(p_id, p_assignment, p_lws_id, p_files)` — published + before `due_at` (database clock), no live submission; clears a stale `uploading` row.
-- `homework_submission_submit(p_id, p_lws_id)` — the student's own upload, still before `due_at`.
+- `homework_submission_start(p_id, p_assignment, p_lws_id, p_files, p_replace DEFAULT false)` — published + before `due_at` (database clock); clears a stale `uploading` row. Without `p_replace`, refused when there is a live hand-in; with it (2026-10-14), refused when that hand-in is `graded` or 2 are already `replaced`. Does **not** touch the old hand-in.
+- `homework_submission_submit(p_id, p_lws_id)` — the student's own upload, still before `due_at`. If a live hand-in exists, it is set `replaced` in the same transaction under a row lock — refused if it was graded meanwhile, or over the 2-replacement limit.
 - `homework_grade_commit(p_submission, p_grades, p_went_well, p_next_steps, p_grader, p_hand_check, p_hand_note) → {total, status}` — replaces the rows, refuses a breakdown whose maximums don't add up to `max_marks`, sums the total. Requires a handwriting check, applied against the reference **this database** holds (no `match`/`unclear` without one, no `no_reference` with one, a note for `mismatch`/`unclear`). `mismatch` → `held`, else `graded`; a graded (not held) first homework becomes the student's reference. Accepts a regrade, which clears any release. The five-argument version was dropped 2026-10-13.
 - `homework_submission_reject(p_submission, p_reason)` — only a `submitted` row.
 
