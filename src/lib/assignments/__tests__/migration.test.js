@@ -182,12 +182,20 @@ describe('handwriting-check migration', () => {
 // 2026-10-14: a student may replace a hand-in that has not been marked, before
 // the deadline, at most MAX_REPLACEMENTS times. The newest is the one marked.
 describe('replace-submission migration', () => {
-  const repFile = readdirSync(dir).find(f => f.endsWith('_homework_replace_submission.sql'))
-  const rep = repFile ? readFileSync(join(dir, repFile), 'utf8').replace(/\s+/g, ' ') : ''
+  // Applied in four parts (the connector declines DROP INDEX / DROP FUNCTION /
+  // DELETE, so part 3 went through the SQL editor). Read together, in order.
+  const repFiles = readdirSync(dir).filter(f => /_homework_replace_submission_\w+\.sql$/.test(f)).sort()
+  const repFile = repFiles[0]
+  const rep = repFiles.map(f => readFileSync(join(dir, f), 'utf8')).join('\n').replace(/\s+/g, ' ')
   const list = xs => xs.map(x => `'${x}'`).join(', ')
 
-  it('exists and sorts after the handwriting check', () => {
-    expect(repFile).toBeTruthy()
+  it('exists in four parts that sort after the handwriting check, schema first', () => {
+    expect(repFiles.map(f => f.replace(/^\d+_/, ''))).toEqual([
+      'homework_replace_submission_1a_column.sql',
+      'homework_replace_submission_1b_constraints.sql',
+      'homework_replace_submission_2_submit.sql',
+      'homework_replace_submission_3_index_and_start.sql',
+    ])
     const lastHand = readdirSync(dir).filter(f => /_homework_handwriting_check_\d_\w+\.sql$/.test(f)).sort().pop()
     expect(repFile > lastHand).toBe(true)
   })
@@ -225,10 +233,16 @@ describe('replace-submission migration', () => {
   // The swap happens when the new pages are sent, in one transaction: a
   // student who gives up half way still has their first hand-in.
   it('retires the old hand-in in the submit function, not at start', () => {
-    const submit = rep.slice(rep.indexOf('FUNCTION public.homework_submission_submit'))
-    expect(submit).toMatch(/SET status = 'replaced', replaced_at = now\(\)/)
-    const start = rep.slice(rep.indexOf('FUNCTION public.homework_submission_start'), rep.indexOf('FUNCTION public.homework_submission_submit'))
-    expect(start).not.toMatch(/status = 'replaced', replaced_at/)
+    // Each function's body runs from its CREATE to the next $$ that closes it.
+    const body = fn => {
+      const from = rep.indexOf(`CREATE OR REPLACE FUNCTION public.${fn}(`)
+      expect(from, fn).toBeGreaterThan(-1)
+      const open = rep.indexOf('$$', from)
+      return rep.slice(open, rep.indexOf('$$', open + 2))
+    }
+    expect(body('homework_submission_submit')).toMatch(/SET status = 'replaced', replaced_at = now\(\)/)
+    expect(body('homework_submission_start')).toMatch(/p_replace/)
+    expect(body('homework_submission_start')).not.toMatch(/status = 'replaced', replaced_at/)
   })
 
   it('lets only the service role run both functions, with search_path pinned', () => {
