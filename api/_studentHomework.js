@@ -4,6 +4,7 @@
 //
 //   homework-list   → the student's homework, with signed question-paper links
 //   homework-start  → check, start the submission, one signed upload link per page
+//                     (`replace: true` replaces a hand-in not yet marked, 2026-10-14)
 //   homework-submit → check every page arrived, then send it for grading
 //
 // Identity is the quiz endpoints' (the student's own mobile from the portal
@@ -14,7 +15,7 @@
 import { randomUUID } from 'node:crypto'
 import { normMobile } from './_mobile.js'
 import { resolveStudent, studentHomeworkList, planSubmissionUploads } from '../src/lib/assignments/studentHomework.js'
-import { canStartSubmission } from '../src/lib/assignments/status.js'
+import { canStartSubmission, canReplaceSubmission } from '../src/lib/assignments/status.js'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET, isQuestionFilePath } from '../src/lib/assignments/upload.js'
 
 export const HOMEWORK_KINDS = new Set(['homework-list', 'homework-start', 'homework-submit'])
@@ -32,6 +33,8 @@ function rpcFailure(res, error, where) {
   const msg = error?.message ?? ''
   if (/deadline/i.test(msg)) return fail(res, 409, 'The deadline for this homework has passed.')
   if (/already submitted/i.test(msg)) return fail(res, 409, 'You have already submitted this homework.')
+  if (/already been marked/i.test(msg)) return fail(res, 409, "This homework has already been marked, so it can't be replaced.")
+  if (/no replacements left/i.test(msg)) return fail(res, 409, "You've already replaced this homework twice.")
   if (/not open|not an upload in progress/i.test(msg)) return fail(res, 409, 'This homework can no longer be submitted. Reload and try again.')
   console.error(`[student-homework] ${where} failed:`, msg)
   return fail(res, 500, 'Something went wrong. Please try again.')
@@ -88,6 +91,7 @@ async function list(supabase, who, res) {
 
 async function start(supabase, who, body, res) {
   const { assignmentId, files } = body
+  const replace = body.replace === true
   if (!assignmentId) return fail(res, 400, 'assignmentId is required')
   const lwsId = who.student.lws_id
 
@@ -111,11 +115,19 @@ async function start(supabase, who, body, res) {
     .eq('assignment_id', assignmentId)
     .eq('lws_id', lwsId)
   if (mErr) { console.error('[student-homework] submissions read failed:', mErr.message); return fail(res, 500, 'Could not load homework') }
-  const allowed = canStartSubmission({ id: a.id, status: a.status, dueAt: a.due_at }, mine ?? [])
+  // A replacement is asked for explicitly and only used when there is a hand-in
+  // to replace; a first hand-in goes the ordinary way.
+  const asAssignment = { id: a.id, status: a.status, dueAt: a.due_at }
+  const fresh = canStartSubmission(asAssignment, mine ?? [])
+  const replacing = !fresh.ok && replace
+  const allowed = replacing ? canReplaceSubmission(asAssignment, mine ?? []) : fresh
   if (!allowed.ok) return fail(res, 409, allowed.error)
 
+  // p_replace is sent only on a replacement, so a first hand-in works against
+  // the database functions as they were before the replace migration.
   const { error: rpcErr } = await supabase.rpc('homework_submission_start', {
     p_id: submissionId, p_assignment: assignmentId, p_lws_id: lwsId, p_files: plan.paths,
+    ...(replacing ? { p_replace: true } : {}),
   })
   if (rpcErr) return rpcFailure(res, rpcErr, 'start')
 

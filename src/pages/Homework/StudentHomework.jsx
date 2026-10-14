@@ -3,6 +3,7 @@ import { Card, Badge, Alert, Spinner } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import { ACCEPT, CAMERA_ACCEPT, SUBMISSIONS_BUCKET, validateUploadFiles } from '../../lib/assignments/upload'
 import { fmtDeadline } from '../../lib/assignments/editor'
+import { MAX_REPLACEMENTS } from '../../lib/assignments/status'
 import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../../lib/assignments/studentUpload'
 
 // The student portal's homework (2026-10-12): see what is set, open the
@@ -74,6 +75,7 @@ function statusBadge(hw) {
 
 function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
   const [showMarks, setShowMarks] = useState(false)
+  const [replacing, setReplacing] = useState(false)
   const sub = hw.submission
 
   return (
@@ -107,6 +109,15 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
         </p>
       )}
 
+      {sub?.status === 'submitted' && hw.canReplace && !replacing && (
+        <div>
+          <button className="btn btn-secondary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                  onClick={() => setReplacing(true)}>
+            Replace my submission
+          </button>
+        </div>
+      )}
+
       {sub?.status === 'graded' && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
@@ -125,6 +136,11 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
       )}
 
       {hw.canSubmit && <HandIn hw={hw} mobile={mobile} lwsId={lwsId} onHandedIn={onHandedIn} />}
+      {!hw.canSubmit && hw.canReplace && replacing && (
+        <HandIn hw={hw} mobile={mobile} lwsId={lwsId} replacing={{ pages: sub?.pages ?? 0, left: hw.replacementsLeft }}
+                onCancel={() => setReplacing(false)}
+                onHandedIn={() => { setReplacing(false); onHandedIn() }} />
+      )}
     </Card>
   )
 }
@@ -161,7 +177,9 @@ function GradeDetail({ sub }) {
   )
 }
 
-function HandIn({ hw, mobile, lwsId, onHandedIn }) {
+// `replacing` ({ pages, left }) when the student is replacing a hand-in that is
+// waiting to be graded (2026-10-14): the new set replaces everything sent before.
+function HandIn({ hw, mobile, lwsId, onHandedIn, replacing = null, onCancel }) {
   const [pages, setPages] = useState([])
   const [pickError, setPickError] = useState('')
   const [sendError, setSendError] = useState('')
@@ -182,10 +200,12 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
   async function send() {
     if (needsSinglePageConfirm(pages) &&
         !window.confirm("You're handing in only 1 page. You can't add more after this. Submit it?")) return
+    if (replacing && !window.confirm(
+      `This replaces the ${replacing.pages} page${replacing.pages === 1 ? '' : 's'} you sent earlier. Only the new pages will be marked. Replace?`)) return
     setSendError('')
     setProgress({ done: 0, total: pages.length })
     const r = await sendHomework({
-      mobile, lwsId, assignmentId: hw.id, files: pages, post, upload,
+      mobile, lwsId, assignmentId: hw.id, files: pages, replace: Boolean(replacing), post, upload,
       onProgress: (done, total) => setProgress({ done, total }),
     })
     setProgress(null)
@@ -200,7 +220,7 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
 
   return (
     <div className="flex flex-col gap-2 pt-2 border-t border-border">
-      <div className="text-[12px] font-semibold text-ink-2">Submit your work</div>
+      <div className="text-[12px] font-semibold text-ink-2">{replacing ? 'Replace your submission' : 'Submit your work'}</div>
       <div className="flex flex-wrap gap-2">
         {/* Once a page is in, "Take photo page N" is the step students skipped (they
             took Submit for "send this page"), so it is drawn to stand out. */}
@@ -248,9 +268,23 @@ function HandIn({ hw, mobile, lwsId, onHandedIn }) {
         </div>
       )}
       {sendError && <Alert type="error">{sendError}</Alert>}
-      <p className="text-[11px] text-ink-3">
-        Photograph each page in good light, in order. You can submit once, before the deadline.
-      </p>
+      {replacing ? (
+        <p className="text-[11px] text-ink-3">
+          Add every page again — the new set replaces everything you sent before. This is
+          replacement {MAX_REPLACEMENTS - replacing.left + 1} of {MAX_REPLACEMENTS}; once it is graded it can't be changed.
+        </p>
+      ) : (
+        <p className="text-[11px] text-ink-3">
+          Photograph each page in good light, in order. Submit sends all the pages above together — you
+          can't add a page afterwards.
+        </p>
+      )}
+      {replacing && !busy && (
+        <div>
+          <button className="text-[12px] font-semibold text-ink-3 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                  onClick={onCancel}>Cancel</button>
+        </div>
+      )}
     </div>
   )
 }

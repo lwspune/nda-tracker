@@ -20,7 +20,7 @@ const HOMEWORK = [
     dueAt: later, maxMarks: 10, state: 'open', canSubmit: true, questionFiles: [],
     submission: { id: 's0', status: 'rejected', pages: 1, rejectedReason: 'Photos too blurry — please retake.', grades: [] } },
   { id: 'wait1', title: 'Trig identities', subject: 'Maths', instructions: '', dueAt: later, maxMarks: 10,
-    state: 'open', canSubmit: false, questionFiles: [],
+    state: 'open', canSubmit: false, canReplace: true, replacementsLeft: 2, questionFiles: [],
     submission: { id: 's1', status: 'submitted', pages: 3, submittedAt: earlier, grades: [] } },
   { id: 'graded1', title: 'Matrices', subject: 'Maths', instructions: '', dueAt: earlier, maxMarks: 10,
     state: 'closed', canSubmit: false, questionFiles: [],
@@ -139,6 +139,55 @@ describe('StudentHomework', () => {
     expect(await within(c).findByText('The deadline for this homework has passed.')).toBeInTheDocument()
   })
 
+  // 2026-10-14: a hand-in waiting to be graded can be replaced before the
+  // deadline; once marked it is final.
+  describe('replacing a hand-in that has not been marked', () => {
+    const photo = name => new File(['a'], name, { type: 'image/jpeg' })
+    const okHandlers = () => ({
+      'homework-start': b => ({ status: 200, json: { submissionId: 'r', uploads: b.files.map((_, i) => ({ path: `wait1/L1/r/0${i + 1}.jpg`, token: `t${i}` })) } }),
+      'homework-submit': () => ({ status: 200, json: { ok: true } }),
+    })
+    afterEach(() => vi.restoreAllMocks())
+
+    it('offers Replace on a waiting hand-in and not on a marked one', async () => {
+      mockFetch()
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Trig identities'))
+      expect(within(c).queryByLabelText(/choose photos or pdf/i)).not.toBeInTheDocument()
+      fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
+      expect(within(c).getByLabelText(/choose photos or pdf/i)).toBeInTheDocument()
+      expect(within(c).getByText(/replaces everything you sent before/i)).toBeInTheDocument()
+      expect(within(c).getByText(/this is replacement 1 of 2/i)).toBeInTheDocument()
+      expect(within(card('Matrices')).queryByRole('button', { name: /replace/i })).not.toBeInTheDocument()
+    })
+
+    it('replaces after the student confirms, asking the server to replace', async () => {
+      const calls = mockFetch(okHandlers())
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Trig identities'))
+      fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
+      fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [photo('n1.jpg'), photo('n2.jpg')] } })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
+      expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/replaces the 3 pages you sent earlier/i))
+      await waitFor(() => expect(calls.map(b => b.kind)).toEqual(['homework-list', 'homework-start', 'homework-submit', 'homework-list']))
+      expect(calls[1]).toMatchObject({ assignmentId: 'wait1', replace: true })
+    })
+
+    it('sends nothing when the student says no, and Cancel closes the panel', async () => {
+      const calls = mockFetch(okHandlers())
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Trig identities'))
+      fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
+      fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [photo('n1.jpg'), photo('n2.jpg')] } })
+      fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
+      expect(calls.map(b => b.kind)).toEqual(['homework-list'])
+      fireEvent.click(within(c).getByRole('button', { name: /cancel/i }))
+      expect(within(c).queryByLabelText(/choose photos or pdf/i)).not.toBeInTheDocument()
+    })
+  })
+
   // 2026-10-13: students read "Submit 1 page" as "upload this page" and handed
   // in one photo of five, then could not add the rest.
   describe('handing in is final, and the screen says so', () => {
@@ -157,7 +206,7 @@ describe('StudentHomework', () => {
       fireEvent.change(within(c).getByLabelText(/take a photo/i), { target: { files: [photo('p1.jpg')] } })
       expect(await within(c).findByLabelText(/take photo page 2/i)).toBeInTheDocument()
       expect(within(c).getByText(/submit your work/i)).toBeInTheDocument()
-      expect(within(c).getByText(/you can submit once/i)).toBeInTheDocument()
+      expect(within(c).getByText(/can.t add a page afterwards/i)).toBeInTheDocument()
       fireEvent.change(within(c).getByLabelText(/take photo page 2/i), { target: { files: [photo('p2.jpg')] } })
       expect(await within(c).findByLabelText(/take photo page 3/i)).toBeInTheDocument()
     })

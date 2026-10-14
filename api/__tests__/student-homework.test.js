@@ -166,6 +166,42 @@ describe('kind: homework-start', () => {
     expect((await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files })).status).toBe(409)
   })
 
+  // 2026-10-14: a hand-in not yet marked can be replaced, but only when asked
+  // for — a double tap on Submit must never quietly replace anything.
+  it('replaces a hand-in waiting to be graded only when asked to', async () => {
+    const waiting = [{ id: 's', assignment_id: 'a1', status: 'submitted', files: ['x'] }]
+    client = makeClient({ submissions: waiting })
+    expect((await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files })).status).toBe(409)
+    expect(client.log.some(l => l[0] === 'rpc')).toBe(false)
+
+    client = makeClient({ submissions: waiting })
+    const r = await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files, replace: true })
+    expect(r.status).toBe(200)
+    expect(client.log.find(l => l[0] === 'rpc')[2]).toMatchObject({ p_replace: true })
+  })
+
+  // A first hand-in sends no p_replace, so this code works against the database
+  // functions as they were before the replace migration.
+  it('sends no replace flag on a first hand-in', async () => {
+    await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files, replace: true })
+    expect(client.log.find(l => l[0] === 'rpc')[2]).not.toHaveProperty('p_replace')
+  })
+
+  it('refuses to replace a graded hand-in, or a third time', async () => {
+    client = makeClient({ submissions: [{ id: 's', assignment_id: 'a1', status: 'graded', files: ['x'] }] })
+    let r = await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files, replace: true })
+    expect(r).toMatchObject({ status: 409, body: { error: expect.stringMatching(/already been marked/) } })
+
+    client = makeClient({ submissions: [
+      { id: 'r1', assignment_id: 'a1', status: 'replaced', files: ['x'] },
+      { id: 'r2', assignment_id: 'a1', status: 'replaced', files: ['x'] },
+      { id: 's', assignment_id: 'a1', status: 'submitted', files: ['x'] },
+    ] })
+    r = await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files, replace: true })
+    expect(r).toMatchObject({ status: 409, body: { error: expect.stringMatching(/twice/) } })
+    expect(client.log.some(l => l[0] === 'rpc')).toBe(false)
+  })
+
   it('reports the database\'s refusal as a 409, not a crash', async () => {
     client = makeClient({ rpcError: { message: 'homework a1: the deadline has passed' } })
     const r = await call({ kind: 'homework-start', ...who, assignmentId: 'a1', files })
@@ -198,6 +234,20 @@ describe('kind: homework-submit', () => {
     const r = await call({ kind: 'homework-submit', ...who, submissionId: 's1' })
     expect(r.status).toBe(404)
     expect(client.log).toContainEqual(['homework_submissions', 'eq', 'lws_id', 'L1'])
+  })
+
+  // The grader can mark the old hand-in while the replacement is uploading;
+  // the database then refuses the swap, and the student is told plainly.
+  it('reports a hand-in marked mid-replacement, or a replacement over the limit, as a 409', async () => {
+    for (const [message, said] of [
+      ['submission s1: the hand-in it replaces has already been marked', /already been marked/],
+      ['submission s1: no replacements left', /twice/],
+    ]) {
+      client = makeClient({ submissions: [upload], stored: ['01.jpg', '02.jpg'], rpcError: { message } })
+      const r = await call({ kind: 'homework-submit', ...who, submissionId: 's1' })
+      expect(r.status, message).toBe(409)
+      expect(r.body.error, message).toMatch(said)
+    }
   })
 
   it('reports a deadline that passed mid-upload as a 409', async () => {

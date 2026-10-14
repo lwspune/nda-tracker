@@ -6,7 +6,9 @@
 // What leaves the server is decided HERE: never the answer key (not even its
 // name), never who set the homework, never another student's work.
 import { isQuestionFilePath, submissionFilePath, validateUploadFiles } from './upload.js'
-import { assignmentState, canStartSubmission, liveSubmission } from './status.js'
+import {
+  assignmentState, canStartSubmission, canReplaceSubmission, liveSubmission, replacementsUsed, MAX_REPLACEMENTS,
+} from './status.js'
 import { isBlockedStatus } from '../accountStatus.js'
 
 // A closed homework the student never handed in stays visible this long, as
@@ -39,7 +41,8 @@ const num = v => (v === null || v === undefined ? null : Number(v))
 const asAssignment = r => ({ id: r.id, status: r.status, dueAt: r.due_at })
 
 // The latest submission that matters to the student: the live one, else the
-// latest rejection (so they can see why). Unfinished uploads never show.
+// latest rejection (so they can see why). Unfinished uploads and replaced
+// hand-ins never show.
 function pickSubmission(rows) {
   const visible = rows.filter(s => s.status !== 'uploading')
   const live = liveSubmission(visible)
@@ -112,6 +115,10 @@ export function studentHomeworkList({ assignments, submissions, batches, urls, n
       maxMarks: num(r.max_marks),
       state,
       canSubmit: canStartSubmission(asAssignment(r), rows, now).ok,
+      // Held and waiting give the same answer here (canReplaceSubmission), so
+      // neither field can give a hold away.
+      canReplace: canReplaceSubmission(asAssignment(r), rows, now).ok,
+      replacementsLeft: Math.max(0, MAX_REPLACEMENTS - replacementsUsed(rows)),
       questionFiles: (r.question_files ?? [])
         .filter(f => isQuestionFilePath(r.id, f.path) && urls?.[f.path])
         .map(f => ({ name: f.name || 'Question paper', type: f.type ?? null, url: urls[f.path] })),

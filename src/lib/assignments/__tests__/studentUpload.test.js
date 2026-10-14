@@ -41,6 +41,16 @@ describe('sendHomework', () => {
   })
 
   // Only the file's type and size go in the start request — never the bytes.
+  // 2026-10-14: replacing is asked for explicitly, and only then.
+  it('asks to replace only when told to', async () => {
+    const plain = fakes()
+    await sendHomework({ ...args(), post: plain.post, upload: plain.upload })
+    expect(plain.calls[0][2]).not.toHaveProperty('replace')
+    const again = fakes()
+    await sendHomework({ ...args({ replace: true }), post: again.post, upload: again.upload })
+    expect(again.calls[0][2]).toMatchObject({ kind: 'homework-start', replace: true })
+  })
+
   it('sends no file contents to the API', async () => {
     const f = fakes()
     await sendHomework({ ...args(), post: f.post, upload: f.upload })

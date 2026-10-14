@@ -31,6 +31,11 @@ async function main() {
     .single()
   if (error) throw new Error(`submission ${id}: ${error.message}`)
   const a = s.homework_assignments
+  // The student swapped it for a newer hand-in before it was marked; the new
+  // one is a different submission, waiting in the queue.
+  if (s.status === 'replaced') {
+    throw new Error(`${id} was replaced by the student with a newer hand-in, so it is not marked. Delete grading-inbox/${id}/ and run npm run grading:pull for the new one.`)
+  }
 
   if (reject !== undefined) {
     if (reject.length < 10) throw new Error('--reject needs a reason the student can act on (10+ characters).')

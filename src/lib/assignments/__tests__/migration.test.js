@@ -6,7 +6,7 @@ import {
 } from '../upload'
 import { OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, MAX_SUMMARY_CHARS } from '../grade'
 import { HAND_CHECKS, MAX_HAND_NOTE_CHARS } from '../handwriting'
-import { SUBMISSION_STATUSES } from '../status'
+import { SUBMISSION_STATUSES, MAX_REPLACEMENTS } from '../status'
 
 // The database repeats the rules the JS checks, and is the actual boundary.
 // These tests keep the two copies from drifting apart.
@@ -125,8 +125,9 @@ describe('handwriting-check migration', () => {
     expect(handFiles[0] > file).toBe(true)
   })
 
-  it('allows exactly the JS submission statuses and handwriting checks', () => {
-    expect(hand).toContain(`status IN (${list(SUBMISSION_STATUSES)})`)
+  it('allows the submission statuses of its day, and exactly the JS handwriting checks', () => {
+    // `replaced` came later (the replace migration below re-states the list).
+    expect(hand).toContain(`status IN (${list(['uploading', 'submitted', 'held', 'graded', 'rejected'])})`)
     expect(hand).toContain(`hand_check IN (${list(HAND_CHECKS)})`)
     expect(hand).toContain(`BETWEEN 1 AND ${MAX_HAND_NOTE_CHARS}`)
   })
@@ -175,5 +176,68 @@ describe('handwriting-check migration', () => {
     const fns = hand.match(/CREATE OR REPLACE FUNCTION/g) ?? []
     expect(fns.length).toBeGreaterThan(0)
     expect((hand.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
+  })
+})
+
+// 2026-10-14: a student may replace a hand-in that has not been marked, before
+// the deadline, at most MAX_REPLACEMENTS times. The newest is the one marked.
+describe('replace-submission migration', () => {
+  const repFile = readdirSync(dir).find(f => f.endsWith('_homework_replace_submission.sql'))
+  const rep = repFile ? readFileSync(join(dir, repFile), 'utf8').replace(/\s+/g, ' ') : ''
+  const list = xs => xs.map(x => `'${x}'`).join(', ')
+
+  it('exists and sorts after the handwriting check', () => {
+    expect(repFile).toBeTruthy()
+    const lastHand = readdirSync(dir).filter(f => /_homework_handwriting_check_\d_\w+\.sql$/.test(f)).sort().pop()
+    expect(repFile > lastHand).toBe(true)
+  })
+
+  it('allows exactly the JS submission statuses', () => {
+    expect(rep).toContain(`status IN (${list(SUBMISSION_STATUSES)})`)
+  })
+
+  // The state check is the boundary: a replaced row was a real hand-in, and
+  // only a replaced row carries replaced_at.
+  it('defines replaced as a sent hand-in with a replacement time', () => {
+    expect(rep).toContain('DROP CONSTRAINT homework_submissions_state')
+    expect(rep).toMatch(/status = 'replaced' AND submitted_at IS NOT NULL AND replaced_at IS NOT NULL AND rejected_reason IS NULL/)
+    expect(rep).toMatch(/\(status = 'replaced'\) = \(replaced_at IS NOT NULL\)/)
+  })
+
+  // One live hand-in and at most one upload in progress, side by side: the
+  // replacement uploads while the old one still counts.
+  it('keeps one live hand-in per student, beside at most one upload', () => {
+    expect(rep).toContain('DROP INDEX public.homework_submissions_one_per_student')
+    expect(rep).toMatch(/CREATE UNIQUE INDEX homework_submissions_one_per_student ON public\.homework_submissions \(assignment_id, lws_id\) WHERE status IN \('submitted', 'held', 'graded'\)/)
+    expect(rep).toMatch(/CREATE UNIQUE INDEX homework_submissions_one_upload ON public\.homework_submissions \(assignment_id, lws_id\) WHERE status = 'uploading'/)
+  })
+
+  it('replaces the start function rather than leaving the old one callable', () => {
+    expect(rep).toContain('DROP FUNCTION public.homework_submission_start(uuid, uuid, text, jsonb)')
+    expect(rep).toMatch(/CREATE OR REPLACE FUNCTION public\.homework_submission_start\( p_id uuid, p_assignment uuid, p_lws_id text, p_files jsonb, p_replace boolean DEFAULT false \)/)
+  })
+
+  it('never replaces a marked hand-in, and caps replacements at the JS limit', () => {
+    expect(rep).toMatch(/has already been marked/)
+    expect((rep.match(new RegExp(`>= ${MAX_REPLACEMENTS} THEN RAISE EXCEPTION '[^']*no replacements left`, 'g')) ?? []).length).toBe(2)
+  })
+
+  // The swap happens when the new pages are sent, in one transaction: a
+  // student who gives up half way still has their first hand-in.
+  it('retires the old hand-in in the submit function, not at start', () => {
+    const submit = rep.slice(rep.indexOf('FUNCTION public.homework_submission_submit'))
+    expect(submit).toMatch(/SET status = 'replaced', replaced_at = now\(\)/)
+    const start = rep.slice(rep.indexOf('FUNCTION public.homework_submission_start'), rep.indexOf('FUNCTION public.homework_submission_submit'))
+    expect(start).not.toMatch(/status = 'replaced', replaced_at/)
+  })
+
+  it('lets only the service role run both functions, with search_path pinned', () => {
+    for (const fn of ['homework_submission_start', 'homework_submission_submit']) {
+      expect(rep).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${fn}\\([^)]*\\) FROM PUBLIC, anon, authenticated`))
+      expect(rep).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${fn}\\([^)]*\\) TO service_role`))
+    }
+    const fns = rep.match(/CREATE OR REPLACE FUNCTION/g) ?? []
+    expect(fns.length).toBe(2)
+    expect((rep.match(/SET search_path = ''/g) ?? []).length).toBe(2)
   })
 })

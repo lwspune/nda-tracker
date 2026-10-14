@@ -17,8 +17,14 @@ export function assignmentState(assignment, now = new Date()) {
 // Every state a submission can be in; the database allows exactly these.
 // `held` (2026-10-13) is a saved grade kept from the student until faculty
 // release it — the handwriting did not match the student's reference.
-export const SUBMISSION_STATUSES = ['uploading', 'submitted', 'held', 'graded', 'rejected']
+// `replaced` (2026-10-14) is a hand-in the student swapped for a newer one
+// before it was marked; it is kept, never marked, and never counts as live.
+export const SUBMISSION_STATUSES = ['uploading', 'submitted', 'held', 'graded', 'rejected', 'replaced']
 const LIVE = new Set(['submitted', 'held', 'graded'])
+
+// A student may replace a hand-in this many times (so three hand-ins in all).
+// Rejections by the grader do not count. The database holds the same number.
+export const MAX_REPLACEMENTS = 2
 
 // The submission that counts: submitted, held or graded. An abandoned upload and
 // a rejected sheet do not — the student may try again while the assignment is open.
@@ -33,6 +39,25 @@ export function canStartSubmission(assignment, submissions, now = new Date()) {
   if (state === 'closed') return { ok: false, error: 'The deadline for this homework has passed.' }
   if (liveSubmission(submissions)) return { ok: false, error: 'You have already submitted this homework.' }
   return { ok: true }
+}
+
+// May this student replace their hand-in now? Only while open, only one not yet
+// marked, and at most MAX_REPLACEMENTS times. A held grade is replaceable exactly
+// like a waiting one: the student is shown it as waiting, so a missing Replace
+// would tell them their handwriting was questioned.
+export function canReplaceSubmission(assignment, submissions, now = new Date()) {
+  const state = assignmentState(assignment, now)
+  if (state === 'draft') return { ok: false, error: 'This homework is not open yet.' }
+  if (state === 'closed') return { ok: false, error: 'The deadline for this homework has passed.' }
+  const live = liveSubmission(submissions)
+  if (!live) return { ok: false, error: 'There is no hand-in to replace.' }
+  if (live.status === 'graded') return { ok: false, error: "This homework has already been marked, so it can't be replaced." }
+  if (replacementsUsed(submissions) >= MAX_REPLACEMENTS) return { ok: false, error: "You've already replaced this homework twice." }
+  return { ok: true }
+}
+
+export function replacementsUsed(submissions) {
+  return (submissions ?? []).filter(s => s?.status === 'replaced').length
 }
 
 // One row per student for the teacher's view: every current member, plus

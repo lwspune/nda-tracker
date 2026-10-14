@@ -7,10 +7,14 @@
 // `post(body)` → { ok, status, body } and `upload(path, token, file)` →
 // { error } are injected so this stays testable; the portal passes fetch and
 // supabase.storage.uploadToSignedUrl.
-export async function sendHomework({ mobile, lwsId, assignmentId, files, post, upload, onProgress = () => {} }) {
+//
+// `replace` (2026-10-14) asks to replace a hand-in not yet marked; it is sent
+// only when true, so a plain hand-in can never replace anything.
+export async function sendHomework({ mobile, lwsId, assignmentId, files, replace = false, post, upload, onProgress = () => {} }) {
   const start = await post({
     kind: 'homework-start', mobile, lwsId, assignmentId,
     files: files.map(f => ({ type: f.type, size: f.size })),
+    ...(replace ? { replace: true } : {}),
   })
   if (!start.ok) return { ok: false, error: start.body?.error || 'Could not start the upload.' }
 

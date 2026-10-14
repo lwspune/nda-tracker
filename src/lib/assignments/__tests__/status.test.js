@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  assignmentState, canStartSubmission, liveSubmission, submissionRoster, validateAssignmentForPublish,
+  assignmentState, canStartSubmission, canReplaceSubmission, liveSubmission, submissionRoster,
+  validateAssignmentForPublish, MAX_REPLACEMENTS, SUBMISSION_STATUSES,
 } from '../status'
 
 const NOW = new Date('2026-10-12T10:00:00Z')
@@ -66,6 +67,49 @@ describe('canStartSubmission', () => {
   })
 })
 
+// 2026-10-14: a student may replace a hand-in that has not been marked yet,
+// before the deadline, at most MAX_REPLACEMENTS times. The newest is marked.
+describe('canReplaceSubmission', () => {
+  it('knows the replaced status and allows two replacements (three hand-ins)', () => {
+    expect(SUBMISSION_STATUSES).toContain('replaced')
+    expect(MAX_REPLACEMENTS).toBe(2)
+  })
+
+  it('allows replacing a hand-in waiting to be graded, while open', () => {
+    expect(canReplaceSubmission(published(), [{ status: 'submitted' }], NOW)).toEqual({ ok: true })
+  })
+
+  // A held grade looks exactly like "waiting to be graded" to the student, so
+  // it must offer the same Replace — a missing button would say "suspected".
+  it('treats a held grade exactly like one waiting to be graded', () => {
+    expect(canReplaceSubmission(published(), [{ status: 'held' }], NOW)).toEqual({ ok: true })
+  })
+
+  it('refuses once graded — a marked hand-in is final', () => {
+    expect(canReplaceSubmission(published(), [{ status: 'graded' }], NOW))
+      .toEqual({ ok: false, error: "This homework has already been marked, so it can't be replaced." })
+  })
+
+  it('refuses after the deadline and when there is nothing to replace', () => {
+    expect(canReplaceSubmission(published({ dueAt: EARLIER }), [{ status: 'submitted' }], NOW)).toMatchObject({ ok: false })
+    expect(canReplaceSubmission(published(), [], NOW)).toMatchObject({ ok: false })
+    expect(canReplaceSubmission(published(), [{ status: 'rejected' }], NOW)).toMatchObject({ ok: false })
+  })
+
+  it('refuses a third replacement; rejections do not count towards the limit', () => {
+    const twice = [{ status: 'replaced' }, { status: 'replaced' }, { status: 'submitted' }]
+    expect(canReplaceSubmission(published(), twice, NOW))
+      .toEqual({ ok: false, error: "You've already replaced this homework twice." })
+    const once = [{ status: 'rejected' }, { status: 'rejected' }, { status: 'replaced' }, { status: 'submitted' }]
+    expect(canReplaceSubmission(published(), once, NOW)).toEqual({ ok: true })
+  })
+
+  it('never counts a replaced hand-in as live', () => {
+    expect(liveSubmission([{ status: 'replaced' }])).toBeNull()
+    expect(canStartSubmission(published(), [{ status: 'replaced' }, { status: 'submitted' }], NOW)).toMatchObject({ ok: false })
+  })
+})
+
 describe('submissionRoster', () => {
   const members = [
     { lwsId: 'L1', name: 'Aarav' },
@@ -88,6 +132,14 @@ describe('submissionRoster', () => {
   it('prefers a live submission over an earlier rejected one', () => {
     const rows = submissionRoster([members[0]], [
       { id: 'old', lwsId: 'L1', status: 'rejected' },
+      { id: 'new', lwsId: 'L1', status: 'submitted' },
+    ])
+    expect(rows[0]).toMatchObject({ status: 'submitted', submission: { id: 'new' } })
+  })
+
+  it('shows the newest hand-in, never the one it replaced', () => {
+    const rows = submissionRoster([members[0]], [
+      { id: 'old', lwsId: 'L1', status: 'replaced' },
       { id: 'new', lwsId: 'L1', status: 'submitted' },
     ])
     expect(rows[0]).toMatchObject({ status: 'submitted', submission: { id: 'new' } })

@@ -1,6 +1,7 @@
 // npm run grading:purge — delete students' pages 30 days after grading. The
-// grade stays. Also clears uploads abandoned for 2+ days (started, never sent)
-// and the local grading-inbox/<id>/ copy of every purged submission.
+// grade stays. Also the pages of a hand-in the student replaced (30 days after
+// it was replaced), uploads abandoned for 2+ days (started, never sent) and the
+// local grading-inbox/<id>/ copy of every purged submission.
 //
 // NEVER a handwriting reference (homework_hand_references): it is kept until
 // faculty delete it by hand. A held grade is never purged either (it is not
@@ -41,10 +42,18 @@ async function main() {
     .lt('graded_at', keepCutoff)
     .limit(1000)
   if (error) throw new Error(error.message)
+  const { data: replaced, error: repErr } = await db
+    .from('homework_submissions')
+    .select('id, files')
+    .eq('status', 'replaced')
+    .is('scans_deleted_at', null)
+    .lt('replaced_at', keepCutoff)
+    .limit(1000)
+  if (repErr) throw new Error(repErr.message)
   // Fail closed: without the reference list, purge nothing.
   const { data: refs, error: refErr } = await db.from('homework_hand_references').select('submission_id')
   if (refErr) throw new Error(`references: ${refErr.message}`)
-  const done = withoutReferences(past, refs.map(r => r.submission_id))
+  const done = withoutReferences([...past, ...replaced], refs.map(r => r.submission_id))
   const { data: abandoned, error: abErr } = await db
     .from('homework_submissions')
     .select('id, files')
@@ -53,7 +62,7 @@ async function main() {
     .limit(1000)
   if (abErr) throw new Error(abErr.message)
 
-  console.log(`${done.length} graded submission(s) past ${KEEP_DAYS} days (${past.length - done.length} kept as handwriting references); ${abandoned.length} abandoned upload(s).`)
+  console.log(`${done.length} graded or replaced submission(s) past ${KEEP_DAYS} days (${past.length + replaced.length - done.length} kept as handwriting references); ${abandoned.length} abandoned upload(s).`)
   if (!apply) { console.log('Dry run. Add -- --apply to delete.'); return }
 
   for (const s of done) {

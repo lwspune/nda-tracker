@@ -146,10 +146,35 @@ describe('studentHomeworkList', () => {
     })
     expect(held).toEqual(waiting)
     expect(held.canSubmit).toBe(false)
+    // Same Replace as a waiting one: a missing button would give the hold away.
+    expect(held).toMatchObject({ canReplace: true, replacementsLeft: 2 })
+  })
+
+  // 2026-10-14: replacing a hand-in that has not been marked yet.
+  it('offers Replace on a hand-in waiting to be graded, with how many are left', () => {
+    const [hw] = studentHomeworkList({
+      assignments: [row()], batches: ['12th_A'], urls, now: NOW,
+      submissions: [
+        { id: 'old', assignment_id: 'a1', status: 'replaced', files: ['a', 'b'], created_at: iso(1), submitted_at: iso(1), homework_grades: [] },
+        { id: 'new', assignment_id: 'a1', status: 'submitted', files: ['c', 'd', 'e'], created_at: iso(2), submitted_at: iso(2), homework_grades: [] },
+      ],
+    })
+    expect(hw).toMatchObject({ canSubmit: false, canReplace: true, replacementsLeft: 1 })
+    // The newest hand-in is the one shown; the replaced one never is.
+    expect(hw.submission).toMatchObject({ id: 'new', status: 'submitted', pages: 3 })
+  })
+
+  it('offers no Replace once graded, after the deadline, or before a hand-in', () => {
+    const sub = status => ({ id: 's1', assignment_id: 'a1', status, files: ['x'], created_at: iso(1), submitted_at: iso(1),
+      graded_at: iso(2), grader: 'session', total_awarded: '7', total_max: '10', went_well: 'G', next_steps: 'N', homework_grades: [] })
+    const list = (over, submissions) => studentHomeworkList({ assignments: [row(over)], batches: ['12th_A'], urls, now: NOW, submissions })[0]
+    expect(list({}, [sub('graded')]).canReplace).toBe(false)
+    expect(list({ due_at: iso(NOW.getTime() - 60e3) }, [{ ...sub('submitted'), graded_at: null }]).canReplace).toBe(false)
+    expect(list({}, []).canReplace).toBe(false)
   })
 
   it('never sends a student any handwriting field, whatever the status', () => {
-    for (const status of ['submitted', 'held', 'graded', 'rejected']) {
+    for (const status of ['submitted', 'held', 'graded', 'rejected', 'replaced']) {
       const [hw] = studentHomeworkList({
         assignments: [row()], batches: ['12th_A'], urls, now: NOW,
         submissions: [{
