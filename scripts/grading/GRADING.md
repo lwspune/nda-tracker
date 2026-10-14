@@ -35,9 +35,11 @@ same way as the 5th.
 5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
    note it in the ledger if the key was wrong. **No key?** Look the question up
-   in PYQ Vault: `npm run grading:vault -- "phrase from the question" ["another"]`
+   in PYQ Vault: `node scripts/grading/vault.js "phrase from the question"`
    prints matching board questions with their stored solutions (plain words work
-   best; maths is stored as LaTeX). Treat a vault solution like a teacher's key:
+   best; maths is stored as LaTeX). Run one phrase per call: through `npm run`
+   on this machine the quoted phrases were joined into one search that matched
+   nothing. Treat a vault solution like a teacher's key:
    it shows the steps and conditions a board answer is expected to state, but it
    can be wrong, and any correct method still gets full marks.
 6. Fill `grade.json`.
@@ -133,27 +135,39 @@ out yourself — without a paper there is often no key either.
    question: method and working 1 · condition or check 0.5 · final answer 0.5.
    Any other maximum: keep these proportions, in halves.
 3. **A correct answer with no working**, on a question worth 2+ marks, gets the
-   final-answer share only (1 of 5, 0.5 of 2), unless the question asks only for
-   a value.
+   final-answer share only (1 of 5, 0.5 of 2). This includes MCQs and questions
+   that ask only for a value (rule 6).
 4. **Any correct method gets full marks**, even if it differs from the key.
 5. **Carry-forward:** a later step done correctly on an earlier wrong value gets
    its marks; the wrong step loses its own.
-6. **MCQ:** the option letter or its text is enough. Two options marked, or a
-   letter contradicting the text written: 0.
+6. **MCQ:** a 1-mark MCQ is right or wrong; the option letter or its text is
+   enough. An MCQ worth 2+ marks is marked as a calculation (rule 2): the letter
+   or value alone earns the final-answer share only (rule 3). Two options marked,
+   or a letter contradicting the text written: 0.
 7. **Question numbers:** match an answer to its question by content when the
-   student numbered it wrongly. This costs no marks, so say so in `nextSteps`,
-   never in `missing`: the portal prints `missing` as a red ✗, and the checker
-   refuses it on a full-marks question.
+   student numbered it wrongly. Numbering that differs from the paper costs 0.5,
+   **once per homework**, taken from the first renumbered question that has
+   marks to lose; say which numbers were swapped in that row's `missing`.
 8. **A page that cannot be read:** mark what can be read; for questions on that
    page write "Page N could not be read" in `missing`. If a third or more is
    unreadable, reject instead (see below).
-9. **Units and labels:** a final answer with missing or wrong units ("9 m" for
-   9 cm) loses 0.5 from the final-answer share. A wrong label in the working (the
-   area written f′(x) instead of f(x)) costs nothing; mention it in `nextSteps`.
+9. **Units, labels and slips:** a final answer with missing or wrong units
+   ("9 m" for 9 cm) loses 0.5 from the final-answer share. A wrong label or a
+   slip in the working (the area written f′(x) instead of f(x), dy/dx written for
+   dy/dt, 20/2 written for 20/9) loses 0.5 from the working share, **once per
+   question**, even when the final answer is right.
 10. **A condition left out costs the same as a condition written wrong.** The
     condition or check is its own share (rule 2); leaving it out, or getting it
     wrong ("dx/dt = 0", "δx = 0", dividing one vector by another), loses that
     share even when the algebra reaches the right result.
+11. **A calculation states the fact it rests on before using it** (ΣP = 1,
+    p + q = 1, E(X) = np, Var(X) = npq, m₁ + m₂ = −2h/b, F(x) = P(X ≤ x)). In a
+    calculation that fact is the condition share (rule 2): using it without
+    writing it ("np = 6" with no E(X) = np) loses that share as rule 10 does.
+    When a question rests on several facts, the share is split between them in
+    halves, as for a proof with two conditions.
+12. **The deductions in rules 7, 9 and 11 stack**, but a question never goes
+    below 0.
 
 ## Feedback style
 
@@ -188,6 +202,35 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-14: Stricter marking from Daily Homework #2 on (faculty decision): an
+  MCQ worth 2+ marks needs working (rule 6), a calculation must write the fact it
+  rests on (rule 11), slips in the working cost 0.5 (rule 9), and numbering that
+  differs from the paper costs 0.5 once (rule 7, superseding the 2026-10-13 entry
+  that kept renumbering free). Earlier homeworks keep their grades.
+- 2026-10-14: A question the class has not been taught yet is left out by setting
+  the homework's breakdown to the remaining questions and its total to match
+  (Daily Homework #2: Q1 dropped, 25 → 20). An answer to the dropped question is
+  not marked.
+
+- 2026-10-14: After changing a homework's marks, confirm the regrade in the
+  database (`homework_submissions.total_max` equals the new total for every
+  graded row), not by memory. The 5 × 2 → 5 × 5 change below was logged as done,
+  but six grades were still out of 10 a day later.
+- 2026-10-14: The same unusual slip in several hand-ins (the same wrong unit, the
+  same mislabelled step) in clearly different hands points to a shared source,
+  not to one writer. It is not a handwriting `mismatch`; mark the work as written.
+- 2026-10-13: Reject only when a whole question is missing. A question with only
+  its "hence" part missing is graded, and the hence part scores 0. A hence part
+  worked on different functions from the ones asked also scores 0: the asked
+  answer is not on the page.
+- 2026-10-13: When a proof has two conditions (e.g. the modulus for an acute angle
+  AND b ≠ 0 or a + b ≠ 0 for the slopes formula), each carries half of the
+  condition share. Writing the hypothesis only as a restated given, never used
+  as the reason for a step, does not earn it.
+- 2026-10-13: A shorter valid route earns full marks (rule 4). Proving
+  dy/dx = (dy/dt)/(dx/dt) by the chain rule and dividing by dx/dt ≠ 0 is
+  complete; δx → 0 as δt → 0 is needed only in the first-principles proof.
 
 - 2026-10-13: A PDF hand-in could not be opened at all (the reader needs poppler,
   which is not installed). `scripts/grading/pdf2png.py` renders it with PyMuPDF;
