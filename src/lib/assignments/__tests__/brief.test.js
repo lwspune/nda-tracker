@@ -69,6 +69,23 @@ describe('buildHomeworkBrief', () => {
     expect(t).toMatch(/becomes .*reference/i)
   })
 
+  // 2026-10-16: the grader reads the PREPARED pages (upright, PDFs split) and
+  // places marks off the grid copies; positions are percent of those pages.
+  it('points the grader at the prepared pages and the grid, and the preview step', () => {
+    const t = buildHomeworkBrief({
+      submission: submission(), assignment: assignment(),
+      files: {
+        questions: [], key: [], scans: ['scans/01.pdf'],
+        pages: ['pages/01.jpg', 'pages/02.jpg'], grid: ['grid/01.jpg', 'grid/02.jpg'],
+      },
+    })
+    expect(t).toMatch(/## The student's work \(2 pages, in order\)/)
+    expect(t).toMatch(/pages\/01\.jpg[\s\S]*pages\/02\.jpg/)
+    expect(t).toMatch(/grid\/01\.jpg[\s\S]*grid\/02\.jpg/)
+    expect(t).toMatch(/## Marks on the pages/)
+    expect(t).toMatch(/npm run grading:preview -- s1/)
+  })
+
   it('lists a teacher-set breakdown, which the grade must follow exactly', () => {
     const t = buildHomeworkBrief({
       submission: submission(),
@@ -97,6 +114,10 @@ describe('gradeTemplate', () => {
       { label: 'Q1', max: 12, outcome: '', awarded: null, earned: '', missing: '', cause: '', topic: '' },
       { label: 'Q2', max: 8, outcome: '', awarded: null, earned: '', missing: '', cause: '', topic: '' },
     ])
+  })
+
+  it('starts with an empty marks list, which the marks checker refuses for a scored question', () => {
+    expect(gradeTemplate('s1', assignment()).marks).toEqual([])
   })
 
   it('starts with an empty handwriting check to fill in', () => {
@@ -153,6 +174,31 @@ describe('savedGradeFile', () => {
     })
     expect(file.handwriting).toEqual({ check: '', note: '' })
     expect(validateGrade({ maxMarks: 20, file }).ok).toBe(false)
+  })
+
+  it('reloads the saved page marks in grade.json form, in order', () => {
+    const file = savedGradeFile({
+      ...submission({ status: 'graded', went_well: 'Good', next_steps: 'Revise', hand_check: 'match', hand_note: null }),
+      homework_grades: [{ position: 1, label: 'Q1', max_marks: '20', outcome: 'scored', awarded: '12', earned: 'e', missing: 'm', cause: 'careless', topic: null }],
+      homework_page_marks: [
+        { position: 2, page: 1, label: 'Q1', kind: 'note', x: '70', y: '40', w: null, h: null, text: 'Sign', to_x: '50', to_y: '41.5' },
+        { position: 3, page: 1, label: 'Q1', kind: 'circle', x: '50', y: '41', w: '8', h: '3', text: null, to_x: null, to_y: null },
+        { position: 1, page: 1, label: 'Q1', kind: 'score', x: '85', y: '20', w: null, h: null, text: null, to_x: null, to_y: null },
+      ],
+    })
+    expect(file.marks).toEqual([
+      { page: 1, label: 'Q1', kind: 'score', x: 85, y: 20 },
+      { page: 1, label: 'Q1', kind: 'note', x: 70, y: 40, text: 'Sign', to: { x: 50, y: 41.5 } },
+      { page: 1, label: 'Q1', kind: 'circle', x: 50, y: 41, w: 8, h: 3 },
+    ])
+  })
+
+  it('starts a regrade of a grade saved before page marks with an empty marks list', () => {
+    const file = savedGradeFile({
+      ...submission({ status: 'graded', went_well: 'Good', next_steps: 'Revise', hand_check: 'match' }),
+      homework_grades: [],
+    })
+    expect(file.marks).toEqual([])
   })
 
   it('is null for a submission that was never graded', () => {

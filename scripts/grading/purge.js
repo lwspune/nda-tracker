@@ -14,7 +14,7 @@
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { serviceClient, INBOX, fail } from './_client.js'
-import { SUBMISSIONS_BUCKET } from '../../src/lib/assignments/upload.js'
+import { SUBMISSIONS_BUCKET, markedPagePaths } from '../../src/lib/assignments/upload.js'
 import { withoutReferences } from '../../src/lib/assignments/handwriting.js'
 
 const KEEP_DAYS = 30
@@ -36,7 +36,7 @@ async function main() {
 
   const { data: past, error } = await db
     .from('homework_submissions')
-    .select('id, files')
+    .select('id, files, assignment_id, lws_id, marked_pages')
     .in('status', ['graded', 'rejected'])
     .is('scans_deleted_at', null)
     .lt('graded_at', keepCutoff)
@@ -44,7 +44,7 @@ async function main() {
   if (error) throw new Error(error.message)
   const { data: replaced, error: repErr } = await db
     .from('homework_submissions')
-    .select('id, files')
+    .select('id, files, assignment_id, lws_id, marked_pages')
     .eq('status', 'replaced')
     .is('scans_deleted_at', null)
     .lt('replaced_at', keepCutoff)
@@ -66,7 +66,9 @@ async function main() {
   if (!apply) { console.log('Dry run. Add -- --apply to delete.'); return }
 
   for (const s of done) {
-    const n = await removeFiles(db, s.files)
+    // The hand-in files and the marked pages go together (2026-10-16); the
+    // grade and its marks stay.
+    const n = await removeFiles(db, [...(s.files ?? []), ...markedPagePaths(s)])
     const { error: upErr } = await db.from('homework_submissions')
       .update({ scans_deleted_at: new Date().toISOString() }).eq('id', s.id)
     if (upErr) throw new Error(upErr.message)

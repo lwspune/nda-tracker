@@ -69,6 +69,21 @@ export function submissionFilePath(assignmentId, lwsId, submissionId, index, ext
   return `${assignmentId}/${lwsId}/${submissionId}/${pad(index)}.${ext}`
 }
 
+// The prepared pages the grader's marks are drawn against (2026-10-16):
+// upright, PDFs split into pages, written by scripts/grading/pages.py and
+// uploaded by grading:commit. `<assignment>/<lws_id>/<submission>/marked/01.jpg`.
+// Purged with the hand-in files 30 days after grading.
+export const MAX_MARKED_PAGES = 60
+
+export function markedPagePath(assignmentId, lwsId, submissionId, index) {
+  return `${assignmentId}/${lwsId}/${submissionId}/marked/${pad(index)}.jpg`
+}
+
+// Every marked page of a submission row (snake_case, as selected).
+export function markedPagePaths(sub) {
+  return Array.from({ length: sub.marked_pages ?? 0 }, (_, i) => markedPagePath(sub.assignment_id, sub.lws_id, sub.id, i))
+}
+
 const QUESTION_FILE = /^[^/]+\/questions\/\d{2}\.[a-z]+$/
 
 // True only for a file directly inside this assignment's questions folder. The

@@ -7,6 +7,8 @@ import {
 import { OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, MAX_SUMMARY_CHARS, CAUSES, TOPIC_CAUSES, MAX_TOPIC_CHARS } from '../grade'
 import { HAND_CHECKS, MAX_HAND_NOTE_CHARS } from '../handwriting'
 import { SUBMISSION_STATUSES, MAX_REPLACEMENTS } from '../status'
+import { MARK_KINDS, MAX_NOTE_CHARS } from '../pageMarks'
+import { MAX_MARKED_PAGES } from '../upload'
 
 // The database repeats the rules the JS checks, and is the actual boundary.
 // These tests keep the two copies from drifting apart.
@@ -305,5 +307,74 @@ describe('grade-cause migration', () => {
     const fns = cause.match(/CREATE OR REPLACE FUNCTION/g) ?? []
     expect(fns.length).toBe(1)
     expect((cause.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
+  })
+})
+
+// 2026-10-16: the grader's marks on the student's pages. Part 1: the table and
+// the page count. Part 2: the grade function saves grade and marks together.
+describe('page-marks migration', () => {
+  const markFiles = readdirSync(dir).filter(f => /_homework_page_marks_\d_\w+\.sql$/.test(f)).sort()
+  const marks = markFiles.map(f => readFileSync(join(dir, f), 'utf8')).join(' ').replace(/\s+/g, ' ')
+  const list = xs => xs.map(x => `'${x}'`).join(', ')
+
+  it('exists in two parts that sort after the grade-cause migration, table first', () => {
+    expect(markFiles.map(f => f.replace(/^\d+_/, ''))).toEqual([
+      'homework_page_marks_1_table.sql',
+      'homework_page_marks_2_commit.sql',
+    ])
+    const lastCause = readdirSync(dir).filter(f => /_homework_grade_cause_\d_\w+\.sql$/.test(f)).sort().pop()
+    expect(markFiles[0] > lastCause).toBe(true)
+  })
+
+  it('allows exactly the JS kinds, note length and page count', () => {
+    expect(marks).toContain(`kind IN (${list(MARK_KINDS)})`)
+    expect(marks).toContain(`BETWEEN 1 AND ${MAX_NOTE_CHARS}`)
+    expect(marks).toContain(`marked_pages BETWEEN 1 AND ${MAX_MARKED_PAGES}`)
+    expect(marks).toContain(`page BETWEEN 1 AND ${MAX_MARKED_PAGES}`)
+  })
+
+  // A mark belongs to a graded question; replacing the grade rows (every
+  // regrade) takes their marks with them.
+  it('ties each mark to its grade row, cascading on a regrade', () => {
+    expect(marks).toMatch(/FOREIGN KEY \(submission_id, label\) REFERENCES public\.homework_grades \(submission_id, label\) ON DELETE CASCADE/)
+    // grading:pull embeds marks in the submission, which needs a direct key.
+    expect(marks).toMatch(/submission_id uuid NOT NULL REFERENCES public\.homework_submissions \(id\) ON DELETE CASCADE/)
+  })
+
+  // NULL passes a CHECK, so "a circle has a size" must not be written as a
+  // bare comparison on w and h.
+  it('gives each kind only its own fields, failing closed on NULL', () => {
+    expect(marks).toMatch(/WHEN kind = 'circle' THEN coalesce\(/)
+    expect(marks).toMatch(/WHEN kind = 'note' THEN coalesce\(/)
+    expect(marks).toContain("to_x IS NULL OR kind = 'note'")
+  })
+
+  it('is read-only to staff, like the grades', () => {
+    expect(marks).toContain('ALTER TABLE public.homework_page_marks ENABLE ROW LEVEL SECURITY')
+    const policies = [...marks.matchAll(/CREATE POLICY \w+ ON public\.homework_page_marks FOR (\w+)/g)]
+    expect(policies.length).toBe(1)
+    expect(policies[0][1]).toBe('SELECT')
+  })
+
+  it('replaces the grade function with one that takes the marks, dropping the old one', () => {
+    expect(marks).toContain('DROP FUNCTION public.homework_grade_commit(uuid, jsonb, text, text, text, text, text)')
+    expect(marks).toMatch(/CREATE OR REPLACE FUNCTION public\.homework_grade_commit\( p_submission uuid, p_grades jsonb, p_went_well text, p_next_steps text, p_grader text, p_hand_check text, p_hand_note text, p_marked_pages smallint, p_marks jsonb \)/)
+    expect(marks).toMatch(/INSERT INTO public\.homework_page_marks/)
+    expect(marks).toContain('marked_pages = p_marked_pages')
+    expect(marks).toMatch(/REVOKE ALL ON FUNCTION public\.homework_grade_commit\([^)]*smallint, jsonb\) FROM PUBLIC, anon, authenticated/)
+    expect(marks).toMatch(/GRANT EXECUTE ON FUNCTION public\.homework_grade_commit\([^)]*smallint, jsonb\) TO service_role/)
+    expect(marks).toMatch(/SELECT COALESCE\(sum\(awarded\), 0\)/)
+  })
+
+  // The database repeats the two rules that make the page agree with the grade.
+  it('refuses a mark off the prepared pages, and a scored question without exactly one score', () => {
+    expect(marks).toMatch(/page > p_marked_pages/)
+    expect(marks).toMatch(/kind = 'score'[^;]*<> CASE WHEN g\.outcome = 'scored' THEN 1 ELSE 0 END/)
+  })
+
+  it('pins search_path on every function', () => {
+    const fns = marks.match(/CREATE OR REPLACE FUNCTION/g) ?? []
+    expect(fns.length).toBe(1)
+    expect((marks.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
   })
 })

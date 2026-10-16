@@ -7,15 +7,23 @@
 //   npm run grading:commit -- <id> --dry    # check only, write nothing
 //   npm run grading:commit -- <id> --reject="Pages 2 and 3 are too dark to read. Retake them in daylight."
 //
-// The check (src/lib/assignments/grade.js) prints EVERY problem; nothing is saved
-// unless it passes. homework_grade_commit then saves the rows, checks they cover
-// the homework's marks and sums the total itself. A regrade is the same command
-// after `grading:pull -- --id=<id>`.
-import { readFileSync } from 'node:fs'
+// The check (src/lib/assignments/grade.js + pageMarks.js) prints EVERY problem;
+// nothing is saved unless it passes AND the marks were previewed as they stand
+// (grading:preview's stamp). Then the prepared pages are uploaded to
+// <submission>/marked/ and homework_grade_commit saves the grade and its page
+// marks together, checks they cover the homework's marks and sums the total
+// itself. A regrade is the same command after `grading:pull -- --id=<id>`.
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { serviceClient, INBOX, arg, fail } from './_client.js'
-import { validateGrade } from '../../src/lib/assignments/grade.js'
 import { commitRows } from '../../src/lib/assignments/brief.js'
+import { SUBMISSIONS_BUCKET, markedPagePath } from '../../src/lib/assignments/upload.js'
+import { loadSubmission, checkGradeFile, printErrors } from './_marking.js'
+
+function previewStamp(dir) {
+  const path = join(dir, 'preview', 'stamp.json')
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).stamp : null
+}
 
 async function main() {
   const id = process.argv.slice(2).find(a => !a.startsWith('--'))
@@ -24,13 +32,7 @@ async function main() {
   const reject = arg('reject')?.trim()
   const db = serviceClient()
 
-  const { data: s, error } = await db
-    .from('homework_submissions')
-    .select('id, lws_id, status, assignment_id, homework_assignments(max_marks, questions, due_at)')
-    .eq('id', id)
-    .single()
-  if (error) throw new Error(`submission ${id}: ${error.message}`)
-  const a = s.homework_assignments
+  const { s, a, hasReference } = await loadSubmission(db, id)
   // The student swapped it for a newer hand-in before it was marked; the new
   // one is a different submission, waiting in the queue.
   if (s.status === 'replaced') {
@@ -50,36 +52,39 @@ async function main() {
     return
   }
 
-  const file = JSON.parse(readFileSync(join(INBOX, id, 'grade.json'), 'utf8'))
-  if (file.submissionId !== id) throw new Error(`grade.json is for ${file.submissionId}, not ${id}.`)
+  const dir = join(INBOX, id)
   const maxMarks = Number(a.max_marks)
-  // Whether there is a reference to have compared against (the database checks
-  // this again; asking here names the problem before anything is written).
-  const { data: ref, error: refErr } = await db
-    .from('homework_hand_references').select('submission_id').eq('lws_id', s.lws_id).maybeSingle()
-  if (refErr) throw new Error(`reference: ${refErr.message}`)
-  const hasReference = Boolean(ref && ref.submission_id !== id)
-  const check = validateGrade({
-    maxMarks, hasReference, file,
-    questions: (a.questions ?? []).map(q => ({ ...q, marks: Number(q.marks) })),
-  })
-  if (!check.ok) {
-    console.error(`grade.json has ${check.errors.length} problem(s):`)
-    for (const e of check.errors) console.error(`  - ${e}`)
+  const check = checkGradeFile({ dir, id, a, hasReference })
+  if (!check.ok) { printErrors(check.errors); process.exit(1) }
+  // The marks as they stand must be the ones last drawn and looked at.
+  if (previewStamp(dir) !== check.stamp) {
+    console.error(`The marks have not been previewed as they stand. Run npm run grading:preview -- ${id} and look at every page first.`)
     process.exit(1)
   }
-  console.log(`Check passed: ${check.totalAwarded} / ${maxMarks} over ${check.rows.length} question(s). Handwriting: ${check.handwriting.check}.`)
-  if (check.handwriting.holds) console.log('This grade will be HELD: the student will not see it until their teacher releases it.')
+  const { grade } = check
+  console.log(`Check passed: ${grade.totalAwarded} / ${maxMarks} over ${grade.rows.length} question(s), ${check.marks.length} mark(s) on ${check.pageCount} page(s). Handwriting: ${grade.handwriting.check}.`)
+  if (grade.handwriting.holds) console.log('This grade will be HELD: the student will not see it until their teacher releases it.')
   if (dry) return
+
+  // The prepared pages the marks sit on. Upserted, so a regrade or a retry
+  // after a failed save overwrites rather than duplicates.
+  for (let i = 0; i < check.pageCount; i++) {
+    const body = readFileSync(join(dir, 'pages', `${String(i + 1).padStart(2, '0')}.jpg`))
+    const { error: upErr } = await db.storage.from(SUBMISSIONS_BUCKET)
+      .upload(markedPagePath(s.assignment_id, s.lws_id, id, i), body, { contentType: 'image/jpeg', upsert: true })
+    if (upErr) throw new Error(`upload page ${i + 1}: ${upErr.message}`)
+  }
 
   const { data: saved, error: cErr } = await db.rpc('homework_grade_commit', {
     p_submission: id,
-    p_grades: commitRows(check.rows),
-    p_went_well: check.wentWell,
-    p_next_steps: check.nextSteps,
+    p_grades: commitRows(grade.rows),
+    p_went_well: grade.wentWell,
+    p_next_steps: grade.nextSteps,
     p_grader: 'session',
-    p_hand_check: check.handwriting.check,
-    p_hand_note: check.handwriting.note,
+    p_hand_check: grade.handwriting.check,
+    p_hand_note: grade.handwriting.note,
+    p_marked_pages: check.pageCount,
+    p_marks: check.marks,
   })
   if (cErr) throw new Error(`save: ${cErr.message}`)
   const regrade = s.status === 'graded' || s.status === 'held' ? ' (regrade)' : ''

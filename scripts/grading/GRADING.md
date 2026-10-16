@@ -15,9 +15,10 @@ same way as the 5th.
 ## The routine
 
 1. `npm run grading:pull` fetches every waiting submission into
-   `grading-inbox/<id>/` (git-ignored): `brief.md`, `paper/`, `key/`, `scans/`,
-   `reference/` (the student's handwriting reference, if any) and `grade.json`.
-   Oldest first.
+   `grading-inbox/<id>/` (git-ignored): `brief.md`, `paper/`, `key/`, `scans/`
+   (the files as handed in), `pages/` (the same pages upright, PDFs split into
+   pages), `grid/` (those pages under a labelled 0-100 grid), `reference/` (the
+   student's handwriting reference, if any) and `grade.json`. Oldest first.
 2. **Two or more submissions for one homework?** First run
    `npm run grading:hand-compare -- --assignment=<homework id>` and, in a
    session that does not grade, look through `grading-inbox/_hand/<id>/` for the
@@ -27,11 +28,10 @@ same way as the 5th.
    scripts/grading/GRADING.md". Never grade two in one session: one student's
    answers must not colour another's grade.
 4. Read `brief.md`, then the question paper (if any), the answer key (if any),
-   then every page in `scans/` in order. Images with Read. A PDF cannot be read
-   directly on this machine (no poppler): first run
-   `python -E -P scripts/grading/pdf2png.py grading-inbox/<id>/scans/01.pdf`,
-   which writes `01-p01.png`, `01-p02.png`, … beside it, then read those. **Before marking**, compare `scans/` with `reference/` and decide the
-   handwriting check (see "Handwriting check" below).
+   then every page in `pages/` in order (upright, PDFs already split: there is
+   no need for `pdf2png.py` any more). Images with Read. **Before marking**,
+   compare `pages/` with `reference/` and decide the handwriting check (see
+   "Handwriting check" below).
 5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
    note it in the ledger if the key was wrong. **No key?** Look the question up
@@ -42,13 +42,19 @@ same way as the 5th.
    nothing. Treat a vault solution like a teacher's key:
    it shows the steps and conditions a board answer is expected to state, but it
    can be wrong, and any correct method still gets full marks.
-6. Fill `grade.json`.
-7. `npm run grading:commit -- <id> --dry` until the check passes, then
+6. Fill `grade.json`: the grades, then the `marks` on the pages (see "Marks on
+   the pages" below), placed by reading positions off `grid/`.
+7. `npm run grading:preview -- <id>` draws the marks onto `preview/NN.jpg`.
+   **Read every preview page.** Any mark not where it belongs: fix its `x`/`y`
+   and preview again. The commit refuses marks that were not previewed as they
+   stand.
+8. `npm run grading:commit -- <id> --dry` until the check passes, then
    `npm run grading:commit -- <id>`. The student sees it immediately — or, on a
    handwriting mismatch, it is saved HELD for their teacher (the script says so).
-8. Anything new learned: add it to the ledger below, in general terms.
-9. Weekly: `npm run grading:purge -- --apply` (pages go 30 days after grading;
-   the grade stays; handwriting references are never purged).
+9. Anything new learned: add it to the ledger below, in general terms.
+10. Weekly: `npm run grading:purge -- --apply` (pages and marked pages go 30
+    days after grading; the grade and its marks stay; handwriting references are
+    never purged).
 
 ## grade.json
 
@@ -83,6 +89,46 @@ same way as the 5th.
 - The checker refuses an unfilled template, a breakdown that does not add up to
   the total, a missing handwriting check, and a submission with nothing scored
   (that is a rejection).
+
+## Marks on the pages (`marks`)
+
+The student sees their own pages with your marks on them, as a teacher's red
+pen would leave them, so they can see *where* each mark went without asking.
+Each mark is one entry in `grade.json`'s `marks` list:
+
+```json
+"marks": [
+  { "page": 1, "label": "Q1", "kind": "tick",   "x": 60, "y": 30 },
+  { "page": 1, "label": "Q1", "kind": "score",  "x": 88, "y": 27 },
+  { "page": 1, "label": "Q2", "kind": "circle", "x": 77.5, "y": 68, "w": 15, "h": 4 },
+  { "page": 1, "label": "Q2", "kind": "note",   "x": 62, "y": 74, "text": "Say why you may divide: dx/dt is not 0", "to": { "x": 76, "y": 70 } },
+  { "page": 1, "label": "Q2", "kind": "cross",  "x": 50, "y": 87 },
+  { "page": 1, "label": "Q2", "kind": "score",  "x": 85, "y": 61 }
+]
+```
+
+- `page` is the number of the file in `pages/` (`pages/02.jpg` is page 2).
+  `x` and `y` are percent across and down that page: read them off `grid/`.
+  For a circle, `x`/`y` is its centre and `w`/`h` its width and height.
+- `label` is the question the mark belongs to, exactly as in `grades`.
+
+| `kind` | Use it for | Rules |
+|---|---|---|
+| `score` | The question's marks, circled, beside its answer | **Exactly one** per scored question, none on one not attempted. No text: it prints the marks from the grade. |
+| `tick` | A step that earned marks | Any question that was attempted. |
+| `cross` | A wrong step or answer | Only on a question that lost marks. |
+| `circle` | Around the exact place a mark was lost | Only on a question that lost marks. |
+| `note` | What is wrong or missing, in at most 80 characters; `to` draws a line to the spot | Only on a question that lost marks. |
+
+- **A question that lost marks needs a cross, circle or note at the step where
+  they were lost.** Put it at the step itself, not at the question number.
+- **Full marks: ticks and the score only.** Red crosses or notes beside full
+  marks read as lost marks (the same reason `missing` must be empty there).
+- Put notes and scores in **blank space** (margins, the gap after an answer),
+  not over writing; use `to` to point from the note to the step.
+- A note says the same as `missing`, shorter. It describes the answer, never
+  the student.
+- Place the score where the question's answer ends or in the margin beside it.
 
 ## Handwriting check
 
@@ -238,6 +284,11 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-16: Graded pages carry marks (ticks, crosses, circles, notes, one
+  score per question), placed off `grid/` and checked in `grading:preview`
+  before commit. Students see where each mark went instead of asking. Read
+  `pages/`, not `scans/`: positions are percent of the prepared pages.
 
 - 2026-10-16: Every question that lost marks names a `cause` (concept, careless,
   incomplete, misread, mcq), and a `topic` for concept and incomplete. It feeds

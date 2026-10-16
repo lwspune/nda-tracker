@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   ALLOWED_TYPES, MAX_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES,
   validateUploadFiles, assignmentFilePath, submissionFilePath, isQuestionFilePath,
+  markedPagePath, markedPagePaths, MAX_MARKED_PAGES,
 } from '../upload'
 
 const jpg = (size = 1000) => ({ type: 'image/jpeg', size })
@@ -64,6 +65,20 @@ describe('storage paths', () => {
   it('numbers files from 01 in upload order, which is the page order the grader reads', () => {
     expect(submissionFilePath(A, 'LWS-12', S, 0, 'jpg')).toBe(`${A}/LWS-12/${S}/01.jpg`)
     expect(submissionFilePath(A, 'LWS-12', S, 10, 'pdf')).toBe(`${A}/LWS-12/${S}/11.pdf`)
+  })
+
+  // The prepared, upright pages the marks are drawn against (2026-10-16). In a
+  // subfolder, so they never mix with the hand-in files in page order.
+  it('keeps marked pages in the marked/ folder of the submission, one per prepared page', () => {
+    expect(markedPagePath(A, 'LWS-12', S, 0)).toBe(`${A}/LWS-12/${S}/marked/01.jpg`)
+    expect(markedPagePaths({ assignment_id: A, lws_id: 'LWS-12', id: S, marked_pages: 2 }))
+      .toEqual([`${A}/LWS-12/${S}/marked/01.jpg`, `${A}/LWS-12/${S}/marked/02.jpg`])
+    expect(markedPagePaths({ assignment_id: A, lws_id: 'LWS-12', id: S, marked_pages: null })).toEqual([])
+  })
+
+  // 20 files, of which PDFs may hold several pages each.
+  it('allows up to 60 prepared pages', () => {
+    expect(MAX_MARKED_PAGES).toBe(60)
   })
 
   it('keeps questions and the answer key in separate folders', () => {

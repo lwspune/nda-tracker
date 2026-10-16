@@ -55,9 +55,25 @@ export function buildHomeworkBrief({ submission, assignment: a, files }) {
     )
   }
 
-  out.push(`## The student's work (${files.scans.length} page${files.scans.length === 1 ? '' : 's'}, in order)`, '')
-  for (const f of files.scans) out.push(`- ${f}`)
-  out.push('')
+  // The prepared pages (2026-10-16): upright, PDFs split into pages. Read these,
+  // not scans/, because mark positions are percent of THESE pages.
+  const pages = files.pages ?? []
+  if (pages.length) {
+    out.push(`## The student's work (${pages.length} page${pages.length === 1 ? '' : 's'}, in order)`, '')
+    for (const f of pages) out.push(`- ${f}`)
+    out.push(
+      '', `(Prepared from ${files.scans.join(', ')}: rotated upright, PDFs split into pages.)`, '',
+      '## Marks on the pages', '',
+      'Fill grade.json\'s `marks` list by GRADING.md ("Marks on the pages"). Read positions off the grid',
+      'copies (percent of the page, 0-100 across and down):', '',
+      ...(files.grid ?? []).map(f => `- ${f}`), '',
+      `Then run \`npm run grading:preview -- ${submission.id}\` and look at EVERY preview page before committing.`, '',
+    )
+  } else {
+    out.push(`## The student's work (${files.scans.length} page${files.scans.length === 1 ? '' : 's'}, in order)`, '')
+    for (const f of files.scans) out.push(`- ${f}`)
+    out.push('')
+  }
 
   // The handwriting check (2026-10-13). Never changes the marks; a mismatch
   // keeps the grade from the student until faculty release it.
@@ -89,7 +105,20 @@ export function gradeTemplate(submissionId, assignment) {
     grades: (assignment.questions ?? []).map(q => ({
       label: q.label, max: num(q.marks), outcome: '', awarded: null, earned: '', missing: '', cause: '', topic: '',
     })),
+    marks: [],
   }
+}
+
+// A saved page mark (snake_case row) → its grade.json form: only the fields
+// its kind uses, as the grader would write it.
+function markToFile(m) {
+  const out = { page: m.page, label: m.label, kind: m.kind, x: num(m.x), y: num(m.y) }
+  if (m.kind === 'circle') { out.w = num(m.w); out.h = num(m.h) }
+  if (m.kind === 'note') {
+    out.text = m.text
+    if (m.to_x !== null && m.to_x !== undefined) out.to = { x: num(m.to_x), y: num(m.to_y) }
+  }
+  return out
 }
 
 // A graded submission's saved grade, as grade.json — the starting point for a
@@ -110,6 +139,10 @@ export function savedGradeFile(submission) {
         label: g.label, max: num(g.max_marks), outcome: g.outcome, awarded: num(g.awarded),
         earned: g.earned ?? '', missing: g.missing ?? '', cause: g.cause ?? '', topic: g.topic ?? '',
       })),
+    // Grades saved before page marks (2026-10-16) have none; a regrade adds them.
+    marks: [...(submission.homework_page_marks ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map(markToFile),
   }
 }
 
