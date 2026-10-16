@@ -12,6 +12,10 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started. **Carry-forward (later the same day):** those grades also have no page marks, no marked pages and no report PDF, so the student sees the old earned/missing list only. The same regrade would add all three; same 360 + go-ahead applies.
 
+### Backfill ledger: rebuild the first marked papers with the note font and report-width fixes
+
+Maths Daily Homework #3's first 8 graded hand-ins (committed 2026-10-16) have marked pages and report PDFs built before two fixes: page notes were drawn in PIL's built-in font (graders worked around it by writing notes in plain ASCII, so none show boxes), and the report's tables ran past the right margin, cutting the end of the longest "What was missing" line on some reports. Rebuilding means re-running `grading:preview` + `grading:commit` on graded rows, which re-uploads the student's marked paper and clears `report_emailed_at`. It is shipped work, so it needs the 360 analysis and an explicit go-ahead. Pages purge 30 days after grading, after which it cannot be done. Logged, not started.
+
 ### Marked-paper report for written exams (deferred by faculty, 2026-10-16)
 
 Agreed with the homework report and deferred: **(A)** a per-question breakdown on the Written Quiz (`exams.written_parts`, never `questions[]`, which `examFormat` reads), marks typed one student at a time, `exam_results.part_marks` with a trigger keeping the parts summing to `total_marks`; and **(B)** staff upload each student's paper, which is graded by the homework pipeline as a hidden `kind='exam'` assignment and writes the exam's `exam_results` row in the same transaction. Build after the homework report has run on real papers.
@@ -34,7 +38,7 @@ Every piece is tested and was checked in the browser with fixtures, but no grade
 
 ### The staff submission table is cramped on a phone
 
-At 390px the Homework → Submissions detail table (Q · Marks · Earned · Missing · Why) fits without sideways scroll but wraps every cell to a few words. It was already a four-column table; the Why column made it five.
+At 390px the Homework → Submissions detail table (Q · Marks · Earned · Missing · Why) wraps every cell to a few words. It was already a four-column table; the Why column made it five. **Partly done (later 2026-10-16):** it actually pushed the page 3px sideways; it now scrolls inside the card (a labelled, focusable region, `min-w-[560px]`), so the page no longer scrolls. The stacked-card layout below is still open.
 
 **Why:** teachers check held grades and marked pages from their phones.
 
