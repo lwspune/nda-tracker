@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveStudent as resolveWith, studentHomeworkList, planSubmissionUploads, KEEP_CLOSED_DAYS } from '../studentHomework'
+import { resolveStudent as resolveWith, studentHomeworkList, planSubmissionUploads, markedPaperPaths, KEEP_CLOSED_DAYS } from '../studentHomework'
 import { normMobile } from '../../../../api/_mobile.js'
 
 // The endpoint passes its own normaliser in (api/_mobile.js stays the one
@@ -121,6 +121,68 @@ describe('studentHomeworkList', () => {
     expect(hw.submission).toMatchObject({ status: 'graded', pages: 2, totalAwarded: 7.5, totalMax: 10, wentWell: 'Good' })
     expect(hw.submission.grades.map(g => [g.label, g.awarded])).toEqual([['Q1', 5], ['Q2', 2.5]])
     expect(hw.submission).not.toHaveProperty('files')
+  })
+
+  // 2026-10-16: the marked-paper report. The marked pages and the PDF are
+  // signed by the endpoint; the shape carries a link only when it was signed.
+  describe('the marked paper', () => {
+    const graded = (over = {}) => ({
+      id: 's1', assignment_id: 'a1', lws_id: 'L1', status: 'graded', files: ['a1/L1/s1/01.jpg'],
+      created_at: iso(1), submitted_at: iso(1), graded_at: iso(2), total_awarded: '3', total_max: '10',
+      went_well: 'G', next_steps: 'N', marked_pages: 2, scans_deleted_at: null,
+      homework_grades: [
+        { position: 1, label: 'Q1', max_marks: '5', outcome: 'scored', awarded: '3', earned: 'e', missing: 'm', cause: 'concept', topic: 'Chain rule' },
+        { position: 2, label: 'Q2', max_marks: '5', outcome: 'not_attempted', awarded: null, earned: null, missing: null, cause: null, topic: null },
+      ],
+      ...over,
+    })
+    const signed = {
+      ...urls,
+      'a1/L1/s1/marked/01.jpg': 'https://signed/p1',
+      'a1/L1/s1/marked/02.jpg': 'https://signed/p2',
+      'a1/L1/s1/marked/report.pdf': 'https://signed/report',
+    }
+    const shape = (sub, u = signed) => studentHomeworkList({ assignments: [row()], batches: ['12th_A'], urls: u, now: NOW, submissions: [sub] })[0].submission
+
+    it('names the paths to sign: a released grade\'s marked pages and its PDF, nothing else', () => {
+      expect(markedPaperPaths([graded()])).toEqual([
+        'a1/L1/s1/marked/01.jpg', 'a1/L1/s1/marked/02.jpg', 'a1/L1/s1/marked/report.pdf',
+      ])
+      expect(markedPaperPaths([graded({ status: 'held' })])).toEqual([])
+      expect(markedPaperPaths([graded({ status: 'submitted' })])).toEqual([])
+      expect(markedPaperPaths([graded({ scans_deleted_at: iso(3) })])).toEqual([])
+      expect(markedPaperPaths([graded({ marked_pages: null })])).toEqual([])
+    })
+
+    it('gives a released grade its marked pages, its PDF and each question\'s cause and topic', () => {
+      const sub = shape(graded())
+      expect(sub.markedPages).toEqual(['https://signed/p1', 'https://signed/p2'])
+      expect(sub.reportUrl).toBe('https://signed/report')
+      expect(sub.pagesRemoved).toBe(false)
+      expect(sub.grades[0]).toMatchObject({ cause: 'concept', topic: 'Chain rule' })
+      expect(sub.grades[1]).toMatchObject({ cause: null, topic: null })
+    })
+
+    it('says the pages were removed after 30 days, and links nothing', () => {
+      const sub = shape(graded({ scans_deleted_at: iso(3) }))
+      expect(sub).toMatchObject({ markedPages: [], reportUrl: null, pagesRemoved: true })
+    })
+
+    it('links nothing for a grade saved before page marks', () => {
+      expect(shape(graded({ marked_pages: null }), urls)).toMatchObject({ markedPages: [], reportUrl: null, pagesRemoved: false })
+    })
+
+    // Even if a link for a held grade's pages were somehow signed, the held
+    // shape must not carry it.
+    it('never carries marked pages or a PDF on a held grade', () => {
+      const held = shape(graded({ status: 'held', hand_check: 'mismatch', hand_note: 'x' }))
+      const waiting = shape(graded({
+        status: 'submitted', graded_at: null, total_awarded: null, total_max: null,
+        went_well: null, next_steps: null, marked_pages: null, homework_grades: [],
+      }))
+      expect(held).toEqual(waiting)
+      expect(JSON.stringify(held)).not.toMatch(/signed\/(p1|p2|report)/)
+    })
   })
 
   // A grade held for a handwriting check must be indistinguishable from one

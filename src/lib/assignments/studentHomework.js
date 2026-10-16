@@ -5,7 +5,7 @@
 //
 // What leaves the server is decided HERE: never the answer key (not even its
 // name), never who set the homework, never another student's work.
-import { isQuestionFilePath, submissionFilePath, validateUploadFiles } from './upload.js'
+import { isQuestionFilePath, submissionFilePath, validateUploadFiles, markedPagePaths, reportPdfPath } from './upload.js'
 import {
   assignmentState, canStartSubmission, canReplaceSubmission, liveSubmission, replacementsUsed, MAX_REPLACEMENTS,
 } from './status.js'
@@ -56,14 +56,27 @@ function pickSubmission(rows) {
 // spread, so nothing added to the row (the handwriting check) can reach a
 // student by default. A `held` grade is shown exactly as one not yet graded —
 // telling a student their grade is held is telling them they were suspected.
-function shapeSubmission(s) {
+// The marked paper (2026-10-16): only a RELEASED grade whose pages are still
+// kept. A held grade is never among these, so its pages are never even signed.
+const hasMarkedPaper = s => s.status === 'graded' && Boolean(s.marked_pages) && !s.scans_deleted_at
+
+// The storage paths the endpoint may sign for this student's marked papers:
+// each released grade's marked pages and its report PDF. Nothing else.
+export function markedPaperPaths(submissions) {
+  return (submissions ?? []).filter(hasMarkedPaper).flatMap(s => [
+    ...markedPagePaths(s), reportPdfPath(s.assignment_id, s.lws_id, s.id),
+  ])
+}
+
+function shapeSubmission(s, urls) {
   if (!s) return null
   if (s.status === 'held') {
     return shapeSubmission({
       id: s.id, status: 'submitted', files: s.files,
       submitted_at: s.submitted_at, homework_grades: [],
-    })
+    }, {})
   }
+  const paper = hasMarkedPaper(s)
   return {
     id: s.id,
     status: s.status,
@@ -79,14 +92,19 @@ function shapeSubmission(s) {
       .map(g => ({
         position: g.position, label: g.label, maxMarks: num(g.max_marks), outcome: g.outcome,
         awarded: num(g.awarded), earned: g.earned ?? null, missing: g.missing ?? null,
+        cause: g.cause ?? null, topic: g.topic ?? null,
       }))
       .sort((a, b) => a.position - b.position),
+    // Signed links, present only when the endpoint signed them (urls).
+    markedPages: paper ? markedPagePaths(s).map(p => urls?.[p]).filter(Boolean) : [],
+    reportUrl: (paper && urls?.[reportPdfPath(s.assignment_id, s.lws_id, s.id)]) || null,
+    pagesRemoved: s.status === 'graded' && Boolean(s.scans_deleted_at),
   }
 }
 
 // assignments: published rows (the endpoint filters by batch overlap in SQL;
 // this re-checks). submissions: this student's rows with homework_grades.
-// urls: { questionFilePath: signedUrl }.
+// urls: { path: signedUrl } for question files and marked papers (markedPaperPaths).
 export function studentHomeworkList({ assignments, submissions, batches, urls, now = new Date() }) {
   const mine = new Set(batches ?? [])
   const byAssignment = new Map()
@@ -122,7 +140,7 @@ export function studentHomeworkList({ assignments, submissions, batches, urls, n
       questionFiles: (r.question_files ?? [])
         .filter(f => isQuestionFilePath(r.id, f.path) && urls?.[f.path])
         .map(f => ({ name: f.name || 'Question paper', type: f.type ?? null, url: urls[f.path] })),
-      submission: shapeSubmission(sub),
+      submission: shapeSubmission(sub, urls),
     })
   }
 

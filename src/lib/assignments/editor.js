@@ -1,6 +1,6 @@
 // The teacher side of homework assignments: who may set what, what each staff
 // member sees, deadlines, file uploads and the row shape. PURE.
-import { assignmentFilePath, validateUploadFiles } from './upload.js'
+import { assignmentFilePath, validateUploadFiles, markedPagePaths, reportPdfPath } from './upload.js'
 import { fmtDate } from '../dates.js'
 
 const IST_OFFSET_MIN = 330
@@ -164,6 +164,10 @@ export function mapSubmissionRow(r) {
     handReferenceId: r.hand_reference_id ?? null,
     resolvedAt: r.resolved_at ?? null,
     resolvedBy: r.resolved_by ?? null,
+    // The marked paper (2026-10-16): storage paths staff open through a signed
+    // link. Empty for grades saved before page marks.
+    markedPages: markedPagePaths(r),
+    reportPath: r.marked_pages ? reportPdfPath(r.assignment_id, r.lws_id, r.id) : null,
     grades: (r.homework_grades ?? [])
       .map(g => ({
         position: g.position,
@@ -173,6 +177,8 @@ export function mapSubmissionRow(r) {
         awarded: num(g.awarded),
         earned: g.earned ?? null,
         missing: g.missing ?? null,
+        cause: g.cause ?? null,
+        topic: g.topic ?? null,
       }))
       .sort((a, b) => a.position - b.position),
   }

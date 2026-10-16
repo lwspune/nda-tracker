@@ -147,6 +147,20 @@ describe('row mapping', () => {
     expect(s.grades.map(g => [g.position, g.awarded])).toEqual([[1, null], [2, 2.5]])
   })
 
+  // 2026-10-16: staff open the marked pages and the report from the detail.
+  it('carries each question\'s cause and the marked paper\'s storage paths', () => {
+    const s = mapSubmissionRow({
+      id: 's', assignment_id: 'id1', lws_id: 'L1', student_name: 'Aarav', status: 'graded', files: ['p/01.jpg'],
+      marked_pages: 2, scans_deleted_at: null,
+      homework_grades: [{ position: 1, label: 'Q1', max_marks: '5', outcome: 'scored', awarded: '3', earned: 'x', missing: 'y', cause: 'concept', topic: 'Chain rule' }],
+    })
+    expect(s.grades[0]).toMatchObject({ cause: 'concept', topic: 'Chain rule' })
+    expect(s.markedPages).toEqual(['id1/L1/s/marked/01.jpg', 'id1/L1/s/marked/02.jpg'])
+    expect(s.reportPath).toBe('id1/L1/s/marked/report.pdf')
+    const old = mapSubmissionRow({ id: 's', assignment_id: 'id1', lws_id: 'L1', status: 'graded', files: [], homework_grades: [] })
+    expect(old).toMatchObject({ markedPages: [], reportPath: null })
+  })
+
   it('carries the handwriting check for faculty', () => {
     const s = mapSubmissionRow({
       id: 's', assignment_id: 'id1', lws_id: 'L1', student_name: 'Aarav', status: 'held', files: ['p/01.jpg'],

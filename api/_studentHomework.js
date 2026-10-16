@@ -14,7 +14,7 @@
 // one-per-student; the batch check lives only here.
 import { randomUUID } from 'node:crypto'
 import { normMobile } from './_mobile.js'
-import { resolveStudent, studentHomeworkList, planSubmissionUploads } from '../src/lib/assignments/studentHomework.js'
+import { resolveStudent, studentHomeworkList, planSubmissionUploads, markedPaperPaths } from '../src/lib/assignments/studentHomework.js'
 import { canStartSubmission, canReplaceSubmission } from '../src/lib/assignments/status.js'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET, isQuestionFilePath } from '../src/lib/assignments/upload.js'
 
@@ -82,6 +82,16 @@ async function list(supabase, who, res) {
   if (paths.length > 0) {
     const { data, error } = await supabase.storage.from(ASSIGNMENT_FILES_BUCKET).createSignedUrls(paths, LINK_TTL_SECONDS)
     if (error) { console.error('[student-homework] signing failed:', error.message); return fail(res, 500, 'Could not load homework') }
+    for (const d of data ?? []) if (d?.signedUrl) urls[d.path] = d.signedUrl
+  }
+
+  // The marked papers of released grades (2026-10-16): only the paths
+  // markedPaperPaths names, so a held grade's pages are never signed. A failure
+  // here costs the links, not the list: the student can still hand work in.
+  const paperPaths = markedPaperPaths(submissions)
+  if (paperPaths.length > 0) {
+    const { data, error } = await supabase.storage.from(SUBMISSIONS_BUCKET).createSignedUrls(paperPaths, LINK_TTL_SECONDS)
+    if (error) console.error('[student-homework] marked paper signing failed:', error.message)
     for (const d of data ?? []) if (d?.signedUrl) urls[d.path] = d.signedUrl
   }
 

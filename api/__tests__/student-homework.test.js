@@ -33,7 +33,7 @@ function builder(result, log, table) {
 
 function makeClient({
   students = [STUDENT], assignments = [assignment()], submissions = [],
-  rpcError = null, stored = null, signFail = false,
+  rpcError = null, stored = null, signFail = false, signFailBucket = null,
 } = {}) {
   const log = []
   const client = {
@@ -49,7 +49,7 @@ function makeClient({
       from: vi.fn(bucket => ({
         createSignedUrls: vi.fn((paths, ttl) => {
           log.push(['sign', bucket, paths, ttl])
-          return Promise.resolve(signFail ? { data: null, error: { message: 'x' } }
+          return Promise.resolve(signFail || signFailBucket === bucket ? { data: null, error: { message: 'x' } }
             : { data: paths.map(p => ({ path: p, signedUrl: `https://signed/${p}` })), error: null })
         }),
         createSignedUploadUrl: vi.fn(path => {
@@ -107,6 +107,41 @@ describe('kind: homework-list', () => {
     expect(JSON.stringify(r.body)).not.toMatch(/key\.pdf|a1\/key|teach@x/)
     const signed = client.log.filter(l => l[0] === 'sign').flatMap(l => l[2])
     expect(signed).toEqual(['a1/questions/01.pdf'])
+  })
+
+  // 2026-10-16: the marked paper of a released grade.
+  const gradedSub = (over = {}) => ({
+    id: 's1', assignment_id: 'a1', lws_id: 'L1', status: 'graded', files: ['a1/L1/s1/01.jpg'],
+    created_at: new Date().toISOString(), submitted_at: new Date().toISOString(), graded_at: new Date().toISOString(),
+    total_awarded: 7, total_max: 10, went_well: 'G', next_steps: 'N', marked_pages: 2, scans_deleted_at: null,
+    homework_grades: [], ...over,
+  })
+
+  it('signs a released grade\'s marked pages and PDF in the submissions bucket', async () => {
+    client = makeClient({ submissions: [gradedSub()] })
+    const r = await call({ kind: 'homework-list', ...who })
+    expect(r.status).toBe(200)
+    const signed = client.log.filter(l => l[0] === 'sign' && l[1] === 'homework-submissions').flatMap(l => l[2])
+    expect(signed).toEqual(['a1/L1/s1/marked/01.jpg', 'a1/L1/s1/marked/02.jpg', 'a1/L1/s1/marked/report.pdf'])
+    expect(r.body.homework[0].submission).toMatchObject({
+      markedPages: ['https://signed/a1/L1/s1/marked/01.jpg', 'https://signed/a1/L1/s1/marked/02.jpg'],
+      reportUrl: 'https://signed/a1/L1/s1/marked/report.pdf',
+    })
+  })
+
+  it('signs nothing of a held grade', async () => {
+    client = makeClient({ submissions: [gradedSub({ status: 'held', hand_check: 'mismatch', hand_note: 'x' })] })
+    await call({ kind: 'homework-list', ...who })
+    expect(client.log.filter(l => l[0] === 'sign' && l[1] === 'homework-submissions')).toEqual([])
+  })
+
+  // The homework list (and the upload button on it) must not break because a
+  // marked paper could not be linked; the card says the paper is unavailable.
+  it('still lists homework when the marked papers cannot be signed', async () => {
+    client = makeClient({ submissions: [gradedSub()], signFailBucket: 'homework-submissions' })
+    const r = await call({ kind: 'homework-list', ...who })
+    expect(r.status).toBe(200)
+    expect(r.body.homework[0].submission).toMatchObject({ markedPages: [], reportUrl: null })
   })
 
   it('refuses a blocked student and an ID that is not on the number', async () => {
