@@ -8,7 +8,6 @@ import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignmen
 import { causeLabel } from '../../lib/assignments/paperReport'
 import { canEmailReport } from '../../lib/assignments/reportEmail'
 import { fmtTimestamp } from '../../lib/dates'
-import { IS_READ_ONLY } from '../../config'
 import { useMode } from '../../context/ModeContext'
 import EmailReportsPanel from './EmailReportsPanel'
 
@@ -37,8 +36,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
   const [open, setOpen] = useState(null)
   const [version, setVersion] = useState(0)
   const [emailing, setEmailing] = useState(null) // the rows being emailed, while the panel is open
-  // Emailing the marked paper is an admin send (teachers capture, never send),
-  // and it runs only on the local admin app's dev server.
+  // Emailing the marked paper is an admin send (teachers capture, never send).
   const canEmail = useMode() === 'admin'
 
   useEffect(() => {
@@ -86,11 +84,10 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
 
       {canEmail && subs && (
         <div className="flex flex-wrap items-center gap-2 mb-4 text-[12px]">
-          <button className="btn btn-secondary btn-sm" disabled={IS_READ_ONLY || unsent.length === 0}
+          <button className="btn btn-secondary btn-sm" disabled={unsent.length === 0}
                   onClick={() => setEmailing(unsent)}>
             ✉ Email reports ({unsent.length} not sent)
           </button>
-          {IS_READ_ONLY && <span className="text-ink-3">Open the local admin app (npm run dev on the office PC) to send.</span>}
         </div>
       )}
       {emailing && (
@@ -158,7 +155,7 @@ function SubmissionDetail({ sub, onOpenFile, onResolved, onEmail }) {
           <span className="text-ink-2">
             {sub.reportEmailedAt ? `Report emailed ${fmtTimestamp(sub.reportEmailedAt)}` : 'Report not emailed yet'}
           </span>
-          <button className="btn btn-secondary btn-sm" disabled={IS_READ_ONLY} onClick={onEmail}>
+          <button className="btn btn-secondary btn-sm" onClick={onEmail}>
             {sub.reportEmailedAt ? 'Resend report' : 'Email report'}
           </button>
         </div>

@@ -185,22 +185,25 @@ export const createHomeworkAssignmentSlice = (set, _get) => ({
     return { ok: true }
   },
 
-  // Email marked-paper reports (2026-10-16), admin only, through the local
-  // admin app's dev server (vite.config.js /api/send-homework-report), which
-  // re-checks every rule and records each send. testTo: send to that address
+  // Email marked-paper reports (2026-10-16), admin only, from the live site:
+  // api/send-homework-pending.js (kind 'report-email') re-checks every rule,
+  // sends through Gmail and records each send. testTo: send to that address
   // instead, recording nothing.
   async emailHomeworkReports(ids, testTo) {
+    const session = await getSession()
+    if (!session) return { ok: false, error: 'Sign in to send email.' }
     try {
-      const r = await fetch('/api/send-homework-report', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, testTo: testTo || null }),
+      const r = await fetch('/api/send-homework-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ kind: 'report-email', ids, testTo: testTo || null }),
       })
       const json = await r.json().catch(() => ({}))
-      if (!r.ok) return { ok: false, error: json.error || 'Could not send. Is the local admin app running?' }
+      if (!r.ok) return { ok: false, error: json.error || `Could not send (HTTP ${r.status}).` }
       return { ok: true, ...json }
     } catch (e) {
       console.error('[homework] email reports failed:', e)
-      return { ok: false, error: 'Could not reach the local admin app. Run npm run dev on the office PC.' }
+      return { ok: false, error: 'Could not reach the server. Check the connection and try again.' }
     }
   },
 

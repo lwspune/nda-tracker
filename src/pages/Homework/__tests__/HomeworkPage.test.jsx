@@ -4,6 +4,13 @@ import { ModeContext } from '../../../context/ModeContext'
 
 const LATER = new Date(Date.now() + 3 * 864e5).toISOString()
 
+// The live site is IS_READ_ONLY; a test flips it to render as there.
+const cfg = vi.hoisted(() => ({ readOnly: false }))
+vi.mock('../../../config', async importOriginal => {
+  const actual = await importOriginal()
+  return { ...actual, get IS_READ_ONLY() { return cfg.readOnly } }
+})
+
 const mockStore = {}
 function resetStore() {
   Object.assign(mockStore, {
@@ -220,8 +227,8 @@ describe('HomeworkPage', () => {
     })
   })
 
-  // 2026-10-16: an admin emails the marked-paper report from the local admin
-  // app. Teachers never send (capture only).
+  // 2026-10-16: an admin emails the marked-paper report, from the live site
+  // (it began local-only, where the page could not load). Teachers never send.
   describe('emailing the marked paper', () => {
     const marked = (over = {}) => ({
       id: 's1', assignmentId: 'a1', lwsId: 'L1', studentName: 'Aarav Nair', status: 'graded', files: ['a1/L1/s1/01.jpg'],
@@ -245,6 +252,18 @@ describe('HomeworkPage', () => {
 
     it('offers an admin to email the reports not yet sent, and a teacher nothing', async () => {
       expect(await openAsAdmin()).toBeEnabled()
+    })
+
+    it('works on the live site, with no "use the local app" message', async () => {
+      cfg.readOnly = true
+      try {
+        expect(await openAsAdmin()).toBeEnabled()
+        expect(screen.queryByText(/local admin app/i)).toBeNull()
+        fireEvent.click(await screen.findByRole('button', { name: /view aarav nair/i }))
+        expect(await screen.findByRole('button', { name: /^email report$/i })).toBeEnabled()
+      } finally {
+        cfg.readOnly = false
+      }
     })
 
     it('shows a teacher no email button', async () => {

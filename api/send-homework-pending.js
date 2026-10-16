@@ -6,6 +6,8 @@ import { refuseIfFlowOff } from './_flowGate.js'
 import { readEnvLocal } from './_env.js'
 import { normMobile } from './_mobile.js'
 import { sendWabridge } from './_wabridge.js'
+import { gmailApiMailer } from './_gmail.js'
+import { sendHomeworkReports } from './_reportEmail.js'
 
 // Wabridge/Meta drop messages whose template variables contain unicode dashes,
 // newlines, tabs, or runs of 5+ spaces. Subject + chapter (free text) are
@@ -30,6 +32,8 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Method Not Allowed' })
     return
   }
+  // Folded in as a kind because we are at the 12-function Hobby cap.
+  if (req.body?.kind === 'report-email') return handleReportEmail(req, res)
 
   const env = readEnvLocal()
   const supabaseUrl  = env.VITE_SUPABASE_URL      || process.env.VITE_SUPABASE_URL      || ''
@@ -125,4 +129,43 @@ export default async function handler(req, res) {
 
   lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}`)
   res.status(200).json({ ok: true, sent, skipped, blocked: blockedRows.length, lines })
+}
+
+// ── kind: 'report-email' — the marked-paper report, by email (2026-10-16) ────
+// Admin only, from the live site. Who gets what is decided in
+// src/lib/assignments/reportEmail.js and enforced by api/_reportEmail.js, which
+// records a send only after Gmail accepts it. Body { kind, ids, testTo? }.
+async function handleReportEmail(req, res) {
+  const env = readEnvLocal()
+  const pick = key => env[key] || process.env[key] || ''
+  const supabaseUrl = pick('VITE_SUPABASE_URL')
+  const supabaseAnon = pick('VITE_SUPABASE_ANON_KEY')
+
+  const jwt = bearerFrom(req)
+  if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
+  const user = await getUserOrNull(createClient(supabaseUrl, supabaseAnon), jwt)
+  if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Emailing families is an office send; teachers capture, never send.
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+  const serviceKey = pick('SUPABASE_SERVICE_ROLE_KEY')
+  let mail
+  try {
+    if (!serviceKey) throw new Error('Email is not configured: set SUPABASE_SERVICE_ROLE_KEY.')
+    mail = gmailApiMailer({
+      clientId: pick('GOOGLE_OAUTH_CLIENT_ID'),
+      clientSecret: pick('GOOGLE_OAUTH_CLIENT_SECRET'),
+      refreshToken: pick('GOOGLE_OAUTH_REFRESH_TOKEN'),
+      sender: pick('GMAIL_SENDER'),
+    })
+  } catch (e) {
+    console.error('[report-email] not configured:', e.message)
+    res.status(500).json({ ok: false, error: e.message })
+    return
+  }
+
+  const { ids, testTo } = req.body || {}
+  const r = await sendHomeworkReports({ db: createClient(supabaseUrl, serviceKey), mail, ids, testTo })
+  const { ok, status, ...rest } = r
+  res.status(status).json({ ok, ...rest })
 }

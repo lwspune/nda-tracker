@@ -3,9 +3,9 @@ import useStore from '../../store/useStore'
 import { Alert } from '../../components/ui'
 import { isEmailAddress } from '../../lib/assignments/reportEmail'
 
-// Confirm, then email the marked-paper report (2026-10-16). Admin only, from
-// the local admin app: the send runs on the dev server (scripts/grading/
-// _sendReports.js), which re-checks every rule and records each send.
+// Confirm, then email the marked-paper report (2026-10-16). Admin only: the
+// send runs on the server (api/send-homework-pending.js, kind 'report-email'),
+// which re-checks every rule, sends through Gmail and records each send.
 //
 // targets: staff submission rows (mapSubmissionRow) the admin chose.
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`

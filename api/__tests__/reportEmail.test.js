@@ -1,7 +1,7 @@
 // @vitest-environment node
-// The local sender behind the admin app's "Email report" button (2026-10-16).
+// The sender behind the admin app's "Email report" button (2026-10-16).
 import { describe, it, expect, vi } from 'vitest'
-import { sendHomeworkReports } from '../_sendReports.js'
+import { sendHomeworkReports } from '../_reportEmail.js'
 
 const row = (over = {}) => ({
   id: 's1', assignment_id: 'a1', lws_id: 'L1', student_name: 'Arjun Sharma', status: 'graded',

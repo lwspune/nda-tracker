@@ -1,13 +1,12 @@
-// Email marked-paper reports (2026-10-16). Run by the local admin app's dev
-// server (vite.config.js, POST /api/send-homework-report), the same way the
-// teacher schedule emails are sent: only on the office machine, only by an
-// admin. Service role, because submissions have no write policy.
+// Email marked-paper reports (2026-10-16). Run by api/send-homework-pending.js
+// (kind 'report-email') for an admin, from the live site; the mailer is
+// api/_gmail.js. Service role, because submissions have no write policy.
 //
 // Who gets what is decided in src/lib/assignments/reportEmail.js. This reads
 // the rows, fetches each stored PDF, hands the message to `mail`, and records
 // the send ONLY after the mailer accepted it. One failure never stops the rest.
-import { planReportEmails } from '../../src/lib/assignments/reportEmail.js'
-import { SUBMISSIONS_BUCKET } from '../../src/lib/assignments/upload.js'
+import { planReportEmails } from '../src/lib/assignments/reportEmail.js'
+import { SUBMISSIONS_BUCKET } from '../src/lib/assignments/upload.js'
 
 export const MAX_PER_SEND = 200
 

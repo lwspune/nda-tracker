@@ -1,10 +1,12 @@
 /*
  * get_google_refresh_token.js — one-time helper to mint a durable Google
- * Calendar refresh token for the institute account (connect.lwspune@gmail.com).
+ * refresh token for the institute account (connect.lwspune@gmail.com): Calendar
+ * (teacher sync) and Gmail send (marked-paper report emails, 2026-10-16).
  *
  * Prereqs (do these in Google Cloud Console first):
- *   - Google Calendar API enabled
- *   - OAuth consent screen: External, PUBLISHED to Production, scope .../auth/calendar
+ *   - Google Calendar API and Gmail API enabled
+ *   - OAuth consent screen: External, PUBLISHED to Production, scopes
+ *     .../auth/calendar and .../auth/gmail.send
  *   - An OAuth client of type "Desktop app"
  *
  * Setup: add these two lines to .env.local (the secret stays out of chat / git):
@@ -13,7 +15,7 @@
  *
  * Run:  node get_google_refresh_token.js
  *   → opens a consent URL; sign in as connect.lwspune@gmail.com, click through the
- *     "unverified app" warning, allow Calendar access. The script prints the
+ *     "unverified app" warning, allow Calendar and Gmail access. The script prints the
  *     refresh_token. Paste it into .env.local as GOOGLE_OAUTH_REFRESH_TOKEN.
  *
  * Zero npm deps — uses only Node's http/https.
@@ -25,7 +27,10 @@ const { URL, URLSearchParams } = require('url')
 
 const PORT = 53682
 const REDIRECT = `http://localhost:${PORT}`
-const SCOPE = 'https://www.googleapis.com/auth/calendar'
+const SCOPE = [
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/gmail.send',
+].join(' ')
 
 function readEnvLocal() {
   const out = {}

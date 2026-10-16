@@ -293,3 +293,89 @@ describe('send-homework-pending — flow switch', () => {
     expect(res.statusCode).toBe(200)
   })
 })
+
+// 2026-10-16: the marked-paper report email, sent from the live site through
+// the Gmail API. Folded in as a kind (12-function Hobby cap); admin only.
+describe('send-homework-pending kind=report-email', () => {
+  const row = {
+    id: 's1', assignment_id: 'a1', lws_id: 'L1', student_name: 'Arjun Sharma', status: 'graded',
+    marked_pages: 2, scans_deleted_at: null, regraded_at: null, total_awarded: 15, total_max: 20,
+    students: { email: 'arjun@example.com', account_status: 'Active' },
+    homework_assignments: { title: 'Limits', subject: 'Maths' }, homework_grades: [],
+  }
+  let stamped
+  function setEmailEnv() {
+    process.env.VITE_SUPABASE_URL = 'https://x.supabase.co'
+    process.env.VITE_SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
+    process.env.GOOGLE_OAUTH_CLIENT_ID = 'cid'
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'secret'
+    process.env.GOOGLE_OAUTH_REFRESH_TOKEN = 'refresh'
+    process.env.GMAIL_SENDER = 'connect.lwspune@gmail.com'
+  }
+  function setClients(user = { id: 'admin-uid' }) {
+    stamped = []
+    createClient.mockImplementation(() => {
+      const b = {
+        select: vi.fn(() => b), in: vi.fn(() => b), eq: vi.fn(() => b),
+        update: vi.fn(v => { stamped.push(v); return b }),
+        then: (ok, bad) => Promise.resolve(stamped.length ? { error: null } : { data: [row], error: null }).then(ok, bad),
+      }
+      return {
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user } }) },
+        from: vi.fn(() => b),
+        storage: { from: vi.fn(() => ({ download: vi.fn(async () => ({ data: new Blob([Buffer.from('%PDF-1.7 x')]), error: null })) })) },
+      }
+    })
+  }
+  function mockGoogle() {
+    vi.stubGlobal('fetch', vi.fn(async url => (String(url).includes('oauth2')
+      ? { ok: true, status: 200, json: async () => ({ access_token: 'tok' }) }
+      : { ok: true, status: 200, json: async () => ({ id: 'm1' }) })))
+  }
+  const sends = () => fetch.mock.calls.filter(([u]) => String(u).includes('gmail.googleapis.com'))
+
+  it('emails the report through Gmail and records the send, with no WhatsApp setup needed', async () => {
+    setEmailEnv(); setClients(); mockGoogle()
+    const { res } = await call({ kind: 'report-email', ids: ['s1'] })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ sent: [{ id: 's1', to: 'arjun@example.com' }], skipped: [], failed: [], test: false })
+    expect(sends()).toHaveLength(1)
+    expect(sends()[0][1].headers['Content-Type']).toBe('message/rfc822')
+    expect(stamped).toHaveLength(1)
+  })
+
+  it('sends a test to the given address without recording it', async () => {
+    setEmailEnv(); setClients(); mockGoogle()
+    const { res } = await call({ kind: 'report-email', ids: ['s1'], testTo: 'office@lws.example' })
+    expect(res.body).toMatchObject({ sent: [{ to: 'office@lws.example' }], test: true })
+    expect(stamped).toHaveLength(0)
+  })
+
+  it('returns 401 without a session and 403 for a teacher, sending nothing', async () => {
+    setEmailEnv(); setClients(); mockGoogle()
+    expect((await call({ kind: 'report-email', ids: ['s1'] }, { jwt: '' })).res.statusCode).toBe(401)
+    setClients({ id: 't', app_metadata: { role: 'teacher' } })
+    expect((await call({ kind: 'report-email', ids: ['s1'] })).res.statusCode).toBe(403)
+    expect(sends()).toHaveLength(0)
+  })
+
+  it('fails closed with a setup message when the Gmail credentials are missing', async () => {
+    setEmailEnv(); delete process.env.GOOGLE_OAUTH_REFRESH_TOKEN; setClients(); mockGoogle()
+    const { res } = await call({ kind: 'report-email', ids: ['s1'] })
+    expect(res.statusCode).toBe(500)
+    expect(res.body.error).toMatch(/GOOGLE_OAUTH_REFRESH_TOKEN/)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reports a Gmail refusal per student instead of failing the batch', async () => {
+    setEmailEnv(); setClients()
+    vi.stubGlobal('fetch', vi.fn(async url => (String(url).includes('oauth2')
+      ? { ok: true, status: 200, json: async () => ({ access_token: 'tok' }) }
+      : { ok: false, status: 403, json: async () => ({ error: { message: 'insufficient scopes' } }) })))
+    const { res } = await call({ kind: 'report-email', ids: ['s1'] })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.failed[0].error).toMatch(/insufficient scopes/)
+    expect(stamped).toHaveLength(0)
+  })
+})
