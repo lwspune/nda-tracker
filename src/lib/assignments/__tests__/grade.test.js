@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateGrade, OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS } from '../grade'
+import { validateGrade, OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, CAUSES, TOPIC_CAUSES, MAX_TOPIC_CHARS } from '../grade'
 
 const row = (over = {}) => ({
   label: 'Q1', max: 5, outcome: 'scored', awarded: 5, earned: 'Correct method and answer.', missing: '', ...over,
@@ -17,7 +17,7 @@ describe('validateGrade — a sound grade', () => {
   it('passes, numbers positions in order, and sums the total', () => {
     const r = validateGrade({
       maxMarks: 10,
-      file: file([row(), row({ label: 'Q2', awarded: 2.5, missing: 'No final answer.' })]),
+      file: file([row(), row({ label: 'Q2', awarded: 2.5, missing: 'No final answer.', cause: 'incomplete', topic: 'State the final answer' })]),
     })
     expect(r.ok).toBe(true)
     expect(r.totalAwarded).toBe(7.5)
@@ -75,7 +75,7 @@ describe('validateGrade — refusals name every problem at once', () => {
     expect(validateGrade({ maxMarks: 5, file: file([row({ awarded: 3, missing: '' })]) }).ok).toBe(false)
     expect(validateGrade({ maxMarks: 5, file: file([row({ earned: '' })]) }).ok).toBe(false)
     // Zero marks: nothing was earned, so "earned" may be blank.
-    expect(validateGrade({ maxMarks: 5, file: file([row({ awarded: 0, earned: '', missing: 'Wrong method.' })]) }).ok).toBe(true)
+    expect(validateGrade({ maxMarks: 5, file: file([row({ awarded: 0, earned: '', missing: 'Wrong method.', cause: 'concept', topic: 'Chain rule' })]) }).ok).toBe(true)
   })
 
   it('refuses "missing" on a full-marks question — the student sees it as a red ✗ beside full marks', () => {
@@ -178,12 +178,83 @@ describe('validateGrade — the handwriting check', () => {
   })
 
   it('never changes the marks', () => {
-    const plain = validateGrade({ maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.' })]) })
+    const plain = validateGrade({ maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.', cause: 'careless' })]) })
     const held = validateGrade({
-      maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.' })], { handwriting: { check: 'mismatch', note: 'Differs.' } }),
+      maxMarks: 5, file: file([row({ awarded: 4, missing: 'Units.', cause: 'careless' })], { handwriting: { check: 'mismatch', note: 'Differs.' } }),
     })
     expect(held.totalAwarded).toBe(plain.totalAwarded)
     expect(held.rows).toEqual(plain.rows)
+  })
+})
+
+// 2026-10-16: every question that lost marks names WHY, so the student's
+// report can say where the marks went (concept gaps vs careless slips vs work
+// left out) and what to fix first. One cause per question; the topic names
+// what to relearn or show.
+describe('validateGrade — why marks were lost', () => {
+  const lost = (over = {}) => row({ awarded: 3, missing: 'Sign slip in line 3.', cause: 'careless', ...over })
+
+  it('keeps the cause and topic on the row', () => {
+    const r = validateGrade({ maxMarks: 5, file: file([lost({ cause: 'concept', topic: '  Distributive property ' })]) })
+    expect(r.ok).toBe(true)
+    expect(r.rows[0]).toMatchObject({ cause: 'concept', topic: 'Distributive property' })
+  })
+
+  it('stores null cause and topic on full marks and on a question not attempted', () => {
+    const r = validateGrade({
+      maxMarks: 10,
+      file: file([row(), row({ label: 'Q2', outcome: 'not_attempted', awarded: null, earned: '', missing: '' })]),
+    })
+    expect(r.ok).toBe(true)
+    for (const x of r.rows) expect(x).toMatchObject({ cause: null, topic: null })
+  })
+
+  it('accepts every cause, a topic optional where it is not required', () => {
+    for (const cause of CAUSES) {
+      const topic = TOPIC_CAUSES.includes(cause) ? 'Something to work on' : ''
+      expect(validateGrade({ maxMarks: 5, file: file([lost({ cause, topic })]) }).ok, cause).toBe(true)
+    }
+  })
+
+  it('requires a cause whenever marks were lost, including a zero', () => {
+    for (const awarded of [4.5, 0]) {
+      const r = validateGrade({ maxMarks: 5, file: file([lost({ awarded, earned: awarded ? 'x' : '', cause: '' })]) })
+      expect(r.ok, String(awarded)).toBe(false)
+      expect(r.errors.join(' ')).toMatch(/Q1: marks were lost, so name the cause/)
+    }
+  })
+
+  it('refuses a cause it does not know', () => {
+    const r = validateGrade({ maxMarks: 5, file: file([lost({ cause: 'silly' })]) })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toMatch(/cause must be one of/)
+  })
+
+  it('refuses a cause on full marks or on a question not attempted', () => {
+    const full = validateGrade({ maxMarks: 5, file: file([row({ cause: 'careless' })]) })
+    expect(full.ok).toBe(false)
+    expect(full.errors.join(' ')).toMatch(/full marks, so leave `cause` empty/)
+    const skipped = validateGrade({
+      maxMarks: 10,
+      file: file([row(), row({ label: 'Q2', outcome: 'not_attempted', awarded: null, earned: '', missing: '', cause: 'concept', topic: 'x' })]),
+    })
+    expect(skipped.ok).toBe(false)
+    expect(skipped.errors.join(' ')).toMatch(/not attempted, so leave `cause` and `topic` empty/)
+  })
+
+  it('requires a topic for a concept gap and for work left out', () => {
+    for (const cause of TOPIC_CAUSES) {
+      const r = validateGrade({ maxMarks: 5, file: file([lost({ cause, topic: ' ' })]) })
+      expect(r.ok, cause).toBe(false)
+      expect(r.errors.join(' ')).toMatch(/needs a `topic`/)
+    }
+  })
+
+  it('refuses a topic with no cause, and one over the limit', () => {
+    expect(validateGrade({ maxMarks: 5, file: file([row({ topic: 'Chain rule' })]) }).ok).toBe(false)
+    const long = validateGrade({ maxMarks: 5, file: file([lost({ topic: 'x'.repeat(MAX_TOPIC_CHARS + 1) })]) })
+    expect(long.ok).toBe(false)
+    expect(long.errors.join(' ')).toMatch(new RegExp(`over ${MAX_TOPIC_CHARS} characters`))
   })
 })
 
@@ -191,5 +262,11 @@ describe('constants', () => {
   it('has the two outcomes and the two graders the database allows', () => {
     expect(OUTCOMES).toEqual(['scored', 'not_attempted'])
     expect(GRADERS).toEqual(['session', 'api'])
+  })
+
+  it('has the five causes, two of which need a topic', () => {
+    expect(CAUSES).toEqual(['concept', 'careless', 'incomplete', 'misread', 'mcq'])
+    expect(TOPIC_CAUSES).toEqual(['concept', 'incomplete'])
+    expect(MAX_TOPIC_CHARS).toBe(60)
   })
 })

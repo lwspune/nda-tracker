@@ -87,7 +87,7 @@ export function gradeTemplate(submissionId, assignment) {
     nextSteps: '',
     handwriting: { check: '', note: '' },
     grades: (assignment.questions ?? []).map(q => ({
-      label: q.label, max: num(q.marks), outcome: '', awarded: null, earned: '', missing: '',
+      label: q.label, max: num(q.marks), outcome: '', awarded: null, earned: '', missing: '', cause: '', topic: '',
     })),
   }
 }
@@ -95,7 +95,8 @@ export function gradeTemplate(submissionId, assignment) {
 // A graded submission's saved grade, as grade.json — the starting point for a
 // regrade. null when there is nothing saved.
 // A grade saved before the handwriting check existed comes back with an empty
-// check, which the checker refuses: a regrade records one.
+// check, which the checker refuses: a regrade records one. Likewise lost marks
+// saved before causes existed (2026-10-16) come back with no cause.
 export function savedGradeFile(submission) {
   if (submission.status !== 'graded' && submission.status !== 'held') return null
   return {
@@ -107,7 +108,7 @@ export function savedGradeFile(submission) {
       .sort((a, b) => a.position - b.position)
       .map(g => ({
         label: g.label, max: num(g.max_marks), outcome: g.outcome, awarded: num(g.awarded),
-        earned: g.earned ?? '', missing: g.missing ?? '',
+        earned: g.earned ?? '', missing: g.missing ?? '', cause: g.cause ?? '', topic: g.topic ?? '',
       })),
   }
 }
@@ -116,6 +117,6 @@ export function savedGradeFile(submission) {
 export function commitRows(rows) {
   return rows.map(r => ({
     position: r.position, label: r.label, maxMarks: r.maxMarks, outcome: r.outcome,
-    awarded: r.awarded, earned: r.earned, missing: r.missing,
+    awarded: r.awarded, earned: r.earned, missing: r.missing, cause: r.cause, topic: r.topic,
   }))
 }

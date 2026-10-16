@@ -59,9 +59,10 @@ same way as the 5th.
   "nextSteps": "One or two concrete actions.",
   "handwriting": { "check": "match", "note": "" },
   "grades": [
-    { "label": "Q1", "max": 5, "outcome": "scored", "awarded": 5, "earned": "Correct factorisation and answer.", "missing": "" },
-    { "label": "Q2", "max": 5, "outcome": "scored", "awarded": 2.5, "earned": "Right method.", "missing": "Sign slip in the last line; no final value." },
-    { "label": "Q3", "max": 5, "outcome": "not_attempted", "awarded": null, "earned": "", "missing": "" }
+    { "label": "Q1", "max": 5, "outcome": "scored", "awarded": 5, "earned": "Correct factorisation and answer.", "missing": "", "cause": "", "topic": "" },
+    { "label": "Q2", "max": 5, "outcome": "scored", "awarded": 2.5, "earned": "Right method.", "missing": "Sign slip in the last line; no final value.", "cause": "careless", "topic": "" },
+    { "label": "Q3", "max": 5, "outcome": "scored", "awarded": 1, "earned": "Correct final answer.", "missing": "No working: the product rule is not used.", "cause": "concept", "topic": "Product rule" },
+    { "label": "Q4", "max": 5, "outcome": "not_attempted", "awarded": null, "earned": "", "missing": "", "cause": "", "topic": "" }
   ]
 }
 ```
@@ -74,6 +75,8 @@ same way as the 5th.
   only if it matters to the student).
 - `outcome`: `scored` (answered; 0 allowed) or `not_attempted` (nothing
   written for it).
+- `cause` and `topic`: required on every question that lost marks, empty
+  otherwise. See "Why marks were lost" below.
 - `awarded`: halves only (0, 0.5, 1, …), never above `max`, `null` unless scored.
 - Marks lost → `missing` is required. Marks given → `earned` is required. Full
   marks → `missing` must be empty.
@@ -169,6 +172,32 @@ out yourself — without a paper there is often no key either.
 12. **The deductions in rules 7, 9 and 11 stack**, but a question never goes
     below 0.
 
+## Why marks were lost (`cause`, `topic`)
+
+Every scored question that lost marks names **one** cause. The student's report
+adds the lost marks up by cause ("−6 concept gaps, −2 careless") and builds its
+"what to focus on" list from them, so the choice must be the same in every
+session.
+
+| `cause` | When | `topic` |
+|---|---|---|
+| `concept` | The idea is wrong: a wrong formula, property, rule or method, or a step that shows the idea is not understood. | **Required**: the idea to relearn, as a syllabus phrase ("Distributive property", "Angles in the same segment"). |
+| `incomplete` | The approach is right but marks were lost for what is not written: steps, the reason or condition for a step (rules 10, 11), construction steps, the final statement. | **Required**: what to show ("Steps of construction", "The condition dx/dt ≠ 0"). |
+| `careless` | The method is right and the student shows they know the step, but slipped: arithmetic, a sign, a copied number, units (rule 9), numbering (rule 7). They would catch it by rereading. | Optional. |
+| `misread` | A different question was answered from the one set: a wrong value copied from the paper, the wrong quantity found. | Optional. |
+| `mcq` | A 1-mark MCQ or one-value answer is wrong and there is no working to show why. If the working shows why, use that cause instead. | Optional. |
+
+- **Two causes in one question:** choose the one that cost more marks. On a tie,
+  the one to fix first: `concept`, then `misread`, then `incomplete`, then
+  `careless`.
+- **The same slip twice in one homework** is not careless: it is `concept`.
+- **Full marks and `not_attempted`:** no cause, no topic. A question not
+  attempted is counted separately in the report.
+- `topic` is at most 60 characters, written for the student, with no question
+  number and no judgement of the student.
+- The cause is a category for the report. `missing` still describes the answer,
+  never the student (see "Feedback style": no "careless" in the text).
+
 ## Feedback style
 
 - Plain English, short sentences, at most two per field. The students are
@@ -209,6 +238,11 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-16: Every question that lost marks names a `cause` (concept, careless,
+  incomplete, misread, mcq), and a `topic` for concept and incomplete. It feeds
+  the student's report: where the marks went and what to fix first. Grades saved
+  before this have no causes; a regrade must add them.
 
 - 2026-10-14: Stricter marking from Daily Homework #2 on (faculty decision): an
   MCQ worth 2+ marks needs working (rule 6), a calculation must write the fact it

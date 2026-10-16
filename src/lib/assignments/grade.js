@@ -13,15 +13,24 @@
 //
 // 2026-10-13: every grade also carries a handwriting check (./handwriting.js).
 // It never changes the marks; a mismatch holds the grade from the student.
+//
+// 2026-10-16: every question that lost marks names WHY (`cause`) and, for a
+// concept gap or work left out, WHAT to relearn or show (`topic`). The student's
+// report adds the lost marks up by cause, so one cause per question: the one
+// that cost the most. GRADING.md says how to choose.
 
 import { validateHandwriting, holdsGrade } from './handwriting.js'
 
 export const OUTCOMES = ['scored', 'not_attempted']
 export const GRADERS = ['session', 'api']
+export const CAUSES = ['concept', 'careless', 'incomplete', 'misread', 'mcq']
+// The causes whose fix needs naming: the concept to relearn, the work to show.
+export const TOPIC_CAUSES = ['concept', 'incomplete']
 
 export const MAX_LABEL_CHARS = 40
 export const MAX_FEEDBACK_CHARS = 1000
 export const MAX_SUMMARY_CHARS = 1500
+export const MAX_TOPIC_CHARS = 60
 
 const text = v => (typeof v === 'string' ? v.trim() : '')
 const isHalf = n => Math.round(n * 2) === n * 2
@@ -30,7 +39,7 @@ const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 // { maxMarks, questions?: [{label, marks}], file, hasReference? } →
 //   { ok: true, rows, totalAwarded, wentWell, nextSteps, handwriting } | { ok: false, errors }
 //
-// `file` is { wentWell, nextSteps, handwriting: { check, note }, grades: [{ label, max, outcome, awarded, earned, missing }] }.
+// `file` is { wentWell, nextSteps, handwriting: { check, note }, grades: [{ label, max, outcome, awarded, earned, missing, cause, topic }] }.
 // hasReference: whether the student has a handwriting reference (see validateHandwriting).
 // Rows come back numbered 1..n: in the teacher's question order when a
 // breakdown was set, else in the grade file's order.
@@ -75,6 +84,9 @@ export function validateGrade({ maxMarks, questions, file, hasReference }) {
     if (earned.length > MAX_FEEDBACK_CHARS || missing.length > MAX_FEEDBACK_CHARS) {
       errors.push(`${label}: feedback is over ${MAX_FEEDBACK_CHARS} characters.`)
     }
+    const cause = text(raw.cause)
+    const topic = text(raw.topic)
+    if (topic.length > MAX_TOPIC_CHARS) errors.push(`${label}: the topic is over ${MAX_TOPIC_CHARS} characters.`)
 
     let awarded = null
     if (outcome === 'scored') {
@@ -90,15 +102,28 @@ export function validateGrade({ maxMarks, questions, file, hasReference }) {
       // The portal prints `missing` as a red ✗; beside full marks it reads as a lost mark.
       if (a === max && missing) errors.push(`${label}: full marks, so \`missing\` must be empty. Put the note in \`earned\` or \`nextSteps\`.`)
       if (a > 0 && !earned) errors.push(`${label}: marks were given, so say what earned them.`)
+      if (a < max) {
+        if (!cause) errors.push(`${label}: marks were lost, so name the cause (${CAUSES.join(', ')}).`)
+        else if (!CAUSES.includes(cause)) errors.push(`${label}: cause must be one of ${CAUSES.join(', ')}.`)
+        else if (TOPIC_CAUSES.includes(cause) && !topic) errors.push(`${label}: a ${cause} cause needs a \`topic\`: what to ${cause === 'concept' ? 'relearn' : 'show'}.`)
+      } else if (cause) {
+        errors.push(`${label}: full marks, so leave \`cause\` empty.`)
+      }
+      if (topic && !cause) errors.push(`${label}: a \`topic\` goes with a cause; this question has none.`)
       awarded = a
-    } else if (raw.awarded !== null && raw.awarded !== undefined) {
-      errors.push(`${label}: \`awarded\` must be null when the question is ${outcome}.`)
+    } else {
+      if (raw.awarded !== null && raw.awarded !== undefined) {
+        errors.push(`${label}: \`awarded\` must be null when the question is ${outcome}.`)
+      }
+      if (cause || topic) errors.push(`${label}: not attempted, so leave \`cause\` and \`topic\` empty.`)
     }
 
     rows.push({
       label, maxMarks: max, outcome, awarded,
       earned: outcome === 'scored' ? (earned || null) : null,
       missing: outcome === 'scored' ? (missing || null) : null,
+      cause: outcome === 'scored' ? (cause || null) : null,
+      topic: outcome === 'scored' ? (topic || null) : null,
     })
   })
 

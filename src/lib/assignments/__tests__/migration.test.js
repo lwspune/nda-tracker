@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   ALLOWED_TYPES, MAX_FILE_BYTES, ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET,
 } from '../upload'
-import { OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, MAX_SUMMARY_CHARS } from '../grade'
+import { OUTCOMES, GRADERS, MAX_FEEDBACK_CHARS, MAX_SUMMARY_CHARS, CAUSES, TOPIC_CAUSES, MAX_TOPIC_CHARS } from '../grade'
 import { HAND_CHECKS, MAX_HAND_NOTE_CHARS } from '../handwriting'
 import { SUBMISSION_STATUSES, MAX_REPLACEMENTS } from '../status'
 
@@ -253,5 +253,57 @@ describe('replace-submission migration', () => {
     const fns = rep.match(/CREATE OR REPLACE FUNCTION/g) ?? []
     expect(fns.length).toBe(2)
     expect((rep.match(/SET search_path = ''/g) ?? []).length).toBe(2)
+  })
+})
+
+// 2026-10-16: every question that lost marks names why (cause) and, for a
+// concept gap or work left out, what to relearn or show (topic). Two parts:
+// columns + checks, then the grade function that writes them.
+describe('grade-cause migration', () => {
+  const causeFiles = readdirSync(dir).filter(f => /_homework_grade_cause_\d_\w+\.sql$/.test(f)).sort()
+  const cause = causeFiles.map(f => readFileSync(join(dir, f), 'utf8')).join('\n').replace(/\s+/g, ' ')
+  const list = xs => xs.map(x => `'${x}'`).join(', ')
+
+  it('exists in two parts that sort after the replace-submission migration, columns first', () => {
+    expect(causeFiles.map(f => f.replace(/^\d+_/, ''))).toEqual([
+      'homework_grade_cause_1_columns.sql',
+      'homework_grade_cause_2_commit.sql',
+    ])
+    const lastRep = readdirSync(dir).filter(f => /_homework_replace_submission_\w+\.sql$/.test(f)).sort().pop()
+    expect(causeFiles[0] > lastRep).toBe(true)
+  })
+
+  it('allows exactly the JS causes, and topics up to the JS limit', () => {
+    expect(cause).toContain(`cause IN (${list(CAUSES)})`)
+    expect(cause).toContain(`BETWEEN 1 AND ${MAX_TOPIC_CHARS}`)
+  })
+
+  // Lost marks need a cause, and only lost marks may have one. NOT VALID: the
+  // grades saved before causes existed keep theirs empty (a regrade replaces
+  // the rows, and the new rows are checked).
+  it('requires a cause exactly when marks were lost, for new rows only', () => {
+    expect(cause).toMatch(/CONSTRAINT homework_grades_cause_needed CHECK \(\(outcome = 'scored' AND awarded < max_marks\) = \(cause IS NOT NULL\)\) NOT VALID/)
+  })
+
+  it('requires a topic for the JS topic causes, and no topic without a cause', () => {
+    expect(cause).toContain(`cause NOT IN (${list(TOPIC_CAUSES)}) OR topic IS NOT NULL`)
+    expect(cause).toContain('topic IS NULL OR cause IS NOT NULL')
+  })
+
+  it('writes cause and topic in the grade function, keeping its signature and service-role-only grant', () => {
+    expect(cause).not.toMatch(/DROP FUNCTION/)
+    expect(cause).toMatch(/CREATE OR REPLACE FUNCTION public\.homework_grade_commit\( p_submission uuid, p_grades jsonb, p_went_well text, p_next_steps text, p_grader text, p_hand_check text, p_hand_note text \)/)
+    expect(cause).toMatch(/INSERT INTO public\.homework_grades \([^)]*cause, topic\)/)
+    expect(cause).toContain("NULLIF(btrim(g->>'cause'), '')")
+    expect(cause).toContain("NULLIF(btrim(g->>'topic'), '')")
+    expect(cause).toMatch(/REVOKE ALL ON FUNCTION public\.homework_grade_commit\([^)]*\) FROM PUBLIC, anon, authenticated/)
+    expect(cause).toMatch(/GRANT EXECUTE ON FUNCTION public\.homework_grade_commit\([^)]*\) TO service_role/)
+    expect(cause).toMatch(/SELECT COALESCE\(sum\(awarded\), 0\)/)
+  })
+
+  it('pins search_path on every function', () => {
+    const fns = cause.match(/CREATE OR REPLACE FUNCTION/g) ?? []
+    expect(fns.length).toBe(1)
+    expect((cause.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
   })
 })
