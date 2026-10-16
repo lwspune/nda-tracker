@@ -134,6 +134,36 @@ function localDataPlugin() {
         })
       })
 
+      // POST /api/send-homework-report — email marked-paper reports (2026-10-16).
+      // Dev-only, like /api/send-schedule: sent from the office machine by an
+      // admin, through Gmail with the local app password. Body { ids, testTo? }.
+      // Returns { ok, sent, skipped, failed, test } or { error }.
+      server.middlewares.use('/api/send-homework-report', (req, res) => {
+        const reply = (status, payload) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(payload))
+        }
+        if (req.method !== 'POST') return reply(405, { error: 'Method Not Allowed' })
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', async () => {
+          try {
+            const { ids, testTo } = JSON.parse(body || '{}')
+            const { sendHomeworkReports } = await import('./scripts/grading/_sendReports.js')
+            const { serviceClient } = await import('./scripts/grading/_client.js')
+            const { gmailMailer } = await import('./scripts/grading/_mailer.js')
+            const mail = gmailMailer({ sender: readEnvLocal().GMAIL_SENDER || process.env.GMAIL_SENDER })
+            const r = await sendHomeworkReports({ db: serviceClient(), mail, ids, testTo })
+            const { ok: _ok, status, ...rest } = r
+            reply(status, rest)
+          } catch (e) {
+            console.error('[send-homework-report]', e)
+            reply(500, { error: e.message })
+          }
+        })
+      })
+
       // POST /api/send-late-notifications  /  /api/send-attendance-alerts  / …
       // In dev we re-use the same Vercel JS handlers, with a tiny shim that
       // parses the JSON body and adapts res to the Vercel res shape.
