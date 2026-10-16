@@ -8,6 +8,8 @@ import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { validateGrade } from '../../src/lib/assignments/grade.js'
 import { validateMarks, drawingPayload } from '../../src/lib/assignments/pageMarks.js'
+import { buildPaperReport } from '../../src/lib/assignments/paperReport.js'
+import { fmtTimestamp } from '../../src/lib/dates.js'
 
 const PAGES_SCRIPT = join('scripts', 'grading', 'pages.py')
 
@@ -22,7 +24,7 @@ export function runPages(command, dir) {
 export async function loadSubmission(db, id) {
   const { data: s, error } = await db
     .from('homework_submissions')
-    .select('id, lws_id, status, assignment_id, homework_assignments(max_marks, questions, due_at)')
+    .select('id, lws_id, student_name, status, assignment_id, homework_assignments(max_marks, questions, due_at, title, subject)')
     .eq('id', id)
     .single()
   if (error) throw new Error(`submission ${id}: ${error.message}`)
@@ -60,6 +62,19 @@ export function checkGradeFile({ dir, id, a, hasReference }) {
 
   const payloadJson = JSON.stringify({ pageCount, ...drawingPayload({ marks: marks.marks, rows: grade.rows }) })
   return { ok: true, grade, marks: marks.marks, pageCount, payloadJson, stamp: sha256(payloadJson) }
+}
+
+// What scripts/grading/pages.py `report` lays out: the header facts, every
+// question's line, and buildPaperReport (the same builder the app shows).
+export function reportJson({ s, a, check }) {
+  const { grade } = check
+  return JSON.stringify({
+    title: a.title, subject: a.subject, student: s.student_name,
+    gradedOn: fmtTimestamp(new Date().toISOString()),
+    pageCount: check.pageCount, wentWell: grade.wentWell, nextSteps: grade.nextSteps,
+    grades: grade.rows.map(r => ({ label: r.label, maxMarks: r.maxMarks, outcome: r.outcome, awarded: r.awarded, missing: r.missing })),
+    report: buildPaperReport(grade.rows),
+  })
 }
 
 export function printErrors(errors) {

@@ -139,3 +139,67 @@ class TestDraw:
         self.setup_page(inbox)
         with pytest.raises(SystemExit):
             self.run(inbox, [mark('cross', page=2)], page_count=2)
+
+
+def report_json(page_count=2):
+    """What grading:commit writes: the header facts and buildPaperReport's output."""
+    return {
+        'title': 'Maths Daily Homework #3', 'subject': 'Maths', 'student': 'Test Student',
+        'gradedOn': '16 Oct 2026', 'pageCount': page_count,
+        'wentWell': 'Clear setup on Q1.', 'nextSteps': 'Write the condition before dividing.',
+        'grades': [
+            {'label': 'Q1', 'maxMarks': 5, 'outcome': 'scored', 'awarded': 5, 'missing': None},
+            {'label': 'Q2', 'maxMarks': 5, 'outcome': 'scored', 'awarded': 2.5, 'missing': 'No reason for dividing: dx/dt ≠ 0.'},
+            {'label': 'Q3', 'maxMarks': 5, 'outcome': 'not_attempted', 'awarded': None, 'missing': None},
+        ],
+        'report': {
+            'total': 7.5, 'max': 15, 'pct': 50,
+            'counts': {'questions': 3, 'full': 1, 'partial': 1, 'zero': 0, 'notAttempted': 1},
+            'lost': [
+                {'key': 'incomplete', 'label': 'Steps left out', 'marks': 2.5, 'questions': ['Q2']},
+                {'key': 'not_attempted', 'label': 'Not attempted', 'marks': 5, 'questions': ['Q3']},
+            ],
+            'potential': {'marks': 7.5, 'pct': 50, 'avoidable': 0, 'questions': []},
+            'focus': [{'label': 'Q2', 'lost': 2.5, 'cause': 'incomplete',
+                       'heading': 'Show full steps: The condition dx/dt ≠ 0', 'missing': 'No reason for dividing.'}],
+            'smallerFixes': [{'cause': 'not_attempted', 'heading': 'Not attempted', 'advice': 'Try these now.',
+                              'questions': ['Q3'], 'marks': 5}],
+        },
+    }
+
+
+class TestReport:
+    def setup(self, inbox, pages_n=2):
+        (inbox / 'preview').mkdir()
+        for n in range(1, pages_n + 1):
+            Image.new('RGB', (1125, 2000), (250, 250, 250)).save(inbox / 'preview' / f'{n:02d}.jpg')
+        (inbox / 'preview' / 'report.json').write_text(json.dumps(report_json(pages_n)), encoding='utf-8')
+
+    def test_builds_summary_pages_then_one_page_per_marked_page(self, inbox):
+        self.setup(inbox)
+        path = pages.report(str(inbox))
+        with fitz.open(path) as doc:
+            summary = doc.page_count - 2
+            assert summary >= 1
+            text = ''.join(doc[i].get_text() for i in range(summary))
+            # The marked pages are images, one per page, after the summary.
+            assert all(doc[i].get_images() for i in range(summary, doc.page_count))
+        for expected in ['Maths Daily Homework #3', 'Test Student', '7.5 / 15', '50%',
+                         'Steps left out', 'Show full steps', 'Not attempted', 'Q2',
+                         'Clear setup on Q1.', 'Write the condition before dividing.']:
+            assert expected in text, expected
+
+    def test_keeps_maths_symbols_in_the_text(self, inbox):
+        self.setup(inbox)
+        with fitz.open(pages.report(str(inbox))) as doc:
+            assert '≠' in doc[0].get_text()
+
+    def test_keeps_the_file_small_enough_to_email(self, inbox):
+        self.setup(inbox, pages_n=6)
+        assert os.path.getsize(pages.report(str(inbox))) < 5 * 1024 * 1024
+
+    def test_refuses_when_a_marked_page_is_missing(self, inbox):
+        self.setup(inbox)
+        os.remove(inbox / 'preview' / '02.jpg')
+        with pytest.raises(SystemExit):
+            pages.report(str(inbox))

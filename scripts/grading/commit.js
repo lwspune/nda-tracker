@@ -9,15 +9,16 @@
 //
 // The check (src/lib/assignments/grade.js + pageMarks.js) prints EVERY problem;
 // nothing is saved unless it passes AND the marks were previewed as they stand
-// (grading:preview's stamp). Then the prepared pages are uploaded to
-// <submission>/marked/ and homework_grade_commit saves the grade and its page
-// marks together, checks they cover the homework's marks and sums the total
+// (grading:preview's stamp). Then the pages AS DRAWN in the preview and the
+// report PDF are uploaded to <submission>/marked/ (the student sees exactly
+// what the grader looked at) and homework_grade_commit saves the grade and its
+// page marks together, checks they cover the homework's marks and sums the total
 // itself. A regrade is the same command after `grading:pull -- --id=<id>`.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { serviceClient, INBOX, arg, fail } from './_client.js'
 import { commitRows } from '../../src/lib/assignments/brief.js'
-import { SUBMISSIONS_BUCKET, markedPagePath } from '../../src/lib/assignments/upload.js'
+import { SUBMISSIONS_BUCKET, markedPagePath, reportPdfPath } from '../../src/lib/assignments/upload.js'
 import { loadSubmission, checkGradeFile, printErrors } from './_marking.js'
 
 function previewStamp(dir) {
@@ -66,13 +67,20 @@ async function main() {
   if (grade.handwriting.holds) console.log('This grade will be HELD: the student will not see it until their teacher releases it.')
   if (dry) return
 
-  // The prepared pages the marks sit on. Upserted, so a regrade or a retry
-  // after a failed save overwrites rather than duplicates.
-  for (let i = 0; i < check.pageCount; i++) {
-    const body = readFileSync(join(dir, 'pages', `${String(i + 1).padStart(2, '0')}.jpg`))
+  // The marked pages as previewed, then the report. Upserted, so a regrade or
+  // a retry after a failed save overwrites rather than duplicates.
+  const uploads = [
+    ...Array.from({ length: check.pageCount }, (_, i) => ({
+      from: join(dir, 'preview', `${String(i + 1).padStart(2, '0')}.jpg`),
+      to: markedPagePath(s.assignment_id, s.lws_id, id, i), type: 'image/jpeg',
+    })),
+    { from: join(dir, 'preview', 'report.pdf'), to: reportPdfPath(s.assignment_id, s.lws_id, id), type: 'application/pdf' },
+  ]
+  for (const u of uploads) {
+    if (!existsSync(u.from)) throw new Error(`${u.from} is missing. Run npm run grading:preview -- ${id} again.`)
     const { error: upErr } = await db.storage.from(SUBMISSIONS_BUCKET)
-      .upload(markedPagePath(s.assignment_id, s.lws_id, id, i), body, { contentType: 'image/jpeg', upsert: true })
-    if (upErr) throw new Error(`upload page ${i + 1}: ${upErr.message}`)
+      .upload(u.to, readFileSync(u.from), { contentType: u.type, upsert: true })
+    if (upErr) throw new Error(`upload ${u.to}: ${upErr.message}`)
   }
 
   const { data: saved, error: cErr } = await db.rpc('homework_grade_commit', {

@@ -44,8 +44,10 @@ same way as the 5th.
    can be wrong, and any correct method still gets full marks.
 6. Fill `grade.json`: the grades, then the `marks` on the pages (see "Marks on
    the pages" below), placed by reading positions off `grid/`.
-7. `npm run grading:preview -- <id>` draws the marks onto `preview/NN.jpg`.
-   **Read every preview page.** Any mark not where it belongs: fix its `x`/`y`
+7. `npm run grading:preview -- <id>` draws the marks onto `preview/NN.jpg` and
+   builds `preview/report.pdf`, the report the student downloads (summary, then
+   these pages). **Read every preview page.** These exact images are what the
+   student sees. Any mark not where it belongs: fix its `x`/`y`
    and preview again. The commit refuses marks that were not previewed as they
    stand.
 8. `npm run grading:commit -- <id> --dry` until the check passes, then

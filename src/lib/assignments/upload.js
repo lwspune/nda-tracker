@@ -69,14 +69,21 @@ export function submissionFilePath(assignmentId, lwsId, submissionId, index, ext
   return `${assignmentId}/${lwsId}/${submissionId}/${pad(index)}.${ext}`
 }
 
-// The prepared pages the grader's marks are drawn against (2026-10-16):
-// upright, PDFs split into pages, written by scripts/grading/pages.py and
-// uploaded by grading:commit. `<assignment>/<lws_id>/<submission>/marked/01.jpg`.
-// Purged with the hand-in files 30 days after grading.
+// The marked pages (2026-10-16): the student's pages, upright and PDFs split,
+// with the grader's marks drawn on, exactly as approved in grading:preview
+// (scripts/grading/pages.py) and uploaded by grading:commit. The student, the
+// PDF and the email all show these same images.
+// `<assignment>/<lws_id>/<submission>/marked/01.jpg`. Purged with the hand-in
+// files 30 days after grading.
 export const MAX_MARKED_PAGES = 60
 
 export function markedPagePath(assignmentId, lwsId, submissionId, index) {
   return `${assignmentId}/${lwsId}/${submissionId}/marked/${pad(index)}.jpg`
+}
+
+// The marked-paper report PDF, beside the marked pages (and purged with them).
+export function reportPdfPath(assignmentId, lwsId, submissionId) {
+  return `${assignmentId}/${lwsId}/${submissionId}/marked/report.pdf`
 }
 
 // Every marked page of a submission row (snake_case, as selected).

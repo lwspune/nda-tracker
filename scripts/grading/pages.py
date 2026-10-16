@@ -11,6 +11,8 @@ Mark positions are percentages of the PREPARED page, so the grid, the drawing
 and the app all agree whatever the photo's size or rotation tag. Run with
 -E -P, not -I: isolated mode hides PyMuPDF on this machine (see GRADING.md).
 """
+import html
+import io
 import json
 import re
 import sys
@@ -177,8 +179,165 @@ def draw(inbox):
     return out
 
 
+# ── The report PDF ─────────────────────────────────────────────────────────
+# Summary page(s) laid out from preview/report.json (every number in it comes
+# from buildPaperReport in src/lib/assignments/paperReport.js, the same builder
+# the app uses), then the marked pages exactly as previewed.
+
+FONT_DIR = Path('C:/Windows/Fonts')
+PDF_PAGE_SIDE = 1400        # marked pages are shrunk for the PDF ...
+PDF_JPEG_QUALITY = 72       # ... to keep it small enough to email
+INK, INK_2, ACCENT, RULE = '#1a1d2e', '#5a6080', '#5b5ef4', '#e3e6f0'
+
+
+def esc(v):
+    return html.escape('' if v is None else str(v))
+
+
+def fmt(n):
+    n = float(n)
+    return str(int(n)) if n.is_integer() else f'{n:g}'
+
+
+def report_css():
+    faces = ''
+    if (FONT_DIR / 'segoeui.ttf').exists():
+        faces = ('@font-face {font-family: Body; src: url(segoeui.ttf);}'
+                 '@font-face {font-family: Body; src: url(segoeuib.ttf); font-weight: bold;}'
+                 '@font-face {font-family: Sym; src: url(seguisym.ttf);}')
+    return faces + f"""
+      body {{ font-family: Body, Sym, sans-serif; font-size: 10pt; color: {INK}; }}
+      h1 {{ font-size: 17pt; margin: 0; }}
+      h2 {{ font-size: 12pt; margin: 16pt 0 5pt 0; padding-bottom: 2pt; border-bottom: 1pt solid {RULE}; }}
+      h3 {{ font-size: 10.5pt; margin: 10pt 0 3pt 0; }}
+      p {{ margin: 2pt 0; }}
+      .muted {{ color: {INK_2}; }}
+      .big {{ font-size: 26pt; font-weight: bold; }}
+      .pct {{ font-size: 14pt; font-weight: bold; color: {INK_2}; }}
+      table {{ border-collapse: collapse; }}
+      td, th {{ padding: 3pt 4pt; vertical-align: top; text-align: left; }}
+      th {{ color: {INK_2}; font-weight: normal; font-size: 9pt; border-bottom: 1pt solid {RULE}; }}
+      .rows td {{ border-bottom: 0.5pt solid {RULE}; }}
+      .num {{ text-align: right; white-space: nowrap; }}
+      .card {{ margin: 0 0 7pt 0; padding: 5pt 7pt; border-left: 2.5pt solid {ACCENT}; background-color: #f4f4ff; }}
+    """
+
+
+# MuPDF's HTML engine honours column widths in points, not percent (a percent
+# width collapses the column), so every width below is points of the 515pt
+# text width of an A4 page with 40pt margins, LESS each cell's 8pt of padding
+# (a width is the content box; padding is added on top).
+BAR_PT = 160
+
+
+def bar_cell(marks, widest):
+    width = max(4, round(BAR_PT * marks / widest)) if widest else 0
+    return (f'<table style="width:{width}pt"><tr>'
+            f'<td style="background-color:{ACCENT}; padding:0; height:7pt;"></td></tr></table>')
+
+
+def report_html(d):
+    r = d['report']
+    c = r['counts']
+    out = [
+        f'<h1>{esc(d["title"])}</h1>',
+        f'<p class="muted">{esc(d["student"])} &#183; {esc(d["subject"])} &#183; graded {esc(d["gradedOn"])}</p>',
+        '<table style="margin-top:10pt"><tr>',
+        f'<td style="width:200pt"><span class="big">{fmt(r["total"])} / {fmt(r["max"])}</span>'
+        f' <span class="pct">{r["pct"]}%</span></td>',
+        f'<td class="muted" style="width:295pt">Full marks: {c["full"]} &#183; Part marks: {c["partial"]} &#183; '
+        f'No marks: {c["zero"]} &#183; Not attempted: {c["notAttempted"]}<br/>{c["questions"]} questions</td>',
+        '</tr></table>',
+    ]
+    p = r['potential']
+    if p['avoidable'] > 0:
+        out.append(f'<p style="margin-top:6pt">Fix the slips in {esc(", ".join(p["questions"]))} and this is '
+                   f'<b>{fmt(p["marks"])} / {fmt(r["max"])} ({p["pct"]}%)</b>: {fmt(p["avoidable"])} '
+                   f'mark{"" if p["avoidable"] == 1 else "s"} you already knew how to get.</p>')
+
+    if r['lost']:
+        widest = max(l['marks'] for l in r['lost'])
+        out.append('<h2>Where your marks went</h2><table class="rows">')
+        out.append(f'<tr><th style="width:130pt">Why</th><th style="width:{BAR_PT}pt"></th>'
+                   '<th class="num" style="width:45pt">Marks</th><th style="width:148pt">Questions</th></tr>')
+        for l in r['lost']:
+            out.append(f'<tr><td>{esc(l["label"])}</td><td>{bar_cell(l["marks"], widest)}</td>'
+                       f'<td class="num">&#8722;{fmt(l["marks"])}</td><td class="muted">{esc(", ".join(l["questions"]))}</td></tr>')
+        out.append('</table>')
+
+    if r['focus']:
+        out.append('<h2>What to focus on</h2>')
+        for f in r['focus']:
+            out.append(f'<div class="card"><b>{esc(f["heading"])}</b> '
+                       f'<span class="muted">({esc(f["label"])}, &#8722;{fmt(f["lost"])})</span>'
+                       + (f'<br/>{esc(f["missing"])}' if f.get('missing') else '') + '</div>')
+    if r['smallerFixes']:
+        out.append('<h3>Smaller fixes</h3><table class="rows">')
+        for f in r['smallerFixes']:
+            out.append(f'<tr><td style="width:130pt"><b>{esc(f["heading"])}</b></td>'
+                       f'<td style="width:310pt">{esc(f["advice"])} <span class="muted">{esc(", ".join(f["questions"]))}</span></td>'
+                       f'<td class="num" style="width:45pt">&#8722;{fmt(f["marks"])}</td></tr>')
+        out.append('</table>')
+
+    out.append('<h2>Question by question</h2><table class="rows">')
+    out.append('<tr><th style="width:40pt">Q</th><th class="num" style="width:55pt">Marks</th><th style="width:396pt">What was missing</th></tr>')
+    for g in d['grades']:
+        got = f'{fmt(g["awarded"])} / {fmt(g["maxMarks"])}' if g['outcome'] == 'scored' else f'&#8212; / {fmt(g["maxMarks"])}'
+        note = 'Not attempted' if g['outcome'] != 'scored' else (g.get('missing') or '')
+        out.append(f'<tr><td>{esc(g["label"])}</td><td class="num">{got}</td><td>{esc(note)}</td></tr>')
+    out.append('</table>')
+
+    out.append(f'<h2>What went well</h2><p>{esc(d["wentWell"])}</p>')
+    out.append(f'<h2>What to work on next</h2><p>{esc(d["nextSteps"])}</p>')
+    out.append(f'<p class="muted" style="margin-top:12pt">Your {d["pageCount"]} marked '
+               f'page{"" if d["pageCount"] == 1 else "s"} follow.</p>')
+    return '\n'.join(out)
+
+
+def report(inbox):
+    inbox = Path(inbox)
+    prev = inbox / 'preview'
+    d = json.loads((prev / 'report.json').read_text(encoding='utf-8'))
+    count = d['pageCount']
+    missing = [n for n in range(1, count + 1) if not (prev / f'{n:02d}.jpg').exists()]
+    if missing:
+        fail(f'marked pages {missing} are missing; run grading:preview again')
+
+    path = prev / 'report.pdf'
+    archive = fitz.Archive(str(FONT_DIR)) if FONT_DIR.exists() else None
+    story = fitz.Story(html=report_html(d), user_css=report_css(), archive=archive)
+    a4 = fitz.paper_rect('a4')
+    where = a4 + (40, 40, -40, -40)
+    summary = io.BytesIO()
+    writer = fitz.DocumentWriter(summary)
+    more = 1
+    while more:
+        dev = writer.begin_page(a4)
+        more, _ = story.place(where)
+        story.draw(dev)
+        writer.end_page()
+    writer.close()
+
+    doc = fitz.open('pdf', summary.getvalue())
+    for n in range(1, count + 1):
+        with Image.open(prev / f'{n:02d}.jpg') as src:
+            img = src.convert('RGB')
+        img.thumbnail((PDF_PAGE_SIDE, PDF_PAGE_SIDE), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=PDF_JPEG_QUALITY)
+        # A4 width, the page's own aspect: no white bands, nothing cropped.
+        page = doc.new_page(width=a4.width, height=a4.width * img.height / img.width)
+        page.insert_image(page.rect, stream=buf.getvalue())
+    # Embed only the characters used: the whole of Segoe UI is ~1.9 MB, ten
+    # times the marked pages themselves.
+    doc.subset_fonts()
+    doc.save(str(path), garbage=3, deflate=True)
+    doc.close()
+    return str(path)
+
+
 if __name__ == '__main__':
-    if len(sys.argv) != 3 or sys.argv[1] not in ('prepare', 'draw'):
-        fail('usage: pages.py prepare|draw <inbox folder>')
-    result = prepare(sys.argv[2]) if sys.argv[1] == 'prepare' else draw(sys.argv[2])
-    print(json.dumps(result))
+    commands = {'prepare': prepare, 'draw': draw, 'report': report}
+    if len(sys.argv) != 3 or sys.argv[1] not in commands:
+        fail('usage: pages.py prepare|draw|report <inbox folder>')
+    print(json.dumps(commands[sys.argv[1]](sys.argv[2])))
