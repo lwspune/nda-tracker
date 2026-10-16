@@ -100,6 +100,7 @@ def prepare(inbox):
     return info
 
 
+
 # ── Drawing ────────────────────────────────────────────────────────────────
 
 def wrap_note(draw, text, f, max_w):
@@ -226,7 +227,9 @@ def report_css():
 # MuPDF's HTML engine honours column widths in points, not percent (a percent
 # width collapses the column), so every width below is points of the 515pt
 # text width of an A4 page with 40pt margins, LESS each cell's 8pt of padding
-# (a width is the content box; padding is added on top).
+# (a width is the content box; padding is added on top), LESS about 12pt of
+# slack: MuPDF spends a little more than that sum, and a table budgeted to the
+# exact width ran past the margin and cut off the end of the longest line.
 BAR_PT = 160
 
 
@@ -245,7 +248,7 @@ def report_html(d):
         '<table style="margin-top:10pt"><tr>',
         f'<td style="width:200pt"><span class="big">{fmt(r["total"])} / {fmt(r["max"])}</span>'
         f' <span class="pct">{r["pct"]}%</span></td>',
-        f'<td class="muted" style="width:295pt">Full marks: {c["full"]} &#183; Part marks: {c["partial"]} &#183; '
+        f'<td class="muted" style="width:283pt">Full marks: {c["full"]} &#183; Part marks: {c["partial"]} &#183; '
         f'No marks: {c["zero"]} &#183; Not attempted: {c["notAttempted"]}<br/>{c["questions"]} questions</td>',
         '</tr></table>',
     ]
@@ -259,7 +262,7 @@ def report_html(d):
         widest = max(l['marks'] for l in r['lost'])
         out.append('<h2>Where your marks went</h2><table class="rows">')
         out.append(f'<tr><th style="width:130pt">Why</th><th style="width:{BAR_PT}pt"></th>'
-                   '<th class="num" style="width:45pt">Marks</th><th style="width:148pt">Questions</th></tr>')
+                   '<th class="num" style="width:45pt">Marks</th><th style="width:136pt">Questions</th></tr>')
         for l in r['lost']:
             out.append(f'<tr><td>{esc(l["label"])}</td><td>{bar_cell(l["marks"], widest)}</td>'
                        f'<td class="num">&#8722;{fmt(l["marks"])}</td><td class="muted">{esc(", ".join(l["questions"]))}</td></tr>')
@@ -275,12 +278,12 @@ def report_html(d):
         out.append('<h3>Smaller fixes</h3><table class="rows">')
         for f in r['smallerFixes']:
             out.append(f'<tr><td style="width:130pt"><b>{esc(f["heading"])}</b></td>'
-                       f'<td style="width:310pt">{esc(f["advice"])} <span class="muted">{esc(", ".join(f["questions"]))}</span></td>'
+                       f'<td style="width:298pt">{esc(f["advice"])} <span class="muted">{esc(", ".join(f["questions"]))}</span></td>'
                        f'<td class="num" style="width:45pt">&#8722;{fmt(f["marks"])}</td></tr>')
         out.append('</table>')
 
     out.append('<h2>Question by question</h2><table class="rows">')
-    out.append('<tr><th style="width:40pt">Q</th><th class="num" style="width:55pt">Marks</th><th style="width:396pt">What was missing</th></tr>')
+    out.append('<tr><th style="width:40pt">Q</th><th class="num" style="width:55pt">Marks</th><th style="width:384pt">What was missing</th></tr>')
     for g in d['grades']:
         got = f'{fmt(g["awarded"])} / {fmt(g["maxMarks"])}' if g['outcome'] == 'scored' else f'&#8212; / {fmt(g["maxMarks"])}'
         note = 'Not attempted' if g['outcome'] != 'scored' else (g.get('missing') or '')

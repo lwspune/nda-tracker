@@ -198,6 +198,26 @@ class TestReport:
         self.setup(inbox, pages_n=6)
         assert os.path.getsize(pages.report(str(inbox))) < 5 * 1024 * 1024
 
+    # 2026-10-16: every column was budgeted to exactly the text width, MuPDF
+    # spent more, and the table ran off the page, cutting the last words.
+    def test_no_text_runs_past_the_right_margin(self, inbox):
+        self.setup(inbox)
+        d = report_json(2)
+        long = ('The general-solution rules are not written before use (sin x = 0 gives x = nπ; '
+                'cos x = cos α gives x = 2nπ ± α), and the answer leaves out n ∈ Z.')
+        for g in d['grades']:
+            g['missing'] = long
+        d['report']['smallerFixes'][0]['advice'] = 'Redo these slowly and check each line and the final answer.'
+        (inbox / 'preview' / 'report.json').write_text(json.dumps(d), encoding='utf-8')
+        with fitz.open(pages.report(str(inbox))) as doc:
+            right = doc[0].rect.width - 40
+            for i in range(doc.page_count - 2):
+                for block in doc[i].get_text('dict')['blocks']:
+                    for line in block.get('lines', []):
+                        for span in line['spans']:
+                            if span['text'].strip():
+                                assert span['bbox'][2] <= right + 0.5, span['text']
+
     def test_refuses_when_a_marked_page_is_missing(self, inbox):
         self.setup(inbox)
         os.remove(inbox / 'preview' / '02.jpg')
