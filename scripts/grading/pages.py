@@ -37,7 +37,15 @@ def fail(msg):
 
 
 def font(px):
-    return ImageFont.load_default(size=max(10, int(px)))
+    # PIL's built-in font has no Greek, minus sign or ≠, so "Δu ≠ 0" in a note
+    # printed as empty boxes on the student's page. PIL cannot fall back from one
+    # font to another per character, so use Segoe UI Symbol: the same Latin as
+    # the report's Segoe UI, plus ⇒ and ∈, which Segoe UI itself lacks.
+    size = max(10, int(px))
+    for name in ('seguisym.ttf', 'segoeui.ttf'):
+        if (FONT_DIR / name).exists():
+            return ImageFont.truetype(str(FONT_DIR / name), size)
+    return ImageFont.load_default(size=size)
 
 
 def shrink(img):

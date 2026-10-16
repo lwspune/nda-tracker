@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scr
 
 import fitz  # PyMuPDF
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import pages
 
@@ -139,6 +139,24 @@ class TestDraw:
         self.setup_page(inbox)
         with pytest.raises(SystemExit):
             self.run(inbox, [mark('cross', page=2)], page_count=2)
+
+    # 2026-10-16: PIL's built-in font has no Greek, no minus sign and no ≠, so a
+    # note about "Δu ≠ 0" printed as empty boxes on the student's page.
+    @pytest.mark.skipif(not (pages.FONT_DIR / 'seguisym.ttf').exists(), reason='needs Segoe UI Symbol')
+    def test_the_note_font_has_greek_and_maths_symbols(self):
+        assert missing_glyphs(pages.font(40), 'ΔδθπλαΣ−≠±⇒∈²') == ''
+
+
+def missing_glyphs(f, chars):
+    """The characters f would draw as its empty box (the glyph a private-use
+    code point gets, which no font draws)."""
+    def drawn(ch):
+        img = Image.new('L', (80, 80), 0)
+        ImageDraw.Draw(img).text((10, 10), ch, fill=255, font=f)
+        return img.tobytes()
+    box = drawn('')
+    return ''.join(ch for ch in chars if drawn(ch) == box)
+
 
 
 def report_json(page_count=2):
