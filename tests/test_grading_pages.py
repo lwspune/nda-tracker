@@ -158,6 +158,55 @@ def missing_glyphs(f, chars):
     return ''.join(ch for ch in chars if drawn(ch) == box)
 
 
+class TestRotate:
+    """A phone photo with no rotation tag stays sideways; the grader turns it."""
+
+    def setup(self, inbox):
+        for d in ('pages', 'grid'):
+            (inbox / d).mkdir()
+        page = Image.new('RGB', (200, 100), (255, 255, 255))
+        page.putpixel((190, 10), (0, 0, 0))  # top-right corner
+        page.save(inbox / 'pages' / '01.jpg', quality=100)
+        Image.new('RGB', (100, 200), (255, 255, 255)).save(inbox / 'pages' / '02.jpg')
+        (inbox / 'pages' / 'pages.json').write_text(json.dumps([
+            {'page': 1, 'source': 'scans/01.jpg', 'width': 200, 'height': 100},
+            {'page': 2, 'source': 'scans/02.jpg', 'width': 100, 'height': 200}]))
+        (inbox / 'grade.json').write_text(json.dumps({'marks': [
+            {'page': 1, 'label': 'Q1', 'kind': 'circle', 'x': 90, 'y': 10, 'w': 8, 'h': 4},
+            {'page': 1, 'label': 'Q1', 'kind': 'note', 'x': 20, 'y': 30, 'text': 'Δu ≠ 0', 'to': {'x': 80, 'y': 60}},
+            {'page': 2, 'label': 'Q2', 'kind': 'tick', 'x': 40, 'y': 40}]}, ensure_ascii=False), encoding='utf-8')
+
+    def test_turning_left_moves_the_page_and_its_marks_together(self, inbox):
+        self.setup(inbox)
+        pages.rotate(str(inbox), '1', 'left')
+        img = Image.open(inbox / 'pages' / '01.jpg').convert('RGB')
+        assert img.size == (100, 200)
+        assert img.getpixel((10, 9))[0] < 128  # the top-right corner is now top-left
+        assert Image.open(inbox / 'grid' / '01.jpg').size == (100, 200)
+        meta = json.loads((inbox / 'pages' / 'pages.json').read_text())
+        assert (meta[0]['width'], meta[0]['height']) == (100, 200)
+        assert (meta[1]['width'], meta[1]['height']) == (100, 200)  # other pages untouched
+        marks = json.loads((inbox / 'grade.json').read_text(encoding='utf-8'))['marks']
+        assert marks[0] == {'page': 1, 'label': 'Q1', 'kind': 'circle', 'x': 10, 'y': 10, 'w': 4, 'h': 8}
+        assert (marks[1]['x'], marks[1]['y'], marks[1]['to']) == (30, 80, {'x': 60, 'y': 20})
+        assert marks[1]['text'] == 'Δu ≠ 0'
+        assert marks[2] == {'page': 2, 'label': 'Q2', 'kind': 'tick', 'x': 40, 'y': 40}
+
+    def test_turning_right_undoes_turning_left(self, inbox):
+        self.setup(inbox)
+        before = json.loads((inbox / 'grade.json').read_text(encoding='utf-8'))['marks']
+        pages.rotate(str(inbox), '1', 'left')
+        pages.rotate(str(inbox), '1', 'right')
+        assert json.loads((inbox / 'grade.json').read_text(encoding='utf-8'))['marks'] == before
+        assert Image.open(inbox / 'pages' / '01.jpg').size == (200, 100)
+
+    def test_refuses_a_page_that_does_not_exist_or_a_bad_direction(self, inbox):
+        self.setup(inbox)
+        with pytest.raises(SystemExit):
+            pages.rotate(str(inbox), '3', 'left')
+        with pytest.raises(SystemExit):
+            pages.rotate(str(inbox), '1', 'upside')
+
 
 def report_json(page_count=2):
     """What grading:commit writes: the header facts and buildPaperReport's output."""

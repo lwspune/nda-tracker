@@ -22,6 +22,7 @@
     "merge:subtopics:sync": "node migrate_subtopics_supabase.js",
     "grading:pull": "node scripts/grading/pull.js",
     "grading:preview": "node scripts/grading/preview.js",
+    "grading:rotate": "python -E -P scripts/grading/pages.py rotate",
     "grading:commit": "node scripts/grading/commit.js",
     "grading:purge": "node scripts/grading/purge.js",
     "grading:hand-compare": "node scripts/grading/hand-compare.js",

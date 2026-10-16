@@ -108,6 +108,55 @@ def prepare(inbox):
     return info
 
 
+def rotate(inbox, page, direction='left'):
+    """Turn one prepared page a quarter-turn and move its marks with it.
+
+    prepare() turns a photo upright only when it carries a rotation tag; a
+    phone photo without one stays sideways. Run this before marking that page
+    (or after: the marks in grade.json are moved too). Then preview again."""
+    inbox = Path(inbox)
+    if not inbox.is_dir():
+        inbox = Path('grading-inbox') / inbox.name
+    if direction not in ('left', 'right'):
+        fail(f'direction must be left or right, not {direction!r}')
+    n = int(page)
+    name = f'{n:02d}.jpg'
+    if not (inbox / 'pages' / name).exists():
+        fail(f'no page {n} in {inbox / "pages"}')
+
+    with Image.open(inbox / 'pages' / name) as src:
+        img = src.convert('RGB').rotate(90 if direction == 'left' else -90, expand=True)
+    img.save(inbox / 'pages' / name, quality=JPEG_QUALITY)
+    (inbox / 'grid').mkdir(exist_ok=True)
+    grid_copy(img).save(inbox / 'grid' / name, quality=JPEG_QUALITY)
+
+    meta_path = inbox / 'pages' / 'pages.json'
+    meta = json.loads(meta_path.read_text(encoding='utf-8'))
+    for entry in meta:
+        if entry['page'] == n:
+            entry['width'], entry['height'] = img.size
+    meta_path.write_text(json.dumps(meta, indent=2) + '\n', encoding='utf-8')
+
+    # Turning left, the right edge becomes the top: (x, y) -> (y, 100 - x).
+    def turn(x, y):
+        return (y, 100 - x) if direction == 'left' else (100 - y, x)
+
+    grade_path = inbox / 'grade.json'
+    moved = 0
+    if grade_path.exists():
+        grade = json.loads(grade_path.read_text(encoding='utf-8'))
+        for m in grade.get('marks', []):
+            if m.get('page') != n:
+                continue
+            m['x'], m['y'] = (round(v, 2) for v in turn(m['x'], m['y']))
+            if 'w' in m and 'h' in m:
+                m['w'], m['h'] = m['h'], m['w']
+            if m.get('to'):
+                m['to'] = dict(zip(('x', 'y'), (round(v, 2) for v in turn(m['to']['x'], m['to']['y']))))
+            moved += 1
+        grade_path.write_text(json.dumps(grade, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    return {'page': n, 'width': img.width, 'height': img.height, 'marksMoved': moved}
+
 
 # ── Drawing ────────────────────────────────────────────────────────────────
 
@@ -349,6 +398,10 @@ def report(inbox):
 
 if __name__ == '__main__':
     commands = {'prepare': prepare, 'draw': draw, 'report': report}
-    if len(sys.argv) != 3 or sys.argv[1] not in commands:
-        fail('usage: pages.py prepare|draw|report <inbox folder>')
-    print(json.dumps(commands[sys.argv[1]](sys.argv[2])))
+    if len(sys.argv) in (4, 5) and sys.argv[1] == 'rotate':
+        print(json.dumps(rotate(*sys.argv[2:])))
+    elif len(sys.argv) != 3 or sys.argv[1] not in commands:
+        fail('usage: pages.py prepare|draw|report <inbox folder>\n'
+             '       pages.py rotate <inbox folder or submission id> <page> [left|right]')
+    else:
+        print(json.dumps(commands[sys.argv[1]](sys.argv[2])))
