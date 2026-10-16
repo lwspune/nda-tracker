@@ -185,6 +185,25 @@ export const createHomeworkAssignmentSlice = (set, _get) => ({
     return { ok: true }
   },
 
+  // Email marked-paper reports (2026-10-16), admin only, through the local
+  // admin app's dev server (vite.config.js /api/send-homework-report), which
+  // re-checks every rule and records each send. testTo: send to that address
+  // instead, recording nothing.
+  async emailHomeworkReports(ids, testTo) {
+    try {
+      const r = await fetch('/api/send-homework-report', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, testTo: testTo || null }),
+      })
+      const json = await r.json().catch(() => ({}))
+      if (!r.ok) return { ok: false, error: json.error || 'Could not send. Is the local admin app running?' }
+      return { ok: true, ...json }
+    } catch (e) {
+      console.error('[homework] email reports failed:', e)
+      return { ok: false, error: 'Could not reach the local admin app. Run npm run dev on the office PC.' }
+    }
+  },
+
   // A 10-minute link to a private file, for viewing in a new tab.
   async getHomeworkFileUrl(bucket, path) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 600)

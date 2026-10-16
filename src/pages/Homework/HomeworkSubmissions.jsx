@@ -6,6 +6,11 @@ import { submissionRoster, assignmentState } from '../../lib/assignments/status'
 import { fmtDeadline } from '../../lib/assignments/editor'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignments/upload'
 import { causeLabel } from '../../lib/assignments/paperReport'
+import { canEmailReport } from '../../lib/assignments/reportEmail'
+import { fmtTimestamp } from '../../lib/dates'
+import { IS_READ_ONLY } from '../../config'
+import { useMode } from '../../context/ModeContext'
+import EmailReportsPanel from './EmailReportsPanel'
 
 const STATUS = {
   not_submitted: { variant: 'gray',   label: 'Not submitted' },
@@ -31,6 +36,10 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(null)
   const [version, setVersion] = useState(0)
+  const [emailing, setEmailing] = useState(null) // the rows being emailed, while the panel is open
+  // Emailing the marked paper is an admin send (teachers capture, never send),
+  // and it runs only on the local admin app's dev server.
+  const canEmail = useMode() === 'admin'
 
   useEffect(() => {
     let live = true
@@ -47,6 +56,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
     [studentProfiles, assignment.batchNames, subs],
   )
   const count = st => rows.filter(r => r.status === st).length
+  const unsent = (subs ?? []).filter(s => canEmailReport(s) && !s.reportEmailedAt)
 
   async function openFile(bucket, path) {
     const url = await getFileUrl(bucket, path)
@@ -73,6 +83,19 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
           </button>
         ))}
       </div>
+
+      {canEmail && subs && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 text-[12px]">
+          <button className="btn btn-secondary btn-sm" disabled={IS_READ_ONLY || unsent.length === 0}
+                  onClick={() => setEmailing(unsent)}>
+            ✉ Email reports ({unsent.length} not sent)
+          </button>
+          {IS_READ_ONLY && <span className="text-ink-3">Open the local admin app (npm run dev on the office PC) to send.</span>}
+        </div>
+      )}
+      {emailing && (
+        <EmailReportsPanel targets={emailing} onClose={() => setEmailing(null)} onSent={() => setVersion(v => v + 1)} />
+      )}
 
       {failed && <Alert type="error">Could not load the submissions. Reload the page to try again.</Alert>}
       {!subs && !failed && <Spinner />}
@@ -115,6 +138,7 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
                     sub={r.submission}
                     onOpenFile={path => openFile(SUBMISSIONS_BUCKET, path)}
                     onResolved={() => setVersion(v => v + 1)}
+                    onEmail={canEmail && canEmailReport(r.submission) ? () => setEmailing([r.submission]) : null}
                   />
                 )}
               </div>
@@ -126,9 +150,19 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
   )
 }
 
-function SubmissionDetail({ sub, onOpenFile, onResolved }) {
+function SubmissionDetail({ sub, onOpenFile, onResolved, onEmail }) {
   return (
     <div className="mt-3 flex flex-col gap-3 text-[12.5px]">
+      {onEmail && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-ink-2">
+            {sub.reportEmailedAt ? `Report emailed ${fmtTimestamp(sub.reportEmailedAt)}` : 'Report not emailed yet'}
+          </span>
+          <button className="btn btn-secondary btn-sm" disabled={IS_READ_ONLY} onClick={onEmail}>
+            {sub.reportEmailedAt ? 'Resend report' : 'Email report'}
+          </button>
+        </div>
+      )}
       {sub.scansDeletedAt ? (
         <p className="text-ink-3">The photos were deleted after grading; the grade is kept.</p>
       ) : (

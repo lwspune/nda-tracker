@@ -220,4 +220,30 @@ describe('homeworkAssignmentSlice', () => {
       }
     })
   })
+
+  // 2026-10-16: emailing marked-paper reports through the local dev server.
+  describe('emailHomeworkReports', () => {
+    const reply = (status, json) => vi.stubGlobal('fetch', vi.fn(async () => ({ ok: status === 200, status, json: async () => json })))
+
+    it('posts the ids and test address and returns the result', async () => {
+      reply(200, { sent: [{ id: 's1' }], skipped: [], failed: [], test: false })
+      const r = await makeStore().get().emailHomeworkReports(['s1'], 'office@lws.com')
+      expect(r).toMatchObject({ ok: true, sent: [{ id: 's1' }] })
+      const [url, init] = fetch.mock.calls[0]
+      expect(url).toBe('/api/send-homework-report')
+      expect(JSON.parse(init.body)).toEqual({ ids: ['s1'], testTo: 'office@lws.com' })
+    })
+
+    it('passes the server refusal back', async () => {
+      reply(400, { error: 'The test address is not an email address.' })
+      expect(await makeStore().get().emailHomeworkReports(['s1'], 'x')).toEqual({ ok: false, error: 'The test address is not an email address.' })
+    })
+
+    it('says to start the local admin app when it cannot be reached', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+      const r = await makeStore().get().emailHomeworkReports(['s1'], null)
+      expect(r.ok).toBe(false)
+      expect(r.error).toMatch(/npm run dev/)
+    })
+  })
 })

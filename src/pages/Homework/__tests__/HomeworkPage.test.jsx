@@ -218,6 +218,84 @@ describe('HomeworkPage', () => {
     })
   })
 
+  // 2026-10-16: an admin emails the marked-paper report from the local admin
+  // app. Teachers never send (capture only).
+  describe('emailing the marked paper', () => {
+    const marked = (over = {}) => ({
+      id: 's1', assignmentId: 'a1', lwsId: 'L1', studentName: 'Aarav Nair', status: 'graded', files: ['a1/L1/s1/01.jpg'],
+      totalAwarded: 7.5, totalMax: 10, wentWell: 'Clear working', nextSteps: 'Revise', scansDeletedAt: null,
+      markedPages: ['a1/L1/s1/marked/01.jpg'], reportPath: 'a1/L1/s1/marked/report.pdf', reportEmailedAt: null,
+      grades: [{ position: 1, label: 'Q1', maxMarks: 10, outcome: 'scored', awarded: 7.5, earned: 'Method right', missing: 'Final answer', cause: 'careless', topic: null }],
+      ...over,
+    })
+    const openAsAdmin = async () => {
+      renderAs('admin', 'office@lws.com')
+      fireEvent.click(screen.getAllByRole('button', { name: /submissions/i })[0])
+      return screen.findByRole('button', { name: /email reports \(1 not sent\)/i })
+    }
+    beforeEach(() => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [
+        marked(),
+        marked({ id: 's2', lwsId: 'L2', studentName: 'Bhavya Rao', reportEmailedAt: '2026-10-16T08:00:00Z' }),
+      ])
+      mockStore.emailHomeworkReports = vi.fn(async ids => ({ ok: true, sent: ids.map(id => ({ id, name: 'Aarav Nair', to: 'a@x.co' })), skipped: [], failed: [], test: false }))
+    })
+
+    it('offers an admin to email the reports not yet sent, and a teacher nothing', async () => {
+      expect(await openAsAdmin()).toBeEnabled()
+    })
+
+    it('shows a teacher no email button', async () => {
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
+      await screen.findByText('Aarav Nair')
+      expect(screen.queryByRole('button', { name: /email report/i })).toBeNull()
+    })
+
+    it('confirms who it goes to, then sends and reloads', async () => {
+      fireEvent.click(await openAsAdmin())
+      const panel = screen.getByRole('region', { name: /email marked papers/i })
+      expect(within(panel).getByText('Aarav Nair')).toBeInTheDocument()
+      expect(within(panel).queryByText('Bhavya Rao')).toBeNull()
+      fireEvent.click(within(panel).getByRole('button', { name: /send to 1 student/i }))
+      await waitFor(() => expect(mockStore.emailHomeworkReports).toHaveBeenCalledWith(['s1'], null))
+      expect(await within(panel).findByText(/sent to 1/i)).toBeInTheDocument()
+      await waitFor(() => expect(mockStore.getHomeworkSubmissions).toHaveBeenCalledTimes(2))
+    })
+
+    it('sends a test to a staff address without sending to the student', async () => {
+      fireEvent.click(await openAsAdmin())
+      const panel = screen.getByRole('region', { name: /email marked papers/i })
+      const send = within(panel).getByRole('button', { name: /send a test/i })
+      expect(send).toBeDisabled()
+      fireEvent.change(within(panel).getByLabelText(/send a test to/i), { target: { value: 'office@lws.com' } })
+      fireEvent.click(send)
+      await waitFor(() => expect(mockStore.emailHomeworkReports).toHaveBeenCalledWith(['s1'], 'office@lws.com'))
+    })
+
+    it('lists what was skipped or failed, with the reason', async () => {
+      mockStore.emailHomeworkReports = vi.fn(async () => ({
+        ok: true, sent: [], test: false,
+        skipped: [{ id: 's1', name: 'Aarav Nair', reason: 'no email address on file' }],
+        failed: [{ id: 's9', name: 'Chetan Joshi', error: 'SMTPAuthenticationError: bad password' }],
+      }))
+      fireEvent.click(await openAsAdmin())
+      const panel = screen.getByRole('region', { name: /email marked papers/i })
+      fireEvent.click(within(panel).getByRole('button', { name: /send to 1 student/i }))
+      expect(await within(panel).findByText(/Aarav Nair: no email address on file/)).toBeInTheDocument()
+      expect(within(panel).getByText(/Chetan Joshi: SMTPAuthenticationError: bad password/)).toBeInTheDocument()
+    })
+
+    it('says when a report was emailed, and offers to resend it', async () => {
+      await openAsAdmin()
+      fireEvent.click(await screen.findByRole('button', { name: /view bhavya rao/i }))
+      expect(await screen.findByText(/report emailed 16 Oct 2026/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /resend report/i }))
+      const panel = screen.getByRole('region', { name: /email marked papers/i })
+      expect(within(panel).getByText('Bhavya Rao')).toBeInTheDocument()
+    })
+  })
+
   // 2026-10-13: a grade whose handwriting does not match the student's
   // reference is held until the homework's teacher or an admin decides.
   describe('held for a handwriting check', () => {

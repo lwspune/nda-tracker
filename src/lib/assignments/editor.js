@@ -168,6 +168,7 @@ export function mapSubmissionRow(r) {
     // link. Empty for grades saved before page marks.
     markedPages: markedPagePaths(r),
     reportPath: r.marked_pages ? reportPdfPath(r.assignment_id, r.lws_id, r.id) : null,
+    reportEmailedAt: r.report_emailed_at ?? null,
     grades: (r.homework_grades ?? [])
       .map(g => ({
         position: g.position,

@@ -157,8 +157,9 @@ describe('row mapping', () => {
     expect(s.grades[0]).toMatchObject({ cause: 'concept', topic: 'Chain rule' })
     expect(s.markedPages).toEqual(['id1/L1/s/marked/01.jpg', 'id1/L1/s/marked/02.jpg'])
     expect(s.reportPath).toBe('id1/L1/s/marked/report.pdf')
+    expect(mapSubmissionRow({ id: 's', assignment_id: 'id1', lws_id: 'L1', status: 'graded', files: [], marked_pages: 1, report_emailed_at: 't', homework_grades: [] }).reportEmailedAt).toBe('t')
     const old = mapSubmissionRow({ id: 's', assignment_id: 'id1', lws_id: 'L1', status: 'graded', files: [], homework_grades: [] })
-    expect(old).toMatchObject({ markedPages: [], reportPath: null })
+    expect(old).toMatchObject({ markedPages: [], reportPath: null, reportEmailedAt: null })
   })
 
   it('carries the handwriting check for faculty', () => {
