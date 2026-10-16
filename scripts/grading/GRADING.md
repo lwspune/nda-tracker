@@ -23,15 +23,21 @@ same way as the 5th.
    `npm run grading:hand-compare -- --assignment=<homework id>` and, in a
    session that does not grade, look through `grading-inbox/_hand/<id>/` for the
    same hand under two submission ids. Note the pairs; they become `mismatch`
-   when those submissions are graded.
+   when those submissions are graded. A PDF hand-in lands there as a `.pdf`,
+   which Read cannot show: look at that submission's `pages/01.jpg` instead.
 3. **One submission per fresh session.** Say: "Grade grading-inbox/<id> by
    scripts/grading/GRADING.md". Never grade two in one session: one student's
    answers must not colour another's grade.
 4. Read `brief.md`, then the question paper (if any), the answer key (if any),
    then every page in `pages/` in order (upright, PDFs already split: there is
-   no need for `pdf2png.py` any more). Images with Read. **Before marking**,
-   compare `pages/` with `reference/` and decide the handwriting check (see
-   "Handwriting check" below).
+   no need for `pdf2png.py` any more). Images with Read. **A page still
+   sideways?** `pages/` is turned upright only when the photo carries a rotation
+   tag, and many phone photos have none. Turn it with
+   `npm run grading:rotate -- <id> <page> left` before placing marks: `left`
+   turns it anticlockwise (its right edge becomes the top), `right` clockwise.
+   Any marks already on that page in `grade.json` move with it. **Before
+   marking**, compare `pages/` with `reference/` and decide the handwriting
+   check (see "Handwriting check" below).
 5. Work out each answer yourself before marking. An answer key is the teacher's,
    and keys are sometimes wrong — if yours and the key disagree, re-derive, and
    note it in the ledger if the key was wrong. **No key?** Look the question up
@@ -286,6 +292,22 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-16: Page-mark notes were drawn in PIL's built-in font, which has no
+  Greek, minus sign or ≠: "Δu ≠ 0" printed as empty boxes. Notes now use Segoe
+  UI Symbol, so write maths as maths (Δu ≠ 0, nπ, ⇒). Never write "du" for an
+  increment (it reads as a derivative) or "!=" (programmer's notation).
+- 2026-10-16: `pages/` is upright only when the photo carries a rotation tag; a
+  phone photo without one stayed sideways and was marked that way. Routine
+  step 4 now checks orientation and turns the page with `grading:rotate`.
+- 2026-10-16: A slip in the working costs 0.5 once per question, however many
+  there are (rule 9): a dropped sign and missing brackets in the same answer are
+  one deduction. A step is earned only when written: a proof that stops at a
+  product of limits without writing them as dy/du and du/dx loses that step.
+- 2026-10-16: The hand-compare pack copies PDF hand-ins as `.pdf`, which cannot
+  be viewed as images; the same page is already upright in the submission's
+  `pages/01.jpg` (routine step 2). Content shared across hand-ins (the same
+  proof steps, word for word) is not a match on its own: compare letter shapes.
 
 - 2026-10-16: Graded pages carry marks (ticks, crosses, circles, notes, one
   score per question), placed off `grid/` and checked in `grading:preview`
