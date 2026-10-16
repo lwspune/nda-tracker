@@ -170,16 +170,9 @@ function SubmissionDetail({ sub, onOpenFile, onResolved, onEmail }) {
           {sub.files.map((path, i) => (
             <button key={path} className="btn btn-secondary btn-sm" onClick={() => onOpenFile(path)}>Page {i + 1}</button>
           ))}
-        </div>
-      )}
-      {/* The marked paper (2026-10-16): the pages as the student sees them, and their report. */}
-      {!sub.scansDeletedAt && sub.markedPages?.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {sub.markedPages.map((path, i) => (
-            <button key={path} className="btn btn-secondary btn-sm" onClick={() => onOpenFile(path)}>Marked page {i + 1}</button>
-          ))}
+          {/* The report carries the marked pages, so they get no buttons of their own. */}
           {sub.reportPath && (
-            <button className="btn btn-secondary btn-sm" onClick={() => onOpenFile(sub.reportPath)}>Report (PDF)</button>
+            <button className="btn btn-primary btn-sm" onClick={() => onOpenFile(sub.reportPath)}>Report (PDF)</button>
           )}
         </div>
       )}
@@ -197,24 +190,28 @@ function SubmissionDetail({ sub, onOpenFile, onResolved, onEmail }) {
             <div><div className="font-semibold text-ink-2">What went well</div><p>{sub.wentWell}</p></div>
             <div><div className="font-semibold text-ink-2">What to work on</div><p>{sub.nextSteps}</p></div>
           </div>
-          <table className="w-full text-left">
-            <thead className="text-[11px] text-ink-3 uppercase">
-              <tr><th className="py-1 pr-2">Q</th><th className="pr-2">Marks</th><th className="pr-2">Earned</th><th className="pr-2">Missing</th><th>Why</th></tr>
-            </thead>
-            <tbody>
-              {sub.grades.map(g => (
-                <tr key={g.position} className="align-top border-t border-border">
-                  <td className="py-1.5 pr-2 font-semibold">{g.label}</td>
-                  <td className="pr-2 font-mono whitespace-nowrap">
-                    {g.outcome === 'scored' ? `${g.awarded} / ${g.maxMarks}` : `— / ${g.maxMarks}`}
-                  </td>
-                  <td className="pr-2">{g.outcome === 'scored' ? g.earned : 'Not attempted'}</td>
-                  <td className="pr-2">{g.missing}</td>
-                  <td className="text-ink-2">{causeLabel(g.cause, g.topic)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Scrolls sideways on a phone instead of running past the card. */}
+          <div className="overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+               tabIndex={0} role="region" aria-label="Marks by question">
+            <table className="w-full min-w-[560px] text-left">
+              <thead className="text-[11px] text-ink-3 uppercase">
+                <tr><th className="py-1 pr-2">Q</th><th className="pr-2">Marks</th><th className="pr-2">Earned</th><th className="pr-2">Missing</th><th>Why</th></tr>
+              </thead>
+              <tbody>
+                {sub.grades.map(g => (
+                  <tr key={g.position} className="align-top border-t border-border">
+                    <td className="py-1.5 pr-2 font-semibold">{g.label}</td>
+                    <td className="pr-2 font-mono whitespace-nowrap">
+                      {g.outcome === 'scored' ? `${g.awarded} / ${g.maxMarks}` : `— / ${g.maxMarks}`}
+                    </td>
+                    <td className="pr-2">{g.outcome === 'scored' ? g.earned : 'Not attempted'}</td>
+                    <td className="pr-2">{g.missing}</td>
+                    <td className="text-ink-2">{causeLabel(g.cause, g.topic)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

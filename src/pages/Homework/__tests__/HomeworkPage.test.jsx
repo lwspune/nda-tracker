@@ -199,8 +199,9 @@ describe('HomeworkPage', () => {
       expect(screen.getByText('Clear working')).toBeInTheDocument()
     })
 
-    // 2026-10-16: the cause of each loss, and the marked paper the student sees.
-    it('shows why marks were lost and opens the marked pages and the report', async () => {
+    // 2026-10-16: the cause of each loss, and the report the student gets. The
+    // marked pages are inside the report, so they get no buttons of their own.
+    it('shows why marks were lost and opens the report, with no marked-page buttons', async () => {
       mockStore.getHomeworkSubmissions = vi.fn(async () => [{
         id: 's1', assignmentId: 'a1', lwsId: 'L1', studentName: 'Aarav Nair', status: 'graded', files: ['a1/L1/s1/01.jpg'],
         totalAwarded: 7.5, totalMax: 10, wentWell: 'Clear working', nextSteps: 'Revise', scansDeletedAt: null,
@@ -211,10 +212,11 @@ describe('HomeworkPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
       fireEvent.click(await screen.findByRole('button', { name: /view aarav nair/i }))
       expect(await screen.findByText(/Concept gap: Chain rule/)).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Marked page 2' }))
-      fireEvent.click(screen.getByRole('button', { name: /report \(pdf\)/i }))
-      await waitFor(() => expect(mockStore.getHomeworkFileUrl).toHaveBeenCalledWith('homework-submissions', 'a1/L1/s1/marked/02.jpg'))
-      expect(mockStore.getHomeworkFileUrl).toHaveBeenCalledWith('homework-submissions', 'a1/L1/s1/marked/report.pdf')
+      expect(screen.queryByRole('button', { name: /marked page/i })).not.toBeInTheDocument()
+      const report = screen.getByRole('button', { name: /report \(pdf\)/i })
+      expect(report).toHaveClass('btn-primary')
+      fireEvent.click(report)
+      await waitFor(() => expect(mockStore.getHomeworkFileUrl).toHaveBeenCalledWith('homework-submissions', 'a1/L1/s1/marked/report.pdf'))
     })
   })
 
