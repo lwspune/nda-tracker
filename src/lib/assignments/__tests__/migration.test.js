@@ -378,3 +378,29 @@ describe('page-marks migration', () => {
     expect((marks.match(/SET search_path = ''/g) ?? []).length).toBe(fns.length)
   })
 })
+
+// 2026-10-16: staff email the marked-paper report from the local admin app.
+// report_emailed_at records it; any change to the grade clears it, so a
+// regraded paper shows as not sent.
+describe('report-email migration', () => {
+  const emailFiles = readdirSync(dir).filter(f => /_homework_report_email\.sql$/.test(f)).sort()
+  const email = emailFiles.map(f => readFileSync(join(dir, f), 'utf8')).join(' ').replace(/\s+/g, ' ')
+
+  it('exists once, after the page-marks migration', () => {
+    expect(emailFiles).toHaveLength(1)
+    const lastMarks = readdirSync(dir).filter(f => /_homework_page_marks_\d_\w+\.sql$/.test(f)).sort().pop()
+    expect(emailFiles[0] > lastMarks).toBe(true)
+  })
+
+  it('records a send only on a released grade with a marked paper', () => {
+    expect(email).toContain('ADD COLUMN report_emailed_at timestamptz')
+    expect(email).toMatch(/CHECK \(report_emailed_at IS NULL OR \(status = 'graded' AND marked_pages IS NOT NULL\)\)/)
+  })
+
+  it('clears the record whenever the grade changes, before the row is written', () => {
+    expect(email).toMatch(/BEFORE UPDATE ON public\.homework_submissions FOR EACH ROW/)
+    expect(email).toMatch(/NEW\.regraded_at IS DISTINCT FROM OLD\.regraded_at OR NEW\.status IS DISTINCT FROM OLD\.status/)
+    expect(email).toContain('NEW.report_emailed_at := NULL')
+    expect(email).toMatch(/LANGUAGE plpgsql SET search_path = ''/)
+  })
+})
