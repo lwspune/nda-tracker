@@ -468,7 +468,7 @@ One row per student: `lws_id` PK (FK → `students`, cascade), `submission_id` U
 
 ### `homework_grades`
 
-PK `(submission_id, position)`, UNIQUE `(submission_id, label)`. `label` (1–40), `max_marks` (> 0, halves), `outcome` `scored` \| `not_attempted`, `awarded` (0..max, halves, only when scored), `earned` / `missing` (1–1000). Replaced as a whole on every (re)grade.
+PK `(submission_id, position)`, UNIQUE `(submission_id, label)`. `label` (1–40), `max_marks` (> 0, halves), `outcome` `scored` \| `not_attempted`, `awarded` (0..max, halves, only when scored), `earned` / `missing` (1–1000). Replaced as a whole on every (re)grade. **`cause`** (2026-10-16): `concept` \| `careless` \| `incomplete` \| `misread` \| `mcq`, set exactly when a scored question lost marks (`homework_grades_cause_needed`, `NOT VALID`, so rows saved before then keep a NULL); **`topic`** (1–60) names what to relearn or show, required for `concept`/`incomplete`, allowed only with a cause. Rules repeat `src/lib/assignments/grade.js`; a test pins them.
 
 ### Functions (service role only — `REVOKE` from `PUBLIC, anon, authenticated`)
 

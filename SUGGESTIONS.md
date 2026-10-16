@@ -6,6 +6,16 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-16
+
+### Backfill ledger: give already-graded homework a cause per question
+
+Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started.
+
+### Marked-paper report for written exams (deferred by faculty, 2026-10-16)
+
+Agreed with the homework report and deferred: **(A)** a per-question breakdown on the Written Quiz (`exams.written_parts`, never `questions[]`, which `examFormat` reads), marks typed one student at a time, `exam_results.part_marks` with a trigger keeping the parts summing to `total_marks`; and **(B)** staff upload each student's paper, which is graded by the homework pipeline as a hidden `kind='exam'` assignment and writes the exam's `exam_results` row in the same transaction. Build after the homework report has run on real papers.
+
 ## 2026-10-13
 
 ### Backfill ledger — regrade Daily Homework #1 on the 5-mark split
