@@ -10,11 +10,35 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ### Backfill ledger: give already-graded homework a cause per question
 
-Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started.
+Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started. **Carry-forward (later the same day):** those grades also have no page marks, no marked pages and no report PDF, so the student sees the old earned/missing list only. The same regrade would add all three; same 360 + go-ahead applies.
 
 ### Marked-paper report for written exams (deferred by faculty, 2026-10-16)
 
 Agreed with the homework report and deferred: **(A)** a per-question breakdown on the Written Quiz (`exams.written_parts`, never `questions[]`, which `examFormat` reads), marks typed one student at a time, `exam_results.part_marks` with a trigger keeping the parts summing to `total_marks`; and **(B)** staff upload each student's paper, which is graded by the homework pipeline as a hidden `kind='exam'` assignment and writes the exam's `exam_results` row in the same transaction. Build after the homework report has run on real papers.
+
+### Run the marked-paper report end to end on the first real graded hand-in
+
+Every piece is tested and was checked in the browser with fixtures, but no grade with marks exists yet, so nothing has gone grade → `marked/` upload → student portal → email for real. The student portal cannot be reached on localhost, and no report PDF exists in storage to email.
+
+**Why:** the parts were verified separately (dry commits, a rolled-back database save, a mounted component, a refused email). A wrong storage path or a signing mismatch would show up only on a real phone, after a student has been told their paper is marked.
+
+**How to apply:** grade the next hand-in with marks (`grading:preview`, then `grading:commit`). Open the student portal on the live site with that student's mobile, open **See marks**, check the pages and the PDF. Then on the local admin app use **Email reports → Send a test to** your own address, read the email and attachment, and only then send to the student. Check `homework_submissions.report_emailed_at` is stamped.
+
+### Retire `scripts/grading/pdf2png.py`
+
+`grading:pull` now prepares every page (PDFs split, photos turned upright) through `pages.py prepare`, and GRADING.md tells graders to read `pages/`. `pdf2png.py` is only referenced by an old ledger entry and a test comment.
+
+**Why:** two ways to turn a PDF into pages invite reading the wrong one; marks are placed against `pages/`, never against `pdf2png` output.
+
+**How to apply:** delete the script, reword the 2026-10-13 ledger line to point at `pages.py prepare`, keep the test that ignores `01-p01.png` (old inbox folders still have them).
+
+### The staff submission table is cramped on a phone
+
+At 390px the Homework → Submissions detail table (Q · Marks · Earned · Missing · Why) fits without sideways scroll but wraps every cell to a few words. It was already a four-column table; the Why column made it five.
+
+**Why:** teachers check held grades and marked pages from their phones.
+
+**How to apply:** under `sm`, stack each question as a card (label + marks on one line, earned / missing / why below), as the student report already does; keep the table at `sm:` and up.
 
 ## 2026-10-13
 

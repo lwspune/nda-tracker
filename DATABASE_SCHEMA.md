@@ -19,13 +19,13 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
 | Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
-| Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades`, `homework_hand_references` + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 + 0 (new 2026-10-12; references 2026-10-13) |
+| Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades`, `homework_hand_references`, `homework_page_marks` (2026-10-16) + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 + 0 (new 2026-10-12; references 2026-10-13) |
 | Teacher feedback | `teacher_feedback` (superadmin-RLS) | 499 |
 | Calendar sync | `teacher_calendar_blocks` (service-role-RLS) | 165 |
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 | **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-33 tables (live count, 2026-10-13). All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+34 tables (live count, 2026-10-16). All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -460,6 +460,7 @@ Teacher-set homework (a question paper and/or a description) for batches, with a
 | `resolved_at` / `resolved_by` | timestamptz / text | who released or sent back a held grade (set together or not at all) |
 | `replaced_at` | timestamptz | when the student replaced this hand-in (2026-10-14); set on `replaced` rows and only on them (`homework_submissions_replaced_at` CHECK). A replaced row keeps its pages until `grading:purge` (30 days) and any held grade + handwriting note it carried |
 | `marked_pages` | smallint | 1–60 (2026-10-16): how many marked pages `grading:commit` uploaded to `<submission>/marked/NN.jpg`: the pages upright, PDFs split, with the marks drawn on exactly as previewed, beside `marked/report.pdf` (the student's report). Students get signed links to these only once the grade is released. NULL on grades saved before page marks. Purged with the hand-in files |
+| `report_emailed_at` | timestamptz | (2026-10-16) when the marked-paper report was last emailed, stamped by the local sender only after Gmail accepts. CHECK `homework_submissions_report_emailed`: only on a `graded` row with `marked_pages`. Trigger `homework_submissions_regrade_unsent` (BEFORE UPDATE) clears it when `regraded_at` or `status` changes |
 
 `homework_submissions_state` CHECK: each status carries exactly its fields; **`held` = a full grade with `hand_check='mismatch'`, a note, and no `resolved_at`**. `homework_submissions_mismatch_released`: a `graded` row with a mismatch must have `resolved_at` (a named person released it). Unique index `homework_submissions_one_per_student` `(assignment_id, lws_id) WHERE status IN ('submitted','held','graded')` — one live hand-in per student; a rejection or a replacement frees it. `homework_submissions_one_upload` `… WHERE status = 'uploading'` — at most one upload in progress beside it (2026-10-14: the replacement uploads while the old hand-in still counts).
 

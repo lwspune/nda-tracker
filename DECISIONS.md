@@ -198,3 +198,24 @@ The LWS register export marks **every** student `A` on a holiday, so each holida
 **Why a table and not a `faculty_state` key.** Two server paths (student login, warden alert) need holidays, and `faculty_state` is a whole-blob write that stale tabs can clobber.
 
 **Rejected:** treating a `P` on a holiday as bonus attendance (the user decides holidays day by day; a marked day is simply not a working day); a separate auth role or teacher write access (holidays are admin configuration).
+
+## The marked-paper report: causes, page marks, one drawing, local email (2026-10-16)
+
+Students kept asking where their homework marks went. The grade showed earned/missing text per question but not *where* on the page, and nothing summed up what kind of mistakes cost the most. Faculty asked for a report like a commercial marked-sheet sample, with marks written on the scanned pages.
+
+**What shipped:** a `cause` (+ `topic`) on every lost-mark question; the grader's marks (tick, cross, circle, note, one score per question) placed on prepared pages; a report (score, losses by cause, what to focus on, the marked pages) on the student's homework card and as a PDF; an admin **Email report** button.
+
+**Why one cause per question.** The report adds lost marks up by cause; two causes per question would need a marks split per cause that graders cannot apply consistently. The tie-break (concept > misread > incomplete > careless) is in GRADING.md.
+
+**Why the score mark has no text.** The sample report showed 35.5/55 on the paper and 38/55 in the report. Deriving the printed score from the saved grade row makes that disagreement impossible.
+
+**Why the student sees the drawn preview images, not an in-app overlay.** One renderer: the grader approves `preview/NN.jpg`, and those exact files are the marked pages, the PDF pages and the email attachment. A second (SVG) renderer would be a second opinion about where a mark sits. The stamp gate makes "the grader looked" structural, not a habit.
+
+**Why the PDF is built in `grading:preview`, not at commit.** The grader can open it before saving; commit only uploads what was previewed.
+
+**Why email is sent from the local admin app.** The app already sends schedule emails this way (Gmail + an app password on the office PC). A Vercel sender needed either a Google re-consent for `gmail.send` or a new SMTP package, and we are at the 12-function cap. Students can still download the PDF any time within 30 days.
+
+**Why 30 days still applies to the marked pages and PDF.** Faculty chose the purge over permanent copies; the email is the copy students keep. The marks and grade rows are kept forever.
+
+**Rejected / deferred:** a staff drag-to-adjust editor for marks (measure placement accuracy on the first real papers first); written exams (A: per-question marks typed by the teacher; B: uploaded papers graded like homework) — deferred by faculty, specced in SUGGESTIONS.md; backfilling causes/marks onto the 34 grades saved before 2026-10-16 (a regrade of shipped work; backfill ledger).
+
