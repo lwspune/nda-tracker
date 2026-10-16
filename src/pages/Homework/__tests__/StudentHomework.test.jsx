@@ -85,6 +85,84 @@ describe('StudentHomework', () => {
     expect(within(c).getByText('Sign error.')).toBeInTheDocument()
   })
 
+  // 2026-10-16: the marked-paper report behind "See marks".
+  describe('the marked paper report', () => {
+    const graded = (sub = {}) => ({
+      id: 'r1', title: 'Pair of lines', subject: 'Maths', instructions: '', dueAt: earlier, maxMarks: 15,
+      state: 'closed', canSubmit: false, canReplace: false, replacementsLeft: 0, questionFiles: [],
+      submission: {
+        id: 'sr', status: 'graded', pages: 2, totalAwarded: 10, totalMax: 15,
+        wentWell: 'Clear setup.', nextSteps: 'State the condition.',
+        markedPages: ['https://signed/p1', 'https://signed/p2'], reportUrl: 'https://signed/report', pagesRemoved: false,
+        grades: [
+          { position: 1, label: 'Q1', maxMarks: 5, outcome: 'scored', awarded: 3.5, earned: 'Method.', missing: 'No final value.', cause: 'incomplete', topic: 'State the final value' },
+          { position: 2, label: 'Q2', maxMarks: 5, outcome: 'scored', awarded: 2, earned: 'Setup.', missing: 'Wrong condition.', cause: 'concept', topic: 'Condition for perpendicular lines' },
+          { position: 3, label: 'Q3', maxMarks: 5, outcome: 'scored', awarded: 4.5, earned: 'Right.', missing: 'Sign slip.', cause: 'careless', topic: null },
+        ],
+        ...sub,
+      },
+    })
+    const open = async hw => {
+      mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'A', homework: [hw] } }) })
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      const c = await waitFor(() => card('Pair of lines'))
+      fireEvent.click(within(c).getByRole('button', { name: /see marks/i }))
+      return c
+    }
+
+    it('shows where the marks went, by cause, with the marks and questions as text', async () => {
+      const c = await open(graded())
+      const where = within(c).getByRole('list', { name: /where your marks went/i })
+      expect(within(where).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+        expect.stringMatching(/Concept gaps.*−3.*Q2/),
+        expect.stringMatching(/Steps left out.*−1\.5.*Q1/),
+        expect.stringMatching(/Slips.*−0\.5.*Q3/),
+      ])
+    })
+
+    it('says what fixing the slips is worth', async () => {
+      const c = await open(graded())
+      expect(within(c).getByText(/fix the slips in Q3/i)).toHaveTextContent('10.5 / 15')
+    })
+
+    it('lists what to focus on, biggest loss first', async () => {
+      const c = await open(graded())
+      const focus = within(c).getByRole('list', { name: /what to focus on/i })
+      expect(within(focus).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+        expect.stringMatching(/Learn this again: Condition for perpendicular lines.*Wrong condition\./),
+        expect.stringMatching(/Show full steps: State the final value.*No final value\./),
+      ])
+    })
+
+    it('shows the marked pages, each opening full size, and the PDF download', async () => {
+      const c = await open(graded())
+      const pages = within(c).getAllByRole('img', { name: /marked page/i })
+      expect(pages.map(p => [p.getAttribute('src'), p.getAttribute('alt')])).toEqual([
+        ['https://signed/p1', 'Marked page 1 of 2'], ['https://signed/p2', 'Marked page 2 of 2'],
+      ])
+      expect(pages[0].closest('a')).toHaveAttribute('href', 'https://signed/p1')
+      expect(within(c).getByRole('link', { name: /download marked paper/i })).toHaveAttribute('href', 'https://signed/report')
+    })
+
+    it('says the pages were removed after 30 days, and offers no download', async () => {
+      const c = await open(graded({ markedPages: [], reportUrl: null, pagesRemoved: true }))
+      expect(within(c).getByText(/removed 30 days after grading/i)).toBeInTheDocument()
+      expect(within(c).queryByRole('link', { name: /download marked paper/i })).toBeNull()
+      expect(within(c).queryAllByRole('img', { name: /marked page/i })).toEqual([])
+    })
+
+    it('shows an older grade without pages or causes as before, with no empty sections', async () => {
+      const c = await open(graded({
+        markedPages: [], reportUrl: null, pagesRemoved: false,
+        grades: [{ position: 1, label: 'Q1', maxMarks: 15, outcome: 'scored', awarded: 10, earned: 'e', missing: 'Sign error.', cause: null, topic: null }],
+      }))
+      expect(within(c).getByText('Sign error.')).toBeInTheDocument()
+      expect(within(c).queryByRole('list', { name: /what to focus on/i })).toBeNull()
+      expect(within(c).queryByText(/removed 30 days/i)).toBeNull()
+      expect(within(c).queryByRole('link', { name: /download marked paper/i })).toBeNull()
+    })
+  })
+
   it('says when work is waiting to be graded, and when it was missed', async () => {
     mockFetch()
     render(<StudentHomework mobile="9876543210" lwsId="L1" />)

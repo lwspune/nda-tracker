@@ -5,6 +5,7 @@ import { buildOfflineRoster } from '../../lib/offlineRoster'
 import { submissionRoster, assignmentState } from '../../lib/assignments/status'
 import { fmtDeadline } from '../../lib/assignments/editor'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignments/upload'
+import { causeLabel } from '../../lib/assignments/paperReport'
 
 const STATUS = {
   not_submitted: { variant: 'gray',   label: 'Not submitted' },
@@ -137,6 +138,17 @@ function SubmissionDetail({ sub, onOpenFile, onResolved }) {
           ))}
         </div>
       )}
+      {/* The marked paper (2026-10-16): the pages as the student sees them, and their report. */}
+      {!sub.scansDeletedAt && sub.markedPages?.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {sub.markedPages.map((path, i) => (
+            <button key={path} className="btn btn-secondary btn-sm" onClick={() => onOpenFile(path)}>Marked page {i + 1}</button>
+          ))}
+          {sub.reportPath && (
+            <button className="btn btn-secondary btn-sm" onClick={() => onOpenFile(sub.reportPath)}>Report (PDF)</button>
+          )}
+        </div>
+      )}
       {sub.status === 'held' && <HeldReview sub={sub} onOpenFile={onOpenFile} onResolved={onResolved} />}
       {sub.status === 'graded' && HAND_FLAG[sub.handCheck] && (
         <Alert type="warning">
@@ -153,7 +165,7 @@ function SubmissionDetail({ sub, onOpenFile, onResolved }) {
           </div>
           <table className="w-full text-left">
             <thead className="text-[11px] text-ink-3 uppercase">
-              <tr><th className="py-1 pr-2">Q</th><th className="pr-2">Marks</th><th className="pr-2">Earned</th><th>Missing</th></tr>
+              <tr><th className="py-1 pr-2">Q</th><th className="pr-2">Marks</th><th className="pr-2">Earned</th><th className="pr-2">Missing</th><th>Why</th></tr>
             </thead>
             <tbody>
               {sub.grades.map(g => (
@@ -163,7 +175,8 @@ function SubmissionDetail({ sub, onOpenFile, onResolved }) {
                     {g.outcome === 'scored' ? `${g.awarded} / ${g.maxMarks}` : `— / ${g.maxMarks}`}
                   </td>
                   <td className="pr-2">{g.outcome === 'scored' ? g.earned : 'Not attempted'}</td>
-                  <td>{g.missing}</td>
+                  <td className="pr-2">{g.missing}</td>
+                  <td className="text-ink-2">{causeLabel(g.cause, g.topic)}</td>
                 </tr>
               ))}
             </tbody>

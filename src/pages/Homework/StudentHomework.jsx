@@ -5,6 +5,7 @@ import { ACCEPT, CAMERA_ACCEPT, SUBMISSIONS_BUCKET, validateUploadFiles } from '
 import { fmtDeadline } from '../../lib/assignments/editor'
 import { MAX_REPLACEMENTS } from '../../lib/assignments/status'
 import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../../lib/assignments/studentUpload'
+import MarkedPaperReport from './MarkedPaperReport'
 
 // The student portal's homework (2026-10-12): see what is set, open the
 // question paper, hand in photos or a PDF before the deadline, and read the
@@ -127,7 +128,7 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
               {showMarks ? 'Hide marks' : 'See marks'}
             </button>
           </div>
-          {showMarks && <GradeDetail sub={sub} />}
+          {showMarks && <MarkedPaperReport sub={sub} />}
         </div>
       )}
 
@@ -142,38 +143,6 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
                 onHandedIn={() => { setReplacing(false); onHandedIn() }} />
       )}
     </Card>
-  )
-}
-
-function GradeDetail({ sub }) {
-  return (
-    <div className="flex flex-col gap-2 text-[12.5px]">
-      {sub.wentWell && <div><span className="font-semibold text-ink-2">What went well: </span>{sub.wentWell}</div>}
-      {sub.nextSteps && <div><span className="font-semibold text-ink-2">What to work on: </span>{sub.nextSteps}</div>}
-      <ul className="flex flex-col divide-y divide-border border border-border rounded-lg">
-        {sub.grades.map(g => (
-          <li key={g.position} className="px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">{g.label}</span>
-              <span className="font-mono text-ink-2 ml-auto">
-                {g.outcome === 'scored' ? `${g.awarded} / ${g.maxMarks}` : `— / ${g.maxMarks}`}
-              </span>
-            </div>
-            {g.outcome !== 'scored' && <div className="text-ink-3">Not attempted</div>}
-            {g.earned && (
-              <div className="text-green-800">
-                <span aria-hidden="true">✓ </span><span className="sr-only">Earned: </span><span>{g.earned}</span>
-              </div>
-            )}
-            {g.missing && (
-              <div className="text-red-800">
-                <span aria-hidden="true">✗ </span><span className="sr-only">Missing: </span><span>{g.missing}</span>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
 
