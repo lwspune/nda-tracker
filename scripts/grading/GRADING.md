@@ -296,6 +296,9 @@ identifying into the repo, this file or a commit. Ledger entries are general
 
 Newest first. One line each: date, rule or learning, and why.
 
+- 2026-10-21: The note font has no superscript letters: "(5/9)ˣ" and "⁴⁻ˣ" print
+  as boxes. Write the values instead ("5/9 and 4/9"); superscript digits (x², m₁)
+  are fine. Check every note in the preview.
 - 2026-10-21: The one-submission-per-fresh-session rule is removed (faculty
   decision): a session may grade several in turn. Each is still marked against
   the paper, key and rules alone, not against the previous student.

@@ -8,7 +8,7 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ## 2026-10-16
 
-### Backfill ledger: give already-graded homework a cause per question
+### ~~Backfill ledger: give already-graded homework a cause per question~~ — **DONE 2026-10-21**: all 34 re-marked from fresh templates; every graded row now has marked pages and a report (0 of 46 without)
 
 Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started. **Carry-forward (later the same day):** those grades also have no page marks, no marked pages and no report PDF, so the student sees the old earned/missing list only. The same regrade would add all three; same 360 + go-ahead applies.
 
