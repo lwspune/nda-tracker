@@ -19,6 +19,9 @@ same way as the 5th.
    (the files as handed in), `pages/` (the same pages upright, PDFs split into
    pages), `grid/` (those pages under a labelled 0-100 grid), `reference/` (the
    student's handwriting reference, if any) and `grade.json`. Oldest first.
+   **A graded submission** is pulled by id: `-- --id=<id>` loads its saved
+   grade into `grade.json` (to correct it), `-- --id=<id> --fresh` an empty
+   template (to re-mark it without the old marks to lean on).
 2. **Two or more submissions for one homework?** First run
    `npm run grading:hand-compare -- --assignment=<homework id>` and, in a
    session that does not grade, look through `grading-inbox/_hand/<id>/` for the
@@ -292,6 +295,11 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-21: A re-mark starts from an empty template (`grading:pull -- --id=<id>
+  --fresh`), not the saved grade: correcting a grade you can see anchors the
+  new marks to the old ones. The 34 grades saved before marked papers existed
+  (Daily Homework #1 and #2) are re-marked this way.
 
 - 2026-10-16: Page-mark notes were drawn in PIL's built-in font, which has no
   Greek, minus sign or ≠: "Δu ≠ 0" printed as empty boxes. Notes now use Segoe

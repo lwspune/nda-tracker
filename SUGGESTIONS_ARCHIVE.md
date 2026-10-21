@@ -12,6 +12,16 @@ not here; the 2026-09-12 review promoted **six** such remainders back out before
 
 Grouped by the date the entry was *filed*, newest first.
 
+## 2026-10-16
+
+### ~~The staff submission table is cramped on a phone~~ — **CLOSED 2026-10-21: the table was removed** (the per-question breakdown is read in the report PDF, at faculty request)
+
+At 390px the Homework → Submissions detail table (Q · Marks · Earned · Missing · Why) wraps every cell to a few words. It was already a four-column table; the Why column made it five. **Partly done (later 2026-10-16):** it actually pushed the page 3px sideways; it now scrolls inside the card (a labelled, focusable region, `min-w-[560px]`), so the page no longer scrolls. The stacked-card layout below is still open.
+
+**Why:** teachers check held grades and marked pages from their phones.
+
+**How to apply:** under `sm`, stack each question as a card (label + marks on one line, earned / missing / why below), as the student report already does; keep the table at `sm:` and up.
+
 ## 2026-10-12
 
 ### ~~Backfill ledger — `className="input"` styles nothing; 17 screens render bare inputs~~ — **DONE 2026-10-12** (63 fields in 17 files; before/after sheets reviewed)

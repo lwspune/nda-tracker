@@ -5,6 +5,8 @@
 //   npm run grading:pull -- --force      # re-pull, overwriting brief + files (never grade.json)
 //   npm run grading:pull -- --id=<uuid>  # one submission in ANY state (a regrade):
 //                                        # a graded one's grade.json is its saved grade
+//   npm run grading:pull -- --id=<uuid> --fresh  # a re-mark: an empty template instead,
+//                                        # so the new marking is not anchored to the old
 //
 // Per submission, grading-inbox/<submission id>/ gets:
 //   paper/   the question paper (if any)        key/  the answer key (if any)
@@ -36,6 +38,8 @@ const ext = path => path.split('.').pop()
 async function main() {
   const only = arg('id')
   const force = process.argv.includes('--force') || !!only
+  const fresh = process.argv.includes('--fresh')
+  if (fresh && !only) throw new Error('--fresh needs --id=<uuid>: it replaces that submission\'s grade.json')
   const db = serviceClient()
   mkdirSync(INBOX, { recursive: true })
 
@@ -96,12 +100,12 @@ async function main() {
 
     writeFileSync(join(dir, 'brief.md'), buildHomeworkBrief({ submission: s, assignment: a, files }))
     const gradePath = join(dir, 'grade.json')
-    const saved = only ? savedGradeFile(s) : null
+    const saved = only && !fresh ? savedGradeFile(s) : null
     if (saved) writeFileSync(gradePath, `${JSON.stringify(saved, null, 2)}\n`)
-    else if (!existsSync(gradePath)) writeFileSync(gradePath, `${JSON.stringify(gradeTemplate(s.id, a), null, 2)}\n`)
+    else if (fresh || !existsSync(gradePath)) writeFileSync(gradePath, `${JSON.stringify(gradeTemplate(s.id, a), null, 2)}\n`)
 
     const refNote = files.reference.length ? `  reference ${files.reference.length} page(s)` : '  no reference'
-    console.log(`  ${s.id}  ${a.title}  ${files.pages.length} page(s)${refNote}  (${hours} h waiting)${saved ? '  [saved grade loaded]' : ''}`)
+    console.log(`  ${s.id}  ${a.title}  ${files.pages.length} page(s)${refNote}  (${hours} h waiting)${saved ? '  [saved grade loaded]' : ''}${fresh ? '  [fresh template: re-mark]' : ''}`)
   }
 }
 
