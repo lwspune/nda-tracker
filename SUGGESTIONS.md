@@ -8,14 +8,6 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ## 2026-10-16
 
-### ~~Backfill ledger: give already-graded homework a cause per question~~ — **DONE 2026-10-21**: all 34 re-marked from fresh templates; every graded row now has marked pages and a report (0 of 46 without)
-
-Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started. **Carry-forward (later the same day):** those grades also have no page marks, no marked pages and no report PDF, so the student sees the old earned/missing list only. The same regrade would add all three; same 360 + go-ahead applies.
-
-**360 (2026-10-21):** scope is 34 graded submissions with no marked pages (Daily Homework #1: 17, /25, graded 12–14 Oct; Maths Daily Homework #2: 17, /20, graded 14 Oct); none held, all pages still stored. The staff card no longer shows the per-question table (removed 2026-10-21), so until these are redone the report PDF they lack is the only per-question view. A re-mark can change a score the student has already seen; each grade stays as it was until its commit. Reversible (another commit; `regraded_at` records it). Deadline: Homework #1 pages start purging 11 Nov. Cost: one grading session per submission. **Approved 2026-10-21 as a full re-mark** (fresh templates, not the saved grades). All 34 pulled with `grading:pull -- --id=<id> --fresh`.
-
-**How to apply:** grade each by `scripts/grading/GRADING.md`, Homework #1 first. Strike this entry once no `graded` row has `marked_pages IS NULL`.
-
 ### Backfill ledger: rebuild the first marked papers with the note font and report-width fixes
 
 Maths Daily Homework #3's first 8 graded hand-ins (committed 2026-10-16) have marked pages and report PDFs built before two fixes: page notes were drawn in PIL's built-in font (graders worked around it by writing notes in plain ASCII, so none show boxes), and the report's tables ran past the right margin, cutting the end of the longest "What was missing" line on some reports. Rebuilding means re-running `grading:preview` + `grading:commit` on graded rows, which re-uploads the student's marked paper and clears `report_emailed_at`. It is shipped work, so it needs the 360 analysis and an explicit go-ahead. Pages purge 30 days after grading, after which it cannot be done. Logged, not started.
