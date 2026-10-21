@@ -197,18 +197,22 @@ describe('HomeworkPage', () => {
       expect(screen.getByText('Chetan Joshi')).toBeInTheDocument()
     })
 
-    it('shows the per-question grade for a graded submission', async () => {
+    // 2026-10-21: the per-question breakdown is read in the report, not on the
+    // card, so the card shows only the files.
+    it('does not repeat the per-question grade beside the report', async () => {
       renderAs('teacher', 'asha@lws.com')
       fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
       fireEvent.click(await screen.findByRole('button', { name: /view aarav nair/i }))
-      expect(await screen.findByText('Method right')).toBeInTheDocument()
-      expect(screen.getByText('Final answer')).toBeInTheDocument()
-      expect(screen.getByText('Clear working')).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /page 1/i })).toBeInTheDocument()
+      expect(screen.queryByText('Method right')).not.toBeInTheDocument()
+      expect(screen.queryByText('Clear working')).not.toBeInTheDocument()
+      expect(screen.queryByText(/what went well/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: /marks by question/i })).not.toBeInTheDocument()
     })
 
-    // 2026-10-16: the cause of each loss, and the report the student gets. The
-    // marked pages are inside the report, so they get no buttons of their own.
-    it('shows why marks were lost and opens the report, with no marked-page buttons', async () => {
+    // 2026-10-16: the report the student gets. The marked pages are inside the
+    // report, so they get no buttons of their own.
+    it('opens the report, with no marked-page buttons', async () => {
       mockStore.getHomeworkSubmissions = vi.fn(async () => [{
         id: 's1', assignmentId: 'a1', lwsId: 'L1', studentName: 'Aarav Nair', status: 'graded', files: ['a1/L1/s1/01.jpg'],
         totalAwarded: 7.5, totalMax: 10, wentWell: 'Clear working', nextSteps: 'Revise', scansDeletedAt: null,
@@ -218,9 +222,8 @@ describe('HomeworkPage', () => {
       renderAs('teacher', 'asha@lws.com')
       fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
       fireEvent.click(await screen.findByRole('button', { name: /view aarav nair/i }))
-      expect(await screen.findByText(/Concept gap: Chain rule/)).toBeInTheDocument()
+      const report = await screen.findByRole('button', { name: /report \(pdf\)/i })
       expect(screen.queryByRole('button', { name: /marked page/i })).not.toBeInTheDocument()
-      const report = screen.getByRole('button', { name: /report \(pdf\)/i })
       expect(report).toHaveClass('btn-primary')
       fireEvent.click(report)
       await waitFor(() => expect(mockStore.getHomeworkFileUrl).toHaveBeenCalledWith('homework-submissions', 'a1/L1/s1/marked/report.pdf'))

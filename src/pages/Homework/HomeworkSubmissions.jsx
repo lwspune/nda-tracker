@@ -5,7 +5,6 @@ import { buildOfflineRoster } from '../../lib/offlineRoster'
 import { submissionRoster, assignmentState } from '../../lib/assignments/status'
 import { fmtDeadline } from '../../lib/assignments/editor'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignments/upload'
-import { causeLabel } from '../../lib/assignments/paperReport'
 import { canEmailReport } from '../../lib/assignments/reportEmail'
 import { fmtTimestamp } from '../../lib/dates'
 import { useMode } from '../../context/ModeContext'
@@ -181,36 +180,6 @@ function SubmissionDetail({ sub, onOpenFile, onResolved, onEmail }) {
         </Alert>
       )}
       {sub.status === 'rejected' && <Alert type="warning">Sent back: {sub.rejectedReason}</Alert>}
-      {(sub.status === 'graded' || sub.status === 'held') && (
-        <>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div><div className="font-semibold text-ink-2">What went well</div><p>{sub.wentWell}</p></div>
-            <div><div className="font-semibold text-ink-2">What to work on</div><p>{sub.nextSteps}</p></div>
-          </div>
-          {/* Scrolls sideways on a phone instead of running past the card. */}
-          <div className="overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-               tabIndex={0} role="region" aria-label="Marks by question">
-            <table className="w-full min-w-[560px] text-left">
-              <thead className="text-[11px] text-ink-3 uppercase">
-                <tr><th className="py-1 pr-2">Q</th><th className="pr-2">Marks</th><th className="pr-2">Earned</th><th className="pr-2">Missing</th><th>Why</th></tr>
-              </thead>
-              <tbody>
-                {sub.grades.map(g => (
-                  <tr key={g.position} className="align-top border-t border-border">
-                    <td className="py-1.5 pr-2 font-semibold">{g.label}</td>
-                    <td className="pr-2 font-mono whitespace-nowrap">
-                      {g.outcome === 'scored' ? `${g.awarded} / ${g.maxMarks}` : `— / ${g.maxMarks}`}
-                    </td>
-                    <td className="pr-2">{g.outcome === 'scored' ? g.earned : 'Not attempted'}</td>
-                    <td className="pr-2">{g.missing}</td>
-                    <td className="text-ink-2">{causeLabel(g.cause, g.topic)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
     </div>
   )
 }
