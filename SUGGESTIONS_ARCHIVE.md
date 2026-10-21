@@ -14,6 +14,14 @@ Grouped by the date the entry was *filed*, newest first.
 
 ## 2026-10-16
 
+### ~~Backfill ledger: give already-graded homework a cause per question~~ — **DONE 2026-10-21**: all 34 re-marked from fresh templates; every graded row now has marked pages and a report (0 of 46 without)
+
+Since 2026-10-16 every question that lost marks names a `cause` (concept, careless, incomplete, misread, mcq) and, for two of them, a `topic`. The student's marked-paper report (in progress) adds lost marks up by cause. The 34 grades saved before then have lost marks with no cause, so their report would show the score and question grid but no "where the marks went" or focus list. Adding causes means regrading shipped work, so it needs the 360 analysis and an explicit go-ahead first. Note that pages are purged 30 days after grading: past that point a regrade (and so a cause) is impossible, so this candidate shrinks by itself. Logged, not started. **Carry-forward (later the same day):** those grades also have no page marks, no marked pages and no report PDF, so the student sees the old earned/missing list only. The same regrade would add all three; same 360 + go-ahead applies.
+
+**360 (2026-10-21):** scope is 34 graded submissions with no marked pages (Daily Homework #1: 17, /25, graded 12–14 Oct; Maths Daily Homework #2: 17, /20, graded 14 Oct); none held, all pages still stored. The staff card no longer shows the per-question table (removed 2026-10-21), so until these are redone the report PDF they lack is the only per-question view. A re-mark can change a score the student has already seen; each grade stays as it was until its commit. Reversible (another commit; `regraded_at` records it). Deadline: Homework #1 pages start purging 11 Nov. Cost: one grading session per submission. **Approved 2026-10-21 as a full re-mark** (fresh templates, not the saved grades). All 34 pulled with `grading:pull -- --id=<id> --fresh`.
+
+**How to apply:** grade each by `scripts/grading/GRADING.md`, Homework #1 first. Strike this entry once no `graded` row has `marked_pages IS NULL`.
+
 ### ~~The staff submission table is cramped on a phone~~ — **CLOSED 2026-10-21: the table was removed** (the per-question breakdown is read in the report PDF, at faculty request)
 
 At 390px the Homework → Submissions detail table (Q · Marks · Earned · Missing · Why) wraps every cell to a few words. It was already a four-column table; the Why column made it five. **Partly done (later 2026-10-16):** it actually pushed the page 3px sideways; it now scrolls inside the card (a labelled, focusable region, `min-w-[560px]`), so the page no longer scrolls. The stacked-card layout below is still open.
