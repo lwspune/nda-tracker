@@ -17,7 +17,7 @@
 //   grade.json  the template to fill — its outcomes start empty, which the checker
 //               refuses, so nothing passes unread
 //
-// Then grade ONE submission per fresh session by scripts/grading/GRADING.md and
+// Then grade each submission by scripts/grading/GRADING.md and
 // run npm run grading:commit -- <id>.
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

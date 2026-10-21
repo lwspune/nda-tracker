@@ -14,7 +14,7 @@ Since 2026-10-16 every question that lost marks names a `cause` (concept, carele
 
 **360 (2026-10-21):** scope is 34 graded submissions with no marked pages (Daily Homework #1: 17, /25, graded 12–14 Oct; Maths Daily Homework #2: 17, /20, graded 14 Oct); none held, all pages still stored. The staff card no longer shows the per-question table (removed 2026-10-21), so until these are redone the report PDF they lack is the only per-question view. A re-mark can change a score the student has already seen; each grade stays as it was until its commit. Reversible (another commit; `regraded_at` records it). Deadline: Homework #1 pages start purging 11 Nov. Cost: one grading session per submission. **Approved 2026-10-21 as a full re-mark** (fresh templates, not the saved grades). All 34 pulled with `grading:pull -- --id=<id> --fresh`.
 
-**How to apply:** one fresh session per submission, Homework #1 first: "Grade grading-inbox/<id> by scripts/grading/GRADING.md". Strike this entry once no `graded` row has `marked_pages IS NULL`.
+**How to apply:** grade each by `scripts/grading/GRADING.md`, Homework #1 first. Strike this entry once no `graded` row has `marked_pages IS NULL`.
 
 ### Backfill ledger: rebuild the first marked papers with the note font and report-width fixes
 

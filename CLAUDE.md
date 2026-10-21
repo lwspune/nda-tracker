@@ -56,7 +56,7 @@ npm run migrate:students  # seed students_db.json → Supabase students tables (
 npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs key; --cleanup prints SQL)
 npm run migrate:insights  # seed savedInsights → class_reports + student_plans (re-runnable, needs key; --cleanup prints SQL)
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs key)
-npm run grading:pull    # homework submissions waiting → grading-inbox/<id>/ (git-ignored); grade ONE per session by scripts/grading/GRADING.md
+npm run grading:pull    # homework submissions waiting → grading-inbox/<id>/ (git-ignored); grade by scripts/grading/GRADING.md
 npm run grading:preview -- <id>  # draw grade.json's page marks + build report.pdf; LOOK at every page (commit refuses an unpreviewed state)
 npm run grading:commit -- <id> [--dry] [--reject="reason"]  # check grade.json and save (student sees it at once)
 npm run grading:purge   # dry run; -- --apply deletes pages 30 days after grading

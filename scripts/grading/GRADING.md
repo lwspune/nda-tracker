@@ -28,9 +28,9 @@ same way as the 5th.
    same hand under two submission ids. Note the pairs; they become `mismatch`
    when those submissions are graded. A PDF hand-in lands there as a `.pdf`,
    which Read cannot show: look at that submission's `pages/01.jpg` instead.
-3. **One submission per fresh session.** Say: "Grade grading-inbox/<id> by
-   scripts/grading/GRADING.md". Never grade two in one session: one student's
-   answers must not colour another's grade.
+3. Say: "Grade grading-inbox/<id> by scripts/grading/GRADING.md". One session
+   may grade several submissions in turn. Mark each against the paper, the key
+   and the rules here, never against the student graded before it.
 4. Read `brief.md`, then the question paper (if any), the answer key (if any),
    then every page in `pages/` in order (upright, PDFs already split: there is
    no need for `pdf2png.py` any more). Images with Read. **A page still
@@ -295,6 +295,10 @@ identifying into the repo, this file or a commit. Ledger entries are general
 ## Ledger
 
 Newest first. One line each: date, rule or learning, and why.
+
+- 2026-10-21: The one-submission-per-fresh-session rule is removed (faculty
+  decision): a session may grade several in turn. Each is still marked against
+  the paper, key and rules alone, not against the previous student.
 
 - 2026-10-21: A re-mark starts from an empty template (`grading:pull -- --id=<id>
   --fresh`), not the saved grade: correcting a grade you can see anchors the
