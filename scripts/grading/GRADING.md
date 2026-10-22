@@ -296,6 +296,24 @@ identifying into the repo, this file or a commit. Ledger entries are general
 
 Newest first. One line each: date, rule or learning, and why.
 
+- 2026-10-22: Check the attached paper against what the pages answer before
+  marking. Daily Homework #4 carried the #5 paper, while every student answered
+  the real #4; the attachment was replaced in storage and the grades marked
+  against the right paper.
+- 2026-10-22: Before deducting for a slip (a sign, a digit, a limit), crop and
+  enlarge that line. At page scale f(−x) read as f(x) and nearly cost a student
+  half a mark.
+- 2026-10-22: Grading a student's first homework makes it their reference at
+  once, so any other folder of theirs pulled earlier goes stale: the preview
+  then refuses `no_reference` with no `reference/` to look at. Compare against
+  the pages just graded, or re-pull.
+- 2026-10-22: Work handed in under the wrong homework (Homework #2 pages filed
+  under #1) is rejected, and the reason names the mix-up (faculty decision). Do
+  not move it between homeworks.
+- 2026-10-22: After `grading:rotate`, look at the grid copy again: the first
+  turn can go the wrong way. `grading:commit` can fail on a network blip
+  ("fetch failed"); check the database before treating it as refused.
+
 - 2026-10-21: The note font has no superscript letters: "(5/9)ˣ" and "⁴⁻ˣ" print
   as boxes. Write the values instead ("5/9 and 4/9"); superscript digits (x², m₁)
   are fine. Check every note in the preview.
