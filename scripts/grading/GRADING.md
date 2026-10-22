@@ -62,8 +62,17 @@ same way as the 5th.
 8. `npm run grading:commit -- <id> --dry` until the check passes, then
    `npm run grading:commit -- <id>`. The student sees it immediately — or, on a
    handwriting mismatch, it is saved HELD for their teacher (the script says so).
-9. Anything new learned: add it to the ledger below, in general terms.
-10. Weekly: `npm run grading:purge -- --apply` (pages and marked pages go 30
+9. **Delete the folder once it is saved** (faculty rule, 2026-10-22). When
+   `grading:commit` says "Saved" or "Rejected", delete `grading-inbox/<id>/`:
+   the grade, the marked pages and the report are in Supabase, and a re-mark
+   pulls afresh (`-- --id=<id>`). Delete `grading-inbox/_hand/<homework id>/`
+   once that homework has nothing left waiting. At the start of a session,
+   delete any inbox folder whose submission is already graded, rejected or
+   replaced in the database. Never delete a folder still waiting to be graded.
+   The machine's disk filled up twice (2026-10-17, 2026-10-22) partly from
+   inbox folders that were never cleared.
+10. Anything new learned: add it to the ledger below, in general terms.
+11. Weekly: `npm run grading:purge -- --apply` (pages and marked pages go 30
     days after grading; the grade and its marks stay; handwriting references are
     never purged).
 
