@@ -175,7 +175,7 @@ export default function AttendanceReportCard({ today }) {
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={sending}
-          className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn btn-secondary text-[13px] min-h-[44px] px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Upload punch file
         </button>
@@ -286,7 +286,7 @@ export default function AttendanceReportCard({ today }) {
               type="button"
               onClick={handleTest}
               disabled={sending || !testNumber.trim() || match.ready.length === 0}
-              className="btn text-[13px] min-h-[44px] px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn btn-secondary text-[13px] min-h-[44px] px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Send test
             </button>
@@ -295,7 +295,7 @@ export default function AttendanceReportCard({ today }) {
               onClick={handleSend}
               disabled={sending || flowOff || unticked || pending.length === 0}
               title={flowOff ? flowOffMessage('attendanceReport') : undefined}
-              className="btn btn-primary text-[13px] min-h-[44px] px-4 ml-auto disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn btn-primary text-[13px] min-h-[44px] px-4 ml-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {pending.length === 0 && match.ready.length > 0
                 ? 'All sent for this date'
