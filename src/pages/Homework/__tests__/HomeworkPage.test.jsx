@@ -400,4 +400,85 @@ describe('HomeworkPage', () => {
       expect(screen.getByText(/1 held for a handwriting check/i)).toBeInTheDocument()
     })
   })
+
+  // 2026-10-23: a homework used as a written exam reaches the Exams page only
+  // when someone records it. The pure rules are in lib/assignments/writtenExam.js.
+  describe('record as written exam', () => {
+    const graded = (lwsId, studentName, totalAwarded, over = {}) => ({
+      id: `s_${lwsId}`, assignmentId: 'a1', lwsId, studentName, status: 'graded', files: [],
+      totalAwarded, totalMax: 10, grades: [], ...over,
+    })
+    beforeEach(() => {
+      mockStore.homeworkAssignments[0].dueAt = new Date(Date.now() - 864e5).toISOString() // closed
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [
+        graded('L1', 'Aarav Nair', 7.5),
+        graded('L2', 'Bhavya Rao', 0, { status: 'rejected', totalAwarded: null, rejectedReason: 'Not your handwriting.' }),
+      ])
+      mockStore.exams = []
+      mockStore.addExam = vi.fn()
+      mockStore.replaceExam = vi.fn()
+    })
+    const openSubmissions = (mode = 'teacher', email = 'asha@lws.com') => {
+      renderAs(mode, email)
+      fireEvent.click(screen.getAllByRole('button', { name: /submissions/i })[0])
+      return screen.findByRole('button', { name: /record as written exam/i })
+    }
+
+    it('shows who is marked and who is absent, then records with no parent messages', async () => {
+      fireEvent.click(await openSubmissions())
+      const panel = screen.getByRole('region', { name: /record as written exam/i })
+      expect(within(panel).getByLabelText(/exam name/i)).toHaveValue('Limits worksheet')
+      expect(within(panel).getByText(/1 marked · 2 absent/i)).toBeInTheDocument()
+      expect(within(panel).getByText(/absent, no mark recorded: Bhavya Rao \(sent back\), Chetan Joshi/i)).toBeInTheDocument()
+
+      fireEvent.click(within(panel).getByRole('button', { name: /^record$/i }))
+      expect(mockStore.addExam).toHaveBeenCalledTimes(1)
+      const [exam, opts] = mockStore.addExam.mock.calls[0]
+      expect(exam).toMatchObject({
+        id: 'exam_hw_a1', name: 'Limits worksheet', subject: 'Maths', batch: '12th_A', maxMarks: 10,
+        questions: [], source: 'teacher', createdBy: 'asha@lws.com',
+      })
+      expect(exam.students.map(s => [s.name, s.totalMarks])).toEqual([['Aarav Nair', 7.5]])
+      expect(opts).toEqual({ syncAbsences: false })
+      expect(await screen.findByText(/recorded on the exams page/i)).toBeInTheDocument()
+    })
+
+    it('updates the exam it recorded before, and warns that it replaces the marks', async () => {
+      mockStore.exams = [{ id: 'exam_hw_a1', name: 'UT2', date: '2026-10-19', source: 'teacher',
+        createdBy: 'asha@lws.com', createdAt: '2026-10-19T13:00:00Z', students: [] }]
+      renderAs('teacher', 'asha@lws.com')
+      fireEvent.click(screen.getByRole('button', { name: /submissions/i }))
+      fireEvent.click(await screen.findByRole('button', { name: /update written exam/i }))
+      const panel = screen.getByRole('region', { name: /record as written exam/i })
+      expect(within(panel).getByLabelText(/exam name/i)).toHaveValue('UT2')
+      expect(within(panel).getByText(/replaces the marks on the exams page/i)).toBeInTheDocument()
+      fireEvent.click(within(panel).getByRole('button', { name: /^update$/i }))
+      expect(mockStore.addExam).not.toHaveBeenCalled()
+      expect(mockStore.replaceExam).toHaveBeenCalledWith('exam_hw_a1', expect.objectContaining({ id: 'exam_hw_a1', name: 'UT2' }), { syncAbsences: false })
+    })
+
+    it('stays disabled and says why while a grade is held', async () => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [graded('L1', 'Aarav Nair', 7.5, { status: 'held' })])
+      expect(await openSubmissions()).toBeDisabled()
+      expect(screen.getByText(/held for a handwriting check\. release or send it back first/i)).toBeInTheDocument()
+    })
+
+    it('stays disabled while the homework is still open', async () => {
+      mockStore.homeworkAssignments[0].dueAt = LATER
+      expect(await openSubmissions()).toBeDisabled()
+      expect(screen.getByText(/the homework is still open/i)).toBeInTheDocument()
+    })
+
+    it('is offered to an admin too, recorded as the office', async () => {
+      fireEvent.click(await openSubmissions('admin', 'office@lws.com'))
+      fireEvent.click(screen.getByRole('button', { name: /^record$/i }))
+      expect(mockStore.addExam.mock.calls[0][0]).toMatchObject({ source: 'admin', createdBy: null })
+    })
+
+    it('will not record without an exam name', async () => {
+      fireEvent.click(await openSubmissions())
+      fireEvent.change(screen.getByLabelText(/exam name/i), { target: { value: '  ' } })
+      expect(screen.getByRole('button', { name: /^record$/i })).toBeDisabled()
+    })
+  })
 })

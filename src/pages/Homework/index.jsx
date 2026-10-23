@@ -65,7 +65,7 @@ export default function HomeworkPage({ email: emailProp }) {
   }
   if (viewing) {
     const assignment = assignments.find(a => a.id === viewing)
-    if (assignment) return <HomeworkSubmissions assignment={assignment} onBack={() => setViewing(null)} />
+    if (assignment) return <HomeworkSubmissions assignment={assignment} email={email} onBack={() => setViewing(null)} />
   }
 
   async function handleDelete(a) {

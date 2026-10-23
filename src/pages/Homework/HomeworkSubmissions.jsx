@@ -9,6 +9,7 @@ import { canEmailReport } from '../../lib/assignments/reportEmail'
 import { fmtTimestamp } from '../../lib/dates'
 import { useMode } from '../../context/ModeContext'
 import EmailReportsPanel from './EmailReportsPanel'
+import RecordWrittenExam from './RecordWrittenExam'
 
 const STATUS = {
   not_submitted: { variant: 'gray',   label: 'Not submitted' },
@@ -26,7 +27,7 @@ const HAND_FLAG = {
 // Who has handed in a homework, and what they got. Grades are written by the
 // grading session (scripts/grading/), never from this page — except that a
 // grade HELD for a handwriting check is released or sent back here.
-export default function HomeworkSubmissions({ assignment, onBack }) {
+export default function HomeworkSubmissions({ assignment, email, onBack }) {
   const studentProfiles = useStore(s => s.studentProfiles)
   const getSubmissions  = useStore(s => s.getHomeworkSubmissions)
   const getFileUrl      = useStore(s => s.getHomeworkFileUrl)
@@ -92,6 +93,8 @@ export default function HomeworkSubmissions({ assignment, onBack }) {
       {emailing && (
         <EmailReportsPanel targets={emailing} onClose={() => setEmailing(null)} onSent={() => setVersion(v => v + 1)} />
       )}
+
+      {subs && <RecordWrittenExam assignment={assignment} rows={rows} email={email} />}
 
       {failed && <Alert type="error">Could not load the submissions. Reload the page to try again.</Alert>}
       {!subs && !failed && <Spinner />}
