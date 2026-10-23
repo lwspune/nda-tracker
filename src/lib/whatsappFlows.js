@@ -101,6 +101,18 @@ export const WHATSAPP_FLOWS = [
     cron: 'ready',
     settingsTab: null,
   },
+  {
+    key: 'attendanceReport',
+    label: 'Daily attendance report',
+    description: "Each LWS Pune student's in and out punch times for the day, or that they were absent.",
+    recipients: 'Student and parents',
+    trigger: 'Attendance page, Daily attendance report card',
+    endpoint: 'api/send-attendance-alerts.js',
+    envVar: 'WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID',
+    variables: ['name', 'date', 'in time', 'out time'],
+    cron: null,
+    settingsTab: null,
+  },
 ]
 
 export const FLOW_KEYS = WHATSAPP_FLOWS.map(f => f.key)

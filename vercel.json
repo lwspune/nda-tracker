@@ -3,7 +3,8 @@
     { "source": "/((?!data/|api/).*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/send-homework-pending.js": { "maxDuration": 60 }
+    "api/send-homework-pending.js": { "maxDuration": 60 },
+    "api/send-attendance-alerts.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/send-mentor-nudges", "schedule": "0 2 * * 1-5" }

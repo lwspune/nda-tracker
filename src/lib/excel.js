@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { parsePunchSheet } from './punchReport'
 
 // How many non-reconciling students to NAME. A wholly broken sheet would otherwise
 // list the whole class; the count is always exact, only the sample is capped.
@@ -471,6 +472,18 @@ export async function parseAttendanceExcel(file) {
   }
 
   return { students }
+}
+
+// ============================================================
+// PARSE PUNCH MONITOR EXPORT (EIS, one day)
+// Row 0: "Punch_Monitor_list_23 Oct 2026", Row 1: headers, Row 2+: students,
+// then footer lines. Interpretation lives in src/lib/punchReport.js.
+// ============================================================
+export async function parsePunchReportExcel(file) {
+  const buf = await file.arrayBuffer()
+  const wb  = XLSX.read(buf, { type: 'array' })
+  const ws  = wb.Sheets[wb.SheetNames[0]]
+  return parsePunchSheet(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }))
 }
 
 // ── Helper ───────────────────────────────────────────────────
