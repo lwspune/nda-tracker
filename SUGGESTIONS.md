@@ -6,6 +6,16 @@ A running list of actionable improvements surfaced during `/update-docs` runs an
 
 ---
 
+## 2026-10-23
+
+### The lecture-miss alert has no server-side blocked-contact check
+
+Found while building the daily attendance report. `api/send-attendance-alerts.js` `kind:'lecture'` loops over `req.body.students[]` and never reads `account_status`, so the preview modal's `buildRecipientRows` filter is the only thing between a Block/Quit/Inactive family and a lecture-miss message. The late, homework and exam-absence senders call `partitionBlocked` (`api/_blockGate.js`); CLAUDE.md's "enforced server-side on every student-facing flow" claim does not hold for this path. Fix: call `partitionBlocked` after the flow gate, return `blocked`, add the four gate tests from `send-late-notifications.test.js`. Not done in that work — it changes a shipped flow and needs its own decision.
+
+### Run the first real attendance report send
+
+The new flow needs `WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID=1393678752049810` in Vercel, then a **Send test** to the office's own number with an end-of-day Punch Monitor file. The only file seen so far was exported at 12:33, before anyone punched out, so the *Out Time* column has not yet been seen filled. Confirm on the test message that the times land in In / Out, then send for real.
+
 ## 2026-10-16
 
 ### Backfill ledger: rebuild the first marked papers with the note font and report-width fixes
