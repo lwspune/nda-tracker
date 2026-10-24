@@ -495,7 +495,7 @@ describe('HomeworkPage', () => {
 
   // 2026-10-24: the marked pages where marks were lost to a calculation slip,
   // in one PDF, student by student, to go through with each student.
-  describe('calculation slips download', () => {
+  describe('calculation errors download', () => {
     const graded = (id, lwsId, name, grades, over = {}) => ({
       id, assignmentId: 'a1', lwsId, studentName: name, status: 'graded', files: [`a1/${lwsId}/${id}/01.jpg`],
       totalAwarded: 7, totalMax: 10, scansDeletedAt: null, reportEmailedAt: null,
@@ -523,7 +523,7 @@ describe('HomeworkPage', () => {
     const open = async (mode = 'teacher', email = 'asha@lws.com') => {
       renderAs(mode, email)
       fireEvent.click(screen.getAllByRole('button', { name: /submissions/i })[0])
-      return screen.findByRole('button', { name: /calculation slips/i })
+      return screen.findByRole('button', { name: /calculation errors \(pdf\)/i })
     }
 
     it('says how many students it covers, leaving out a held grade', async () => {
@@ -539,7 +539,7 @@ describe('HomeworkPage', () => {
       expect(args.plan.pages).toEqual([expect.objectContaining({ studentName: 'Aarav Nair', page: 2 })])
       expect(args.urls).toEqual({ 'a1/L1/s1/marked/02.jpg': 'https://signed/a1/L1/s1/marked/02.jpg' })
       expect(args.title).toBe('Limits worksheet')
-      expect(pdf.download.mock.calls[0][1]).toBe('Limits_worksheet_calculation_slips.pdf')
+      expect(pdf.download.mock.calls[0][1]).toBe('Limits_worksheet_calculation_errors.pdf')
     })
 
     it('is offered to an admin as well', async () => {
@@ -556,7 +556,7 @@ describe('HomeworkPage', () => {
     it('says so, and downloads nothing, when the page marks cannot be read', async () => {
       mockStore.getHomeworkPageMarks = vi.fn(async () => null)
       fireEvent.click(await open())
-      expect(await screen.findByText(/could not build the slip pages/i)).toBeInTheDocument()
+      expect(await screen.findByText(/could not build the calculation errors pdf/i)).toBeInTheDocument()
       expect(pdf.download).not.toHaveBeenCalled()
     })
 

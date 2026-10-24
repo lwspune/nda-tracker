@@ -12,11 +12,11 @@
 export const LOSS_ORDER = ['concept', 'incomplete', 'careless', 'misread', 'mcq', 'not_attempted', 'other']
 
 // Student-facing wording. "careless" is the grader's category, never a word
-// said to the student (GRADING.md, feedback style): it shows as "Slips".
+// said to the student (GRADING.md, feedback style): it shows as "Calculation errors".
 const LOSS = {
   concept: { label: 'Concept gaps', heading: 'Learn this again', advice: 'Revise the idea, then redo these and compare with the solution.' },
   incomplete: { label: 'Steps left out', heading: 'Show full steps', advice: 'Redo these writing every step, reason and the final statement.' },
-  careless: { label: 'Slips', heading: 'Slips in the working', advice: 'Redo these slowly and check each line and the final answer.' },
+  careless: { label: 'Calculation errors', heading: 'Calculation errors', advice: 'Redo these slowly and check each line and the final answer.' },
   misread: { label: 'Misread the question', heading: 'Read the question again', advice: 'Reread the question and check you answered what was asked.' },
   mcq: { label: 'Objective answers', heading: 'Check options slowly', advice: 'Retry these, checking every option before choosing.' },
   not_attempted: { label: 'Not attempted', heading: 'Not attempted', advice: 'Try these now: an attempt earns marks for the method.' },
@@ -24,7 +24,7 @@ const LOSS = {
 }
 
 // One question's loss, for staff beside its marks: 'Concept gap: Chain rule'.
-const ONE = { concept: 'Concept gap', incomplete: 'Steps left out', careless: 'Slip', misread: 'Misread the question', mcq: 'Objective answer' }
+const ONE = { concept: 'Concept gap', incomplete: 'Steps left out', careless: 'Calculation error', misread: 'Misread the question', mcq: 'Objective answer' }
 export function causeLabel(cause, topic) {
   const name = ONE[cause]
   if (!name) return ''

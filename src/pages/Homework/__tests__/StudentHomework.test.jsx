@@ -122,13 +122,13 @@ describe('StudentHomework', () => {
       expect(within(where).getAllByRole('listitem').map(li => li.textContent)).toEqual([
         expect.stringMatching(/Concept gaps.*−3.*Q2/),
         expect.stringMatching(/Steps left out.*−1\.5.*Q1/),
-        expect.stringMatching(/Slips.*−0\.5.*Q3/),
+        expect.stringMatching(/Calculation errors.*−0\.5.*Q3/),
       ])
     })
 
-    it('says what fixing the slips is worth', async () => {
+    it('says what fixing the calculation errors is worth', async () => {
       const c = await open(graded())
-      expect(within(c).getByText(/fix the slips in Q3/i)).toHaveTextContent('10.5 / 15')
+      expect(within(c).getByText(/fix the calculation errors in Q3/i)).toHaveTextContent('10.5 / 15')
     })
 
     it('lists what to focus on, biggest loss first', async () => {

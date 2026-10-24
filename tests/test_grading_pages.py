@@ -290,3 +290,11 @@ class TestReport:
         os.remove(inbox / 'preview' / '02.jpg')
         with pytest.raises(SystemExit):
             pages.report(str(inbox))
+
+    # 2026-10-24: the `careless` cause is shown as "calculation errors" everywhere.
+    def test_names_calculation_errors_in_the_potential_line(self):
+        d = report_json(2)
+        d['report']['potential'] = {'marks': 10, 'pct': 67, 'avoidable': 2.5, 'questions': ['Q2']}
+        html = pages.report_html(d)
+        assert 'Fix the calculation errors in Q2' in html
+        assert 'slip' not in html.lower()

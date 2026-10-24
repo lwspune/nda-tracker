@@ -25,7 +25,7 @@ function Summary({ r }) {
       </div>
       {r.potential.avoidable > 0 && (
         <p className="text-ink">
-          Fix the slips in {r.potential.questions.join(', ')} and this is{' '}
+          Fix the calculation errors in {r.potential.questions.join(', ')} and this is{' '}
           <span className="font-bold font-mono">{fmt(r.potential.marks)} / {fmt(r.max)}</span> ({r.potential.pct}%).
         </p>
       )}

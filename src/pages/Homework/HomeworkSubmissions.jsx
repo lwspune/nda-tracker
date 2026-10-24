@@ -69,7 +69,7 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
     if (url) window.open(url, '_blank', 'noopener')
   }
 
-  // The marked pages where marks were lost to a calculation slip, as one PDF,
+  // The marked pages where marks were lost to a calculation error, as one PDF,
   // student by student (2026-10-24). A download, never a send.
   async function downloadSlips() {
     setSlipBusy(true)
@@ -87,10 +87,10 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
         plan,
         urls,
       })
-      downloadBlob(blob, `${safeFilename(assignment.title, 'homework')}_calculation_slips.pdf`)
+      downloadBlob(blob, `${safeFilename(assignment.title, 'homework')}_calculation_errors.pdf`)
     } catch (e) {
-      console.error('[homework] slip pages download failed:', e)
-      setSlipError('Could not build the slip pages. Try again.')
+      console.error('[homework] calculation errors download failed:', e)
+      setSlipError('Could not build the calculation errors PDF. Try again.')
     } finally {
       setSlipBusy(false)
     }
@@ -128,7 +128,7 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
           <button className="btn btn-secondary btn-sm" disabled={slipStudents === 0 || slipBusy} onClick={downloadSlips}>
             {slipBusy
               ? 'Building PDF…'
-              : `⬇ Calculation slips (PDF) · ${slipStudents === 0 ? 'none' : `${slipStudents} student${slipStudents === 1 ? '' : 's'}`}`}
+              : `⬇ Calculation errors (PDF) · ${slipStudents === 0 ? 'none' : `${slipStudents} student${slipStudents === 1 ? '' : 's'}`}`}
           </button>
         </div>
       )}

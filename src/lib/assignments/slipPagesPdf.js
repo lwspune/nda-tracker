@@ -1,4 +1,4 @@
-// The calculation-slips PDF (2026-10-24): a cover, then each marked page from
+// The calculation-errors PDF (2026-10-24): a cover, then each marked page from
 // planSlipPages with what the grader noted printed above it.
 //
 // Every page, cover included, is drawn on a canvas and placed in the PDF as
@@ -111,10 +111,10 @@ function composeCover({ title, subtitle, plan, failed }) {
   const blocks = [
     { text: title, size: 44, weight: 700 },
     { text: subtitle, size: 24, color: MUTED, before: 0.2 },
-    { text: 'Calculation slips', size: 30, weight: 700, before: 1.2 },
+    { text: 'Calculation errors', size: 30, weight: 700, before: 1.2 },
     {
       text: `${shown} page${shown === 1 ? '' : 's'} from ${students.size} student${students.size === 1 ? '' : 's'}, in name order. `
-        + 'Each page is the student\'s marked work, with the slips the grader noted printed above it.',
+        + 'Each page is the student\'s marked work, with the calculation errors the grader noted printed above it.',
       size: 24, before: 0.3,
     },
     ...[...students].map(([name, pages], i) => ({

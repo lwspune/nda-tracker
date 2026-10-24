@@ -130,7 +130,7 @@ describe('causeLabel', () => {
   it('names one question\'s loss for staff, with its topic', () => {
     expect(causeLabel('concept', 'Chain rule')).toBe('Concept gap: Chain rule')
     expect(causeLabel('incomplete', 'Steps of construction')).toBe('Steps left out: Steps of construction')
-    expect(causeLabel('careless', null)).toBe('Slip')
+    expect(causeLabel('careless', null)).toBe('Calculation error')
     expect(causeLabel('misread', '')).toBe('Misread the question')
     expect(causeLabel('mcq', null)).toBe('Objective answer')
     expect(causeLabel(null, null)).toBe('')

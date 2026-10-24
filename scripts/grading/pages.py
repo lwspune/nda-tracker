@@ -311,7 +311,7 @@ def report_html(d):
     ]
     p = r['potential']
     if p['avoidable'] > 0:
-        out.append(f'<p style="margin-top:6pt">Fix the slips in {esc(", ".join(p["questions"]))} and this is '
+        out.append(f'<p style="margin-top:6pt">Fix the calculation errors in {esc(", ".join(p["questions"]))} and this is '
                    f'<b>{fmt(p["marks"])} / {fmt(r["max"])} ({p["pct"]}%)</b>: {fmt(p["avoidable"])} '
                    f'mark{"" if p["avoidable"] == 1 else "s"} you already knew how to get.</p>')
 
