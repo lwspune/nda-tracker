@@ -56,7 +56,9 @@ npm run migrate:students  # seed students_db.json → Supabase students tables (
 npm run migrate:exams   # seed exams + results → Supabase normalised tables (re-runnable, needs key; --cleanup prints SQL)
 npm run migrate:insights  # seed savedInsights → class_reports + student_plans (re-runnable, needs key; --cleanup prints SQL)
 npm run sync:students   # download Supabase → students_db.json (for Python scripts, needs key)
-npm run grading:pull    # homework submissions waiting → grading-inbox/<id>/ (git-ignored); grade by scripts/grading/GRADING.md
+# usual way: say "grade homework" (/grade skill) — pulls, one marking scheme per homework, one grader agent per submission, reviews, saves
+npm run grading:pull    # homework submissions waiting → grading-inbox/<id>/ (git-ignored) + _queue.json; clears finished folders; grade by scripts/grading/GRADING.md
+npm run grading:scheme -- <homework id> [--check]  # the homework's marking scheme template / is it current + complete
 npm run grading:preview -- <id>  # draw grade.json's page marks + build report.pdf; LOOK at every page (commit refuses an unpreviewed state)
 npm run grading:commit -- <id> [--dry] [--reject="reason"]  # check grade.json and save (student sees it at once)
 npm run grading:purge   # dry run; -- --apply deletes pages 30 days after grading
@@ -75,6 +77,7 @@ node migrate_absence_times.js --dry-run   # freeze historical lecture_absences c
 | Command | Purpose |
 |---|---|
 | `/subtopic-analyse` | Near-duplicate subtopic names queried live from Supabase. Run after bulk tag uploads. |
+| `/grade` (or "grade homework") | Grades every waiting homework submission end to end: `.claude/skills/grade/SKILL.md` coordinates, `.claude/agents/marking-scheme-writer.md` + `homework-grader.md` draft (≤3 at once), the main session reviews and alone saves. |
 
 ---
 
