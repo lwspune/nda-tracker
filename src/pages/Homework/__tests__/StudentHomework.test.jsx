@@ -45,7 +45,13 @@ function mockFetch(handlers = {}) {
   return calls
 }
 
-const card = title => screen.getByText(title).closest('[data-testid="homework-card"]')
+// The homework card with this title. A title can also appear in the
+// calculation-errors card above the list, so search the cards only.
+const card = title => {
+  const found = screen.getAllByTestId('homework-card').find(c => within(c).queryByText(title))
+  if (!found) throw new Error(`No homework card titled ${title}`)
+  return found
+}
 
 describe('StudentHomework', () => {
   beforeEach(() => { uploadToSignedUrl.mockClear(); vi.spyOn(console, 'error').mockImplementation(() => {}) })
@@ -354,5 +360,63 @@ describe('StudentHomework', () => {
     mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'Arjun', homework: [] } }) })
     const { container } = render(<StudentHomework mobile="9876543210" lwsId="L1" />)
     await waitFor(() => expect(container.textContent).toBe(''))
+  })
+
+  // 2026-10-24: calculation errors (the grader's `careless` cause) added up
+  // across every graded homework, above the list.
+  describe('calculation errors across homeworks', () => {
+    const q = (label, maxMarks, awarded, cause = null) =>
+      ({ position: Number(label.slice(1)), label, maxMarks, outcome: 'scored', awarded, earned: null, missing: null, cause, topic: null })
+    const graded = (id, title, dueAt, grades) => ({
+      id, title, subject: 'Maths', instructions: '', dueAt, maxMarks: 10, state: 'closed', canSubmit: false, questionFiles: [],
+      submission: { id: `s-${id}`, status: 'graded', pages: 1, totalAwarded: 0, totalMax: 10, wentWell: null, nextSteps: null, grades },
+    })
+    const LIST = [
+      graded('h1', 'Integration', new Date(Date.now() - 2 * DAY).toISOString(), [q('Q1', 5, 3, 'careless'), q('Q2', 5, 5)]),
+      graded('h2', 'Vectors', new Date(Date.now() - 9 * DAY).toISOString(), [q('Q1', 5, 4.5, 'careless'), q('Q3', 5, 4, 'careless')]),
+      graded('h3', 'Probability', new Date(Date.now() - 5 * DAY).toISOString(), [q('Q1', 5, 2, 'concept'), q('Q2', 5, 5)]),
+      HOMEWORK[2], // waiting to be graded: not counted
+    ]
+    const show = list => {
+      mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'Arjun', homework: list } }) })
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      return screen.findByRole('region', { name: /calculation errors across homeworks/i })
+    }
+
+    it('adds up the marks lost across graded homework', async () => {
+      const region = await show(LIST)
+      expect(region).toHaveTextContent('3.5 marks lost to calculation errors in 2 of 3 graded homeworks')
+    })
+
+    it('lists each homework with errors, newest first, with its questions and the score with them fixed', async () => {
+      const region = await show(LIST)
+      const rows = within(region).getAllByRole('button')
+      expect(rows.map(r => r.textContent)).toEqual([
+        expect.stringMatching(/Integration.*Q1.*lost 2.*8 \/ 10.*10 \/ 10/),
+        expect.stringMatching(/Vectors.*Q1, Q3.*lost 1\.5.*8\.5 \/ 10.*10 \/ 10/),
+      ])
+      expect(within(region).queryByText(/Probability/)).not.toBeInTheDocument()
+    })
+
+    it('opens that homework\'s marks when a row is tapped', async () => {
+      const region = await show(LIST)
+      const c = card('Vectors')
+      expect(within(c).getByRole('button', { name: /see marks/i })).toHaveAttribute('aria-expanded', 'false')
+      fireEvent.click(within(region).getByRole('button', { name: /vectors/i }))
+      expect(within(c).getByRole('button', { name: /hide marks/i })).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('says so when graded homework had no calculation errors', async () => {
+      const region = await show([LIST[2]])
+      expect(region).toHaveTextContent('No calculation errors in your 1 graded homework.')
+      expect(within(region).queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('is not shown before any homework is graded', async () => {
+      mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'Arjun', homework: [HOMEWORK[0], HOMEWORK[2]] } }) })
+      render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+      await screen.findByText('Trig identities')
+      expect(screen.queryByRole('region', { name: /calculation errors/i })).not.toBeInTheDocument()
+    })
   })
 })

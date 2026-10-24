@@ -6,6 +6,8 @@ import { fmtDeadline } from '../../lib/assignments/editor'
 import { MAX_REPLACEMENTS } from '../../lib/assignments/status'
 import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../../lib/assignments/studentUpload'
 import MarkedPaperReport from './MarkedPaperReport'
+import CalculationErrorsCard from './CalculationErrorsCard'
+import { summariseCalculationErrors } from '../../lib/assignments/calculationErrors'
 
 // The student portal's homework (2026-10-12): see what is set, open the
 // question paper, hand in photos or a PDF before the deadline, and read the
@@ -28,6 +30,9 @@ async function upload(path, token, file) {
 export default function StudentHomework({ mobile, lwsId }) {
   const [homework, setHomework] = useState(null)
   const [error, setError] = useState('')
+  // Which homework's marks are open: here, not in each card, so a row in the
+  // calculation-errors card can open one.
+  const [openMarks, setOpenMarks] = useState(() => new Set())
 
   const known = Boolean(mobile && lwsId)
   const load = useCallback(async () => {
@@ -53,12 +58,25 @@ export default function StudentHomework({ mobile, lwsId }) {
   if (error) return <div className="mb-5"><Alert type="error">{error}</Alert></div>
   if (homework.length === 0) return null
 
+  const toggleMarks = id => setOpenMarks(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const openFromSummary = id => {
+    setOpenMarks(prev => new Set(prev).add(id))
+    requestAnimationFrame(() => document.getElementById(`homework-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
+  }
+
   return (
     <div className="mb-6">
       <div className="text-[13px] font-extrabold text-ink uppercase tracking-wide mb-2">📤 Homework</div>
+      <CalculationErrorsCard summary={summariseCalculationErrors(homework)} onOpen={openFromSummary} />
       <div className="space-y-2">
         {homework.map(h => (
-          <HomeworkCard key={h.id} hw={h} mobile={mobile} lwsId={lwsId} onHandedIn={load} />
+          <HomeworkCard key={h.id} hw={h} mobile={mobile} lwsId={lwsId} onHandedIn={load}
+                        showMarks={openMarks.has(h.id)} onToggleMarks={() => toggleMarks(h.id)} />
         ))}
       </div>
     </div>
@@ -74,13 +92,12 @@ function statusBadge(hw) {
   return <Badge variant="blue">To do</Badge>
 }
 
-function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
-  const [showMarks, setShowMarks] = useState(false)
+function HomeworkCard({ hw, mobile, lwsId, onHandedIn, showMarks, onToggleMarks }) {
   const [replacing, setReplacing] = useState(false)
   const sub = hw.submission
 
   return (
-    <Card data-testid="homework-card" className="flex flex-col gap-2">
+    <Card id={`homework-${hw.id}`} data-testid="homework-card" className="flex flex-col gap-2 scroll-mt-[80px]">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-bold text-ink">{hw.title}</div>
@@ -124,7 +141,7 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn }) {
           <div className="flex items-center gap-3">
             <span className="text-[15px] font-bold font-mono text-ink">{sub.totalAwarded} / {sub.totalMax}</span>
             <button className="text-[12px] font-semibold text-accent hover:underline"
-                    aria-expanded={showMarks} onClick={() => setShowMarks(v => !v)}>
+                    aria-expanded={showMarks} onClick={onToggleMarks}>
               {showMarks ? 'Hide marks' : 'See marks'}
             </button>
           </div>
