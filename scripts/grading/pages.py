@@ -396,12 +396,161 @@ def report(inbox):
     return str(path)
 
 
+# Best answers (2026-10-24): grading:best downloads each shortlisted answer's
+# marked pages into <dir>/pages/<submission>/NN.jpg; the judge reads crop boxes
+# off the grid copies, and the PDF prints each pick's crop. Boxes are percent
+# of the marked page, the same coordinates as the marks drawn on it.
+BEST_MARGIN = 40         # pt, as the report
+BEST_GAP = 8             # pt between blocks
+# MuPDF's HTML layout SHRINKS an image into whatever is left of the page
+# instead of moving it to the next one (a tall crop after another question
+# printed at a quarter size, unreadable), so images are placed by hand: text
+# goes through insert_htmlbox, each crop is sized to the room left, and moves
+# to a fresh page when that room would shrink it below this share of a page.
+BEST_MIN_SHARE = 0.6
+
+
+def best_grid(root):
+    root = Path(root)
+    n = 0
+    for page in sorted((root / 'pages').glob('*/*.jpg')):
+        out = root / 'grid' / page.parent.name / page.name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with Image.open(page) as img:
+            grid_copy(img.convert('RGB')).save(out, quality=JPEG_QUALITY)
+        n += 1
+    return n
+
+
+def best_intro_html(d):
+    return (f'<h1>{esc(d["title"])}</h1><p class="muted">{esc(d["subtitle"])}</p><h2>Best answers</h2>'
+            '<p>One answer to each question, chosen from the class for accuracy, thoroughness and presentation. '
+            'Compare it with your own: the method, every step and the way it is set out.</p>')
+
+
+def best_head_html(p):
+    out = f'<h2>{esc(p["label"])} &#183; {fmt(p["max"])} marks</h2>'
+    if p['kind'] == 'none':
+        return out + '<p class="muted">Nobody scored on this question, so there is no answer to show.</p>'
+    lead = 'Best attempt' if p['kind'] == 'best_attempt' else 'Answer by'
+    return out + f'<p>{lead}: <b>{esc(p["studentName"])}</b> &#183; {fmt(p["awarded"])} / {fmt(p["max"])}</p>'
+
+
+def best_tail_html(p):
+    out = f'<p class="muted">Why: {esc(p["reason"])}</p>'
+    if p['kind'] == 'best_attempt' and p.get('missing'):
+        out += f'<p>Still missing: {esc(p["missing"])}</p>'
+    return out
+
+
+class BestLayout:
+    """A top-down cursor over A4 pages: text blocks and images, never shrunk to fit."""
+
+    def __init__(self, css, archive):
+        self.doc = fitz.open()
+        self.css, self.archive = css, archive
+        a4 = fitz.paper_rect('a4')
+        self.size = (a4.width, a4.height)
+        self.left, self.right = BEST_MARGIN, a4.width - BEST_MARGIN
+        self.top, self.bottom = BEST_MARGIN, a4.height - BEST_MARGIN
+        self.page = None
+        self.new_page()
+
+    def new_page(self):
+        self.page = self.doc.new_page(width=self.size[0], height=self.size[1])
+        self.y = self.top
+
+    def text(self, html_text):
+        for attempt in (0, 1):
+            rect = fitz.Rect(self.left, self.y, self.right, self.bottom)
+            spare, _ = self.page.insert_htmlbox(rect, html_text, css=self.css, archive=self.archive, scale_low=1)
+            if spare >= 0:
+                self.y = self.bottom - spare + BEST_GAP
+                return
+            if attempt == 0:
+                self.new_page()
+        fail('a block of text is longer than a page')
+
+    def measure(self, html_text):
+        """The height a text block needs, measured on a scratch page."""
+        scratch = fitz.open()
+        page = scratch.new_page(width=self.size[0], height=self.size[1])
+        rect = fitz.Rect(self.left, self.top, self.right, self.bottom)
+        spare, _ = page.insert_htmlbox(rect, html_text, css=self.css, archive=self.archive, scale_low=1)
+        scratch.close()
+        return rect.height - spare + BEST_GAP
+
+    def image(self, path, w, h, reserve=0):
+        """reserve: room to keep below the image (its caption), so a crop that
+        fills a page does not push one line of text onto a page of its own."""
+        full = self.bottom - self.top
+        width = self.right - self.left
+        height = width * h / w
+        if height > full - reserve:            # taller than a page: fit the page
+            height = full - reserve
+            width = height * w / h
+        room = self.bottom - self.y - reserve
+        if height > room:
+            if room >= BEST_MIN_SHARE * full:  # shrink a little rather than leave a gap
+                height, width = room, room * w / h
+            else:
+                self.new_page()
+        self.page.insert_image(fitz.Rect(self.left, self.y, self.left + width, self.y + height), filename=str(path))
+        self.y += height + BEST_GAP
+
+
+def best(root):
+    root = Path(root)
+    prev = root / 'preview'
+    d = json.loads((prev / 'payload.json').read_text(encoding='utf-8'))
+    crops_dir = prev / 'crops'
+    crops_dir.mkdir(exist_ok=True)
+    written, sizes = [], {}
+    for p in d['picks']:
+        for n, c in enumerate(p['crops'], start=1):
+            src = root / c['image']
+            if not src.exists():
+                fail(f'{p["label"]}: page {c["image"]} is missing; run grading:best again to download it')
+            with Image.open(src) as img:
+                img = img.convert('RGB')
+                w, h = img.size
+                box = (round(w * c['x'] / 100), round(h * c['y'] / 100),
+                       round(w * (c['x'] + c['w']) / 100), round(h * (c['y'] + c['h']) / 100))
+                crop = img.crop(box)
+            name = f'{p["label"]}-{n}.jpg'
+            crop.save(crops_dir / name, quality=JPEG_QUALITY)
+            sizes[name] = crop.size
+            written.append(f'preview/crops/{name}')
+
+    archive = fitz.Archive(str(FONT_DIR)) if FONT_DIR.exists() else None
+    out = BestLayout(report_css(), archive)
+    out.text(best_intro_html(d))
+    for i, p in enumerate(d['picks']):
+        if i > 0:
+            out.new_page()                     # one question per page: shared one at a time
+        out.text(best_head_html(p))
+        tail = out.measure(best_tail_html(p)) if p['kind'] != 'none' else 0
+        for n in range(1, len(p['crops']) + 1):
+            name = f'{p["label"]}-{n}.jpg'
+            out.image(crops_dir / name, *sizes[name], reserve=tail if n == len(p['crops']) else 0)
+        if p['kind'] != 'none':
+            out.text(best_tail_html(p))
+
+    path = prev / 'best-answers.pdf'
+    doc = out.doc
+    doc.subset_fonts()
+    doc.save(str(path), garbage=3, deflate=True)
+    doc.close()
+    return {'path': str(path), 'crops': written}
+
+
 if __name__ == '__main__':
-    commands = {'prepare': prepare, 'draw': draw, 'report': report}
+    commands = {'prepare': prepare, 'draw': draw, 'report': report, 'best-grid': best_grid, 'best': best}
     if len(sys.argv) in (4, 5) and sys.argv[1] == 'rotate':
         print(json.dumps(rotate(*sys.argv[2:])))
     elif len(sys.argv) != 3 or sys.argv[1] not in commands:
         fail('usage: pages.py prepare|draw|report <inbox folder>\n'
+             '       pages.py best-grid|best grading-inbox/_best/<homework id>\n'
              '       pages.py rotate <inbox folder or submission id> <page> [left|right]')
     else:
         print(json.dumps(commands[sys.argv[1]](sys.argv[2])))

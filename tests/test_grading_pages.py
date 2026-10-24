@@ -298,3 +298,90 @@ class TestReport:
         html = pages.report_html(d)
         assert 'Fix the calculation errors in Q2' in html
         assert 'slip' not in html.lower()
+
+
+def best_payload():
+    """What grading:best --preview writes: the header and validateBestFile's picks."""
+    return {
+        'title': 'Maths Daily Homework #4', 'subtitle': 'Maths · 12th_A · due 21 Oct 2026',
+        'picks': [
+            {'label': 'Q1', 'max': 5, 'kind': 'full', 'studentName': 'Aarav Patil', 'awarded': 5, 'missing': None,
+             'reason': 'Every step stated: the condition λ ≠ 0 is written before dividing.',
+             'crops': [{'image': 'pages/s1/01.jpg', 'x': 10, 'y': 20, 'w': 50, 'h': 25}]},
+            {'label': 'Q2', 'max': 5, 'kind': 'best_attempt', 'studentName': 'Bina Rao', 'awarded': 4, 'missing': 'No units.',
+             'reason': 'Right method, neatly laid out; only the units are missing.',
+             'crops': [{'image': 'pages/s2/01.jpg', 'x': 0, 'y': 0, 'w': 100, 'h': 50},
+                       {'image': 'pages/s2/02.jpg', 'x': 0, 'y': 0, 'w': 100, 'h': 30}]},
+            {'label': 'Q3', 'max': 5, 'kind': 'none', 'studentName': None, 'awarded': None, 'missing': None,
+             'reason': '', 'crops': []},
+        ],
+    }
+
+
+class TestBestAnswers:
+    def setup(self, root):
+        for sid, n in (('s1', 1), ('s2', 2)):
+            (root / 'pages' / sid).mkdir(parents=True)
+            for p in range(1, n + 1):
+                Image.new('RGB', (1000, 2000), (250, 250, 250)).save(root / 'pages' / sid / f'{p:02d}.jpg')
+        (root / 'preview').mkdir()
+        (root / 'preview' / 'payload.json').write_text(json.dumps(best_payload()), encoding='utf-8')
+
+    def test_writes_a_grid_copy_of_every_candidate_page(self, tmp_path):
+        self.setup(tmp_path)
+        assert pages.best_grid(str(tmp_path)) == 3
+        assert Image.open(tmp_path / 'grid' / 's2' / '02.jpg').size == (1000, 2000)
+
+    def test_crops_each_answer_to_its_box(self, tmp_path):
+        self.setup(tmp_path)
+        out = pages.best(str(tmp_path))
+        assert out['crops'] == ['preview/crops/Q1-1.jpg', 'preview/crops/Q2-1.jpg', 'preview/crops/Q2-2.jpg']
+        assert Image.open(tmp_path / 'preview' / 'crops' / 'Q1-1.jpg').size == (500, 500)
+
+    def test_the_pdf_names_each_question_its_student_and_why(self, tmp_path):
+        self.setup(tmp_path)
+        with fitz.open(pages.best(str(tmp_path))['path']) as doc:
+            text = ''.join(p.get_text() for p in doc)
+            images = sum(len(p.get_images()) for p in doc)
+        for expected in ['Maths Daily Homework #4', 'Best answers', 'Q1', 'Aarav Patil', '5 / 5', 'λ ≠ 0',
+                         'Best attempt', '4 / 5', 'Still missing: No units.', 'Nobody scored on this question']:
+            assert expected in text, expected
+        assert images == 3
+
+    # 2026-10-24: MuPDF's HTML layout squeezed a tall crop into the space left
+    # on a page, printing it at a quarter size. Every crop must be printed at
+    # full text width, or at least BEST_MIN_SHARE of a page tall.
+    def test_never_squeezes_a_crop_into_the_end_of_a_page(self, tmp_path):
+        self.setup(tmp_path)
+        d = best_payload()
+        d['picks'][1]['crops'] = [{'image': 'pages/s2/01.jpg', 'x': 0, 'y': 0, 'w': 100, 'h': 40},
+                                  {'image': 'pages/s2/02.jpg', 'x': 0, 'y': 0, 'w': 80, 'h': 90}]
+        (tmp_path / 'preview' / 'payload.json').write_text(json.dumps(d), encoding='utf-8')
+        with fitz.open(pages.best(str(tmp_path))['path']) as doc:
+            text_w = doc[0].rect.width - 2 * pages.BEST_MARGIN
+            full_h = doc[0].rect.height - 2 * pages.BEST_MARGIN
+            rects = [r for page in doc for img in page.get_images() for r in page.get_image_rects(img[0])]
+        assert len(rects) == 3
+        for r in rects:
+            assert r.width >= text_w - 1 or r.height >= pages.BEST_MIN_SHARE * full_h - 1, r
+
+    def test_keeps_the_reason_on_the_page_of_a_crop_that_fills_it(self, tmp_path):
+        self.setup(tmp_path)
+        d = best_payload()
+        d['picks'][1]['crops'] = [{'image': 'pages/s2/01.jpg', 'x': 0, 'y': 0, 'w': 100, 'h': 100}]
+        (tmp_path / 'preview' / 'payload.json').write_text(json.dumps(d), encoding='utf-8')
+        with fitz.open(pages.best(str(tmp_path))['path']) as doc:
+            page = next(p for p in doc if 'Why: Right method' in p.get_text())
+            assert page.get_images(), 'the reason was pushed onto a page without its answer'
+
+    def test_starts_each_question_on_its_own_page(self, tmp_path):
+        self.setup(tmp_path)
+        with fitz.open(pages.best(str(tmp_path))['path']) as doc:
+            firsts = [next(i for i in range(doc.page_count) if f'{q} · 5 marks' in doc[i].get_text()) for q in ('Q1', 'Q2', 'Q3')]
+        assert firsts[0] < firsts[1] < firsts[2]
+
+    def test_refuses_a_crop_whose_page_is_missing(self, tmp_path):
+        self.setup(tmp_path)
+        os.remove(tmp_path / 'pages' / 's2' / '02.jpg')
+        with pytest.raises(SystemExit):
+            pages.best(str(tmp_path))

@@ -33,6 +33,7 @@ function resetStore() {
         ] },
     ]),
     getHomeworkFileUrl: vi.fn(async () => 'https://signed/x'),
+    getHomeworkBestAnswers: vi.fn(async () => null),
     getHomeworkReferenceFiles: vi.fn(async () => ({ submissionId: 'r1', files: ['b/L2/r1/01.jpg', 'b/L2/r1/02.jpg'], scansDeletedAt: null })),
     resolveHeldHomework: vi.fn(async () => ({ ok: true })),
     saveHomeworkAssignment: vi.fn(async (a) => ({ ok: true, assignment: { ...a, id: 'new' } })),
@@ -568,6 +569,36 @@ describe('HomeworkPage', () => {
       await waitFor(() => expect(pdf.download).toHaveBeenCalled())
       expect(mockStore.getHomeworkFileUrls).not.toHaveBeenCalled()
       expect(pdf.build.mock.calls[0][0].plan.missing).toEqual([{ studentName: 'Aarav Nair', reason: 'deleted', questions: ['Q2'] }])
+    })
+  })
+
+  // 2026-10-24: the best answer to each question, made by npm run grading:best
+  // and saved to the homework's files; staff download it to share.
+  describe('best answers', () => {
+    const open = async (mode = 'teacher', email = 'asha@lws.com') => {
+      renderAs(mode, email)
+      fireEvent.click(screen.getAllByRole('button', { name: /submissions/i })[0])
+      await screen.findByRole('button', { name: /view aarav nair/i })
+    }
+
+    it('offers the PDF once it has been made, and opens it', async () => {
+      mockStore.getHomeworkBestAnswers = vi.fn(async () => ({ path: 'a1/best/best-answers.pdf', updatedAt: '2026-10-24T10:00:00Z' }))
+      await open()
+      expect(mockStore.getHomeworkBestAnswers).toHaveBeenCalledWith('a1')
+      fireEvent.click(await screen.findByRole('button', { name: /best answers \(pdf\)/i }))
+      await waitFor(() => expect(mockStore.getHomeworkFileUrl).toHaveBeenCalledWith('homework-files', 'a1/best/best-answers.pdf'))
+    })
+
+    it('is offered to an admin as well', async () => {
+      mockStore.getHomeworkBestAnswers = vi.fn(async () => ({ path: 'a1/best/best-answers.pdf', updatedAt: null }))
+      await open('admin', 'office@lws.com')
+      expect(await screen.findByRole('button', { name: /best answers \(pdf\)/i })).toBeInTheDocument()
+    })
+
+    it('is absent until one has been made', async () => {
+      await open()
+      await waitFor(() => expect(mockStore.getHomeworkBestAnswers).toHaveBeenCalled())
+      expect(screen.queryByRole('button', { name: /best answers/i })).not.toBeInTheDocument()
     })
   })
 })

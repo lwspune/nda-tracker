@@ -36,6 +36,7 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
   const getFileUrl      = useStore(s => s.getHomeworkFileUrl)
   const getFileUrls     = useStore(s => s.getHomeworkFileUrls)
   const getPageMarks    = useStore(s => s.getHomeworkPageMarks)
+  const getBestAnswers  = useStore(s => s.getHomeworkBestAnswers)
   const [subs, setSubs] = useState(null)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(null)
@@ -43,6 +44,7 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
   const [emailing, setEmailing] = useState(null) // the rows being emailed, while the panel is open
   const [slipBusy, setSlipBusy] = useState(false)
   const [slipError, setSlipError] = useState('')
+  const [best, setBest] = useState(null) // the best-answers PDF, once grading:best has saved one
   // Emailing the marked paper is an admin send (teachers capture, never send).
   const canEmail = useMode() === 'admin'
 
@@ -55,6 +57,12 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
     })
     return () => { live = false }
   }, [assignment.id, getSubmissions, version])
+
+  useEffect(() => {
+    let live = true
+    getBestAnswers(assignment.id).then(r => { if (live) setBest(r) })
+    return () => { live = false }
+  }, [assignment.id, getBestAnswers])
 
   const rows = useMemo(
     () => submissionRoster(buildOfflineRoster(studentProfiles, assignment.batchNames), subs ?? []),
@@ -115,6 +123,11 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
             🔑 {f.name || 'Answer key'}
           </button>
         ))}
+        {best && (
+          <button className="btn btn-secondary btn-sm" onClick={() => openFile(ASSIGNMENT_FILES_BUCKET, best.path)}>
+            ⭐ Best answers (PDF)
+          </button>
+        )}
       </div>
 
       {subs && (

@@ -164,6 +164,30 @@ describe('homeworkAssignmentSlice', () => {
     expect(url).toBe('https://signed/a/L1/s/01.jpg?ttl=600')
   })
 
+  // 2026-10-24: the best-answers PDF, saved by npm run grading:best.
+  describe('getHomeworkBestAnswers', () => {
+    const listing = result => {
+      const list = vi.fn(async () => result)
+      supabase.storage.from.mockImplementation(() => ({ list }))
+      return list
+    }
+
+    it('finds the PDF in the homework\'s best/ folder', async () => {
+      const list = listing({ data: [{ name: 'best-answers.pdf', updated_at: '2026-10-24T10:00:00Z' }], error: null })
+      const r = await makeStore().get().getHomeworkBestAnswers('a1')
+      expect(supabase.storage.from).toHaveBeenCalledWith('homework-files')
+      expect(list).toHaveBeenCalledWith('a1/best')
+      expect(r).toEqual({ path: 'a1/best/best-answers.pdf', updatedAt: '2026-10-24T10:00:00Z' })
+    })
+
+    it('is null when none has been made, and on a failed read', async () => {
+      listing({ data: [], error: null })
+      expect(await makeStore().get().getHomeworkBestAnswers('a1')).toBeNull()
+      listing({ data: null, error: { message: 'boom' } })
+      expect(await makeStore().get().getHomeworkBestAnswers('a1')).toBeNull()
+    })
+  })
+
   // 2026-10-24: the slip-pages download signs every page in one call.
   describe('getHomeworkFileUrls', () => {
     it('signs many files at once, keyed by path', async () => {

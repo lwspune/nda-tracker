@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import { getSession } from './session'
 import { ASSIGNMENT_FILES_BUCKET } from '../../lib/assignments/upload'
+import { BEST_FOLDER, bestAnswersPdfPath } from '../../lib/assignments/bestAnswers'
 import {
   planFileUploads, buildAssignmentRow, mapAssignmentRow, mapSubmissionRow,
 } from '../../lib/assignments/editor'
@@ -212,6 +213,16 @@ export const createHomeworkAssignmentSlice = (set, _get) => ({
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 600)
     if (error) { console.error('[homework] sign url failed:', error); return null }
     return data?.signedUrl ?? null
+  },
+
+  // The best-answers PDF npm run grading:best saved for a homework:
+  // { path, updatedAt }, or null when none has been made (or the read failed).
+  async getHomeworkBestAnswers(assignmentId) {
+    const path = bestAnswersPdfPath(assignmentId)
+    const { data, error } = await supabase.storage.from(ASSIGNMENT_FILES_BUCKET).list(`${assignmentId}/${BEST_FOLDER}`)
+    if (error) { console.error('[homework] best answers read failed:', error); return null }
+    const file = (data ?? []).find(f => `${assignmentId}/${BEST_FOLDER}/${f.name}` === path)
+    return file ? { path, updatedAt: file.updated_at ?? null } : null
   },
 
   // Many 10-minute links in one call → { path: signedUrl }, or null on failure.
