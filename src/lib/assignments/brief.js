@@ -17,6 +17,7 @@ export function buildHomeworkBrief({ submission, assignment: a, files }) {
     `# ${a.title}`,
     '',
     `Submission: ${submission.id}`,
+    `Homework: ${a.id}`,
     `Subject: ${a.subject} · out of ${max} · due ${fmtDeadline(a.due_at)} · submitted ${fmtDeadline(submission.submitted_at)}`,
     '',
     'Grade by scripts/grading/GRADING.md and fill grade.json in this folder.',
