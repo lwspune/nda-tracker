@@ -16,7 +16,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Activity logs | `student_attendance`, `student_logins`, `attendance_holidays` | 2402 + 193 + 0 (holidays new 2026-10-07) |
 | Exams (Phase 5) | `exams`, `exam_results` | 45 + 1636 |
 | Insights (Phase 6) | `class_reports`, `student_plans` | 0 + 1 |
-| Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents` | 125 + 0 + 2 + 876 + 0 |
+| Event logs | `lecture_absences`, `lecture_submissions`, `homework_pending`, `exam_absences`, `integrity_incidents`, `attendance_report_sends` | 125 + 0 + 2 + 876 + 0 + 0 (report sends new 2026-10-23) |
 | Hostel (APJ) | `checkpoint_absences`, `leaves`, `checkpoint_confirmations` | 0 + 0 + 0 (new 2026-07-08) |
 | Daily Quiz | `quizzes`, `quiz_attempts` | 0 + 0 |
 | Homework assignments | `homework_assignments`, `homework_submissions`, `homework_grades`, `homework_hand_references`, `homework_page_marks` (2026-10-16) + Storage buckets `homework-files`, `homework-submissions` | 0 + 0 + 0 + 0 (new 2026-10-12; references 2026-10-13) |
@@ -25,7 +25,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | Mentorship | `mentor_assignments`, `mentor_nudges` | 86 + 0 |
 | **Fees (superadmin-only)** | `student_fee_plans`, `fee_installments`, `fee_payments` | 0 + 0 + 0 (new 2026-09-10) |
 
-34 tables (live count, 2026-10-16). All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
+35 tables (live count, 2026-10-23). All RLS-enabled except `student_logins` — see warning below. **Role-restricted policies:** `teacher_feedback` **and the three fee tables** (superadmin-only, read+write — keyed on `app_metadata.role`, never the self-editable `user_metadata`, since 2026-09-10) plus `faculty_state` (**writes** denied to `role='teacher'`, reads open — 2026-07-27). `teacher_calendar_blocks` has no public policy (service-role only).
 
 ---
 
@@ -322,6 +322,20 @@ Indexes: `(date)`, `(lws_id, date)`, `(slot_id)`. RLS ✓ authenticated (`facult
 Indexes: `(date)`, `(teacher_id)`. RLS ✓ authenticated (`faculty_rw`) — teachers must be able to write this.
 
 **Why it exists:** `lecture_absences` is an exception log, so zero rows means BOTH "filed, nobody absent" AND "never filed". Centralised capture made that harmless (the office knew what it had done); teacher-filed capture does not. A row here means "this period was accounted for" — `filed` is read from this table alone, never from an absentee count. Slice: `submissionSlice.js`; pure pairing + board aggregation in `src/lib/teacherDay.js` (`withFilingStatus`, `buildFilingBoard`). See [`FLOWS.md`](./FLOWS.md) → "School attendance".
+
+### `attendance_report_sends` — one row per (date, student) the nightly attendance report reached (2026-10-23)
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `date` | date NOT NULL | — | The report's day, read from the Punch Monitor file's title row — not the day it was sent |
+| `lws_id` | text NOT NULL | — | FK → `students.lws_id` ON DELETE CASCADE |
+| `sent_at` | timestamptz NOT NULL | `now()` | |
+| `sent_by` | uuid | `auth.uid()` | The admin session that sent it |
+| **PK** | `(date, lws_id)` | | The no-double-send guard |
+
+RLS ✓ — read, insert and delete for authenticated **except** `app_metadata.role = 'teacher'`; no UPDATE policy (a row is claimed or released, never edited).
+
+**Why it exists:** `api/send-attendance-alerts.js` `kind:'attendance-report'` **claims** each student here (`upsert … ignoreDuplicates`) *before* messaging them, so a re-upload, a double click or two racing tabs reach each family once. A claim whose family no message reached is deleted so the next run retries it; a redirected test send writes nothing. See [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md) §13.
 
 ### `homework_pending` — one row per (student, day, subject, chapter, type) flagged
 
@@ -631,6 +645,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
          ├──→ homework_pending (2, ON DELETE CASCADE)
          ├──→ exam_absences (876, ON DELETE CASCADE)
          ├──→ mentor_assignments (86, ON DELETE CASCADE)
+         ├──→ attendance_report_sends (0, ON DELETE CASCADE)
          └──→ quiz_attempts (0, ON DELETE CASCADE)
 
         quizzes (0)
@@ -660,6 +675,7 @@ Attached to the **student, not the plan**: the receipts export names the payer b
 | Storage `homework-files` | — | Staff read; staff write only into an assignment folder whose row they could write. Students get signed links to `questions/` only. |
 | Storage `homework-submissions` | — | Staff read. **No write policy**: students upload through signed upload links the service role issues. |
 | **`attendance_holidays`** | ✓ | `holidays_read` — authenticated `SELECT`. `holidays_write_insert/update/delete` — authenticated **except** `app_metadata.role = 'teacher'` (same predicate as `faculty_state`). The student portal never reads it: `api/student-login.js` filters server-side with the service role. |
+| **`attendance_report_sends`** | ✓ | Read/insert/delete — authenticated **except** `app_metadata.role = 'teacher'`; no update policy. Office only: the report is parent-facing. |
 | **`teacher_feedback`** | ✓ | **Superadmin only** — `(auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'` (migrated from the self-editable `user_metadata` on 2026-09-10). |
 | **`student_fee_plans`, `fee_installments`, `fee_payments`** | ✓ | **Superadmin only** — same `app_metadata` predicate, one `fees_superadmin_all` policy each. The plain admin login is excluded by design. See §11. |
 | **`teacher_calendar_blocks`** | ✓ | **No public policy** — anon/authenticated denied; only the service-role client (`api/sync-calendar.js`) reaches it. |

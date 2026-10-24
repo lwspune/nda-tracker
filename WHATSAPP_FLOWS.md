@@ -25,8 +25,9 @@ enforced **server-side** on every send path, including the cron.
 | `homework` | Homework / notes pending | `api/send-homework-pending.js` | `WABRIDGE_HOMEWORK_TEMPLATE_ID` | Attendance → Homework log | student + parents | `[name, subject, chapter, type]` |
 | `mentorNudge` | Mentorship nudge | `api/send-mentor-nudges.js` | `WABRIDGE_MENTOR_NUDGE_TEMPLATE_ID` | **Vercel cron 07:30 IST Mon–Fri** + Settings → Mentorship (manual) | mentor **teacher** | `[date, students]` |
 | `hostelAlert` | Hostel warden alert | `api/send-attendance-alerts.js` `kind:'hostel'` | `WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID` | Hostel tab → 📣 Alert warden (cron-ready, unscheduled) | **warden** numbers | `[date, listText]` |
+| `attendanceReport` | Daily attendance report (added 2026-10-23, §13) | `api/send-attendance-alerts.js` `kind:'attendance-report'` | `WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID` | Attendance → Class metrics → Daily attendance report card | student + parents (LWS Pune only) | `[name, date, inTime, outTime]` |
 
-All seven go through `api/_wabridge.js` `sendWabridge(...)`. Full per-flow detail: memory
+All of them go through `api/_wabridge.js` `sendWabridge(...)`. Full per-flow detail: memory
 `reference_whatsapp_templates.md` and [`FLOWS.md`](./FLOWS.md).
 
 **Not in scope.** `SendScheduleModal` → `/api/send-schedule` is Gmail SMTP via `send_schedule.py`,
@@ -306,3 +307,14 @@ each commit message with the attribution line the session reminder gives you.
 - The gate was run read-only against the live `faculty_state` row: every flow reads on (no key yet), and a read without a session is refused rather than read as on.
 - Golden path driven in headless Chrome against `npm run dev`: seven switches; switching exam results off disables all ten WhatsApp Results buttons with the reason while Send Absent Alert stays live; survives a reload; switching back re-enables; Tab reaches the switch with a visible ring; Space and Enter both toggle; no sideways scroll at 390px.
 - **Not verified in a browser:** a 409 from a real send. Localhost has no admin session, so the endpoints answer 401 before the gate. Covered by the endpoint tests; verify on a branch preview with an admin login.
+
+## 13. Eighth flow — daily attendance report (2026-10-23)
+
+Added after this spec shipped; it follows every rule above (registry row, server gate, disabled-not-hidden button, `whatsapp-status` badge from the registry).
+
+- **What it sends.** The nightly in/out punch report from EIS's Punch Monitor export, uploaded on Attendance → Class metrics. Meta template `attendance_report_bulk_message` (ID `1393678752049810`, set as `WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID`): header "Dear Parents,", body `Name {{1}} · Date {{2}} · In time {{3}} · Out time {{4}}`, no button. Absent → `Absent` / `Absent`; present with no out punch → `Not punched out`; no in punch → `Not punched in`. Values come from `reportTimes` in `src/lib/punchReport.js`, shared by the preview and the endpoint.
+- **LWS Pune only.** Enforced server-side: the endpoint reads branch, status, name and numbers from `students` itself. The request carries `{ lwsId, status, inTime, outTime }` and nothing else, so it cannot reach a number of its choosing. An id the table does not hold is refused (unlike `_blockGate`, which fails open), because its branch cannot be checked.
+- **Never twice.** `attendance_report_sends` (PK `date, lws_id`) is claimed with `upsert … ignoreDuplicates` **before** any message goes out; an id not returned by the claim is skipped as already sent. A claim whose family no message reached is deleted so the next run retries it. A claim error refuses the whole group. Redirected test sends neither claim nor check.
+- **Groups.** The browser posts 10 students per request (about 30 messages); the endpoint refuses more than `ATTENDANCE_REPORT_GROUP` (25). `vercel.json` gives `send-attendance-alerts.js` `maxDuration: 60`.
+- **Not sent from the file into `student_attendance`.** That table keeps its single writer (the daily XLS import).
+- Replaces the `Attendance Automation.ipynb` notebook, which read *Recent Punch* as the out time, sent repeated Reg Nos twice, and messaged one number per student.

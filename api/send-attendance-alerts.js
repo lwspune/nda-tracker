@@ -8,11 +8,14 @@ import { sendWabridge, fmtDate } from './_wabridge.js'
 import { refuseIfFlowOff } from './_flowGate.js'
 import { WHATSAPP_FLOWS } from '../src/lib/whatsappFlows.js'
 import { makeDayOff, normalizeHolidayRow, filterWorkingDaysByStudent } from '../src/lib/holidays.js'
+import { isBlockedStatus } from '../src/lib/accountStatus.js'
+import { reportTimes, ATTENDANCE_REPORT_BRANCH, ATTENDANCE_REPORT_GROUP } from '../src/lib/punchReport.js'
 
 // Two attendance-alert flows share one Serverless Function (Vercel Hobby caps a
 // deployment at 12). Dispatched by `kind` in the POST body:
 //   • kind: 'lecture' (default)    — per-student lecture-miss alerts to student + parents.
 //   • kind: 'hostel'               — warden alert for APJ boarders who fell off the daily chain.
+//   • kind: 'attendance-report'    — the nightly in/out punch report to LWS Pune student + parents.
 //   • kind: 'whatsapp-status'      — which WhatsApp flows have a template ID set, for the
 //                                    Settings → WhatsApp badge. Booleans only; sends nothing.
 //                                    Lodged here only because of the function cap.
@@ -57,6 +60,7 @@ export default async function handler(req, res) {
   const kind = req.body?.kind || req.query?.kind || (req.method === 'GET' ? 'hostel' : 'lecture')
   if (kind === 'hostel') return handleHostelAlert(req, res)
   if (kind === 'whatsapp-status') return handleWhatsappStatus(req, res)
+  if (kind === 'attendance-report') return handleAttendanceReport(req, res)
   return handleLectureAbsences(req, res)
 }
 
@@ -306,6 +310,154 @@ async function handleHostelAlert(req, res) {
   }
   lines.push(`Done. Alerted ${sent}${redirectNorm ? ' (test redirect)' : ''}  Failed: ${skipped}`)
   res.status(200).json({ ok: true, date: day, count: alert.count, sent, skipped, message: alert.message, lines })
+}
+
+// ── kind: 'attendance-report' — the nightly punch report ─────────────────────
+// One message per LWS Pune student and each parent: name, date, in time, out
+// time (template attendance_report_bulk_message). The browser parses EIS's
+// Punch Monitor export and posts { lwsId, status, inTime, outTime } in groups
+// of at most ATTENDANCE_REPORT_GROUP — about 250 messages a night would
+// outlive one function call.
+//
+// The request carries ids and punch times ONLY. Name, branch, status and every
+// number are read here from `students`, so a tampered request can neither
+// reach a number of its choosing nor a student outside LWS Pune.
+//
+// Never twice: each student is CLAIMED in attendance_report_sends (primary key
+// date + lws_id) before any message goes out, so a re-upload, a double click or
+// two tabs racing reach each family once. A claim whose family nobody reached
+// is released, so the next run retries it. A redirected test send neither
+// claims nor checks.
+function isIsoDate(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? ''))
+  if (!m) return false
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3]
+}
+
+async function handleAttendanceReport(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' }); return
+  }
+
+  const pick = envReader()
+  const appKey     = pick('WABRIDGE_APP_KEY')
+  const authKey    = pick('WABRIDGE_AUTH_KEY')
+  const deviceId   = pick('WABRIDGE_DEVICE_ID')
+  const templateId = pick('WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID')
+  if (!appKey || !authKey || !deviceId || !templateId) {
+    res.status(500).json({ ok: false, error: 'Wabridge attendance report not configured. Set WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID (plus app/auth/device) in Vercel env.' })
+    return
+  }
+
+  const jwt = bearerFrom(req)
+  if (!jwt) { res.status(401).json({ ok: false, error: 'Unauthorized — no session token' }); return }
+  const supabaseUrl  = pick('VITE_SUPABASE_URL')
+  const supabaseAnon = pick('VITE_SUPABASE_ANON_KEY')
+  const user = await getUserOrNull(createClient(supabaseUrl, supabaseAnon), jwt)
+  if (!user) { res.status(401).json({ ok: false, error: 'Unauthorized — invalid session' }); return }
+  // Parent-facing, so it stays with the office.
+  if (isTeacherUser(user)) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+  const { date, redirectTo, students } = req.body || {}
+  if (!isIsoDate(date)) { res.status(400).json({ ok: false, error: 'date must be YYYY-MM-DD' }); return }
+  if (!Array.isArray(students) || students.length === 0 || students.length > ATTENDANCE_REPORT_GROUP) {
+    res.status(400).json({ ok: false, error: `students[] must hold 1 to ${ATTENDANCE_REPORT_GROUP} rows` }); return
+  }
+  if (students.some(s => !s?.lwsId || typeof s.lwsId !== 'string')) {
+    res.status(400).json({ ok: false, error: 'every student needs an lwsId' }); return
+  }
+
+  const db = createClient(supabaseUrl, supabaseAnon, { global: { headers: { Authorization: `Bearer ${jwt}` } } })
+  const redirectNorm = redirectTo ? normMobile(redirectTo) : null
+  if (!redirectNorm && await refuseIfFlowOff(db, 'attendanceReport', res)) return
+
+  // Fails CLOSED: without this read there is no name, no number and no way to
+  // tell a blocked or out-of-branch student, so nothing goes out.
+  const ids = [...new Set(students.map(s => s.lwsId))]
+  const { data: rows, error: sErr } = await db
+    .from('students')
+    .select('lws_id, canonical_name, branch, account_status, mobile, parent_mobiles')
+    .in('lws_id', ids)
+  if (sErr || !Array.isArray(rows)) {
+    res.status(500).json({ ok: false, error: 'Could not read students: ' + (sErr?.message || 'no rows returned') }); return
+  }
+  const byId = new Map(rows.map(r => [r.lws_id, r]))
+
+  const lines = []
+  let sent = 0, skipped = 0, blocked = 0, notInBranch = 0, alreadySent = 0
+  const sendable = []
+  const seen = new Set()
+  for (const punch of students) {
+    if (seen.has(punch.lwsId)) continue
+    seen.add(punch.lwsId)
+    const s = byId.get(punch.lwsId)
+    // Unlike the shared block gate, an unknown id is refused, not passed: the
+    // branch cannot be checked for a student this table does not hold.
+    if (!s || s.branch !== ATTENDANCE_REPORT_BRANCH) {
+      lines.push(`  SKIP ${asciiClean(s?.canonical_name) || punch.lwsId} — not an ${ATTENDANCE_REPORT_BRANCH} student`)
+      notInBranch++
+      continue
+    }
+    if (isBlockedStatus(s.account_status)) { blocked++; continue }
+    sendable.push({ student: s, punch })
+  }
+  if (blocked) lines.push(`Excluded ${blocked} blocked/inactive student(s).`)
+
+  let toSend = sendable
+  if (!redirectNorm && sendable.length) {
+    const { data: claimedRows, error: cErr } = await db
+      .from('attendance_report_sends')
+      .upsert(sendable.map(x => ({ date, lws_id: x.student.lws_id })), { onConflict: 'date,lws_id', ignoreDuplicates: true })
+      .select('lws_id')
+    if (cErr || !Array.isArray(claimedRows)) {
+      res.status(500).json({ ok: false, error: 'Could not record the send, so nothing was sent: ' + (cErr?.message || 'no rows returned') }); return
+    }
+    const claimed = new Set(claimedRows.map(r => r.lws_id))
+    toSend = []
+    for (const x of sendable) {
+      if (claimed.has(x.student.lws_id)) toSend.push(x)
+      else { lines.push(`  SKIP ${asciiClean(x.student.canonical_name)} — already sent for this date`); alreadySent++ }
+    }
+  }
+
+  const dateLabel = fmtDate(date)
+  const unreached = []
+  for (const { student: s, punch } of toSend) {
+    const name = asciiClean(s.canonical_name) || s.lws_id
+    const { inText, outText } = reportTimes(punch)
+    const variables = [name, dateLabel, inText, outText]
+    let reached = false
+
+    const destStudent = redirectNorm || normMobile(s.mobile)
+    if (destStudent) {
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destStudent, variables)
+      if (ok) { lines.push(`  SENT → ${name} (student → ${destStudent})`); sent++; reached = true }
+      else    { lines.push(`  FAIL → ${name} (student → ${destStudent}): ${detail}`); skipped++ }
+    } else {
+      lines.push(`  SKIP ${name} — no mobile`); skipped++
+    }
+
+    for (const parentRaw of (s.parent_mobiles || [])) {
+      const destParent = redirectNorm || normMobile(parentRaw)
+      if (!destParent) { lines.push(`  SKIP ${name} parent ${parentRaw} — unrecognised format`); skipped++; continue }
+      const { ok, detail } = await sendWabridge(appKey, authKey, deviceId, templateId, destParent, variables)
+      if (ok) { lines.push(`  SENT → ${name} (parent → ${destParent})`); sent++; reached = true }
+      else    { lines.push(`  FAIL → ${name} (parent → ${destParent}): ${detail}`); skipped++ }
+    }
+    if (!reached) unreached.push(s.lws_id)
+  }
+
+  if (!redirectNorm && unreached.length) {
+    const { error: rErr } = await db.from('attendance_report_sends').delete().eq('date', date).in('lws_id', unreached)
+    if (rErr) {
+      console.error('[attendance-report] could not release unreached claims:', rErr.message)
+      lines.push(`  WARN could not release ${unreached.length} unreached student(s) for a retry: ${rErr.message}`)
+    }
+  }
+
+  lines.push(`Done. Sent: ${sent}  Skipped: ${skipped}  Already sent: ${alreadySent}`)
+  res.status(200).json({ ok: true, sent, skipped, blocked, notInBranch, alreadySent, lines })
 }
 
 // ── kind: 'whatsapp-status' — is each flow's template ID set? ───────────────

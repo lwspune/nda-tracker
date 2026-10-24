@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { WHATSAPP_FLOWS, FLOW_KEYS, isFlowEnabled, isKnownFlow, getFlow } from '../whatsappFlows'
 
 describe('WHATSAPP_FLOWS registry', () => {
-  it('lists the seven send flows in a fixed order', () => {
+  it('lists the eight send flows in a fixed order', () => {
     expect(FLOW_KEYS).toEqual([
       'examResults', 'late', 'lectureMiss', 'examAbsence', 'homework', 'mentorNudge', 'hostelAlert',
+      'attendanceReport',
     ])
   })
 
@@ -12,6 +13,7 @@ describe('WHATSAPP_FLOWS registry', () => {
   // send flow that is not added here would have no switch and no Settings row.
   it('names exactly the template env vars the endpoints read', () => {
     expect(WHATSAPP_FLOWS.map(f => f.envVar).sort()).toEqual([
+      'WABRIDGE_ATTENDANCE_REPORT_TEMPLATE_ID',
       'WABRIDGE_EXAM_ABSENCE_TEMPLATE_ID',
       'WABRIDGE_HOMEWORK_TEMPLATE_ID',
       'WABRIDGE_HOSTEL_ALERT_TEMPLATE_ID',

@@ -8,6 +8,7 @@ import { parseFailedNames } from '../../lib/sendLog'
 import { EmptyState, PageHeader, Spinner, Alert } from '../../components/ui'
 import { buildConsecutiveAbsent } from './consecutiveAbsent'
 import LateMarkingWidget from './LateMarkingWidget'
+import AttendanceReportCard from './AttendanceReportCard'
 import LectureLogTab from './LectureLogTab'
 import HomeworkLogTab from './HomeworkLogTab'
 import HostelTab from './HostelTab'
@@ -469,6 +470,7 @@ export default function AttendancePage() {
           {mode === 'admin' && (
             <LateMarkingWidget date={today} onSend={handleSendLate} />
           )}
+          {mode === 'admin' && <AttendanceReportCard today={today} />}
 
       {/* Consecutive absences alert */}
       {records.length > 0 && (

@@ -80,7 +80,7 @@ describe('whatsapp-status — the answer', () => {
       shared: true,
       configured: {
         examResults: true, late: true, lectureMiss: false, examAbsence: false,
-        homework: false, mentorNudge: false, hostelAlert: false,
+        homework: false, mentorNudge: false, hostelAlert: false, attendanceReport: false,
       },
     })
   })

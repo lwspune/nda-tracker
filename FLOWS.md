@@ -96,6 +96,16 @@ Expansion model is `expanded: { month, kind } | null` at the component level —
 - "Send Morning Late Notifications" disabled until at least one L row exists for the day; "Send Lecture-Miss Notifications" disabled until at least one lecture absence is logged for the (date, batch) pair.
 - After send, a fixed-bottom `Alert` shows `sent` / `skipped` counts (or the error). Dismissable.
 
+### Daily attendance report — nightly punch times to LWS Pune families (2026-10-23)
+
+1. After class (every day except Sundays and holidays), the office downloads **Punch Monitor** from EIS (`Punch_Monitor_list_<DD Mon YYYY>.xls`) and uploads it on **Attendance → Class metrics → Daily attendance report** (admin only).
+2. `parsePunchReportExcel` → `parsePunchSheet` (`src/lib/punchReport.js`) reads columns **by header** — *Out Time*, never *Recent Punch* — takes the date from the title row, and keeps the first of any repeated Reg No.
+3. `matchPunchRows` pairs each row with a student by `eis_reg_no` (two students sharing a number → not matched, never guessed) and sorts out **not in the tracker / other branch / blocked**; only LWS Pune students go to *ready*. The preview shows each student's In and Out exactly as the message will (`reportTimes`: Absent/Absent, a time, `Not punched in`, `Not punched out`) and marks anyone already sent for the date.
+4. A file whose date is **not today**, a **Sunday**, or a **holiday** for any listed student (`dayOffReason`) needs a tick before Send. **Send test** posts one present and one absent student redirected to a typed number.
+5. **Send** posts groups of 10 `{ lwsId, status, inTime, outTime }` to `api/send-attendance-alerts.js` `kind:'attendance-report'`, which re-reads names/numbers/branch/status from `students`, claims each student in `attendance_report_sends`, and sends `[name, date, in, out]` to the student and every parent. A re-upload reaches only students not yet sent; a family nobody reached is released for the next run.
+
+Nothing here writes `student_attendance` — P/A still comes only from the daily XLS import. Spec: [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md) §13.
+
 ### School attendance — teacher-filed capture (`/school-attendance`, 2026-07-27)
 
 Distributes lecture-attendance capture from the office to the teachers who actually took the period. "School" distinguishes it from the hostel & mess attendance surface.
