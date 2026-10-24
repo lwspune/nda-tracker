@@ -62,6 +62,7 @@ npm run grading:scheme -- <homework id> [--check]  # the homework's marking sche
 npm run grading:preview -- <id>  # draw grade.json's page marks + build report.pdf; LOOK at every page (commit refuses an unpreviewed state)
 npm run grading:commit -- <id> [--dry] [--reject="reason"]  # check grade.json and save (student sees it at once)
 npm run grading:purge   # dry run; -- --apply deletes pages 30 days after grading
+npm run grading:best -- <homework id or title> [--preview|--commit]  # best answer per question → PDF on the Submissions screen (scripts/grading/BEST_ANSWERS.md)
 npm run merge:subtopics       # python -X utf8 merge_subtopics.py — apply subtopic + chapter renames to faculty-data.json
 npm run merge:subtopics:sync  # node migrate_subtopics_supabase.js — push the same renames to Supabase (needs key)
 # one-off (applied 2026-05-20): node migrate_unify_batches.js — verify current Supabase state before re-running
