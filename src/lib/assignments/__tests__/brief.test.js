@@ -33,6 +33,11 @@ describe('buildHomeworkBrief', () => {
 
   // Graded work must not carry a student's identity into a chat transcript
   // beyond what grading needs: the brief names no student.
+  // The coordinator groups submissions by homework (one marking scheme each).
+  it('names the homework id', () => {
+    expect(text).toMatch(/Homework: a1/)
+  })
+
   it('does not name the student', () => {
     expect(text).not.toMatch(/Arjun|L1\b/)
   })

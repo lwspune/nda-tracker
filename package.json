@@ -26,7 +26,8 @@
     "grading:commit": "node scripts/grading/commit.js",
     "grading:purge": "node scripts/grading/purge.js",
     "grading:hand-compare": "node scripts/grading/hand-compare.js",
-    "grading:vault": "node scripts/grading/vault.js"
+    "grading:vault": "node scripts/grading/vault.js",
+    "grading:scheme": "node scripts/grading/scheme.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
