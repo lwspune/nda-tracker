@@ -164,6 +164,49 @@ describe('homeworkAssignmentSlice', () => {
     expect(url).toBe('https://signed/a/L1/s/01.jpg?ttl=600')
   })
 
+  // 2026-10-24: the slip-pages download signs every page in one call.
+  describe('getHomeworkFileUrls', () => {
+    it('signs many files at once, keyed by path', async () => {
+      const createSignedUrls = vi.fn(async paths => ({ data: paths.map(p => ({ path: p, signedUrl: `https://signed/${p}` })), error: null }))
+      supabase.storage.from.mockImplementation(() => ({ createSignedUrls }))
+      const urls = await makeStore().get().getHomeworkFileUrls('homework-submissions', ['a/01.jpg', 'a/02.jpg'])
+      expect(createSignedUrls).toHaveBeenCalledWith(['a/01.jpg', 'a/02.jpg'], 600)
+      expect(urls).toEqual({ 'a/01.jpg': 'https://signed/a/01.jpg', 'a/02.jpg': 'https://signed/a/02.jpg' })
+    })
+
+    it('is null on a failed signing', async () => {
+      supabase.storage.from.mockImplementation(() => ({ createSignedUrls: vi.fn(async () => ({ data: null, error: { message: 'boom' } })) }))
+      expect(await makeStore().get().getHomeworkFileUrls('homework-submissions', ['a/01.jpg'])).toBeNull()
+    })
+  })
+
+  describe('getHomeworkPageMarks', () => {
+    const fakeMarks = result => {
+      const b = {}
+      b.select = vi.fn(() => b)
+      b.in = vi.fn(() => Promise.resolve(result))
+      supabase.from.mockImplementation(() => b)
+      return b
+    }
+
+    it('reads which page each question\'s marks are on, for the given submissions', async () => {
+      const b = fakeMarks({ data: [{ submission_id: 's1', label: 'Q2', page: 2 }], error: null })
+      const r = await makeStore().get().getHomeworkPageMarks(['s1', 's2'])
+      expect(supabase.from).toHaveBeenCalledWith('homework_page_marks')
+      expect(b.select).toHaveBeenCalledWith('submission_id, label, page')
+      expect(b.in).toHaveBeenCalledWith('submission_id', ['s1', 's2'])
+      expect(r).toEqual([{ submissionId: 's1', label: 'Q2', page: 2 }])
+    })
+
+    it('skips the read when there are no submissions, and is null on a failed read', async () => {
+      supabase.from.mockReset()
+      expect(await makeStore().get().getHomeworkPageMarks([])).toEqual([])
+      expect(supabase.from).not.toHaveBeenCalled()
+      fakeMarks({ data: null, error: { message: 'boom' } })
+      expect(await makeStore().get().getHomeworkPageMarks(['s1'])).toBeNull()
+    })
+  })
+
   // 2026-10-13: a grade held for a handwriting check is released or sent back
   // through one database function, which checks who is asking.
   describe('resolveHeldHomework', () => {

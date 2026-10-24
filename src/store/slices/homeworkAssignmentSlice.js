@@ -213,4 +213,25 @@ export const createHomeworkAssignmentSlice = (set, _get) => ({
     if (error) { console.error('[homework] sign url failed:', error); return null }
     return data?.signedUrl ?? null
   },
+
+  // Many 10-minute links in one call → { path: signedUrl }, or null on failure.
+  async getHomeworkFileUrls(bucket, paths) {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 600)
+    if (error) { console.error('[homework] sign urls failed:', error); return null }
+    const urls = {}
+    for (const d of data ?? []) if (d?.signedUrl) urls[d.path] = d.signedUrl
+    return urls
+  },
+
+  // Which page each question's marks sit on: [{ submissionId, label, page }],
+  // or null on a failed read.
+  async getHomeworkPageMarks(submissionIds) {
+    if (!submissionIds?.length) return []
+    const { data, error } = await supabase
+      .from('homework_page_marks')
+      .select('submission_id, label, page')
+      .in('submission_id', submissionIds)
+    if (error) { console.error('[homework] page marks read failed:', error); return null }
+    return (data ?? []).map(r => ({ submissionId: r.submission_id, label: r.label, page: r.page }))
+  },
 })

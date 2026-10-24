@@ -7,6 +7,9 @@ import { fmtDeadline } from '../../lib/assignments/editor'
 import { ASSIGNMENT_FILES_BUCKET, SUBMISSIONS_BUCKET } from '../../lib/assignments/upload'
 import { canEmailReport } from '../../lib/assignments/reportEmail'
 import { fmtTimestamp } from '../../lib/dates'
+import { slipQuestions, countSlipStudents, planSlipPages } from '../../lib/assignments/slipPages'
+import { buildSlipPagesPdf } from '../../lib/assignments/slipPagesPdf'
+import { downloadBlob, safeFilename } from '../../lib/download'
 import { useMode } from '../../context/ModeContext'
 import EmailReportsPanel from './EmailReportsPanel'
 import RecordWrittenExam from './RecordWrittenExam'
@@ -31,11 +34,15 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
   const studentProfiles = useStore(s => s.studentProfiles)
   const getSubmissions  = useStore(s => s.getHomeworkSubmissions)
   const getFileUrl      = useStore(s => s.getHomeworkFileUrl)
+  const getFileUrls     = useStore(s => s.getHomeworkFileUrls)
+  const getPageMarks    = useStore(s => s.getHomeworkPageMarks)
   const [subs, setSubs] = useState(null)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(null)
   const [version, setVersion] = useState(0)
   const [emailing, setEmailing] = useState(null) // the rows being emailed, while the panel is open
+  const [slipBusy, setSlipBusy] = useState(false)
+  const [slipError, setSlipError] = useState('')
   // Emailing the marked paper is an admin send (teachers capture, never send).
   const canEmail = useMode() === 'admin'
 
@@ -55,10 +62,38 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
   )
   const count = st => rows.filter(r => r.status === st).length
   const unsent = (subs ?? []).filter(s => canEmailReport(s) && !s.reportEmailedAt)
+  const slipStudents = countSlipStudents(subs)
 
   async function openFile(bucket, path) {
     const url = await getFileUrl(bucket, path)
     if (url) window.open(url, '_blank', 'noopener')
+  }
+
+  // The marked pages where marks were lost to a calculation slip, as one PDF,
+  // student by student (2026-10-24). A download, never a send.
+  async function downloadSlips() {
+    setSlipBusy(true)
+    setSlipError('')
+    try {
+      const withSlips = subs.filter(s => s.status === 'graded' && slipQuestions(s).length > 0)
+      const marks = await getPageMarks(withSlips.map(s => s.id))
+      if (marks === null) throw new Error('page marks read failed')
+      const plan = planSlipPages(withSlips, marks)
+      const urls = plan.pages.length ? await getFileUrls(SUBMISSIONS_BUCKET, plan.pages.map(p => p.path)) : {}
+      if (urls === null) throw new Error('signing failed')
+      const blob = await buildSlipPagesPdf({
+        title: assignment.title,
+        subtitle: `${assignment.subject} · ${assignment.batchNames.join(', ')} · due ${fmtDeadline(assignment.dueAt)}`,
+        plan,
+        urls,
+      })
+      downloadBlob(blob, `${safeFilename(assignment.title, 'homework')}_calculation_slips.pdf`)
+    } catch (e) {
+      console.error('[homework] slip pages download failed:', e)
+      setSlipError('Could not build the slip pages. Try again.')
+    } finally {
+      setSlipBusy(false)
+    }
   }
 
   return (
@@ -82,14 +117,22 @@ export default function HomeworkSubmissions({ assignment, email, onBack }) {
         ))}
       </div>
 
-      {canEmail && subs && (
+      {subs && (
         <div className="flex flex-wrap items-center gap-2 mb-4 text-[12px]">
-          <button className="btn btn-secondary btn-sm" disabled={unsent.length === 0}
-                  onClick={() => setEmailing(unsent)}>
-            ✉ Email reports ({unsent.length} not sent)
+          {canEmail && (
+            <button className="btn btn-secondary btn-sm" disabled={unsent.length === 0}
+                    onClick={() => setEmailing(unsent)}>
+              ✉ Email reports ({unsent.length} not sent)
+            </button>
+          )}
+          <button className="btn btn-secondary btn-sm" disabled={slipStudents === 0 || slipBusy} onClick={downloadSlips}>
+            {slipBusy
+              ? 'Building PDF…'
+              : `⬇ Calculation slips (PDF) · ${slipStudents === 0 ? 'none' : `${slipStudents} student${slipStudents === 1 ? '' : 's'}`}`}
           </button>
         </div>
       )}
+      {slipError && <Alert type="error">{slipError}</Alert>}
       {emailing && (
         <EmailReportsPanel targets={emailing} onClose={() => setEmailing(null)} onSent={() => setVersion(v => v + 1)} />
       )}

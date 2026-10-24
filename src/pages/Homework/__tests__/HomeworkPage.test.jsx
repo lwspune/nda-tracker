@@ -61,6 +61,17 @@ vi.mock('../../../store/useStore', () => ({
   default: (selector) => selector(mockStore),
 }))
 
+// The PDF is drawn on a canvas, which jsdom lacks; the page is tested for what
+// it asks for and what it hands to the download.
+const pdf = vi.hoisted(() => ({ build: null, download: null }))
+vi.mock('../../../lib/assignments/slipPagesPdf', () => ({
+  buildSlipPagesPdf: (...args) => pdf.build(...args),
+}))
+vi.mock('../../../lib/download', async importOriginal => ({
+  ...(await importOriginal()),
+  downloadBlob: (...args) => pdf.download(...args),
+}))
+
 import HomeworkPage from '../index'
 
 function renderAs(mode, email) {
@@ -479,6 +490,84 @@ describe('HomeworkPage', () => {
       fireEvent.click(await openSubmissions())
       fireEvent.change(screen.getByLabelText(/exam name/i), { target: { value: '  ' } })
       expect(screen.getByRole('button', { name: /^record$/i })).toBeDisabled()
+    })
+  })
+
+  // 2026-10-24: the marked pages where marks were lost to a calculation slip,
+  // in one PDF, student by student, to go through with each student.
+  describe('calculation slips download', () => {
+    const graded = (id, lwsId, name, grades, over = {}) => ({
+      id, assignmentId: 'a1', lwsId, studentName: name, status: 'graded', files: [`a1/${lwsId}/${id}/01.jpg`],
+      totalAwarded: 7, totalMax: 10, scansDeletedAt: null, reportEmailedAt: null,
+      markedPages: [`a1/${lwsId}/${id}/marked/01.jpg`, `a1/${lwsId}/${id}/marked/02.jpg`],
+      reportPath: `a1/${lwsId}/${id}/marked/report.pdf`, grades, ...over,
+    })
+    const q = (label, awarded, cause, missing = null) =>
+      ({ position: Number(label.slice(1)), label, maxMarks: 5, outcome: 'scored', awarded, earned: null, missing, cause, topic: null })
+
+    beforeEach(() => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [
+        graded('s1', 'L1', 'Aarav Nair', [q('Q1', 5, null), q('Q2', 3, 'careless', 'Sign slip.')]),
+        graded('s2', 'L2', 'Bhavya Rao', [q('Q1', 2, 'concept'), q('Q2', 5, null)]),
+        graded('s3', 'L3', 'Chetan Joshi', [q('Q1', 4, 'careless')], { status: 'held' }),
+      ])
+      mockStore.getHomeworkPageMarks = vi.fn(async () => [
+        { submissionId: 's1', label: 'Q1', page: 1 },
+        { submissionId: 's1', label: 'Q2', page: 2 },
+      ])
+      mockStore.getHomeworkFileUrls = vi.fn(async (_bucket, paths) => Object.fromEntries(paths.map(p => [p, `https://signed/${p}`])))
+      pdf.build = vi.fn(async () => new Blob(['%PDF']))
+      pdf.download = vi.fn()
+    })
+
+    const open = async (mode = 'teacher', email = 'asha@lws.com') => {
+      renderAs(mode, email)
+      fireEvent.click(screen.getAllByRole('button', { name: /submissions/i })[0])
+      return screen.findByRole('button', { name: /calculation slips/i })
+    }
+
+    it('says how many students it covers, leaving out a held grade', async () => {
+      expect(await open()).toHaveTextContent(/· 1 student$/)
+    })
+
+    it('downloads the slip pages of released grades as one PDF', async () => {
+      fireEvent.click(await open())
+      await waitFor(() => expect(pdf.download).toHaveBeenCalled())
+      expect(mockStore.getHomeworkPageMarks).toHaveBeenCalledWith(['s1'])
+      expect(mockStore.getHomeworkFileUrls).toHaveBeenCalledWith('homework-submissions', ['a1/L1/s1/marked/02.jpg'])
+      const [args] = pdf.build.mock.calls[0]
+      expect(args.plan.pages).toEqual([expect.objectContaining({ studentName: 'Aarav Nair', page: 2 })])
+      expect(args.urls).toEqual({ 'a1/L1/s1/marked/02.jpg': 'https://signed/a1/L1/s1/marked/02.jpg' })
+      expect(args.title).toBe('Limits worksheet')
+      expect(pdf.download.mock.calls[0][1]).toBe('Limits_worksheet_calculation_slips.pdf')
+    })
+
+    it('is offered to an admin as well', async () => {
+      expect(await open('admin', 'office@lws.com')).toBeEnabled()
+    })
+
+    it('is disabled when no released grade has a slip', async () => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [graded('s2', 'L2', 'Bhavya Rao', [q('Q1', 2, 'concept')])])
+      const button = await open()
+      expect(button).toBeDisabled()
+      expect(button).toHaveTextContent(/none/i)
+    })
+
+    it('says so, and downloads nothing, when the page marks cannot be read', async () => {
+      mockStore.getHomeworkPageMarks = vi.fn(async () => null)
+      fireEvent.click(await open())
+      expect(await screen.findByText(/could not build the slip pages/i)).toBeInTheDocument()
+      expect(pdf.download).not.toHaveBeenCalled()
+    })
+
+    it('still downloads when every slip page was deleted, so the PDF can say who was missed', async () => {
+      mockStore.getHomeworkSubmissions = vi.fn(async () => [
+        graded('s1', 'L1', 'Aarav Nair', [q('Q2', 3, 'careless')], { scansDeletedAt: '2026-10-01T00:00:00Z' }),
+      ])
+      fireEvent.click(await open())
+      await waitFor(() => expect(pdf.download).toHaveBeenCalled())
+      expect(mockStore.getHomeworkFileUrls).not.toHaveBeenCalled()
+      expect(pdf.build.mock.calls[0][0].plan.missing).toEqual([{ studentName: 'Aarav Nair', reason: 'deleted', questions: ['Q2'] }])
     })
   })
 })
