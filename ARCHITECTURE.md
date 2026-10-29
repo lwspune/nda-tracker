@@ -291,7 +291,7 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |
 | Syllabus Tracker (view) | ✓ | ✓ | — |
-| Monthly Reports page (generate PDFs + ZIP) | ✓ | — | — |
+| Monthly Reports page (generate PDFs + ZIP) | ✓ | only with the `reports` permission (Settings → Teachers) | — |
 | Settings page (Branches / Batches / Teachers / NDA Weightage / Monitoring / WhatsApp / Mentorship) | ✓ | — | — |
 | WhatsApp flow switches (Settings → WhatsApp) — enforced server-side for every caller, the mentorship cron included | ✓ | — | — |
 | Mentorship nudge — dry-run preview / test send (Settings → Mentorship) | ✓ | — | — |

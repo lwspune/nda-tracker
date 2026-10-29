@@ -214,6 +214,7 @@
 - **A delegated editor may add slots but never retime or delete an existing one.** A timetabled absence stores no clock time, so a retime rewrites history (see CLAUDE.md, "Retiming a slot rewrites HISTORY"). The function enforces this, and the page hides the slot-edit chips to match. Admins still can, after running `migrate_absence_times.js`.
 - **A no-op save must not bump `updated_at`.** When the patch changes nothing, the function returns the unchanged version, so a delegated editor merely loading the page doesn't put every admin tab out of date. It uses `clock_timestamp()`, not `now()`, because `now()` is fixed for the whole transaction.
 - **Sends and calendar sync stay admin-only**, even with the permission. Those endpoints 403 teachers, and capture and edit surfaces never send.
+- **`reportsAccess` (2026-10-29) opens Monthly Reports and nothing else.** A nav item marked `adminOnly` with `permission: 'reports'` shows for a teacher who holds it, and `TeacherPortal` mounts the page only then, so without it a stale `activePage` lands on the Dashboard. It is a visibility gate, not a data boundary: the page reads tables every staff session can already read (`student_attendance`, `lecture_absences`, `exam_absences`, `homework_pending`, `attendance_holidays`) and only builds local downloads. Keep it send-free: a send added to that page would hand a teacher a parent-facing flow.
 
 ### Modal layout (`ModalShell`, 2026-07-28)
 
