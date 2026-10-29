@@ -14,21 +14,11 @@
 // Every exam is OFFLINE (`questions: []` + explicit `max_marks`): the sheet has
 // totals only, so per-question analytics are intentionally empty.
 //
-// Writes `exams` + `exam_results` ONLY. No absence sync, no sends — recording
-// marks must never reach a parent, and exam absences drive a WhatsApp flow.
-//
-// Idempotent: exam ids are derived from class + column, and each exam's results
-// are deleted before insert (mirroring `upsertExam`), so a re-run replaces
-// rather than duplicates.
+// The read, plan, report and write live in `scripts/schoolExamImport.js`,
+// shared with the other school exams (writes exams + results only, never
+// sends; idempotent).
 
-import fs from 'node:fs'
-import { createClient } from '@supabase/supabase-js'
-import * as XLSX from 'xlsx'
-import { buildUnitTestExams } from './src/lib/unitTest1Import.js'
-
-const SUPABASE_URL = 'https://exjnzrrlzcrsoxfoojcq.supabase.co'
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
-const DRY_RUN      = process.argv.includes('--dry-run')
+import { runSchoolExamImport } from './scripts/schoolExamImport.js'
 
 const fileFlag = process.argv.indexOf('--file')
 const WORKBOOK = fileFlag !== -1
@@ -126,146 +116,5 @@ const NAME_ALIASES = {
   'dropadi sarpale':      'Droupadi Sarpale',
 }
 
-if (!SERVICE_KEY) {
-  console.error('Error: SUPABASE_SERVICE_ROLE_KEY env var is required.')
-  process.exit(1)
-}
-if (!fs.existsSync(WORKBOOK)) {
-  console.error(`Error: workbook not found: ${WORKBOOK}`)
-  process.exit(1)
-}
-
-const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
-
-// The ESM build of xlsx has no filesystem bound — without this `readFile`
-// reports the file as inaccessible even when it is right there.
-XLSX.set_fs(fs)
-
-const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z]/g, '')
-
-async function main() {
-  const wb = XLSX.readFile(WORKBOOK)
-  console.log(`Workbook: ${WORKBOOK}`)
-  console.log(`Sheets:   ${wb.SheetNames.join(', ')}\n`)
-
-  // ── 1. Roster → normalised name → canonical ───────────────────────────────
-  const { data: students, error: stErr } = await db
-    .from('students')
-    .select('lws_id, canonical_name, name_variants, branch, student_batches(batch_name)')
-    .eq('branch', BRANCH)
-  if (stErr) throw stErr
-
-  // Batch-scoped so a sheet name cannot resolve to a same-named student in
-  // another class — an out-of-class match would be reported as matched.
-  const profiles = new Map()   // canonical name → { batches, branch }
-  const byBatch = new Map()    // batch name → Map(normalised → canonical)
-  for (const s of students) {
-    const batches = (s.student_batches ?? []).map(b => b.batch_name)
-    profiles.set(s.canonical_name, { batches, branch: s.branch })
-    for (const b of batches) {
-      if (!byBatch.has(b)) byBatch.set(b, new Map())
-      const m = byBatch.get(b)
-      for (const v of [...(s.name_variants ?? []), s.canonical_name]) {
-        m.set(norm(v), s.canonical_name)
-      }
-    }
-  }
-
-  // ── 2. Build ──────────────────────────────────────────────────────────────
-  const allExams = []
-  const allReports = []
-
-  for (const config of CLASSES) {
-    const ws = wb.Sheets[config.sheet]
-    if (!ws) { console.error(`Error: sheet "${config.sheet}" not in workbook.`); process.exit(1) }
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-
-    const scope = new Map()
-    for (const b of config.batch.split(',').map(x => x.trim())) {
-      for (const [k, v] of (byBatch.get(b) ?? new Map())) scope.set(k, v)
-    }
-    const resolveName = name => NAME_ALIASES[name] ?? scope.get(norm(name)) ?? null
-
-    const { exams, report } = buildUnitTestExams({ rows, config, resolveName })
-    allExams.push(...exams)
-    allReports.push({ cls: config.cls, report })
-  }
-
-  // ── 3. Print the plan ─────────────────────────────────────────────────────
-  console.log('Exams to write:')
-  let cls = null
-  for (const e of allExams) {
-    const c = e.id.split('_')[2]
-    if (c !== cls) { cls = c; console.log(`\n  ── ${cls} ── ${e.batch}`) }
-    console.log(`  ${e.date}  ${e.name.padEnd(38)} ${String(e.subject).padEnd(10)} /${String(e.maxMarks).padEnd(3)} ${String(e.students.length).padStart(4)} results`)
-  }
-  const totalRows = allExams.reduce((n, e) => n + e.students.length, 0)
-  console.log(`\n  ${allExams.length} exams, ${totalRows} result rows.`)
-
-  let blocking = 0
-  for (const { cls: c, report } of allReports) {
-    const lines = []
-    for (const r of report.unmatched)       { lines.push(`✗ UNMATCHED name, row dropped: "${r.name}"`); blocking++ }
-    for (const r of report.unmappedColumns) { lines.push(`✗ sheet column with no configured paper: "${r.column}"`); blocking++ }
-    for (const r of report.missingColumns)  { lines.push(`✗ configured paper with no sheet column: "${r.column}"`); blocking++ }
-    for (const r of report.corrected)       lines.push(`~ corrected: ${r.name} ${r.column} = ${r.from} → ${r.to}`)
-    for (const r of report.overMax)         lines.push(`· over max, cell omitted: ${r.name} ${r.column} = ${r.value} (max ${r.max})`)
-    for (const r of report.nonNumeric)      lines.push(`· non-numeric, absent: ${r.name} ${r.column} = "${r.value}"`)
-    for (const r of report.skippedAll)      lines.push(`· absent from all ${r.papers} papers: ${r.name}`)
-    for (const r of report.skippedZeros)    lines.push(`· zeros treated as absent (${r.papers} papers): ${r.name}`)
-    for (const r of report.skippedPapers)   lines.push(`· absent from ${r.column}: ${r.name}`)
-    if (lines.length) {
-      console.log(`\n  ── ${c} notes ──`)
-      for (const l of lines) console.log(`  ${l}`)
-    }
-  }
-
-  if (blocking) {
-    console.log(`\n✗ ${blocking} blocking issue(s) above. Nothing written — fix the config or the sheet first.`)
-    process.exit(1)
-  }
-
-  if (DRY_RUN) {
-    console.log('\n--dry-run: nothing written.')
-    return
-  }
-
-  // ── 4. Write ──────────────────────────────────────────────────────────────
-  // Same order as `upsertExam`: exam row, clear stale results, insert.
-  for (const e of allExams) {
-    const { error: exErr } = await db.from('exams').upsert({
-      id: e.id, name: e.name, date: e.date, subject: e.subject,
-      batch: e.batch, branch: e.branch, marking: e.marking,
-      questions: e.questions, max_marks: e.maxMarks,
-      created_by: null, source: 'admin',
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
-    if (exErr) throw new Error(`${e.id} exams upsert failed: ${exErr.message}`)
-
-    const { error: delErr } = await db.from('exam_results').delete().eq('exam_id', e.id)
-    if (delErr) throw new Error(`${e.id} exam_results delete failed: ${delErr.message}`)
-
-    if (e.students.length) {
-      const rows = e.students.map(s => {
-        const p = profiles.get(s.name)
-        return {
-          exam_id: e.id,
-          student_name: s.name,
-          roll_no: '', total_marks: s.totalMarks,
-          correct: 0, incorrect: 0, not_attempted: 0,
-          responses: {}, choices: {},
-          batch_at_exam:  p ? ((p.batches ?? []).join(', ') || null) : null,
-          branch_at_exam: p ? (p.branch || null) : null,
-        }
-      })
-      const { error: insErr } = await db.from('exam_results').insert(rows)
-      if (insErr) throw new Error(`${e.id} exam_results insert failed: ${insErr.message}`)
-    }
-    console.log(`  ✓ ${e.id.padEnd(30)} ${String(e.students.length).padStart(4)} results`)
-  }
-
-  console.log(`\n✓ Wrote ${allExams.length} exams, ${totalRows} result rows.`)
-  console.log('Every open admin tab must RELOAD to see them.')
-}
-
-main().catch(e => { console.error(e); process.exit(1) })
+runSchoolExamImport({ workbook: WORKBOOK, classes: CLASSES, aliases: NAME_ALIASES })
+  .catch(e => { console.error(e); process.exit(1) })
