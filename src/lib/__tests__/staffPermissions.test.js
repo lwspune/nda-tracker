@@ -9,11 +9,12 @@ const STAFF = [
   { id: 't2', name: 'Warden Sir',    email: 'warden@lwspune.com', hostelAccess: true },
   { id: 't3', name: 'Both Sir',      email: 'both@lwspune.com', hostelAccess: true, timetableAccess: true },
   { id: 't4', name: 'No Email Mam',  timetableAccess: true },
+  { id: 't5', name: 'Reports Mam',   email: 'reports@lwspune.com', reportsAccess: true },
 ]
 
 describe('STAFF_PERMISSIONS registry', () => {
-  it('lists hostel and timetable, each with a unique key, field and a label', () => {
-    expect(STAFF_PERMISSIONS.map(p => p.key)).toEqual(['hostel', 'timetable'])
+  it('lists hostel, timetable and reports, each with a unique key, field and a label', () => {
+    expect(STAFF_PERMISSIONS.map(p => p.key)).toEqual(['hostel', 'timetable', 'reports'])
     const fields = STAFF_PERMISSIONS.map(p => p.field)
     expect(new Set(fields).size).toBe(fields.length)
     for (const p of STAFF_PERMISSIONS) {
@@ -27,6 +28,7 @@ describe('STAFF_PERMISSIONS registry', () => {
   it('keeps the shipped hostelAccess field name', () => {
     expect(STAFF_PERMISSIONS.find(p => p.key === 'hostel').field).toBe('hostelAccess')
     expect(STAFF_PERMISSIONS.find(p => p.key === 'timetable').field).toBe('timetableAccess')
+    expect(STAFF_PERMISSIONS.find(p => p.key === 'reports').field).toBe('reportsAccess')
   })
 })
 
@@ -37,6 +39,9 @@ describe('hasPermission', () => {
     expect(hasPermission(STAFF, 'warden@lwspune.com', 'timetable')).toBe(false)
     expect(hasPermission(STAFF, 'both@lwspune.com', 'timetable')).toBe(true)
     expect(hasPermission(STAFF, 'both@lwspune.com', 'hostel')).toBe(true)
+    expect(hasPermission(STAFF, 'reports@lwspune.com', 'reports')).toBe(true)
+    expect(hasPermission(STAFF, 'reports@lwspune.com', 'timetable')).toBe(false)
+    expect(hasPermission(STAFF, 'asha@lwspune.com', 'reports')).toBe(false)
   })
 
   it('matches email regardless of case and surrounding whitespace', () => {

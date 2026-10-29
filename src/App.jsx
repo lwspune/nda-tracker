@@ -33,7 +33,7 @@ import ScanSheetsPage from './pages/ScanSheets'
 import HostelAttendancePage from './pages/HostelAttendance'
 import { isSchoolAttendancePath, isHostelAttendancePath, isScanPath, scanExamIdFromSearch } from './lib/routing'
 import { hasHostelAccess } from './lib/teacherDay'
-import { hasPermission } from './lib/staffPermissions'
+import { hasPermission, STAFF_PERMISSIONS } from './lib/staffPermissions'
 
 export default function App() {
   const activePage = useStore(s => s.activePage)
@@ -309,7 +309,7 @@ function OnlineAdminPortal({ session, onLogout }) {
 // Loads read-only data from Supabase faculty_state on mount.
 // Syllabus/timetable/settings come from faculty_state JSONB;
 // exams come from normalised tables via loadExamsFromSupabase.
-function TeacherPortal({ session, onLogout }) {
+export function TeacherPortal({ session, onLogout }) {
   const loadRemoteData          = useStore(s => s.loadRemoteData)
   const loadExamsFromSupabase   = useStore(s => s.loadExamsFromSupabase)
   const loadQuizzesFromSupabase = useStore(s => s.loadQuizzesFromSupabase)
@@ -322,6 +322,12 @@ function TeacherPortal({ session, onLogout }) {
   // Settings → Teachers → "Edit timetable". Saves go through save_timetable,
   // which re-checks this against the live row — this only shows the controls.
   const timetableAccess = hasPermission(teachers, session?.user?.email, 'timetable')
+  // Every permission this teacher holds, for the nav. Monthly Reports is the
+  // one adminOnly page a permission opens; it is mounted below on the same key.
+  const grants = STAFF_PERMISSIONS
+    .filter(p => hasPermission(teachers, session?.user?.email, p.key))
+    .map(p => p.key)
+  const reportsAccess = grants.includes('reports')
 
   useEffect(() => {
     async function loadAll() {
@@ -351,6 +357,9 @@ function TeacherPortal({ session, onLogout }) {
     syllabus:   <SyllabusPage />,
     timetable:  <TimetablePage canEdit={timetableAccess} />,
     errorSets:  <ErrorSetsPage />,
+    // Absent from the map without the permission, so a stale activePage falls
+    // back to the Dashboard instead of reaching the page.
+    ...(reportsAccess && { monthlyReports: <MonthlyReportsPage /> }),
   }
 
   if (!loaded) {
@@ -366,7 +375,7 @@ function TeacherPortal({ session, onLogout }) {
       <div className="flex min-h-screen bg-bg">
         {/* Only a teacher with timetable access ever saves, so only they can go stale. */}
         {timetableAccess && <StaleDataBanner />}
-        <Sidebar onLogout={onLogout} hostelAccess={hostelAccess} />
+        <Sidebar onLogout={onLogout} hostelAccess={hostelAccess} grants={grants} />
         <div className="flex-1 min-w-0 flex flex-col min-h-screen md:ml-[228px] pt-[56px] md:pt-0 pb-[60px] md:pb-0">
           <main className="flex-1 p-4 md:p-8 md:pt-7">
             {pages[activePage] ?? <DashboardPage />}

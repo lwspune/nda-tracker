@@ -85,3 +85,34 @@ describe('Sidebar — mobile bottom bar', () => {
       .not.toHaveAttribute('aria-current')
   })
 })
+
+// Monthly Reports is admin-only unless the teacher holds the "reports" switch
+// from Settings → Teachers. Read + local download only, so it sends nothing.
+describe('Sidebar — Monthly Reports', () => {
+  beforeEach(() => {
+    state.activePage = 'dashboard'
+    state.isSuperadmin = false
+  })
+
+  const reportsLinks = () => screen.queryAllByRole('button', { name: /Monthly Reports/ })
+
+  it('shows it to an admin', () => {
+    renderAs('admin')
+    expect(reportsLinks().length).toBeGreaterThan(0)
+  })
+
+  it('hides it from a teacher without the reports permission', () => {
+    renderAs('teacher', { grants: ['timetable'] })
+    expect(reportsLinks()).toHaveLength(0)
+  })
+
+  it('shows it to a teacher who holds the reports permission', () => {
+    renderAs('teacher', { grants: ['reports'] })
+    expect(reportsLinks().length).toBeGreaterThan(0)
+  })
+
+  it('still hides admin-only pages the permission does not cover', () => {
+    renderAs('teacher', { grants: ['reports'] })
+    expect(screen.queryAllByRole('button', { name: /Settings/ })).toHaveLength(0)
+  })
+})

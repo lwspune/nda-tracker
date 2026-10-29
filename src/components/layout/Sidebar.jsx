@@ -36,7 +36,9 @@ const NAV = [
   // Faculty + content-team instrumentation: what the answer sheets say about
   // each bank question. Admin-only — a student can act on none of it.
   { id: 'itemStats',      icon: '🔬', label: 'Question Stats', adminOnly: true },
-  { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true },
+  // Admin-only, unless the teacher holds the "reports" permission (Settings →
+  // Teachers). TeacherPortal mounts the page on the same permission.
+  { id: 'monthlyReports', icon: '📨', label: 'Monthly Reports', adminOnly: true, permission: 'reports' },
   { id: 'settings',       icon: '⚙', label: 'Settings', adminOnly: true },
   { id: 'teacherFeedback', icon: '🗣', label: 'Feedback', superadminOnly: true },
 ]
@@ -48,7 +50,9 @@ const MOBILE_LINKS = 4
 const BAR_BUTTON = `flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg transition-all
   min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300`
 
-export default function Sidebar({ onLogout, hostelAccess = false }) {
+// grants — the STAFF_PERMISSIONS keys the signed-in teacher holds. An adminOnly
+// page that names one of them in `permission` shows for that teacher too.
+export default function Sidebar({ onLogout, hostelAccess = false, grants = [] }) {
   const activePage    = useStore(s => s.activePage)
   const setActivePage = useStore(s => s.setActivePage)
   const exams         = useStore(s => s.exams)
@@ -65,7 +69,7 @@ export default function Sidebar({ onLogout, hostelAccess = false }) {
     .length
 
   const visibleNav = NAV.filter(n =>
-    !(mode !== 'admin' && n.adminOnly) &&
+    !(mode !== 'admin' && n.adminOnly && !(n.permission && grants.includes(n.permission))) &&
     !(n.superadminOnly && !isSuperadmin) &&
     !(n.teacherOnly && mode !== 'teacher') &&
     !(n.hostelOnly && !hostelAccess)

@@ -30,6 +30,15 @@ export const STAFF_PERMISSIONS = [
     description: 'Cells, mappings, new time slots, notes and the exam schedule. Cannot retime or delete an existing slot, or create, rename or delete a timetable.',
     badge: '🗓 edits timetable',
   },
+  {
+    // Opens the admin-only Monthly Reports page. Read + local download: it
+    // reads tables every staff session can already read, and sends nothing.
+    key: 'reports',
+    field: 'reportsAccess',
+    label: 'Monthly reports',
+    description: 'Build each student\'s monthly report for download (PDF, Word, ZIP). Sends nothing to parents.',
+    badge: '📨 monthly reports',
+  },
 ]
 
 const BY_KEY = Object.fromEntries(STAFF_PERMISSIONS.map(p => [p.key, p]))
