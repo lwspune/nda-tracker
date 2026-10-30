@@ -156,3 +156,23 @@ export function matchPunchRows(rows, studentList) {
   }
   return { ready, unmatched, otherBranch, blocked }
 }
+
+/**
+ * The day's register from the same file: one student_attendance row per
+ * matched LWS Pune student. Blocked students are included — blocking stops
+ * messages, not the register. Only P and A are saved; the message reads any
+ * other status as Absent, but the register must not guess, so those are
+ * returned in `skipped` for the preview to list.
+ *
+ * @param {ReturnType<typeof matchPunchRows>} match
+ * @param {string|null} date the file's date (YYYY-MM-DD)
+ */
+export function punchAttendanceRecords(match, date) {
+  const records = [], skipped = []
+  if (!date || !match) return { records, skipped }
+  for (const r of [...match.ready, ...match.blocked]) {
+    if (r.status === 'P' || r.status === 'A') records.push({ lws_id: r.lwsId, date, status: r.status })
+    else skipped.push({ name: r.name, status: r.status })
+  }
+  return { records, skipped }
+}

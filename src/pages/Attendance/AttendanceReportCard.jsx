@@ -3,7 +3,7 @@ import useStore from '../../store/useStore'
 import useHolidays from '../../store/useHolidays'
 import { supabase } from '../../lib/supabase'
 import { parsePunchReportExcel } from '../../lib/excel'
-import { matchPunchRows, ATTENDANCE_REPORT_BRANCH } from '../../lib/punchReport'
+import { matchPunchRows, punchAttendanceRecords, ATTENDANCE_REPORT_BRANCH } from '../../lib/punchReport'
 import { dayOffReason } from '../../lib/holidays'
 import { isFlowEnabled, flowOffMessage } from '../../lib/whatsappFlows'
 import { fmtDate, fmtDateShort } from '../../lib/dates'
@@ -18,11 +18,13 @@ const SEND_GROUP = 10
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // The nightly attendance report (Attendance → Class metrics, admin only):
-// upload EIS's Punch Monitor export, check the preview, send. Parsing and the
-// message values come from src/lib/punchReport.js; who may be messaged, and
-// whether they already were, is decided again by the server.
+// upload EIS's Punch Monitor export, check the preview, save the day's P/A and
+// send. Parsing, the register rows and the message values come from
+// src/lib/punchReport.js; who may be messaged, and whether they already were,
+// is decided again by the server.
 export default function AttendanceReportCard({ today }) {
   const studentList = useStore(s => s.studentList)
+  const saveAttendanceRecords = useStore(s => s.saveAttendanceRecords)
   const flowOff = useStore(s => !isFlowEnabled(s.whatsappFlows, 'attendanceReport'))
   const holidays = useHolidays()
   const inputRef = useRef(null)
@@ -30,15 +32,23 @@ export default function AttendanceReportCard({ today }) {
   const [report, setReport]         = useState(null)   // parsePunchSheet() result
   const [parseError, setParseError] = useState(null)
   const [alreadySent, setAlreadySent] = useState(() => new Set())
+  const [onFile, setOnFile]         = useState(() => new Set())   // student_attendance rows for the date
   const [ticks, setTicks]           = useState({})     // warning key → acknowledged
   const [testNumber, setTestNumber] = useState('')
   const [progress, setProgress]     = useState(null)   // { done, total }
   const [result, setResult]         = useState(null)   // { test?, sent, skipped, alreadySent, failures[], error? }
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(null)   // saveAttendanceRecords() result
 
   const match = useMemo(
     () => (report ? matchPunchRows(report.rows, studentList) : null),
     [report, studentList],
   )
+  const register = useMemo(
+    () => (match ? punchAttendanceRecords(match, report.date) : null),
+    [match, report],
+  )
+  const replacing = register ? register.records.filter(r => onFile.has(r.lws_id)).length : 0
   const pending = useMemo(
     () => (match ? match.ready.filter(r => !alreadySent.has(r.lwsId)) : []),
     [match, alreadySent],
@@ -49,7 +59,7 @@ export default function AttendanceReportCard({ today }) {
     if (!report?.date || !match) return []
     const list = []
     if (report.date !== today) {
-      list.push({ key: 'date', label: `This file is for ${fmtDate(report.date)}, not today. Send anyway.` })
+      list.push({ key: 'date', label: `This file is for ${fmtDate(report.date)}, not today. Continue anyway.` })
     }
     const byLwsId = new Map((studentList || []).map(s => [s.lws_id, s]))
     const reasons = new Map()
@@ -62,25 +72,26 @@ export default function AttendanceReportCard({ today }) {
       list.push({
         key: `off:${why}`,
         label: why === 'Sunday'
-          ? `${fmtDateShort(report.date)} is a Sunday. Send anyway.`
-          : `${why} is a holiday for ${plural(n, 'student')} on ${fmtDateShort(report.date)}. Send anyway.`,
+          ? `${fmtDateShort(report.date)} is a Sunday. Continue anyway.`
+          : `${why} is a holiday for ${plural(n, 'student')} on ${fmtDateShort(report.date)}. Continue anyway.`,
       })
     }
     return list
   }, [report, match, today, holidays, studentList])
 
-  const sending = progress !== null
+  const sending = progress !== null || saving
   const unticked = warnings.some(w => !ticks[w.key])
 
   async function handleFile(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setReport(null); setParseError(null); setResult(null); setTicks({}); setAlreadySent(new Set())
+    setReport(null); setParseError(null); setResult(null); setSaved(null); setTicks({})
+    setAlreadySent(new Set()); setOnFile(new Set())
     try {
       const parsed = await parsePunchReportExcel(file)
       setReport(parsed)
-      if (parsed.date) await loadAlreadySent(parsed.date)
+      if (parsed.date) await Promise.all([loadAlreadySent(parsed.date), loadOnFile(parsed.date)])
     } catch (err) {
       setParseError(err.message || String(err))
     }
@@ -95,6 +106,30 @@ export default function AttendanceReportCard({ today }) {
       return
     }
     setAlreadySent(new Set((data || []).map(r => r.lws_id)))
+  }
+
+  async function loadOnFile(date) {
+    if (!supabase) return
+    const { data, error } = await supabase.from('student_attendance').select('lws_id').eq('date', date)
+    // Only shapes the "already has attendance" note; saving reads Late marks itself.
+    if (!error) setOnFile(new Set((data || []).map(r => r.lws_id)))
+  }
+
+  // The day's P/A, through the same write as the bulk import (Late marks kept).
+  async function saveRegister() {
+    setSaving(true)
+    setSaved(null)
+    try {
+      const res = await saveAttendanceRecords(register.records)
+      setSaved(res)
+      if (!res.error) await loadOnFile(report.date)
+      return !res.error
+    } catch (err) {
+      setSaved({ error: err.message || String(err) })
+      return false
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function post(students, redirectTo) {
@@ -143,7 +178,9 @@ export default function AttendanceReportCard({ today }) {
     }
   }
 
-  function handleSend() {
+  async function handleSend() {
+    setResult(null)
+    if (!(await saveRegister())) return
     const groups = []
     for (let i = 0; i < pending.length; i += SEND_GROUP) groups.push(pending.slice(i, i + SEND_GROUP))
     run(groups)
@@ -189,8 +226,8 @@ export default function AttendanceReportCard({ today }) {
         />
       </div>
       <p className="text-[12px] text-ink-3 mb-3">
-        After class, upload the day's Punch Monitor export from EIS. Each {ATTENDANCE_REPORT_BRANCH} student and their
-        parents get the in and out times, or Absent.
+        After class, upload the day's Punch Monitor export from EIS. Saving records each {ATTENDANCE_REPORT_BRANCH} student
+        present or absent for the day; sending gives each student and their parents the in and out times, or Absent.
       </p>
       {flowOff && <FlowOffNote flow="attendanceReport" className="block mb-3" />}
 
@@ -215,6 +252,13 @@ export default function AttendanceReportCard({ today }) {
               </span>
             )}
           </div>
+
+          {replacing > 0 && (
+            <p className="mb-3 text-[12px] text-ink-2">
+              {replacing} of these students already have attendance for this date. Saving replaces it with this
+              file; Late marks are kept.
+            </p>
+          )}
 
           {match.ready.length > 0 && (
             <div className="max-h-72 overflow-auto border border-border rounded-lg mb-3">
@@ -250,6 +294,13 @@ export default function AttendanceReportCard({ today }) {
                   <span className="text-ink-3">{g.rows.join(', ')}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {register.skipped.length > 0 && (
+            <div className="mb-3 text-[12px]">
+              <span className="font-semibold text-ink-2">Not saved — status is not P or A ({register.skipped.length}): </span>
+              <span className="text-ink-3">{register.skipped.map(r => `${r.name} (${r.status || 'blank'})`).join(', ')}</span>
             </div>
           )}
 
@@ -290,19 +341,46 @@ export default function AttendanceReportCard({ today }) {
             >
               Send test
             </button>
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={sending || flowOff || unticked || pending.length === 0}
-              title={flowOff ? flowOffMessage('attendanceReport') : undefined}
-              className="btn btn-primary text-[13px] min-h-[44px] px-4 ml-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {pending.length === 0 && match.ready.length > 0
-                ? 'All sent for this date'
-                : `Send to ${plural(pending.length, 'student')}`}
-            </button>
+            <div className="flex items-end gap-3 flex-wrap ml-auto">
+              <button
+                type="button"
+                onClick={saveRegister}
+                disabled={sending || unticked || register.records.length === 0}
+                className="btn btn-secondary text-[13px] min-h-[44px] px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Save attendance only
+              </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={sending || flowOff || unticked || pending.length === 0}
+                title={flowOff ? flowOffMessage('attendanceReport') : undefined}
+                className="btn btn-primary text-[13px] min-h-[44px] px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {pending.length === 0 && match.ready.length > 0
+                  ? 'All sent for this date'
+                  : `Save & send to ${plural(pending.length, 'student')}`}
+              </button>
+            </div>
           </div>
         </>
+      )}
+
+      {saving && (
+        <div className="mt-3 text-[12px] text-ink-2" role="status">Saving attendance…</div>
+      )}
+
+      {saved && (
+        <div className="mt-3">
+          <Alert type={saved.error ? 'error' : 'success'}>
+            {saved.error
+              ? saved.error
+              : <>
+                  Attendance saved for {plural(saved.upserted, 'student')}
+                  {saved.lateProtected > 0 && ` · ${plural(saved.lateProtected, 'Late mark')} kept`}
+                </>}
+          </Alert>
+        </div>
       )}
 
       {progress && (

@@ -207,6 +207,80 @@ describe('importAttendance', () => {
   })
 })
 
+// ── saveAttendanceRecords: the one write both uploads share ──
+
+describe('saveAttendanceRecords', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const RECORDS = [
+    { lws_id: 'LWS-001', date: '2026-10-23', status: 'P' },
+    { lws_id: 'LWS-002', date: '2026-10-23', status: 'A' },
+  ]
+
+  it('upserts the records on (lws_id, date) and reports the count', async () => {
+    const { mockUpsert } = mockSupabase()
+    const { slice } = makeStore()
+    const result = await slice.saveAttendanceRecords(RECORDS)
+    expect(mockUpsert).toHaveBeenCalledWith(RECORDS, { onConflict: 'lws_id,date' })
+    expect(result).toEqual({ upserted: 2, lateProtected: 0, error: null })
+  })
+
+  it('keeps an existing Late mark', async () => {
+    const { mockUpsert } = mockSupabase({ lateRows: [{ lws_id: 'LWS-001', date: '2026-10-23' }] })
+    const { slice } = makeStore()
+    const result = await slice.saveAttendanceRecords(RECORDS)
+    expect(mockUpsert.mock.calls[0][0]).toEqual([RECORDS[1]])
+    expect(result).toEqual({ upserted: 1, lateProtected: 1, error: null })
+  })
+
+  // Not knowing which Late marks exist means any write could erase one.
+  it('writes nothing when the Late marks cannot be read', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'admin' } } } })
+    const builder = makeQueryBuilder({ error: { message: 'timeout' } })
+    supabase.from.mockReturnValue(builder)
+    const { slice } = makeStore()
+    const result = await slice.saveAttendanceRecords(RECORDS)
+    expect(builder.upsert).not.toHaveBeenCalled()
+    expect(result.upserted).toBe(0)
+    expect(result.error).toMatch(/timeout/)
+  })
+
+  it('reports a failed write instead of a count', async () => {
+    mockSupabase({ upsertError: { message: 'permission denied' } })
+    const { slice } = makeStore()
+    const result = await slice.saveAttendanceRecords(RECORDS)
+    expect(result.upserted).toBe(0)
+    expect(result.error).toMatch(/permission denied/)
+  })
+
+  it('says so when nobody is signed in', async () => {
+    mockSupabase({ sessionActive: false })
+    const { slice } = makeStore()
+    const result = await slice.saveAttendanceRecords(RECORDS)
+    expect(supabase.from).not.toHaveBeenCalled()
+    expect(result.upserted).toBe(0)
+    expect(result.error).toMatch(/sign in/i)
+  })
+
+  it('does nothing for an empty list', async () => {
+    mockSupabase()
+    const { slice } = makeStore()
+    expect(await slice.saveAttendanceRecords([])).toEqual({ upserted: 0, lateProtected: 0, error: null })
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('is what the bulk import writes through, so it also refuses on an unreadable Late list', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'admin' } } } })
+    const builder = makeQueryBuilder({ error: { message: 'timeout' } })
+    supabase.from.mockReturnValue(builder)
+    const { slice } = makeStore()
+    const result = await slice.importAttendance(PARSED)
+    expect(builder.upsert).not.toHaveBeenCalled()
+    expect(result.matched).toBe(2)
+    expect(result.error).toMatch(/timeout/)
+  })
+})
+
 // ── markLate / unmarkLate / getLateStudentsForDate tests ─────
 
 describe('markLate', () => {
