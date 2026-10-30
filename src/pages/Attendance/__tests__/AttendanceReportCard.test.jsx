@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockStore = { studentList: [], whatsappFlows: {} }
+const mockSave = vi.fn()
+const mockStore = { studentList: [], whatsappFlows: {}, saveAttendanceRecords: (...a) => mockSave(...a) }
 vi.mock('../../../store/useStore', () => ({ default: (selector) => selector(mockStore) }))
 
 let mockHolidays = []
@@ -10,14 +11,19 @@ vi.mock('../../../store/useHolidays', () => ({ default: () => mockHolidays }))
 const mockParse = vi.fn()
 vi.mock('../../../lib/excel', () => ({ parsePunchReportExcel: (...a) => mockParse(...a) }))
 
-// attendance_report_sends rows already written for the date.
+// Rows already written for the date: who was sent (attendance_report_sends)
+// and whose attendance is already on file (student_attendance).
 let mockAlreadySent = []
+let mockOnFile = []
 vi.mock('../../../lib/supabase', () => ({
   supabase: {
     auth: { getSession: () => Promise.resolve({ data: { session: { access_token: 'tok' } } }) },
-    from: () => ({
+    from: (table) => ({
       select: () => ({
-        eq: () => Promise.resolve({ data: mockAlreadySent.map(lws_id => ({ lws_id })), error: null }),
+        eq: () => Promise.resolve({
+          data: (table === 'student_attendance' ? mockOnFile : mockAlreadySent).map(lws_id => ({ lws_id })),
+          error: null,
+        }),
       }),
     }),
   },
@@ -56,6 +62,8 @@ beforeEach(() => {
   mockStore.whatsappFlows = {}
   mockHolidays = []
   mockAlreadySent = []
+  mockOnFile = []
+  mockSave.mockImplementation(async records => ({ upserted: records.length, lateProtected: 0, error: null }))
   mockParse.mockResolvedValue({
     date: '2026-10-23',
     rows: [punch(1), punch(2, { status: 'A', inTime: '', outTime: '' }), punch(3), punch(4), punch(99, { name: 'Shravani Vedpathak' })],
@@ -202,5 +210,102 @@ describe('AttendanceReportCard — sending', () => {
     fireEvent.click(await screen.findByRole('button', { name: /send to 2 students/i }))
     expect(await screen.findByText(/switched off in Settings/)).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AttendanceReportCard — saving attendance', () => {
+  const SAVED = [
+    { lws_id: 'LWS-1', date: '2026-10-23', status: 'P' },
+    { lws_id: 'LWS-2', date: '2026-10-23', status: 'A' },
+    { lws_id: 'LWS-4', date: '2026-10-23', status: 'P' },
+  ]
+
+  it("saves each matched LWS Pune student's P or A, blocked included, and sends nothing", async () => {
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    fireEvent.click(await screen.findByRole('button', { name: /save attendance only/i }))
+    await waitFor(() => expect(mockSave).toHaveBeenCalledWith(SAVED))
+    expect(await screen.findByText(/attendance saved for 3 students/i)).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('saves first, then sends', async () => {
+    const order = []
+    mockSave.mockImplementation(async records => { order.push('save'); return { upserted: records.length, lateProtected: 0, error: null } })
+    const sendOk = fetch.getMockImplementation()
+    fetch.mockImplementation(async (...a) => { order.push('send'); return sendOk(...a) })
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    fireEvent.click(await screen.findByRole('button', { name: /save & send to 2 students/i }))
+    expect(await screen.findByText(/Sent 2/)).toBeInTheDocument()
+    expect(mockSave).toHaveBeenCalledWith(SAVED)
+    expect(order).toEqual(['save', 'send'])
+  })
+
+  it('does not send when the attendance could not be saved', async () => {
+    mockSave.mockResolvedValue({ upserted: 0, lateProtected: 0, error: 'permission denied' })
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    fireEvent.click(await screen.findByRole('button', { name: /save & send to 2 students/i }))
+    expect(await screen.findByText(/permission denied/)).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('says how many Late marks were kept', async () => {
+    mockSave.mockResolvedValue({ upserted: 2, lateProtected: 1, error: null })
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    fireEvent.click(await screen.findByRole('button', { name: /save attendance only/i }))
+    expect(await screen.findByText(/1 late mark kept/i)).toBeInTheDocument()
+  })
+
+  it('a test send saves nothing', async () => {
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    await screen.findByRole('button', { name: /save attendance only/i })
+    fireEvent.change(screen.getByLabelText(/test number/i), { target: { value: '9000000001' } })
+    fireEvent.click(screen.getByRole('button', { name: /send test/i }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    expect(mockSave).not.toHaveBeenCalled()
+  })
+
+  it('needs the same tick before saving a file that is not from today', async () => {
+    render(<AttendanceReportCard today="2026-10-24" />)
+    upload()
+    const save = await screen.findByRole('button', { name: /save attendance only/i })
+    expect(save).toBeDisabled()
+    fireEvent.click(screen.getByLabelText(/not today/i))
+    expect(save).toBeEnabled()
+  })
+
+  it('still saves when the WhatsApp flow is switched off', async () => {
+    mockStore.whatsappFlows = { attendanceReport: { enabled: false } }
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    expect(await screen.findByRole('button', { name: /save attendance only/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /save & send/i })).toBeDisabled()
+  })
+
+  it('still saves when everyone was already sent, so a later file can correct the day', async () => {
+    mockAlreadySent = ['LWS-1', 'LWS-2']
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    expect(await screen.findByRole('button', { name: /all sent for this date/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /save attendance only/i })).toBeEnabled()
+  })
+
+  it('warns when the day already has attendance on file', async () => {
+    mockOnFile = ['LWS-1', 'LWS-2', 'LWS-77']
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    expect(await screen.findByText(/2 of these students already have attendance for this date/i)).toBeInTheDocument()
+  })
+
+  it('lists a status it will not save', async () => {
+    mockParse.mockResolvedValue({ date: '2026-10-23', rows: [punch(1), punch(2, { status: 'H' })], duplicates: [] })
+    render(<AttendanceReportCard today="2026-10-23" />)
+    upload()
+    expect(await screen.findByText(/not saved/i)).toBeInTheDocument()
+    expect(screen.getByText(/Student 2 \(H\)/)).toBeInTheDocument()
   })
 })
