@@ -219,3 +219,15 @@ Students kept asking where their homework marks went. The grade showed earned/mi
 
 **Rejected / deferred:** a staff drag-to-adjust editor for marks (measure placement accuracy on the first real papers first); written exams (A: per-question marks typed by the teacher; B: uploaded papers graded like homework) — deferred by faculty, specced in SUGGESTIONS.md; backfilling causes/marks onto the 34 grades saved before 2026-10-16 (a regrade of shipped work; backfill ledger).
 
+## The nightly punch file also saves attendance (2026-10-30)
+
+**Decision.** The Punch Monitor file the office uploads every night for the parent report also writes the day's P/A to `student_attendance`. The bulk XLS import stays for corrections and catching up; whichever is uploaded last for a day wins.
+
+**Why.** The office asked: once one file goes up every night, a second bulk upload of the same day is redundant. The punch file also matches more reliably — by EIS Reg No rather than phone or name — and covered 95 of 96 active LWS Pune students where the 12 Oct bulk export held 63.
+
+**Why one shared write.** `saveAttendanceRecords` is the only P/A write; the import and the card both call it, so the Late-mark rule cannot drift between them. Moving it there also changed the import in one respect: when the `L` marks cannot be read it now writes nothing, where it used to write anyway and could overwrite a Late mark.
+
+**Why blocked students are saved.** Blocking stops messages; it does not mean the student was not in class.
+
+**Open question at ship time.** On 23 Oct a 12:33 export disagreed with the register for 17 students, all one way (register P, file A), 7 of them the CDS Apr27 batch — consistent with students not yet arrived at 12:33, not yet proven against an end-of-day file. If the register turns out to be corrected by hand, the punch file would record those students absent.
+

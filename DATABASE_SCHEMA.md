@@ -113,7 +113,7 @@ Column-level reference. For *how* the app uses this data (load/save paths, dual-
 | `id` | int4 PK (serial) | nextval | |
 | `lws_id` | text | — | FK → `students(lws_id)` |
 | `date` | text | — | `YYYY-MM-DD` (the XLS header's `DD-MM-YYYY` is converted on import; re-checked against live rows 2026-10-07) |
-| `status` | text | `''` | `P` / `A` from the import, `L` from late-marking (`-` cells are not stored) |
+| `status` | text | `''` | `P` / `A` from the XLS import or the nightly punch file (since 2026-10-30), `L` from late-marking (`-` cells are not stored). Both files write through `saveAttendanceRecords`, which never overwrites an `L` |
 | **UNIQUE** | `(lws_id, date)` | | Upsert conflict target |
 
 Original schema had `batch` + `eis_reg_no`; dropped 2026-05-07. UNIQUE was `(lws_id, date, batch)` originally.
