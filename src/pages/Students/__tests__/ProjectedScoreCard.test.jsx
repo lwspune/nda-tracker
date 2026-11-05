@@ -408,3 +408,15 @@ describe('ProjectedScoreCard — untested rows go last for students', () => {
     expect(screen.getByText(/what you score now out of what the chapter is worth/i)).toBeInTheDocument()
   })
 })
+
+describe('ProjectedScoreCard — student card says it once', () => {
+  it('drops the "Biggest Opportunities" subheading that repeats the description', () => {
+    render(<ProjectedScoreCard {...base} showScore={false} projected={{ total: 83, breakdown, subtopicBreakdown }} />)
+    expect(screen.queryByText(/biggest opportunities/i)).toBeNull()
+  })
+
+  it('keeps it for faculty', () => {
+    render(<ProjectedScoreCard {...base} projected={{ total: 83, breakdown, subtopicBreakdown }} />)
+    expect(screen.getByText(/biggest opportunities/i)).toBeInTheDocument()
+  })
+})

@@ -81,12 +81,15 @@ function SubtopicQuestions({ chapter, subtopic, name, exams }) {
 // the muted qualifier under it (a subtopic's parent chapter; nothing for a
 // chapter row). Untested rows carry the same italic marker at both levels, so
 // "no data" never reads as "scored zero".
+// On a phone the label takes its own full-width line above the bar: at 100px
+// wide, "Trigonometric Identities" truncated to "Trigonometric Ide…" and rows
+// could not be told apart. Desktop keeps the side-by-side row.
 function OpportunityRow({ label, sub, projected, marksAtStake, accuracy }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-[100px] md:w-[140px] lg:w-[180px] flex-shrink-0 min-w-0">
-        <div className="text-[11px] text-ink-2 truncate" title={label}>{label}</div>
-        {sub && <div className="text-[9px] text-ink-3 truncate" title={sub}>{sub}</div>}
+    <div className="flex items-center gap-3 max-md:flex-wrap max-md:gap-y-1">
+      <div className="w-[100px] md:w-[140px] lg:w-[180px] flex-shrink-0 min-w-0 max-md:w-full">
+        <div className="text-[11px] text-ink-2 truncate max-md:whitespace-normal max-md:text-[13px]" title={label}>{label}</div>
+        {sub && <div className="text-[9px] text-ink-3 truncate max-md:text-[11px]" title={sub}>{sub}</div>}
       </div>
       <div className="flex-1 bg-surface-2 rounded-full h-2 overflow-hidden">
         <div
@@ -237,9 +240,12 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
       {/* Top opportunities — chapters, or a flat cross-chapter subtopic ranking */}
       <div>
         <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3">
-            Biggest Opportunities — {bySubtopic ? 'subtopics' : 'chapters'} with highest marks at stake
-          </div>
+          {/* Students have the plain description under the title instead. */}
+          {showScore ? (
+            <div className="text-[10px] font-bold uppercase tracking-wide text-ink-3">
+              Biggest Opportunities — {bySubtopic ? 'subtopics' : 'chapters'} with highest marks at stake
+            </div>
+          ) : <span />}
           {hasSubtopics && (
             <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Breakdown level">
               {['chapters', 'subtopics'].map(v => (
