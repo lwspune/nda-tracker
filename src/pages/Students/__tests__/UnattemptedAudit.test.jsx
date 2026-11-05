@@ -266,3 +266,12 @@ describe('UnattemptedAudit — question card toggle', () => {
     expect(screen.getByText('Mock Test 5')).toBeInTheDocument()
   })
 })
+
+describe('UnattemptedAudit — embedded in another card', () => {
+  it('renders no title of its own and a plain description', () => {
+    render(<UnattemptedAudit skippedAudit={makeItems(3)} name="Alice" exams={[]} embedded />)
+    expect(screen.queryByText(/unattempted question audit/i)).toBeNull()
+    expect(screen.getByText(/subtopics where you skipped the most questions/i)).toBeInTheDocument()
+    expect(screen.getByText('Subtopic 1')).toBeInTheDocument()
+  })
+})

@@ -271,3 +271,17 @@ describe('WrongAnswerAudit — question card toggle', () => {
     expect(screen.getByText('Mock Test 3')).toBeInTheDocument()
   })
 })
+
+// Inside the student portal's "Your chapters" card the audit is a tab, so it
+// drops its own card frame and title, and describes itself plainly rather than
+// claiming to be "your highest-priority revision targets" — a claim two other
+// cards on the same page also made (2026-11-05).
+describe('WrongAnswerAudit — embedded in another card', () => {
+  it('renders no title of its own and a plain description', () => {
+    render(<WrongAnswerAudit wrongAudit={makeItems(3)} name="Alice" exams={[]} embedded />)
+    expect(screen.queryByText(/wrong answer audit/i)).toBeNull()
+    expect(screen.queryByText(/highest-priority/i)).toBeNull()
+    expect(screen.getByText(/subtopics where you got the most questions wrong/i)).toBeInTheDocument()
+    expect(screen.getByText('Subtopic 1')).toBeInTheDocument()
+  })
+})

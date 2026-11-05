@@ -6,7 +6,7 @@ import { getSubtopicQuestions, groupByExam, fmtDate } from './chapterAccordionHe
 const PAGE_SIZE = 5
 
 // Props: wrongAudit, name, exams
-export default function WrongAnswerAudit({ wrongAudit, name, exams }) {
+export default function WrongAnswerAudit({ wrongAudit, name, exams, embedded = false }) {
   const [page, setPage]               = useState(0)
   const [openQuestions, setOpenQuestions] = useState({})
 
@@ -20,11 +20,15 @@ export default function WrongAnswerAudit({ wrongAudit, name, exams }) {
     setOpenQuestions(o => ({ ...o, [key]: !o[key] }))
   }
 
+  // Embedded: a tab inside the student portal's "Your chapters" card, so no
+  // frame or title of its own, and a plain description.
+  const Frame = embedded ? 'div' : Card
+
   return (
-    <Card>
-      <CardTitle>🔴 Wrong Answer Audit</CardTitle>
+    <Frame>
+      {!embedded && <CardTitle>🔴 Wrong Answer Audit</CardTitle>}
       <div className="text-[12px] text-ink-3 mb-4">
-        Subtopics sorted by wrong answer count — your highest-priority revision targets.
+        {embedded ? 'Subtopics where you got the most questions wrong.' : <>Subtopics sorted by wrong answer count — your highest-priority revision targets.</>}
       </div>
 
       <div className="space-y-2 mb-4">
@@ -140,6 +144,6 @@ export default function WrongAnswerAudit({ wrongAudit, name, exams }) {
           </button>
         </div>
       )}
-    </Card>
+    </Frame>
   )
 }
