@@ -52,16 +52,18 @@ export default function UnattemptedAudit({ skippedAudit, name, exams, embedded =
                 </span>
 
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-semibold text-ink truncate">{item.subtopic}</div>
+                  <div className="text-[12px] font-semibold text-ink truncate max-md:whitespace-normal max-md:text-[13px]">{item.subtopic}</div>
                   <div className="text-[10px] text-ink-3">{item.chapter}</div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                {/* Below md this group takes its own full-width line: beside a long subtopic
+                    name it pushed the Show Questions button past the card edge. */}
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap max-md:w-full max-md:pl-8">
                   <span className="text-[11px] font-mono font-bold text-warning bg-amber-50
                                    px-2 py-0.5 rounded-full">
                     {item.skipped} ⬜
                   </span>
-                  <div className="w-16 bg-surface-2 rounded-full h-1.5 overflow-hidden">
+                  <div className="w-16 bg-surface-2 rounded-full h-1.5 overflow-hidden max-md:hidden">
                     <div
                       className="h-full rounded-full bg-warning"
                       style={{ width: `${Math.round(item.skipRate * 100)}%` }}
@@ -73,7 +75,7 @@ export default function UnattemptedAudit({ skippedAudit, name, exams, embedded =
 
                   <button
                     onClick={() => toggleQuestions(key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg max-md:ml-auto max-md:min-h-[40px]
                                 text-[12px] font-semibold border transition-all
                       ${isOpen
                         ? 'bg-amber-50 text-warning border-amber-200'
