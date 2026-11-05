@@ -3,6 +3,9 @@ import useStore from '../../store/useStore'
 import { Card, CardTitle } from '../../components/ui'
 import { fmtDateShort as fmtDate } from '../../lib/dates'
 
+// Chips shown before "Show all".
+const PREVIEW = 6
+
 function isoDaysAgo(n) {
   const d = new Date()
   d.setDate(d.getDate() - n)
@@ -27,6 +30,7 @@ export default function RecentIncidents({
   const [fetchedLecture, setFetchedLecture] = useState([])
   const [fetchedExam,    setFetchedExam]    = useState([])
   const [fetchedHomework, setFetchedHomework] = useState([])
+  const [showAll, setShowAll] = useState(false)
   const sinceDate = useMemo(() => isoDaysAgo(30), [])
 
   useEffect(() => {
@@ -114,11 +118,16 @@ export default function RecentIncidents({
 
   if (items.length === 0) return null
 
+  // Newest six, then the rest on request (2026-11-05): a student can carry 14
+  // lecture misses in 30 days, and as wrapped chips that filled a phone screen.
+  // A cap rather than pages — chips are read at a glance, not paged through.
+  const shown = showAll ? items : items.slice(0, PREVIEW)
+
   return (
     <Card>
       <CardTitle>Recent incidents · last 30 days</CardTitle>
       <div className="flex flex-wrap gap-2 mt-2">
-        {items.map((item, idx) => {
+        {shown.map((item, idx) => {
           let label, cls
           if (item.kind === 'late') {
             label = 'Late'
@@ -144,6 +153,17 @@ export default function RecentIncidents({
           )
         })}
       </div>
+      {items.length > PREVIEW && (
+        <button
+          type="button"
+          onClick={() => setShowAll(v => !v)}
+          aria-expanded={showAll}
+          className="mt-2 min-h-[44px] px-1 text-[12px] font-semibold text-accent hover:underline rounded
+                     focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          {showAll ? 'Show fewer ▴' : `Show all ${items.length} ▾`}
+        </button>
+      )}
     </Card>
   )
 }

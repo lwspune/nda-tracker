@@ -192,12 +192,18 @@ describe('MissedExams — student portal', () => {
     expect(screen.queryByText(/batch/i)).toBeNull()
   })
 
-  it('shows the latest five, then offers the rest', async () => {
+  // 2026-11-05: pages with the shared Newer / Older pager, like the homework
+  // list, instead of expanding the whole list in place.
+  it('shows the latest five, then pages to the rest', async () => {
     renderStudent(many)
     expect(screen.getByText('Mock 7')).toBeInTheDocument()     // newest first
     expect(screen.queryByText('Mock 2')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: /show all 7/i }))
+    const pager = screen.getByRole('navigation', { name: 'Missed tests pages' })
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /older/i }))
     expect(screen.getByText('Mock 1')).toBeInTheDocument()
+    expect(screen.queryByText('Mock 7')).toBeNull()
+    expect(pager).toHaveTextContent('Page 2 of 2')
   })
 
   it('keeps the full table for faculty', () => {

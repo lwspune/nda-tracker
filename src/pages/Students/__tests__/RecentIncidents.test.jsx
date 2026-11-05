@@ -204,3 +204,26 @@ describe('RecentIncidents', () => {
     expect(mockStore.getHomeworkForStudent).not.toHaveBeenCalled()
   })
 })
+
+// 2026-11-05: a student can carry 14 lecture misses in 30 days; as wrapped
+// chips that filled a phone screen. Newest six, then the rest on request.
+describe('RecentIncidents — newest six, then show all', () => {
+  const lateDays = n => Array.from({ length: n }, (_, i) => ({ date: isoDaysAgo(i + 1), status: 'L' }))
+
+  it('shows the newest six and offers the rest', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    render(<RecentIncidents lwsId="LWS-001" attendance={lateDays(9)} lectureAbsencesProp={[]} examAbsencesProp={[]} homeworkPendingProp={[]} />)
+    expect(screen.getAllByText('Late')).toHaveLength(6)
+    const more = screen.getByRole('button', { name: /show all 9/i })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(more)
+    expect(screen.getAllByText('Late')).toHaveLength(9)
+    expect(screen.getByRole('button', { name: /show fewer/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('offers nothing extra when six or fewer', () => {
+    render(<RecentIncidents lwsId="LWS-001" attendance={lateDays(6)} lectureAbsencesProp={[]} examAbsencesProp={[]} homeworkPendingProp={[]} />)
+    expect(screen.getAllByText('Late')).toHaveLength(6)
+    expect(screen.queryByRole('button', { name: /show all/i })).toBeNull()
+  })
+})
