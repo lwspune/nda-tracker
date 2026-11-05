@@ -425,13 +425,16 @@ export function StudentPortal({ data, onLogout }) {
             <div className="text-[15px] font-extrabold text-indigo-300 tracking-tight">
               🎯 NDA Tracker
             </div>
-            <div className="text-[9px] font-mono text-indigo-300/30 tracking-[1.5px] uppercase">
-              LWS PUNE · {data.name}{data.profile?.batches?.[0] ? ` · ${data.profile.batches[0]}` : ''}
+            {/* Readable at a glance: this line is now the only place the portal
+                names the student (the profile card is faculty-only). */}
+            <div className="text-[12px] text-indigo-200/80">
+              {data.name}{data.profile?.batches?.[0] ? ` · ${data.profile.batches[0]}` : ''}
             </div>
           </div>
           <button
             onClick={onLogout}
-            className="text-[11px] font-semibold text-indigo-300/50 hover:text-indigo-300
+            className="text-[12px] font-semibold text-indigo-200/90 hover:text-indigo-100
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60
                        transition-colors px-3 py-2.5 rounded-lg hover:bg-white/10 min-h-[44px] flex items-center"
           >
             Logout
