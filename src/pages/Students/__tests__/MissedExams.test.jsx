@@ -14,6 +14,8 @@ vi.mock('../../../store/useStore', () => ({
   }),
 }))
 
+import userEvent from '@testing-library/user-event'
+import { ModeContext } from '../../../context/ModeContext'
 import MissedExams from '../MissedExams'
 
 const exams = [
@@ -166,5 +168,41 @@ describe('MissedExams — readable dates', () => {
     ]} />)
     expect(await screen.findByText('10 May 2026')).toBeInTheDocument()
     expect(screen.queryByText('2026-05-10')).toBeNull()
+  })
+})
+
+// Students read a plain list: which test, when. Batch codes wrapped to four
+// lines a row on a phone, and "Notified" is faculty bookkeeping about whether we
+// messaged the parent (2026-11-05). Faculty keep the table.
+describe('MissedExams — student portal', () => {
+  const many = Array.from({ length: 7 }, (_, i) => ({
+    exam_id: `x${i}`, lws_id: 'LWS-001', marked_at: '2026-05-10T10:00Z', notified_at: i === 0 ? '2026-05-10T11:00Z' : null,
+    exam_name: `Mock ${i + 1}`, exam_date: `2026-05-${String(10 + i).padStart(2, '0')}`, exam_batch: 'LWS_NDA_2Y_(25-27)_B',
+  }))
+  const renderStudent = rows => render(
+    <ModeContext.Provider value="student"><MissedExams lwsId="LWS-001" exams={[]} examAbsencesProp={rows} /></ModeContext.Provider>,
+  )
+
+  it('shows name and date only — no batch codes, no "Notified"', () => {
+    renderStudent(many.slice(0, 2))
+    expect(screen.getByText('Mock 1')).toBeInTheDocument()
+    expect(screen.getByText('10 May 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/LWS_NDA_2Y/)).toBeNull()
+    expect(screen.queryByText(/notified/i)).toBeNull()
+    expect(screen.queryByText(/batch/i)).toBeNull()
+  })
+
+  it('shows the latest five, then offers the rest', async () => {
+    renderStudent(many)
+    expect(screen.getByText('Mock 7')).toBeInTheDocument()     // newest first
+    expect(screen.queryByText('Mock 2')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /show all 7/i }))
+    expect(screen.getByText('Mock 1')).toBeInTheDocument()
+  })
+
+  it('keeps the full table for faculty', () => {
+    render(<MissedExams lwsId="LWS-001" exams={[]} examAbsencesProp={many.slice(0, 2)} />)
+    expect(screen.getAllByText('LWS_NDA_2Y_(25-27)_B').length).toBe(2)
+    expect(screen.getByRole('columnheader', { name: 'Notified' })).toBeInTheDocument()
   })
 })

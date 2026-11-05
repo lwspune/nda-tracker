@@ -84,3 +84,24 @@ describe('IntegrityIncidents — readable dates', () => {
     expect(screen.queryByText('2026-06-14')).toBeNull()
   })
 })
+
+// The student portal must not name the OTHER student, nor show the evidence
+// arithmetic or which staff member recorded it. Display-side only: the payload
+// still ships the fields, a separate fix logged in SUGGESTIONS.md (2026-11-05).
+describe('IntegrityIncidents — student portal', () => {
+  it('shows the exam, date and note, but not the other student or the evidence', () => {
+    renderWithMode(<IntegrityIncidents lwsId="LWS-001" integrityIncidentsProp={[ROW]} />, 'student')
+    expect(screen.getByText("Math's mock test")).toBeInTheDocument()
+    expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
+    expect(screen.getByText('Admitted after confrontation')).toBeInTheDocument()
+    expect(screen.queryByText('Saarth Deshmukh')).toBeNull()
+    expect(screen.queryByText(/shared wrong/)).toBeNull()
+    expect(screen.queryByText('teacher@lws.test')).toBeNull()
+  })
+
+  it('keeps every column for faculty', () => {
+    renderWithMode(<IntegrityIncidents lwsId="LWS-001" integrityIncidentsProp={[ROW]} />, 'admin')
+    expect(screen.getByText('Saarth Deshmukh')).toBeInTheDocument()
+    expect(screen.getByText(/18 shared wrong/)).toBeInTheDocument()
+  })
+})

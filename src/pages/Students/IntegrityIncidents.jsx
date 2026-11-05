@@ -37,6 +37,10 @@ export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = nul
   if (!rows.length) return null
 
   const canDelete = mode === 'admin'
+  // The student portal must not name the OTHER student, nor show the evidence
+  // arithmetic or which staff member recorded it. Display-side only: the
+  // student-login payload still ships these fields (see SUGGESTIONS.md).
+  const full = mode !== 'student'
 
   return (
     <Card className="!p-0 overflow-hidden border-red-200">
@@ -52,7 +56,7 @@ export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = nul
         <table className="w-full text-[12px]">
           <thead>
             <tr className="text-left border-b border-border">
-              {['Exam', 'Date', 'With', 'Evidence', 'Recorded', canDelete ? '' : null]
+              {['Exam', 'Date', full ? 'With' : null, full ? 'Evidence' : null, full ? 'Recorded' : null, canDelete ? '' : null]
                 .filter(h => h !== null)
                 .map((h, i) => (
                   <th key={i} className="text-[10px] font-bold uppercase tracking-[1px] text-ink-3 pb-2 pr-3 pl-4 first:pl-4">{h}</th>
@@ -68,16 +72,18 @@ export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = nul
                   {r.note && <div className="text-[11px] text-ink-3 font-normal mt-0.5">{r.note}</div>}
                 </td>
                 <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{fmtDate(r.exam_date) || r.exam_date || '—'}</td>
-                <td className="py-2 pr-3 text-ink-2">{r.counterpart_name || '—'}</td>
-                <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
-                  {r.shared_wrong != null
-                    ? `${r.shared_wrong} shared wrong${r.diff != null ? ` · ${r.diff} diff` : ''}`
-                    : '—'}
-                </td>
-                <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
-                  {fmtTimestamp(r.created_at)}
-                  {r.created_by && <div className="text-[10px]">{r.created_by}</div>}
-                </td>
+                {full && <>
+                  <td className="py-2 pr-3 text-ink-2">{r.counterpart_name || '—'}</td>
+                  <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
+                    {r.shared_wrong != null
+                      ? `${r.shared_wrong} shared wrong${r.diff != null ? ` · ${r.diff} diff` : ''}`
+                      : '—'}
+                  </td>
+                  <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
+                    {fmtTimestamp(r.created_at)}
+                    {r.created_by && <div className="text-[10px]">{r.created_by}</div>}
+                  </td>
+                </>}
                 {canDelete && (
                   <td className="py-2 pr-4">
                     <button

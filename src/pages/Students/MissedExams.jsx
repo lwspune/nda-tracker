@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import useStore from '../../store/useStore'
 import { Card, CardTitle, Badge } from '../../components/ui'
 import { fmtDate } from '../../lib/dates'
+import { useMode } from '../../context/ModeContext'
+
+// Rows a student sees before "Show all".
+const STUDENT_PREVIEW = 5
 
 // Component returns null (no card rendered) when there are zero missed exams.
 // Same hide-when-empty pattern as `RecentIncidents`.
@@ -12,8 +16,10 @@ import { fmtDate } from '../../lib/dates'
 //     Supabase session, so the slice would return [])
 export default function MissedExams({ lwsId, exams = [], examAbsencesProp = null }) {
   const getExamAbsencesForStudent = useStore(s => s.getExamAbsencesForStudent)
+  const mode = useMode()
 
   const [rows, setRows] = useState(examAbsencesProp ?? [])
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     if (examAbsencesProp !== null) {
@@ -54,6 +60,37 @@ export default function MissedExams({ lwsId, exams = [], examAbsencesProp = null
     .sort((a, b) => (b.examDate || '').localeCompare(a.examDate || ''))
 
   if (enriched.length === 0) return null
+
+  // Students get a plain list: which test, when. The Batch column wrapped to
+  // four lines a row on a phone, and "Notified" is faculty bookkeeping about
+  // whether the parent was messaged. Faculty keep the table below.
+  if (mode === 'student') {
+    const shown = showAll ? enriched : enriched.slice(0, STUDENT_PREVIEW)
+    return (
+      <Card>
+        <CardTitle>Tests you missed · {enriched.length}</CardTitle>
+        <ul className="divide-y divide-border">
+          {shown.map(row => (
+            <li key={row.examId} className="py-2 flex justify-between gap-3 text-[13px]">
+              <span className="text-ink" data-testid="missed-exam-name">{row.examName}</span>
+              <span className="text-ink-3 whitespace-nowrap">{fmtDate(row.examDate) || row.examDate}</span>
+            </li>
+          ))}
+        </ul>
+        {enriched.length > STUDENT_PREVIEW && (
+          <button
+            type="button"
+            onClick={() => setShowAll(v => !v)}
+            aria-expanded={showAll}
+            className="w-full min-h-[44px] text-[13px] font-semibold text-accent rounded
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            {showAll ? 'Show fewer' : `Show all ${enriched.length}`}
+          </button>
+        )}
+      </Card>
+    )
+  }
 
   return (
     <Card className="!p-0 overflow-hidden">
