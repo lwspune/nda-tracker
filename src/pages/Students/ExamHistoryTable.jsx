@@ -65,9 +65,11 @@ const STATUS = {
 const isOfflineRow = s => Boolean(s.exam) && !s.exam.questions?.length
 
 // A bare "—" is meaningless to a screen reader, so it carries its reason.
+// Hidden on a phone: the card there has no column headers, so three bare
+// dashes would say nothing at all.
 function NotApplicableCell() {
   return (
-    <td className="py-2 pr-3 text-ink-3 font-mono">
+    <td className="py-2 pr-3 text-ink-3 font-mono max-md:hidden">
       <span title="Marks-only exam — no per-question data">—</span>
     </td>
   )
@@ -211,16 +213,21 @@ export default function ExamHistoryTable({ scores }) {
         )}
       </div>
 
+      {/* One DOM at every width. Below md the table restyles into a card per
+          exam — name + score, date + %, then the counts and the review control —
+          because eight columns do not fit a phone (the last four were cut off
+          the right edge). A CSS breakpoint, not a matchMedia branch, so desktop
+          is byte-identical and tests see a single structure. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
-          <thead>
+        <table className="w-full text-[12px] max-md:block">
+          <thead className="max-md:hidden">
             <tr className="text-left border-b border-border">
               {['Exam', 'Date', 'Score', '✅', '❌', '⬜', '%', ''].map((h, i) => (
                 <th key={i} className="text-[10px] font-bold uppercase tracking-[1px] text-ink-3 pb-2 pr-3 pl-4 first:pl-4">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-md:block">
             {visible.map((s, i) => {
               const absIdx     = start + i
               const isOpen     = openRows.has(absIdx)
@@ -231,8 +238,11 @@ export default function ExamHistoryTable({ scores }) {
 
               return (
                 <>
-                  <tr key={absIdx} className="border-b border-border/50 hover:bg-surface-2">
-                    <td className="py-2 pr-3 pl-4 font-medium">
+                  <tr key={absIdx} className="border-b border-border/50 hover:bg-surface-2
+                                              max-md:grid max-md:grid-cols-[auto_auto_auto_1fr_auto]
+                                              max-md:gap-x-3 max-md:gap-y-1 max-md:px-4 max-md:py-3">
+                    <td className="py-2 pr-3 pl-4 font-medium
+                                   max-md:col-span-4 max-md:row-start-1 max-md:p-0 max-md:text-[14px]">
                       {canReport ? (
                         <button
                           onClick={() => toggleReport(absIdx)}
@@ -245,13 +255,17 @@ export default function ExamHistoryTable({ scores }) {
                         </button>
                       ) : s.name}
                     </td>
-                    <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{fmtDate(s.date) || s.date}</td>
+                    <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap
+                                   max-md:col-span-4 max-md:col-start-1 max-md:row-start-2 max-md:p-0 max-md:font-sans">
+                      {fmtDate(s.date) || s.date}
+                    </td>
                     {/* The denominator is load-bearing, not decoration: this column
                         interleaves paper sizes (a 30-Q chapter test maxes at 75, a
                         120-Q mock at 300), so read bare it ORDERS WRONG — 114.19
                         (38%) sits above 29.18 (39%). It is the only value on the
                         row that can't be interpreted alone. */}
-                    <td className="py-2 pr-3 font-bold whitespace-nowrap">
+                    <td className="py-2 pr-3 font-bold whitespace-nowrap
+                                   max-md:col-start-5 max-md:row-start-1 max-md:p-0 max-md:text-right max-md:text-[14px]">
                       {s.score}
                       {s.max > 0 && <span className="font-normal text-ink-3"> / {s.max}</span>}
                     </td>
@@ -266,57 +280,65 @@ export default function ExamHistoryTable({ scores }) {
                         <NotApplicableCell />
                       </>
                     ) : (
+                      // The word after each count is for the phone card, which
+                      // has no column headers; the ✅ ❌ ⬜ headers say it on desktop.
+                      // The bracketed marks are desktop-only detail.
                       <>
-                        <td className="py-2 pr-3 text-success font-mono">
-                          {s.correct}
+                        <td className="py-2 pr-3 text-success font-mono max-md:row-start-3 max-md:p-0 max-md:font-sans">
+                          {s.correct}<span className="md:hidden"> right</span>
                           {s.exam?.marking && (
-                            <span className="text-ink-3"> ({fmtMarks(s.correct * s.exam.marking.correct)})</span>
+                            <span className="text-ink-3 max-md:hidden"> ({fmtMarks(s.correct * s.exam.marking.correct)})</span>
                           )}
                         </td>
-                        <td className="py-2 pr-3 text-danger font-mono">
-                          {s.wrong}
+                        <td className="py-2 pr-3 text-danger font-mono max-md:row-start-3 max-md:p-0 max-md:font-sans">
+                          {s.wrong}<span className="md:hidden"> wrong</span>
                           {s.exam?.marking && (
-                            <span className="text-ink-3"> ({fmtMarks(s.wrong * s.exam.marking.wrong)})</span>
+                            <span className="text-ink-3 max-md:hidden"> ({fmtMarks(s.wrong * s.exam.marking.wrong)})</span>
                           )}
                         </td>
-                        <td className="py-2 pr-3 text-ink-3 font-mono">
-                          {s.na}
-                          {s.exam?.marking && <span className="text-ink-3"> (0)</span>}
+                        <td className="py-2 pr-3 text-ink-3 font-mono max-md:row-start-3 max-md:p-0 max-md:font-sans">
+                          {s.na}<span className="md:hidden"> skipped</span>
+                          {s.exam?.marking && <span className="text-ink-3 max-md:hidden"> (0)</span>}
                         </td>
                       </>
                     )}
-                    <td className="py-2 pr-3">
+                    <td className="py-2 pr-3 max-md:col-start-5 max-md:row-start-2 max-md:p-0 max-md:text-right">
                       <Badge variant={s.pct >= 0.7 ? 'green' : s.pct >= 0.45 ? 'yellow' : 'red'}>
                         {(s.pct * 100).toFixed(0)}%
                       </Badge>
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2 pr-4 max-md:col-start-4 max-md:col-span-2 max-md:row-start-3
+                                   max-md:p-0 max-md:justify-self-end">
                       {hasIssues && (
                         <button
                           onClick={() => toggleRow(absIdx)}
+                          aria-expanded={isOpen}
+                          aria-label={`Review ${issues.length} wrong or skipped question${issues.length === 1 ? '' : 's'}`}
                           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px]
                                       font-semibold border transition-all whitespace-nowrap
+                                      max-md:min-h-[36px] max-md:text-[12px]
+                                      focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50
                             ${isOpen
                               ? 'bg-accent text-white border-accent'
                               : 'bg-surface-2 text-ink-2 border-border hover:bg-accent-soft hover:text-accent hover:border-accent/30'
                             }`}
                         >
-                          {isOpen ? '▲' : '▼'} {issues.length} issues
+                          {isOpen ? '▲' : '▼'} Review {issues.length}
                         </button>
                       )}
                     </td>
                   </tr>
                   {isReportOpen && canReport && (
-                    <tr key={`${absIdx}-report`}>
-                      <td colSpan={8} className="p-3 bg-surface-2/30 border-t border-border">
+                    <tr key={`${absIdx}-report`} className="max-md:block">
+                      <td colSpan={8} className="p-3 bg-surface-2/30 border-t border-border max-md:block">
                         {/* The exact parent-facing report the WhatsApp deep-link opens */}
                         <FocusedExamResult examId={s.exam.id} exams={[{ ...s.exam, students: [s.student] }]} />
                       </td>
                     </tr>
                   )}
                   {isOpen && s.exam && s.student && (
-                    <tr key={`${absIdx}-panel`}>
-                      <td colSpan={8} className="p-0">
+                    <tr key={`${absIdx}-panel`} className="max-md:block">
+                      <td colSpan={8} className="p-0 max-md:block">
                         <ExamIssuesPanel exam={s.exam} student={s.student} />
                       </td>
                     </tr>
@@ -338,9 +360,12 @@ export default function ExamHistoryTable({ scores }) {
                        bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
                        hover:border-accent/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            ← Prev
+            ← Newer
           </button>
-          <div className="flex gap-1">
+          {/* A 44px button per page does not fit a phone past ~5 pages (the top
+              tenth of students have 9+); the header's "Page x of y" says where
+              you are, so the numbers are a desktop shortcut only. */}
+          <div className="flex gap-1 max-md:hidden">
             {Array.from({ length: totalPages }, (_, i) => (
               <button
                 key={i}
@@ -362,7 +387,7 @@ export default function ExamHistoryTable({ scores }) {
                        bg-surface-2 text-ink-2 hover:bg-accent-soft hover:text-accent
                        hover:border-accent/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            Next →
+            Older →
           </button>
         </div>
       )}

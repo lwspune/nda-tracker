@@ -212,3 +212,48 @@ describe('ExamHistoryTable — readable dates', () => {
     expect(screen.queryByText('2026-05-01')).toBeNull()
   })
 })
+
+// On a phone the table collapses to one card per exam (CSS only — the DOM is
+// the same at every width) and the column headers are hidden, so each count
+// must say what it counts. Students read "issues" as jargon; the control now
+// says what it does (2026-11-05).
+describe('ExamHistoryTable — reads without its column headers', () => {
+  function mcqRow(i) {
+    const name = `Mock ${i}`
+    return {
+      name, date: `2026-05-${String(i).padStart(2, '0')}`, score: 40, max: 100, pct: 0.4,
+      correct: 10, wrong: 5, na: 5,
+      exam: { id: name, name, date: `2026-05-${String(i).padStart(2, '0')}`, marking: { correct: 4, wrong: -1 },
+              questions: [{ q: 1 }, { q: 2 }, { q: 3 }] },
+      student: { totalMarks: 40, correct: 10, incorrect: 5, notAttempted: 5,
+                 responses: { 1: 1, 2: -1, 3: 0 }, choices: {} },
+    }
+  }
+  const cellsOf = name =>
+    [...screen.getByText(name).closest('tr').querySelectorAll('td')].map(td => td.textContent.trim())
+
+  it('labels each count in words', () => {
+    render(<ExamHistoryTable scores={[mcqRow(1)]} />)
+    const cells = cellsOf('Mock 1')
+    expect(cells[3]).toMatch(/10 right/)
+    expect(cells[4]).toMatch(/5 wrong/)
+    expect(cells[5]).toMatch(/5 skipped/)
+  })
+
+  it('names the review control by what it does, not "issues"', () => {
+    render(<ExamHistoryTable scores={[mcqRow(1)]} />)
+    expect(screen.queryByText(/issues/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /review 2 wrong or skipped/i }))
+    expect(screen.getByRole('button', { name: /review 2 wrong or skipped/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('pages with Newer / Older, newest first', () => {
+    render(<ExamHistoryTable scores={Array.from({ length: 12 }, (_, i) => mcqRow(i + 1))} />)
+    expect(screen.getByRole('button', { name: /newer/i })).toBeDisabled()
+    expect(screen.getByText('Mock 12')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /older/i }))
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    expect(screen.getByText('Mock 7')).toBeInTheDocument()
+    expect(screen.queryByText('Mock 12')).toBeNull()
+  })
+})
