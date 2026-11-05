@@ -45,37 +45,46 @@ export const createAttendanceSlice = (set, get) => ({
       }
     }
 
-    let upserted = 0
-    let lateProtected = 0
-    if (records.length > 0) {
-      const session = await getSession()
-      if (session) {
-        // Protect existing L (late) markings — XLS doesn't carry the L symbol,
-        // so re-importing today's attendance would otherwise overwrite L → P/A.
-        const dates  = [...new Set(records.map(r => r.date))]
-        const lwsIds = [...new Set(records.map(r => r.lws_id))]
-        const { data: lateRows, error: selectError } = await supabase
-          .from('student_attendance')
-          .select('lws_id, date')
-          .eq('status', 'L')
-          .in('lws_id', lwsIds)
-          .in('date', dates)
-        if (selectError) console.error('[attendance] L-protection select failed:', selectError)
-        const lateKeys = new Set((lateRows ?? []).map(r => `${r.lws_id}|${r.date}`))
-        const filtered = records.filter(r => !lateKeys.has(`${r.lws_id}|${r.date}`))
-        lateProtected = records.length - filtered.length
+    if (records.length === 0) return { matched, unmatched, upserted: 0, lateProtected: 0 }
+    const { upserted, lateProtected, error } = await get().saveAttendanceRecords(records)
+    return { matched, unmatched, upserted, lateProtected, ...(error ? { error } : {}) }
+  },
 
-        if (filtered.length > 0) {
-          const { error } = await supabase
-            .from('student_attendance')
-            .upsert(filtered, { onConflict: 'lws_id,date' })
-          if (error) console.error('[attendance] upsert failed:', error)
-          else upserted = filtered.length
-        }
-      }
+  // The one write to student_attendance's P/A, shared by the bulk XLS import
+  // and the nightly punch file. Neither file carries the L symbol, so an
+  // existing Late mark is never overwritten — and when the Late marks cannot be
+  // read, nothing is written at all, since any row could be one.
+  // Returns { upserted, lateProtected, error }.
+  async saveAttendanceRecords(records) {
+    if (!records?.length) return { upserted: 0, lateProtected: 0, error: null }
+    const session = await getSession()
+    if (!session) return { upserted: 0, lateProtected: 0, error: 'Sign in as admin to save attendance.' }
+
+    const dates  = [...new Set(records.map(r => r.date))]
+    const lwsIds = [...new Set(records.map(r => r.lws_id))]
+    const { data: lateRows, error: selectError } = await supabase
+      .from('student_attendance')
+      .select('lws_id, date')
+      .eq('status', 'L')
+      .in('lws_id', lwsIds)
+      .in('date', dates)
+    if (selectError) {
+      console.error('[attendance] L-protection select failed:', selectError)
+      return { upserted: 0, lateProtected: 0, error: `Nothing saved — could not check Late marks: ${selectError.message}` }
     }
+    const lateKeys = new Set((lateRows ?? []).map(r => `${r.lws_id}|${r.date}`))
+    const filtered = records.filter(r => !lateKeys.has(`${r.lws_id}|${r.date}`))
+    const lateProtected = records.length - filtered.length
+    if (filtered.length === 0) return { upserted: 0, lateProtected, error: null }
 
-    return { matched, unmatched, upserted, lateProtected }
+    const { error } = await supabase
+      .from('student_attendance')
+      .upsert(filtered, { onConflict: 'lws_id,date' })
+    if (error) {
+      console.error('[attendance] upsert failed:', error)
+      return { upserted: 0, lateProtected, error: `Attendance not saved: ${error.message}` }
+    }
+    return { upserted: filtered.length, lateProtected, error: null }
   },
 
   // Marks a student as late (L) for a given date. Replaces any existing P/A row.

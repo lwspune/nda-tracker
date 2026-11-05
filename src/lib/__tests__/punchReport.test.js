@@ -3,6 +3,7 @@ import {
   parsePunchSheet,
   reportTimes,
   matchPunchRows,
+  punchAttendanceRecords,
   ATTENDANCE_REPORT_BRANCH,
   NOT_PUNCHED_IN,
   NOT_PUNCHED_OUT,
@@ -196,5 +197,51 @@ describe('matchPunchRows', () => {
   it('falls back to the file name when the tracker record has none', () => {
     const { ready } = matchPunchRows([punch()], [student({ canonical_name: '' })])
     expect(ready[0].name).toBe('Arjun Vitthal Bhayegave')
+  })
+})
+
+describe('punchAttendanceRecords', () => {
+  const entry = (lwsId, status, name = lwsId) => ({ lwsId, name, status })
+  const match = (over = {}) => ({ ready: [], unmatched: [], otherBranch: [], blocked: [], ...over })
+
+  it("turns each matched LWS Pune student's P or A into an attendance record for the file's date", () => {
+    const { records, skipped } = punchAttendanceRecords(
+      match({ ready: [entry('LWS-1', 'P'), entry('LWS-2', 'A')] }),
+      '2026-10-23',
+    )
+    expect(records).toEqual([
+      { lws_id: 'LWS-1', date: '2026-10-23', status: 'P' },
+      { lws_id: 'LWS-2', date: '2026-10-23', status: 'A' },
+    ])
+    expect(skipped).toEqual([])
+  })
+
+  // Blocking stops messages, not the register: a blocked student who comes to
+  // class is still present.
+  it('records blocked students too', () => {
+    const { records } = punchAttendanceRecords(match({ blocked: [entry('LWS-4', 'P')] }), '2026-10-23')
+    expect(records).toEqual([{ lws_id: 'LWS-4', date: '2026-10-23', status: 'P' }])
+  })
+
+  it('never records a student it could not match, or one from another branch', () => {
+    const { records } = punchAttendanceRecords(
+      match({ unmatched: [entry(undefined, 'P')], otherBranch: [entry('LWS-3', 'P')] }),
+      '2026-10-23',
+    )
+    expect(records).toEqual([])
+  })
+
+  // The message reads anything but P as Absent; the register must not guess.
+  it('skips and lists a status that is neither P nor A', () => {
+    const { records, skipped } = punchAttendanceRecords(
+      match({ ready: [entry('LWS-1', 'H', 'Student 1'), entry('LWS-2', '', 'Student 2'), entry('LWS-3', 'P')] }),
+      '2026-10-23',
+    )
+    expect(records).toEqual([{ lws_id: 'LWS-3', date: '2026-10-23', status: 'P' }])
+    expect(skipped).toEqual([{ name: 'Student 1', status: 'H' }, { name: 'Student 2', status: '' }])
+  })
+
+  it('records nothing without a date', () => {
+    expect(punchAttendanceRecords(match({ ready: [entry('LWS-1', 'P')] }), null).records).toEqual([])
   })
 })

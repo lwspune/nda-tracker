@@ -104,7 +104,13 @@ Expansion model is `expanded: { month, kind } | null` at the component level —
 4. A file whose date is **not today**, a **Sunday**, or a **holiday** for any listed student (`dayOffReason`) needs a tick before Send. **Send test** posts one present and one absent student redirected to a typed number.
 5. **Send** posts groups of 10 `{ lwsId, status, inTime, outTime }` to `api/send-attendance-alerts.js` `kind:'attendance-report'`, which re-reads names/numbers/branch/status from `students`, claims each student in `attendance_report_sends`, and sends `[name, date, in, out]` to the student and every parent. A re-upload reaches only students not yet sent; a family nobody reached is released for the next run.
 
-Nothing here writes `student_attendance` — P/A still comes only from the daily XLS import. Spec: [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md) §13.
+**It also saves the day's attendance (2026-10-30)**, so the daily XLS import is no longer needed (it stays for corrections and catching up):
+
+6. `punchAttendanceRecords` turns the matched rows into one `student_attendance` row per LWS Pune student for the file's date — **blocked students included** (blocking stops messages, not the register). Only `P` and `A` are saved; any other status is listed under *Not saved* rather than guessed.
+7. **Save attendance only** writes without messaging; **Save & send** writes first and sends only if the write succeeded. Both go through `attendanceSlice.saveAttendanceRecords`, the same write the XLS import uses: an existing `L` is never overwritten, and if the `L` marks cannot be read **nothing is written**. The same not-today / Sunday / holiday ticks gate saving. A test send saves nothing.
+8. The preview says how many of the file's students already have attendance for the date. A later file for the same day replaces their P/A (an export taken before everyone arrived reads late arrivals as absent — upload the end-of-day file). Last upload wins, whichever of the two files it is.
+
+Spec: [`WHATSAPP_FLOWS.md`](./WHATSAPP_FLOWS.md) §13.
 
 ### School attendance — teacher-filed capture (`/school-attendance`, 2026-07-27)
 
