@@ -157,6 +157,15 @@ describe('StudentHomework', () => {
       ])
     })
 
+    // 2026-11-05: the PDF is what students keep, so it leads the report rather
+    // than sitting below every comment and page.
+    it('puts the PDF download at the top, before the score summary', async () => {
+      const c = await open(graded())
+      const pdf = within(c).getByRole('link', { name: /download marked paper/i })
+      const summary = within(c).getByText(/full marks/i)
+      expect(pdf.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
     it('shows the marked pages, each opening full size, and the PDF download', async () => {
       const c = await open(graded())
       const pages = within(c).getAllByRole('img', { name: /marked page/i })

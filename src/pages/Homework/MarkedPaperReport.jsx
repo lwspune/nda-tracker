@@ -159,17 +159,21 @@ function Questions({ grades }) {
   )
 }
 
-function MarkedPages({ pages, reportUrl }) {
+// The PDF leads the report (2026-11-05): it is the copy students keep, and it
+// sat below every comment and page. Absent once the pages are purged.
+function DownloadReport({ url }) {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+       className={`btn btn-secondary min-h-[44px] self-start text-[13px] ${LINK_FOCUS}`}>
+      <span aria-hidden="true">⬇ </span>Download marked paper (PDF)
+    </a>
+  )
+}
+
+function MarkedPages({ pages }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <SectionTitle>Your marked pages</SectionTitle>
-        {reportUrl && (
-          <a href={reportUrl} target="_blank" rel="noopener noreferrer" className={`btn btn-secondary btn-sm ml-auto ${LINK_FOCUS}`}>
-            <span aria-hidden="true">⬇ </span>Download marked paper (PDF)
-          </a>
-        )}
-      </div>
+      <SectionTitle>Your marked pages</SectionTitle>
       <div className="flex flex-col gap-3">
         {pages.map((url, i) => (
           <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`block rounded-lg ${LINK_FOCUS}`}>
@@ -188,11 +192,12 @@ export default function MarkedPaperReport({ sub }) {
   const pages = sub.markedPages ?? []
   return (
     <div className="flex flex-col gap-4 text-[12.5px]">
+      {sub.reportUrl && <DownloadReport url={sub.reportUrl} />}
       <Summary r={r} />
       {r.lost.length > 0 && <WhereMarksWent lost={r.lost} />}
       {r.focus.length > 0 && <Focus focus={r.focus} />}
       <Comments smallerFixes={r.smallerFixes} wentWell={sub.wentWell} nextSteps={sub.nextSteps} grades={sub.grades} />
-      {pages.length > 0 && <MarkedPages pages={pages} reportUrl={sub.reportUrl} />}
+      {pages.length > 0 && <MarkedPages pages={pages} />}
       {sub.pagesRemoved && (
         <p className="text-ink-3">
           Your marked pages were removed 30 days after grading. The marks and comments above are kept.
