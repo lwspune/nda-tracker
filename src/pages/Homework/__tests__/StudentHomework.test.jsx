@@ -521,3 +521,68 @@ describe('StudentHomework — collapsed by default (2026-11-05)', () => {
     expect(within(c).getByText('Sign error.')).toBeInTheDocument()
   })
 })
+
+// 2026-11-05: ~2 homeworks a week, so the list and the calculation-errors list
+// page at 5. The list arrives open-first (studentHomeworkList sorts it), so
+// anything due is always on page 1.
+describe('StudentHomework — paged', () => {
+  beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}))
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  const careless = lost => ({ position: 1, label: 'Q1', maxMarks: 5, outcome: 'scored', awarded: 5 - lost,
+    earned: null, missing: null, cause: 'careless', topic: null })
+  const gradedHw = i => ({
+    id: `g${i}`, title: `Graded ${i}`, subject: 'Maths', instructions: '', dueAt: new Date(Date.now() - i * DAY).toISOString(),
+    maxMarks: 5, state: 'closed', canSubmit: false, questionFiles: [],
+    submission: { id: `s${i}`, status: 'graded', pages: 1, totalAwarded: 4, totalMax: 5, wentWell: null, nextSteps: null,
+      grades: [careless(1)] },
+  })
+  const todo = i => ({ ...HOMEWORK[0], id: `t${i}`, title: `To do ${i}` })
+  const LIST = [todo(1), todo(2), ...Array.from({ length: 10 }, (_, i) => gradedHw(i + 1))]
+
+  const show = async list => {
+    mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'A', homework: list } }) })
+    render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+    await screen.findByRole('button', { name: /^📤 homework/i })
+    openSection()
+  }
+  const titles = () => screen.getAllByTestId('homework-card').map(c => c.querySelector('button').textContent)
+  const pager = name => screen.getByRole('navigation', { name })
+
+  it('shows five homeworks a page, with anything due on the first', async () => {
+    await show(LIST)
+    expect(titles()).toHaveLength(5)
+    expect(titles()[0]).toMatch(/To do 1/)
+    expect(titles()[1]).toMatch(/To do 2/)
+    expect(within(pager('Homework pages')).getByText('Page 1 of 3')).toBeInTheDocument()
+    fireEvent.click(within(pager('Homework pages')).getByRole('button', { name: /older/i }))
+    expect(titles()[0]).toMatch(/Graded 4/)
+    expect(within(pager('Homework pages')).getByText('Page 2 of 3')).toBeInTheDocument()
+  })
+
+  it('keeps the header summary counting every homework, not one page', async () => {
+    await show(LIST)
+    expect(sectionButton()).toHaveTextContent('2 to do · 10 graded')
+  })
+
+  it('pages the calculation-errors rows at five', async () => {
+    await show(LIST)
+    const region = screen.getByRole('region', { name: /calculation errors across homeworks/i })
+    expect(within(region).getAllByRole('button', { name: /graded \d+/i })).toHaveLength(5)
+    expect(within(pager('Calculation errors pages')).getByText('Page 1 of 2')).toBeInTheDocument()
+  })
+
+  it('jumps to the right page when a calculation-errors row names a homework on another page', async () => {
+    await show(LIST)
+    const region = screen.getByRole('region', { name: /calculation errors across homeworks/i })
+    fireEvent.click(within(pager('Calculation errors pages')).getByRole('button', { name: /older/i }))
+    fireEvent.click(within(region).getByRole('button', { name: /graded 10/i }))
+    expect(within(pager('Homework pages')).getByText('Page 3 of 3')).toBeInTheDocument()
+    expect(cardButton('Graded 10')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('shows no pager when everything fits', async () => {
+    await show(LIST.slice(0, 4))
+    expect(screen.queryByRole('navigation', { name: 'Homework pages' })).toBeNull()
+  })
+})

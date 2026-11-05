@@ -7,6 +7,11 @@ import { MAX_REPLACEMENTS } from '../../lib/assignments/status'
 import { sendHomework, readPickedFiles, needsSinglePageConfirm } from '../../lib/assignments/studentUpload'
 import MarkedPaperReport from './MarkedPaperReport'
 import CalculationErrorsCard from './CalculationErrorsCard'
+import Pager, { pageCount, pageSlice } from '../../components/ui/Pager'
+
+// Homeworks per page. The list arrives open-first (studentHomeworkList sorts
+// it), so anything still due is always on page 1.
+const PAGE_SIZE = 5
 import { summariseCalculationErrors } from '../../lib/assignments/calculationErrors'
 
 // The student portal's homework (2026-10-12): see what is set, open the
@@ -41,6 +46,7 @@ export default function StudentHomework({ mobile, lwsId }) {
   const [openCards, setOpenCards] = useState(() => new Set())
   const initialised = useRef(false)
   const bodyId = useId()
+  const [page, setPage] = useState(0)
 
   const known = Boolean(mobile && lwsId)
   const load = useCallback(async () => {
@@ -88,10 +94,15 @@ export default function StudentHomework({ mobile, lwsId }) {
   // A calculation-errors row opens that homework's card as well as its marks:
   // the card is usually collapsed (it is graded, so nothing is due on it).
   const openFromSummary = id => {
+    // ...and turns to the page that homework is on.
+    const at = homework.findIndex(h => h.id === id)
+    if (at >= 0) setPage(Math.floor(at / PAGE_SIZE))
     setOpenCards(prev => new Set(prev).add(id))
     setOpenMarks(prev => new Set(prev).add(id))
     requestAnimationFrame(() => document.getElementById(`homework-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
   }
+
+  const shown = pageSlice(homework, page, PAGE_SIZE)
 
   return (
     <div className="mb-6">
@@ -111,12 +122,13 @@ export default function StudentHomework({ mobile, lwsId }) {
         <div id={bodyId}>
           <CalculationErrorsCard summary={summariseCalculationErrors(homework)} onOpen={openFromSummary} />
           <div className="space-y-2">
-            {homework.map(h => (
+            {shown.rows.map(h => (
               <HomeworkCard key={h.id} hw={h} mobile={mobile} lwsId={lwsId} onHandedIn={load}
                             open={openCards.has(h.id)} onToggle={() => toggleCard(h.id)}
                             showMarks={openMarks.has(h.id)} onToggleMarks={() => toggleMarks(h.id)} />
             ))}
           </div>
+          <Pager page={shown.page} totalPages={pageCount(homework.length, PAGE_SIZE)} onPage={setPage} label="Homework pages" />
         </div>
       )}
     </div>

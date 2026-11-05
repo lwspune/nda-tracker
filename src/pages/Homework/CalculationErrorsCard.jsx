@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Card } from '../../components/ui'
+import Pager, { pageCount, pageSlice } from '../../components/ui/Pager'
 import { fmtDateShort } from '../../lib/dates'
 import { isoToIstLocal } from '../../lib/assignments/editor'
 
@@ -10,9 +12,15 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 // Calculation errors across every graded homework (2026-10-24): the total, then
 // one row per homework that had any, newest first. Tapping a row opens that
 // homework's marks below. Numbers come from summariseCalculationErrors.
+// One row per graded homework with errors grows ~2 a week, so it pages at 5
+// (2026-11-05). The total above the rows always counts every homework.
+const PAGE_SIZE = 5
+
 export default function CalculationErrorsCard({ summary, onOpen }) {
+  const [page, setPage] = useState(0)
   if (!summary) return null
   const { lost, graded, withErrors, rows } = summary
+  const shown = pageSlice(rows, page, PAGE_SIZE)
 
   return (
     <section aria-label="Calculation errors across homeworks">
@@ -27,7 +35,7 @@ export default function CalculationErrorsCard({ summary, onOpen }) {
               {withErrors} of {plural(graded, 'graded homework', 'graded homeworks')}
             </p>
             <ul className="flex flex-col divide-y divide-border">
-              {rows.map(r => (
+              {shown.rows.map(r => (
                 <li key={r.id}>
                   <button
                     className="w-full text-left py-2 flex flex-col gap-0.5 rounded hover:bg-accent-soft
@@ -46,6 +54,7 @@ export default function CalculationErrorsCard({ summary, onOpen }) {
                 </li>
               ))}
             </ul>
+            <Pager page={shown.page} totalPages={pageCount(rows.length, PAGE_SIZE)} onPage={setPage} label="Calculation errors pages" />
           </>
         )}
       </Card>
