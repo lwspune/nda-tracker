@@ -55,11 +55,10 @@ const CLASSES = [
       { column: 'Geography',         subject: 'Geography', date: '2026-10-16' },
       { column: 'Maths - I',         subject: 'Maths',     date: '2026-10-17' },
       { column: 'Maths - II',        subject: 'Maths',     date: '2026-10-19' },
+      // The sheet header and the timetable say 80, but every mark is 21-40;
+      // faculty confirmed it was marked out of 40 (2026-11-05).
+      { column: 'Science',           subject: 'Science',   date: '2026-10-20', maxMarks: 40 },
     ],
-    // Science (paper on 20 Oct) is in the sheet but held: the header and the
-    // timetable say 80, yet all 15 marks are 21-40. Waiting on the school to
-    // confirm the max (2026-11-05); then add it as a paper with --only.
-    noExamColumns: { Science: 'held: sheet says /80 but marks look /40' },
   },
   {
     ...TERM,
