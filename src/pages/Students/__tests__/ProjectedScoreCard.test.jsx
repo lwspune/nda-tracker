@@ -109,7 +109,8 @@ describe('ProjectedScoreCard', () => {
       const user = userEvent.setup()
       render(<ProjectedScoreCard {...studentProps} />)
       await user.click(screen.getByRole('button', { name: /subtopics/i }))
-      expect(screen.getByText('Subtopic 1')).toBeInTheDocument()
+      // Subtopic 1 is untested, so for a student it sits after the tested rows.
+      expect(screen.getByText('Subtopic 2')).toBeInTheDocument()
     })
 
     it('drops the Settings pointer — a student has no Settings page', () => {
@@ -248,9 +249,11 @@ describe('ProjectedScoreCard — practice-set download', () => {
     name: 'Alice', exams,
   }
 
-  it('is hidden in the chapter view', () => {
+  // Was subtopic-view-only, as 10px link text — the most useful thing a student
+  // can do on this card, and they had to find a toggle first (2026-11-05).
+  it('appears in the chapter view too, as a real button', () => {
     render(<ProjectedScoreCard {...props} />)
-    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /download a practice set/i })).toBeInTheDocument()
   })
 
   it('appears in the subtopic view', async () => {
@@ -358,5 +361,50 @@ describe('ProjectedScoreCard — practice-set download', () => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
       spy.mockRestore()
     })
+  })
+})
+
+// ── Untested last, for students ─────────────────────────────────────────────
+// Ranked by marks at stake, an untested chapter tops the list at "0 / 24" — so
+// a student was told their biggest opportunity is a chapter they have not been
+// tested on, often not yet taught. For students the tested rows come first and
+// the untested ones are named in one line below. Faculty keep the engine's order
+// (owner decision, 2026-11-05).
+describe('ProjectedScoreCard — untested rows go last for students', () => {
+  const untestedFirst = [
+    { chapter: 'Integration', marksAtStake: 24, projected: 0, accuracy: null, gap: 24 },
+    { chapter: 'Matrices & Determinants', marksAtStake: 23.1, projected: 8.3, accuracy: 0.4, gap: 14.8 },
+  ]
+  const studentProps = { ...base, showScore: false, projected: { total: 83, breakdown: untestedFirst, subtopicBreakdown } }
+
+  it('lists tested chapters first and names the untested ones under "Not tested yet"', () => {
+    render(<ProjectedScoreCard {...studentProps} />)
+    const tested = screen.getByText('Matrices & Determinants')
+    const heading = screen.getByText('Not tested yet (1)')
+    expect(tested.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText(/Integration \(24\)/)).toBeInTheDocument()
+    expect(screen.queryByText('not tested')).not.toBeInTheDocument()   // no 0.0 / 24.0 row
+  })
+
+  it('keeps the engine order for faculty', () => {
+    render(<ProjectedScoreCard {...base} projected={{ total: 83, breakdown: untestedFirst, subtopicBreakdown }} />)
+    expect(screen.queryByText(/Not tested yet/)).not.toBeInTheDocument()
+    expect(screen.getByText('Integration')).toBeInTheDocument()
+    expect(screen.getByText('not tested')).toBeInTheDocument()
+  })
+
+  it('moves untested subtopics after the tested ones', async () => {
+    const user = userEvent.setup()
+    render(<ProjectedScoreCard {...studentProps} />)
+    await user.click(screen.getByRole('button', { name: /subtopics/i }))
+    // Subtopic 1 is the untested one and ranks first by marks at stake.
+    expect(screen.getByText('Subtopic 2')).toBeInTheDocument()
+    expect(screen.queryByText('Subtopic 1')).not.toBeInTheDocument()   // now 12th, past the top 10
+  })
+
+  it('explains what the card shows, in words', () => {
+    render(<ProjectedScoreCard {...studentProps} />)
+    expect(screen.getByText(/where your marks are/i)).toBeInTheDocument()
+    expect(screen.getByText(/what you score now out of what the chapter is worth/i)).toBeInTheDocument()
   })
 })

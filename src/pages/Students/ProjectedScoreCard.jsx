@@ -173,10 +173,20 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
     }
   }
 
-  const subtopics    = projected.subtopicBreakdown || []
+  // Students: untested rows last. Ranked by marks at stake, an untested chapter
+  // tops the list at "0 / 24", telling a student their biggest opportunity is a
+  // chapter they have not been tested on (often not yet taught). Faculty keep the
+  // engine's order. The practice set follows the order shown, so the file
+  // matches the list (owner decision, 2026-11-05).
+  const untestedLast = !showScore
+  const tested       = r => r.accuracy !== null
+  const testedFirst  = list => (untestedLast ? [...list.filter(tested), ...list.filter(r => !tested(r))] : list)
+  const subtopics    = testedFirst(projected.subtopicBreakdown || [])
+  const chapterRows  = untestedLast ? projected.breakdown.filter(tested) : projected.breakdown
+  const untestedChapters = untestedLast ? projected.breakdown.filter(r => !tested(r)) : []
   const hasSubtopics = subtopics.length > 0
   const bySubtopic   = hasSubtopics && view === 'subtopics'
-  const rows         = bySubtopic ? subtopics : projected.breakdown
+  const rows         = bySubtopic ? subtopics : chapterRows
   const visible      = bySubtopic
     ? (showAll ? rows : rows.slice(0, TOP_N))
     : rows.slice(0, 6)
@@ -187,8 +197,13 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
       <CardTitle>
         {showScore
           ? `🎯 Projected NDA ${primarySubject} Score`
-          : `🎯 NDA ${primarySubject} — Where Your Marks Are`}
+          : `🎯 Where your marks are · NDA ${primarySubject}`}
       </CardTitle>
+      {!showScore && (
+        <p className="text-[13px] text-ink-2 mb-3 leading-snug">
+          Chapters worth the most marks that you are losing. The bar is what you score now out of what the chapter is worth.
+        </p>
+      )}
       {showScore && (
       <div className="flex items-end gap-4 mb-4 flex-wrap">
         <div>
@@ -232,7 +247,8 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
                   key={v}
                   onClick={() => { setView(v); setShowAll(false); setOpenRow(null) }}
                   aria-pressed={view === v}
-                  className={`text-[10px] px-2 py-0.5 rounded-full border capitalize transition-colors ${
+                  className={`text-[12px] px-3 min-h-[32px] rounded-full border capitalize transition-colors
+                              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
                     view === v
                       ? 'bg-ink text-surface border-ink'
                       : 'border-border text-ink-3 hover:text-ink-2'
@@ -287,26 +303,45 @@ export default function ProjectedScoreCard({ projected, primarySubject, subjectM
           })}
         </div>
 
+        {untestedChapters.length > 0 && !bySubtopic && (
+          <div className="mt-4 pt-3 border-t border-border">
+            <div className="text-[12px] font-semibold text-ink-3 mb-1">Not tested yet ({untestedChapters.length})</div>
+            <div className="text-[13px] text-ink-2 leading-relaxed">
+              {untestedChapters.map(r => `${r.chapter} (${Math.round(r.marksAtStake)})`).join(' · ')}
+            </div>
+          </div>
+        )}
+
         <div className="mt-2 flex items-center gap-3 flex-wrap">
           {bySubtopic && rows.length > TOP_N && (
             <button
               onClick={() => setShowAll(s => !s)}
-              className="text-[10px] text-accent hover:underline"
+              className="text-[12px] text-accent hover:underline min-h-[32px]"
             >
               {showAll ? `Show top ${TOP_N}` : `Show all ${rows.length}`}
             </button>
           )}
-          {bySubtopic && canDrill && (
+          {error && <span className="text-[12px] text-danger">{error}</span>}
+        </div>
+
+        {/* A real button in both views. It was 10px link text, and only in the
+            subtopic view — the most useful thing a student can do here, behind a
+            toggle they had to find first. The set is the subtopics in the order
+            shown: the top ten, or every row once "Show all" is open. */}
+        {hasSubtopics && canDrill && (
+          <div className="mt-3">
             <button
               onClick={handleDownload}
               disabled={busy}
-              className="text-[10px] text-accent hover:underline disabled:opacity-50 disabled:no-underline"
+              className="btn btn-secondary w-full md:w-auto min-h-[44px] text-[13px] disabled:opacity-50"
             >
-              {busy ? 'Building…' : `⬇ Download these ${visible.length} as a practice set`}
+              {busy ? 'Building…' : '⬇ Download a practice set'}
             </button>
-          )}
-          {error && <span className="text-[10px] text-danger">{error}</span>}
-        </div>
+            <div className="text-[11px] text-ink-3 mt-1">
+              A Word file of questions from your {bySubtopic && showAll ? subtopics.length : Math.min(TOP_N, subtopics.length)} weakest subtopics.
+            </div>
+          </div>
+        )}
 
         {/* Determinate bar — the build takes seconds, and a button that only
             greys out reads as hung. Percentages are fixed weights, not measured
