@@ -262,3 +262,28 @@ export function selectExams(exams, onlyIds) {
     unknown: [...wanted].filter(id => !built.has(id)),
   }
 }
+
+// (exams, storedRows) → [{ examId, names }].
+//
+// Writing an exam deletes its stored results and inserts the sheet's, so any
+// student stored now but absent from the new rows loses their mark. This names
+// them, per exam, so the run can refuse instead of erasing quietly — the 12th
+// Term 1 tab lost Sarthak Mane's row after import, and a full re-run would
+// have dropped three of his marks without a word. `storedRows` are
+// `exam_results` rows ({ exam_id, student_name }); rows of exams not being
+// written are ignored. `canonicalOf` maps a stored spelling to its record's
+// current canonical name, so a record renamed since the import counts as the
+// same student re-filed rather than a removal.
+export function findRemovals(exams, storedRows, canonicalOf = n => n) {
+  const out = []
+  for (const e of exams) {
+    // Both sides through canonicalOf: an alias can file a new row under an old
+    // spelling just as the stored row may carry one.
+    const keep = new Set(e.students.map(s => canonicalOf(s.name)))
+    const names = (storedRows ?? [])
+      .filter(r => r.exam_id === e.id && !keep.has(canonicalOf(r.student_name)))
+      .map(r => r.student_name)
+    if (names.length) out.push({ examId: e.id, names })
+  }
+  return out
+}

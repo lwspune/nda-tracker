@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseClassSheet, buildUnitTestExams, makeNameResolver, selectExams } from '../unitTest1Import'
+import { parseClassSheet, buildUnitTestExams, makeNameResolver, selectExams, findRemovals } from '../unitTest1Import'
 
 // A miniature of the real workbook's shape: row 0 carries the per-subject max
 // in the subject columns, row 1 the headers, row 2+ the students. Columns 0-2
@@ -400,3 +400,61 @@ describe('selectExams', () => {
     expect(unknown).toEqual(['exam_term1_12th_math'])
   })
 })
+
+// Writing an exam deletes its stored results and inserts the sheet's, so a
+// student whose row has vanished from the sheet loses their mark silently. The
+// 12th Term 1 tab lost Sarthak Mane's row after import; a full re-run would
+// have erased three of his marks with nothing said.
+describe('findRemovals', () => {
+  const EXAMS = [
+    { id: 'exam_term1_12th_physics', students: [{ name: 'Swarup Karle' }, { name: 'Prem Sutar' }] },
+    { id: 'exam_term1_9th_science',  students: [{ name: 'Avani Amate' }] },
+  ]
+
+  it('names each stored student a write would drop, per exam', () => {
+    const stored = [
+      { exam_id: 'exam_term1_12th_physics', student_name: 'Swarup Karle' },
+      { exam_id: 'exam_term1_12th_physics', student_name: 'Sarthak Santosh Mane' },
+      { exam_id: 'exam_term1_12th_physics', student_name: 'Prem Sutar' },
+    ]
+    expect(findRemovals(EXAMS, stored)).toEqual([
+      { examId: 'exam_term1_12th_physics', names: ['Sarthak Santosh Mane'] },
+    ])
+  })
+
+  it('is empty for a new exam and for one whose stored students all reappear', () => {
+    const stored = [{ exam_id: 'exam_term1_12th_physics', student_name: 'Prem Sutar' }]
+    expect(findRemovals(EXAMS, stored)).toEqual([])
+    expect(findRemovals(EXAMS, [])).toEqual([])
+  })
+
+  // Rows for exams this run does not write are none of its business.
+  it('ignores stored rows of exams not being written', () => {
+    const stored = [{ exam_id: 'exam_term1_12th_english', student_name: 'Sarthak Santosh Mane' }]
+    expect(findRemovals(EXAMS, stored)).toEqual([])
+  })
+
+  // A record renamed since the import (stored as "Dhyuthi Rajachari", now
+  // "Dhyuthi D N") is the same student re-filed, not a mark lost.
+  it('matches stored names through canonicalOf, so a renamed record is not a removal', () => {
+    const exams = [{ id: 'exam_ut1_11th_it', students: [{ name: 'Dhyuthi D N' }] }]
+    const stored = [
+      { exam_id: 'exam_ut1_11th_it', student_name: 'Dhyuthi Rajachari' },
+      { exam_id: 'exam_ut1_11th_it', student_name: 'Atharva Satish Ingle' },
+    ]
+    const canonicalOf = n => (n === 'Dhyuthi Rajachari' ? 'Dhyuthi D N' : n)
+    expect(findRemovals(exams, stored, canonicalOf)).toEqual([
+      { examId: 'exam_ut1_11th_it', names: ['Atharva Satish Ingle'] },
+    ])
+  })
+
+  // An alias may file the new row under an old spelling too ("Droupadi
+  // Sarpale"); both sides go through canonicalOf, so it is still the same student.
+  it('maps the new rows through canonicalOf as well', () => {
+    const exams = [{ id: 'exam_ut1_11th_it', students: [{ name: 'Droupadi Sarpale' }] }]
+    const stored = [{ exam_id: 'exam_ut1_11th_it', student_name: 'Droupadi Sarpale' }]
+    const canonicalOf = n => (n === 'Droupadi Sarpale' ? 'Dropadi Sarpale' : n)
+    expect(findRemovals(exams, stored, canonicalOf)).toEqual([])
+  })
+})
+

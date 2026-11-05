@@ -16,7 +16,7 @@
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
-import { buildUnitTestExams, makeNameResolver, selectExams } from '../src/lib/unitTest1Import.js'
+import { buildUnitTestExams, makeNameResolver, selectExams, findRemovals } from '../src/lib/unitTest1Import.js'
 
 const SUPABASE_URL = 'https://exjnzrrlzcrsoxfoojcq.supabase.co'
 
@@ -32,11 +32,16 @@ XLSX.set_fs(fs)
 // stored results as they are. A full run REPLACES each paper's results with the
 // sheet's, so when the sheet has lost a row the database still needs, adding a
 // newly filled paper must go through --only.
+//
+// Every run refuses when writing would remove a mark already stored (a student
+// stored for an exam but missing from its new rows), naming who. Pass
+// --allow-removals only when that removal is intended.
 export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const dryRun = process.argv.includes('--dry-run')
   const onlyArg = process.argv.find(a => a.startsWith('--only='))
   const only = onlyArg ? onlyArg.slice('--only='.length).split(',').map(s => s.trim()).filter(Boolean) : null
+  const allowRemovals = process.argv.includes('--allow-removals')
 
   if (!serviceKey) {
     console.error('Error: SUPABASE_SERVICE_ROLE_KEY env var is required.')
@@ -65,10 +70,17 @@ export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
   const profiles = new Map()   // canonical name → { batches, branch }
   const byBatch = new Map()    // batch name → [{ canonical, names }]
   const knownNames = new Set() // every spelling a student record carries
+  const spellingTo = new Map() // spelling → its record's canonical name (null if shared)
   for (const s of students) {
     const batches = (s.student_batches ?? []).map(b => b.batch_name)
     profiles.set(s.canonical_name, { batches, branch: s.branch })
-    for (const n of [s.canonical_name, ...(s.name_variants ?? [])]) knownNames.add(n)
+    for (const n of [s.canonical_name, ...(s.name_variants ?? [])]) {
+      knownNames.add(n)
+      // A spelling two records share stays unmapped, so the removal check
+      // compares it as written rather than guess whose it is.
+      if (spellingTo.has(n) && spellingTo.get(n) !== s.canonical_name) spellingTo.set(n, null)
+      else spellingTo.set(n, s.canonical_name)
+    }
     for (const b of batches) {
       if (!byBatch.has(b)) byBatch.set(b, [])
       byBatch.get(b).push({ canonical: s.canonical_name, names: s.name_variants ?? [] })
@@ -141,6 +153,22 @@ export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
     if (lines.length) {
       console.log(`\n  ── ${c} notes ──`)
       for (const l of lines) console.log(`  ${l}`)
+    }
+  }
+
+  // A write replaces each exam's stored results, so check what it would drop.
+  if (allExams.length) {
+    const { data: stored, error: rdErr } = await db
+      .from('exam_results')
+      .select('exam_id, student_name')
+      .in('exam_id', allExams.map(e => e.id))
+    if (rdErr) throw new Error(`reading stored results failed: ${rdErr.message}`)
+    const removals = findRemovals(allExams, stored, n => spellingTo.get(n) ?? n)
+    if (removals.length) console.log('')
+    for (const r of removals) {
+      const what = `${r.examId} would remove ${r.names.length} stored mark(s): ${r.names.join(', ')}`
+      if (allowRemovals) console.log(`  ~ --allow-removals: ${what}`)
+      else { console.log(`  ✗ ${what}`); blocking++ }
     }
   }
 
