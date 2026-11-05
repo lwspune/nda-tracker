@@ -276,18 +276,20 @@ Component-level visibility is decided with `useMode()` — **never** `IS_READ_ON
 | Hostel & Mess tab — marking + reconciliation + chain (Attendance page, APJ boarders) | ✓ | — | — |
 | Send Late / Lecture-Miss / Homework notifications | ✓ | — | — |
 | Recent incidents strip (StudentView) | ✓ | ✓ | ✓ (portal) |
-| Missed exams card (StudentView) | ✓ | ✓ | ✓ (portal) |
+| Missed exams card (StudentView) | ✓ | ✓ | ✓ (portal: "Tests you missed", name + date list, no Batch / Notified) |
 | Exam Integrity panel (🕵 on Exams card) | ✓ | ✓ | — |
 | Log "admitted" integrity incident (from panel) | ✓ | ✓ | — |
-| Academic-integrity incidents card (StudentView) | ✓ | ✓ | ✓ (portal) |
+| Academic-integrity incidents card (StudentView) | ✓ | ✓ | ✓ (portal: exam / date / note only — no counterpart, evidence or recorder; display-side, the payload still ships them) |
 | Integrity Incidents rollup widget (Dashboard) | ✓ | ✓ | — |
 | Delete an integrity incident | ✓ | — | — |
 | Attendance rings (student monthly % view) | ✓ (StudentView) | ✓ (StudentView) | ✓ (portal, inline scroll) |
 | Syllabus Tracker (edit) | ✓ | — | — |
 | Performance block (StudentView) — stat tiles (Latest Score / Exams Taken / Attempt Quality / Consistency) | superadmin only (gated on `isSuperadmin`; regular admin, teacher, and student portal all hidden) | — | — |
 | `ProjectedScoreCard` (StudentView) | superadmin only (all subjects, score shown) | — | ✓ (portal, **Maths only**, `showScore={false}` — headline score + SSB/merit/rank scale withheld) |
-| Practice-set .docx download (from the card's subtopic view) | ✓ (with the card) | — | ✓ (portal) |
-| WrongAnswerAudit / UnattemptedAudit | ✓ | ✓ | ✓ |
+| Practice-set .docx download (a button on the card, both views) | ✓ (with the card) | — | ✓ (portal) |
+| WrongAnswerAudit / UnattemptedAudit | ✓ (own cards) | ✓ (own cards) | ✓ (portal: "Most wrong" / "Most skipped" tabs inside `StudentChaptersCard`) |
+| Profile card (StudentView — ID, DOB, mobiles, status) | ✓ | ✓ | — (the portal top bar names the student) |
+| Latest-test card (`LatestTestCard`) | — | — | ✓ (portal) |
 | Download exam PDF | ✓ | ✓ | — |
 | Toppers page | ✓ | ✓ | — |
 | Syllabus Tracker (view) | ✓ | ✓ | — |
@@ -372,7 +374,7 @@ The high-level code map is §6. This is the exhaustive file→purpose inventory 
 | `src/pages/Exams/WhatsAppResultsModal.jsx` | Post-send log modal — sent/skipped counts + per-line colour-coded log (incl. 👁 `MONITOR →` lines). Accepts `recipientLabel` prop (defaults to `'students + parents'`). |
 | `src/pages/Exams/ExamAbsencePreviewModal.jsx` | Pre-send modal for exam absence alerts. Reads the persistent absentee list from `getExamAbsencesForExam(examId)` (self-heals via `syncExamAbsences` if the table is empty for a legacy exam). Joins with `studentProfiles` for contact info. One card per absentee with editable student `mobile` + `parent_mobiles`. Green "Notified" badge on rows whose `notified_at` is set. Same `failedNames` scope toggle + `bulkUpdateStudentContacts` persistence pattern as `LateNotificationPreviewModal`. |
 | `src/store/slices/examAbsenceSlice.js` | `syncExamAbsences(examId)` — asymmetric reconciliation: read current absentee rows, compute target from `getExamAbsentees(exam, studentProfiles)`, DELETE only rows whose student NOW appears as an attendee (re-upload correction), INSERT new absentees, preserve rows for students who left the cohort but didn't attend (batch moves, deleted profiles) so historical absences aren't silently lost. Returns `{ added, removed, kept }`. Plus `getExamAbsencesForExam`, `getExamAbsencesForStudent(lwsId, sinceDate?)`, `markExamAbsencesNotified(examId, lwsIds)`. |
-| `src/pages/Students/MissedExams.jsx` | Renders absences for one student on `StudentView`. Admin/teacher fetch via `getExamAbsencesForStudent(lwsId)`; student portal supplies the rows via `examAbsencesProp` (same prop-bypass as `RecentIncidents`). Joined with `exams[]` for the display name+date+batch. Hidden when empty. Notified badge per row. |
+| `src/pages/Students/MissedExams.jsx` | Renders absences for one student on `StudentView`. Admin/teacher fetch via `getExamAbsencesForStudent(lwsId)`; student portal supplies the rows via `examAbsencesProp` (same prop-bypass as `RecentIncidents`). Joined with `exams[]` for the display name+date+batch. Hidden when empty. Notified badge per row. **Student mode** renders "Tests you missed": name + date, latest 5 then "Show all" — no Batch, no Notified. |
 | `src/components/auth/LoginPage.jsx` | Two-tab login (Admin·Teacher / Student); Admin + Teacher share one Supabase auth form, routed by `user_metadata.role`; Student via `/api/student-login` (own or parent number). Renders the **sibling picker** when the endpoint returns `multiple`; choosing re-calls with the chosen `lwsId`. Restore passes stored `lwsId` |
 | `src/components/upload/UploadModal.jsx` | 4-step add-exam modal (Evalbee MCQ) |
 | `src/components/upload/OfflineExamModal.jsx` | Single-form "Add Offline Exam" modal — `Name,Marks` template upload + metadata (max marks, subject, batch, branch) + absentee opt-in; saves a `questions:[]` + `maxMarks` exam via `addExam(exam,{syncAbsences})` |
@@ -438,7 +440,9 @@ The high-level code map is §6. This is the exhaustive file→purpose inventory 
 | `src/store/slices/integritySlice.js` | Academic-integrity incident CRUD (session-gated): `logIntegrityIncident(payload)` (upsert on `lws_id,exam_id`, stamps `created_by` from session email), `getIntegrityIncidentsForStudent(lwsId)`, `getIntegrityIncidentsForExam(examId)`, `getAllIntegrityIncidents()` (Dashboard rollup), `deleteIntegrityIncident(id)`. Writes `integrity_incidents`. |
 | `src/lib/analytics/integrityLeaders.js` | Pure `buildIntegrityLeaders(rows, studentProfiles)` — groups `integrity_incidents` rows per student, ranked by incident count (repeat offenders first), with distinct-exam count + per-student exam list. Prefers the current profile's canonical name/branch, falls back to the row's snapshot `student_name` (works for deleted/inactive students). NOT Active-only (a record stands regardless of status). |
 | `src/pages/Dashboard/IntegrityLeaders.jsx` | Dashboard "⚠ Integrity Incidents" rollup widget (admin + teacher, hide-when-empty). Fetches via `getAllIntegrityIncidents`; rows ranked repeat-first, expandable to the per-student exam list (exam · date · counterpart · status), click-through via `setActiveStudent`. |
-| `src/pages/Students/IntegrityIncidents.jsx` | StudentView "⚠ Academic Integrity" card — hide-when-empty (like `MissedExams`). Admin/teacher fetch via `getIntegrityIncidentsForStudent`; student portal via `integrityIncidentsProp` (served by `api/student-login.js`). Lists exam · date · counterpart · evidence · note · recorder. **Delete (×) admin-only** (`mode === 'admin'`). |
+| `src/pages/Students/IntegrityIncidents.jsx` | StudentView "⚠ Academic Integrity" card — hide-when-empty (like `MissedExams`). Admin/teacher fetch via `getIntegrityIncidentsForStudent`; student portal via `integrityIncidentsProp` (served by `api/student-login.js`). Lists exam · date · counterpart · evidence · note · recorder. **Delete (×) admin-only** (`mode === 'admin'`). **Student mode** shows exam · date · note only (display-side; the payload still carries the rest). |
+| `src/pages/Students/LatestTestCard.jsx` | Student portal's "Your latest test": score / max, %, right / wrong / skipped (hidden for a marks-only paper), and "See full result", which opens `FocusedExamResult` inline, the same report the WhatsApp link opens. No change-from-last-test figure (owner decision 2026-11-05). |
+| `src/pages/Students/StudentChaptersCard.jsx` | Student portal's "Your chapters": `ChapterAccordion` with the two audits as tabs (`embedded`). A tab is offered only when it has rows. Faculty see the audits as their own cards. |
 | `src/lib/analytics/attendanceRollup.js` | Pure `buildAttendanceRollup({attendanceRows, studentProfiles, syllabusBatchBranches})` → `{branch:{batch:{male,female:{present[],absent[]}}}}`. Absent=`A`, Present=rest; Active-only; skips variant-keyed + batch-less profiles; multi-batch student counted per batch. Optional `offReason(lwsId)`: a member on their day off is in neither bucket; each batch carries `holiday` (name when every member is off, else null) and the widget renders that row as `Holiday · <name>`. |
 | `src/pages/Dashboard/AttendanceRollup.jsx` | Per-branch attendance tables (side by side) with gender sub-columns + `▸` name drill-down + date picker. Class-wide for one day; ignores the page filter chain. |
 | `src/pages/Dashboard/index.jsx` | Command-center page (attendance roll-up + leaders + integrity rollup + never-logged-in + batch comparison + hardest-Q). Subject→branch→batch→exam filter chain, which now feeds only the batch comparison and hardest-Q table. |
