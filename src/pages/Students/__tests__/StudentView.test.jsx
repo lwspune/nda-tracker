@@ -621,3 +621,91 @@ describe('StudentView — attendance rings skip days off', () => {
     expect(screen.getByTestId('ring-2026-11')).toHaveTextContent('50%')
   })
 })
+
+// ── Student portal layout (2026-11-05) ───────────────────────────────────────
+// The student view was the faculty page with admin parts hidden. For students
+// it now leads with their latest result, folds the two audits into the chapter
+// card as tabs, drops the profile card (the top bar already names them; DOB and
+// phone numbers are not something to read on every visit) and puts attendance
+// last. Faculty keep their layout.
+
+describe('StudentView — student portal layout', () => {
+  const withMode = (mode, ui) =>
+    render(<ModeContext.Provider value={mode}>{ui}</ModeContext.Provider>)
+
+  function profileAlice() {
+    mockStore.studentProfiles = {
+      Alice: { name: 'Alice', lwsId: 'S1', mobile: '9800000010', parentMobiles: ['9800000011'],
+               branch: 'LWS', batches: ['B1'], nameVariants: [] },
+    }
+  }
+  function wrongExam(name) {
+    const e = makeExam({ examName: name })
+    e.students[0] = { ...e.students[0], correct: 0, incorrect: 1, notAttempted: 0, responses: { 1: -1 } }
+    return e
+  }
+
+  it('shows no profile card to a student', () => {
+    profileAlice()
+    setExams([makeExam()])
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.queryByText('9800000010')).toBeNull()
+    expect(screen.queryByText(/parent mobiles/i)).toBeNull()
+  })
+
+  it('keeps the profile card for faculty', () => {
+    profileAlice()
+    setExams([makeExam()])
+    withMode('admin', <StudentView name="Alice" />)
+    expect(screen.getByText('9800000010')).toBeInTheDocument()
+  })
+
+  it('leads with the latest test, and opens its full result', async () => {
+    setExams([makeExam({ examName: 'Older Test' }), makeExam({ examName: 'Newest Test' })])
+    withMode('student', <StudentView name="Alice" />)
+    const card = screen.getByText('Your latest test').closest('.card')
+    expect(within(card).getByText('Newest Test')).toBeInTheDocument()
+    expect(within(card).queryByText(/your result/i)).toBeNull()
+    await userEvent.click(within(card).getByRole('button', { name: /see full result/i }))
+    expect(within(card).getByText(/your result/i)).toBeInTheDocument()
+  })
+
+  it('has no latest-test card for faculty', () => {
+    setExams([makeExam()])
+    withMode('admin', <StudentView name="Alice" />)
+    expect(screen.queryByText('Your latest test')).toBeNull()
+  })
+
+  it('folds the audits into the chapter card as tabs', async () => {
+    setExams([wrongExam('Paper 1')])
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.getByText(/your chapters/i)).toBeInTheDocument()
+    expect(screen.getByTestId('chapter-accordion')).toBeInTheDocument()
+    expect(screen.queryByTestId('wrong-audit')).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: /most wrong/i }))
+    expect(screen.getByTestId('wrong-audit')).toBeInTheDocument()
+    expect(screen.queryByTestId('chapter-accordion')).toBeNull()
+  })
+
+  it('keeps the audits as their own cards for faculty', () => {
+    setExams([wrongExam('Paper 1')])
+    withMode('admin', <StudentView name="Alice" />)
+    expect(screen.getByTestId('wrong-audit')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /most wrong/i })).toBeNull()
+  })
+
+  it('puts attendance after the results for a student', () => {
+    setExams([makeExam()])
+    withMode('student', <StudentView name="Alice" attendance={[{ date: '2026-11-10', status: 'P' }]} />)
+    const history = screen.getByText('Exam History')
+    const attendance = screen.getByText(/^attendance$/i)
+    expect(history.compareDocumentPosition(attendance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('labels the subject picker in words', () => {
+    setExams([makeExam({ subject: 'Maths' }), makeExam({ subject: 'Physics' })])
+    withMode('student', <StudentView name="Alice" />)
+    expect(screen.getByText('Subject')).toBeInTheDocument()
+    expect(getSubjectSelect()).toBeInTheDocument()
+  })
+})

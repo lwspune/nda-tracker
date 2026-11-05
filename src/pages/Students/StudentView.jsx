@@ -27,6 +27,8 @@ import WrongAnswerAudit from './WrongAnswerAudit'
 import UnattemptedAudit from './UnattemptedAudit'
 import { ProfileCard } from './studentViewComponents'
 import ExamHistoryTable from './ExamHistoryTable'
+import LatestTestCard from './LatestTestCard'
+import StudentChaptersCard from './StudentChaptersCard'
 
 
 export default function StudentView({ name, attendance: attendanceProp = null, lectureAbsencesProp = null, examAbsencesProp = null, homeworkPendingProp = null, integrityIncidentsProp = null }) {
@@ -145,10 +147,15 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   const validExamData  = filterValidExams(allExamData, profile?.regDate)
   const excludedCount  = allExamData.length - validExamData.length
 
+  // The profile card is faculty-only: in the student portal the top bar already
+  // names the student, and their DOB and phone numbers are not something to
+  // read on every visit (2026-11-05).
+  const showProfile = Boolean(profile) && mode !== 'student'
+
   if (!allExamData.length) {
     return (
       <>
-        {profile && <ProfileCard name={name} profile={profile} />}
+        {showProfile && <ProfileCard name={name} profile={profile} />}
         <EmptyState icon="📋" title="No exam records" sub={`${name} is registered but hasn't sat any exams yet`} />
       </>
     )
@@ -282,10 +289,28 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   }).sort((a, b) => a.avg - b.avg)
 
   // All valid exams excluded (e.g. student registered after all exams were held)
+  // One subject picker for every path below, with a visible label — the bare
+  // "Maths" dropdown sat mid-page saying nothing about what it changes.
+  const subjectPicker = (
+    <label className="flex items-center gap-2 text-[13px] text-ink-2">
+      <span className="font-semibold">Subject</span>
+      <select
+        aria-label="Subject filter"
+        value={effectiveFilter}
+        onChange={e => setSubjectFilter(e.target.value)}
+        className="form-input w-auto text-[13px] pr-8 cursor-pointer"
+        style={{ minWidth: '160px' }}
+      >
+        <option value="all">All Subjects</option>
+        {studentSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    </label>
+  )
+
   if (!validExamData.length) {
     return (
       <>
-        {profile && <ProfileCard name={name} profile={profile} />}
+        {showProfile && <ProfileCard name={name} profile={profile} />}
         <EmptyState
           icon="📅"
           title="No valid exams"
@@ -300,28 +325,93 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
   if (!examData.length) {
     return (
       <>
-        {profile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
-        <div>
-          <select
-            aria-label="Subject filter"
-            value={effectiveFilter}
-            onChange={e => setSubjectFilter(e.target.value)}
-            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-            style={{ minWidth: '160px' }}
-          >
-            <option value="all">All Subjects</option>
-            {studentSubjects.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
+        {showProfile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
+        <div>{subjectPicker}</div>
         <EmptyState icon="🔍" title="No data" sub={`No ${effectiveFilter} exam records found for "${name}"`} />
       </>
+    )
+  }
+
+  // Projected NDA Score — superadmin (all subjects, with the score) and the
+  // student portal (Maths only, score withheld). Maths is the only subject
+  // with a curated weightage table AND a subtopic taxonomy, so elsewhere a
+  // student would get an empty or misleading card. isSuperadmin is false in
+  // student mode, so the two branches never overlap.
+  const projectedCard = (isSuperadmin || (mode === 'student' && primarySubject === 'Maths'))
+    && hasFreqData && projected.total > 0 && (
+    <ProjectedScoreCard
+      projected={projected}
+      primarySubject={primarySubject}
+      subjectMaxScore={subjectMaxScore}
+      // Keyed on mode, NOT on isSuperadmin: dev sets isSuperadmin=true
+      // unconditionally on localhost (useStore.initStore), so a student
+      // logging in against the dev server would otherwise see the score.
+      // Visibility is a mode question — see CLAUDE.md.
+      showScore={mode !== 'student'}
+      // Powers the per-subtopic question drill-down. Same pair
+      // ChapterAccordion below takes, and the same helpers read them.
+      name={name}
+      exams={filteredExams}
+      // Every spelling this student's results are filed under — matching the
+      // canonical name alone reports a variant-filed student as having sat
+      // nothing, which lands their whole history in the "absent" bucket.
+      studentNames={[...allNames]}
+      absentExams={absentExams}
+    />
+  )
+
+  // ── Student portal ─────────────────────────────────────────────
+  // Ordered for the student, not the analyst (2026-11-05): their latest result
+  // first, then where the marks are, what to work on, the chapter card (the
+  // two audits are tabs inside it), every test, and the record (missed tests,
+  // integrity, attendance) last. Faculty keep the layout below.
+  if (mode === 'student') {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-[13px] font-extrabold text-ink uppercase tracking-wide mt-2">📊 Your results</h2>
+        <LatestTestCard s={latest} />
+        {isMultiSubject && <div>{subjectPicker}</div>}
+        {projectedCard}
+        <FocusAreas startHere={focusAreas.startHere} readyToLearn={focusAreas.readyToLearn} />
+        <StudentChaptersCard
+          chapterSummary={chapterSummary}
+          name={name}
+          exams={filteredExams}
+          wrongAudit={wrongAudit}
+          skippedAudit={skippedAudit}
+          allOffline={allOffline}
+        />
+        <ExamHistoryTable scores={scores} />
+        <MissedExams lwsId={profile?.lwsId} exams={normalizedExams} examAbsencesProp={examAbsencesProp} />
+        <IntegrityIncidents lwsId={profile?.lwsId} integrityIncidentsProp={integrityIncidentsProp} />
+        {attendance.length > 0 && (
+          <Card>
+            <CardTitle>Attendance</CardTitle>
+            <AttendanceRings
+              attendance={attendance}
+              lectureAbsences={lectureAbsences}
+              examAbsences={examAbsences}
+              exams={normalizedExams}
+              homework={homework}
+            />
+          </Card>
+        )}
+        <RecentIncidents
+          lwsId={profile?.lwsId}
+          attendance={attendance}
+          exams={normalizedExams}
+          lectureAbsencesProp={lectureAbsencesProp}
+          examAbsencesProp={examAbsencesProp}
+          homeworkPendingProp={homework}
+        />
+      </div>
     )
   }
 
   return (
     <div className="space-y-4">
       {/* Profile card */}
-      {profile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
+      {showProfile && <ProfileCard name={name} profile={profile} loginStats={loginStats} />}
 
       {/* Attendance rings — directly below profile */}
       {attendance.length > 0 && (
@@ -366,22 +456,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       )}
 
       {/* Subject filter — only shown when student has 2+ subjects */}
-      {isMultiSubject && (
-        <div>
-          <select
-            aria-label="Subject filter"
-            value={effectiveFilter}
-            onChange={e => setSubjectFilter(e.target.value)}
-            className="form-input w-auto text-[13px] pr-8 cursor-pointer"
-            style={{ minWidth: '160px' }}
-          >
-            <option value="all">All Subjects</option>
-            {studentSubjects.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {isMultiSubject && <div>{subjectPicker}</div>}
 
       {/* Stats row + Projected card — superadmin only (isSuperadmin is false in
           teacher/student modes and for regular admins, so this hides the whole
@@ -423,33 +498,7 @@ export default function StudentView({ name, attendance: attendanceProp = null, l
       </div>
       )}
 
-      {/* Projected NDA Score — superadmin (all subjects, with the score) and the
-          student portal (Maths only, score withheld). Maths is the only subject
-          with a curated weightage table AND a subtopic taxonomy, so elsewhere a
-          student would get an empty or misleading card. isSuperadmin is false in
-          student mode, so the two branches never overlap. */}
-      {(isSuperadmin || (mode === 'student' && primarySubject === 'Maths'))
-        && hasFreqData && projected.total > 0 && (
-        <ProjectedScoreCard
-          projected={projected}
-          primarySubject={primarySubject}
-          subjectMaxScore={subjectMaxScore}
-          // Keyed on mode, NOT on isSuperadmin: dev sets isSuperadmin=true
-          // unconditionally on localhost (useStore.initStore), so a student
-          // logging in against the dev server would otherwise see the score.
-          // Visibility is a mode question — see CLAUDE.md.
-          showScore={mode !== 'student'}
-          // Powers the per-subtopic question drill-down. Same pair
-          // ChapterAccordion below takes, and the same helpers read them.
-          name={name}
-          exams={filteredExams}
-          // Every spelling this student's results are filed under — matching the
-          // canonical name alone reports a variant-filed student as having sat
-          // nothing, which lands their whole history in the "absent" bucket.
-          studentNames={[...allNames]}
-          absentExams={absentExams}
-        />
-      )}
+      {projectedCard}
 
       {/* Exam history */}
       <ExamHistoryTable scores={scores} />
