@@ -282,6 +282,23 @@ describe('buildUnitTestExams', () => {
     expect(report.overMax).toEqual([])
   })
 
+  // The school's sheet can carry the wrong max (9th Term 1 Science: header 80,
+  // marked out of 40). A faculty-confirmed max on the paper wins over the sheet,
+  // and the ceiling check then applies to it.
+  it('a paper maxMarks overrides the sheet max, and the ceiling uses it', () => {
+    const rows = ROWS.map(r => [...r])
+    rows[0][5] = 80                                  // sheet says Maths is /80
+    rows[2][5] = 41                                  // Asha 41 — over a /40 paper
+    const papers = PAPERS.map(p => (p.column === 'Maths' ? { ...p, maxMarks: 40 } : p))
+    const { exams, report } = buildUnitTestExams({ rows, config: { ...CONFIG, papers }, resolveName: resolveAll })
+    const maths = exams.find(e => e.subject === 'Maths')
+    expect(maths.maxMarks).toBe(40)
+    expect(maths.students.map(s => s.name)).not.toContain('Asha Kale')
+    expect(report.overMax).toEqual([{ cls: '11th', name: 'Asha Kale', column: 'Maths', value: 41, max: 40 }])
+    // the other papers keep the sheet's max
+    expect(exams.find(e => e.subject === 'Physics').maxMarks).toBe(25)
+  })
+
   // A column the school has not filled yet (or a paper the class does not take)
   // is named in config rather than mapped to an empty exam, so the student sees
   // no blank paper in their history. If it ever does carry marks, saying so is

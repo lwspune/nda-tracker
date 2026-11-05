@@ -68,8 +68,9 @@ export function parseClassSheet(rows) {
 //   examKey     id segment, `exam_<examKey>_<cls>_<paper>` (default 'ut1').
 //   examLabel   name prefix, `<examLabel>: <paper> (<cls>)` (default 'Unit Test 1').
 //               Together they keep one school exam from overwriting another.
-//   papers      [{ column, subject, date }] — one per timetable slot. The column
-//               name is the join key to the sheet header.
+//   papers      [{ column, subject, date, maxMarks? }] — one per timetable slot.
+//               The column name is the join key to the sheet header; maxMarks,
+//               when given, overrides the sheet's Max Marks row for that paper.
 //   noExamColumns { column: reason } — sheet columns that build no exam: marks
 //               not entered yet, or a paper the class does not take. Each is
 //               reported with how many marks it holds, so a column that fills in
@@ -128,7 +129,9 @@ export function buildUnitTestExams({ rows, config, resolveName }) {
   for (const paper of papers) {
     const subject = subjects.find(s => s.name === paper.column)
     if (!subject) continue
-    const max = Number.isFinite(subject.max) ? subject.max : config.maxMarks
+    // A faculty-confirmed max on the paper beats the sheet's header, which can
+    // be wrong; otherwise the sheet's, else the class default.
+    const max = paper.maxMarks ?? (Number.isFinite(subject.max) ? subject.max : config.maxMarks)
 
     const studentRows = []
     for (const st of students) {
