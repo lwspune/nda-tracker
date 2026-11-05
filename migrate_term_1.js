@@ -1,13 +1,19 @@
 // Import the APJ "First Term" exam marks (12–21 Oct 2026) as offline exams.
 //
 // Usage:
-//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_term_1.js --file <path> [--dry-run]
+//   SUPABASE_SERVICE_ROLE_KEY=<key> node migrate_term_1.js --file <path> [--dry-run] [--only=<exam id,…>]
 //
 // --file <path>  The school's "Exam Test  Results 2026" Google Sheet, exported
 //                as .xlsx (Drive id 1VBgmm5kMdBNYXFJOqafR-srdELoRHIKSqVqKOxjP0mQ).
 //                Required: the sheet is still being filled in, so always import
 //                a fresh export rather than a stale local copy.
 // --dry-run      Plan and print, write nothing.
+// --only=<ids>   Write just these exams; every other exam keeps its stored
+//                results. Use it to add a paper the school has filled in since:
+//                the sheet no longer has Sarthak Mane's 12th row (deleted
+//                there after the 29 Oct import; faculty kept his marks,
+//                2026-11-05), so a FULL run would erase his 12th Physics,
+//                English and Chemistry.
 //
 // Same workbook layout as Unit Test 1, so the same importer: one exam per paper,
 // totals only (`questions: []` + explicit `max_marks`). Max marks come from the
@@ -50,7 +56,10 @@ const CLASSES = [
       { column: 'Maths - I',         subject: 'Maths',     date: '2026-10-17' },
       { column: 'Maths - II',        subject: 'Maths',     date: '2026-10-19' },
     ],
-    noExamColumns: { Science: 'marks not entered yet (paper on 20 Oct)' },
+    // Science (paper on 20 Oct) is in the sheet but held: the header and the
+    // timetable say 80, yet all 15 marks are 21-40. Waiting on the school to
+    // confirm the max (2026-11-05); then add it as a paper with --only.
+    noExamColumns: { Science: 'held: sheet says /80 but marks look /40' },
   },
   {
     ...TERM,
@@ -67,11 +76,9 @@ const CLASSES = [
       { column: 'Geography',  subject: 'Geography', date: '2026-10-16' },
       { column: 'Maths - I',  subject: 'Maths',     date: '2026-10-17' },
       { column: 'Maths - II', subject: 'Maths',     date: '2026-10-19' },
+      { column: 'Science I',  subject: 'Science',   date: '2026-10-20' },
+      { column: 'Science II', subject: 'Science',   date: '2026-10-21' },
     ],
-    noExamColumns: {
-      'Science I':  'marks not entered yet (paper on 20 Oct)',
-      'Science II': 'marks not entered yet (paper on 21 Oct)',
-    },
   },
   {
     ...TERM,
@@ -108,9 +115,9 @@ const CLASSES = [
       { column: 'English',   subject: 'English',   date: '2026-10-12' },
       { column: 'Physics',   subject: 'Physics',   date: '2026-10-13' },
       { column: 'Chemistry', subject: 'Chemistry', date: '2026-10-14' },
+      { column: 'Maths',     subject: 'Maths',     date: '2026-10-15' },
     ],
     noExamColumns: {
-      Maths:     'marks not entered yet (paper on 15 Oct)',
       Geography: 'not a 12th paper (struck off the timetable)',
       IT:        'not a 12th paper (struck off the timetable)',
       Biology:   'not a 12th paper',
