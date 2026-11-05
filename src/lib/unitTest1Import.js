@@ -243,3 +243,19 @@ export function makeNameResolver({ roster, aliases = {} }) {
     return found.size === 1 ? [...found][0] : null
   }
 }
+
+// (exams, onlyIds | null) → { exams, unknown }.
+//
+// A run that names papers writes only those, leaving every other exam's stored
+// results alone — the way to add a newly filled paper when the sheet has since
+// lost a row the database still needs. `unknown` lists named ids that match no
+// built exam, so a typo is refused instead of writing nothing quietly.
+export function selectExams(exams, onlyIds) {
+  if (!onlyIds) return { exams, unknown: [] }
+  const wanted = new Set(onlyIds)
+  const built = new Set(exams.map(e => e.id))
+  return {
+    exams: exams.filter(e => wanted.has(e.id)),
+    unknown: [...wanted].filter(id => !built.has(id)),
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseClassSheet, buildUnitTestExams, makeNameResolver } from '../unitTest1Import'
+import { parseClassSheet, buildUnitTestExams, makeNameResolver, selectExams } from '../unitTest1Import'
 
 // A miniature of the real workbook's shape: row 0 carries the per-subject max
 // in the subject columns, row 1 the headers, row 2+ the students. Columns 0-2
@@ -357,5 +357,29 @@ describe('makeNameResolver', () => {
     })
     expect(resolve('Neel')).toBe('Neel Wardhamane')
     expect(resolve('Manas Mangesh Bakde')).toBe('Manas Bakde')
+  })
+})
+
+// The import replaces each paper's results with the sheet's. When the sheet has
+// since lost a row the database still needs (a student deleted by mistake),
+// re-writing every paper would erase that student's marks — so a run can name
+// just the papers it adds.
+describe('selectExams', () => {
+  const EXAMS = [{ id: 'exam_term1_9th_english' }, { id: 'exam_term1_12th_maths' }, { id: 'exam_term1_12th_physics' }]
+
+  it('keeps every exam when no selection is given', () => {
+    expect(selectExams(EXAMS, null)).toEqual({ exams: EXAMS, unknown: [] })
+  })
+
+  it('keeps only the named exams, in build order', () => {
+    const { exams } = selectExams(EXAMS, ['exam_term1_12th_physics', 'exam_term1_12th_maths'])
+    expect(exams.map(e => e.id)).toEqual(['exam_term1_12th_maths', 'exam_term1_12th_physics'])
+  })
+
+  // A typo would otherwise write nothing and look like success.
+  it('reports a named id that matches no built exam', () => {
+    const { exams, unknown } = selectExams(EXAMS, ['exam_term1_12th_maths', 'exam_term1_12th_math'])
+    expect(exams.map(e => e.id)).toEqual(['exam_term1_12th_maths'])
+    expect(unknown).toEqual(['exam_term1_12th_math'])
   })
 })

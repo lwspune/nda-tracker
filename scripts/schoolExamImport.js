@@ -16,7 +16,7 @@
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
-import { buildUnitTestExams, makeNameResolver } from '../src/lib/unitTest1Import.js'
+import { buildUnitTestExams, makeNameResolver, selectExams } from '../src/lib/unitTest1Import.js'
 
 const SUPABASE_URL = 'https://exjnzrrlzcrsoxfoojcq.supabase.co'
 
@@ -27,9 +27,16 @@ XLSX.set_fs(fs)
 // workbook  path to the .xlsx
 // classes   per-class config for `buildUnitTestExams`, plus `sheet` (tab name)
 // aliases   { sheetName: canonical } — faculty-confirmed spellings
+//
+// --only=<exam id,…> writes just those exams and leaves every other exam's
+// stored results as they are. A full run REPLACES each paper's results with the
+// sheet's, so when the sheet has lost a row the database still needs, adding a
+// newly filled paper must go through --only.
 export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const dryRun = process.argv.includes('--dry-run')
+  const onlyArg = process.argv.find(a => a.startsWith('--only='))
+  const only = onlyArg ? onlyArg.slice('--only='.length).split(',').map(s => s.trim()).filter(Boolean) : null
 
   if (!serviceKey) {
     console.error('Error: SUPABASE_SERVICE_ROLE_KEY env var is required.')
@@ -79,7 +86,7 @@ export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
   }
 
   // ── 2. Build ──────────────────────────────────────────────────────────────
-  const allExams = []
+  const builtExams = []
   const allReports = []
 
   for (const config of classes) {
@@ -91,8 +98,15 @@ export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
     const resolveName = makeNameResolver({ roster, aliases })
 
     const { exams, report } = buildUnitTestExams({ rows, config, resolveName })
-    allExams.push(...exams)
+    builtExams.push(...exams)
     allReports.push({ cls: config.cls, report })
+  }
+
+  const { exams: allExams, unknown } = selectExams(builtExams, only)
+  if (only) console.log(`--only: writing ${allExams.length} of ${builtExams.length} exams; the rest stay as stored.\n`)
+  for (const id of unknown) {
+    console.log(`✗ --only names an exam this config does not build: "${id}"`)
+    blocking++
   }
 
   // ── 3. Print the plan ─────────────────────────────────────────────────────
@@ -112,7 +126,10 @@ export async function runSchoolExamImport({ workbook, classes, aliases = {} }) {
     for (const r of report.unmappedColumns) { lines.push(`✗ sheet column with no configured paper: "${r.column}"`); blocking++ }
     for (const r of report.missingColumns)  { lines.push(`✗ configured paper with no sheet column: "${r.column}"`); blocking++ }
     for (const r of report.noExam) {
-      if (r.marks) { lines.push(`✗ "${r.column}" is set to build no exam (${r.reason}) but holds ${r.marks} marks`); blocking++ }
+      // Under --only the column is not being written either way, so its marks
+      // waiting is a note; on a full run it would be left behind, so it blocks.
+      if (r.marks && !only) { lines.push(`✗ "${r.column}" is set to build no exam (${r.reason}) but holds ${r.marks} marks`); blocking++ }
+      else if (r.marks) lines.push(`· "${r.column}" holds ${r.marks} marks but builds no exam (${r.reason})`)
       else lines.push(`· no exam for "${r.column}": ${r.reason}`)
     }
     for (const r of report.corrected)       lines.push(`~ corrected: ${r.name} ${r.column} = ${r.from} → ${r.to}`)
