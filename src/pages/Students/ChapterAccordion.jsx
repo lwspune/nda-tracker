@@ -18,38 +18,52 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {chapterSummary.map(({ ch, avg, subs }) => (
+      {chapterSummary.map(({ ch, avg, subs }) => {
+        const { wrong: chWrong, skipped: chSkipped } = chapterCounts(subs)
+        return (
         <div key={ch}>
 
-          {/* ── Chapter row ─────────────────────────────── */}
-          <div
-            className="flex items-center gap-2.5 py-3 cursor-pointer group min-h-[44px]"
+          {/* ── Chapter row ───────────────────────────────
+              A button so it opens from the keyboard. The name wraps rather than
+              truncating ("Trigonome…" could not be told apart on a phone), and the
+              % sits beside the bar so a 0% chapter still says 0%. The wrong /
+              skipped line replaced a "(n)" subtopic count that never matched what
+              opened — subtopics with nothing to review are hidden below. */}
+          <button
+            type="button"
             onClick={() => toggleChapter(ch)}
+            aria-expanded={!!openChapters[ch]}
+            className="w-full text-left flex items-center gap-2.5 py-2.5 min-h-[44px] group rounded
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            <div className="w-[120px] md:w-[175px] min-w-[120px] md:min-w-[175px] text-[12.5px] text-ink font-semibold
-                            flex items-center gap-1.5 truncate">
-              <span
-                className="text-[10px] text-ink-3 inline-block transition-transform duration-200 flex-shrink-0"
-                style={{ transform: openChapters[ch] ? 'rotate(90deg)' : 'rotate(0deg)' }}
-              >▶</span>
-              <span className="truncate">{ch}</span>
-              <span className="text-[9px] text-ink-3 font-normal font-mono flex-shrink-0">
-                ({Object.keys(subs).length})
-              </span>
+            <div className="w-[150px] md:w-[220px] flex-shrink-0 min-w-0">
+              <div className="flex items-start gap-1.5 text-[13px] text-ink font-semibold leading-snug">
+                <span
+                  aria-hidden="true"
+                  className="text-[10px] text-ink-3 inline-block transition-transform duration-200 flex-shrink-0 mt-[3px]"
+                  style={{ transform: openChapters[ch] ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                >▶</span>
+                <span className="break-words min-w-0">{ch}</span>
+              </div>
+              <div className="text-[11px] text-ink-3 pl-[18px] mt-0.5">
+                {chWrong} wrong · {chSkipped} skipped
+              </div>
             </div>
-            <div className="flex-1 bg-surface-2 rounded-full h-6 overflow-hidden">
+            <div className="flex-1 bg-surface-2 rounded-full h-2.5 overflow-hidden">
               {avg > 0 && (
                 <div
-                  className="h-full rounded-full flex items-center px-2.5 transition-all duration-500"
+                  className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${avg * 100}%`, background: scoreBg(avg) }}
-                >
-                  <span className="text-[10px] font-mono font-bold text-white drop-shadow">
-                    {(avg * 100).toFixed(0)}%
-                  </span>
-                </div>
+                />
               )}
             </div>
-          </div>
+            <span
+              className="w-10 text-right text-[13px] font-mono font-bold flex-shrink-0"
+              style={{ color: avg > 0 ? scoreBg(avg) : undefined }}
+            >
+              {(avg * 100).toFixed(0)}%
+            </span>
+          </button>
 
           {/* ── Subtopic cards ───────────────────────────── */}
           {openChapters[ch] && (
@@ -224,7 +238,20 @@ export default function ChapterAccordion({ chapterSummary, name, exams }) {
           )}
 
         </div>
-      ))}
+        )
+      })}
     </div>
   )
+}
+
+// Wrong and skipped questions across a chapter: every subtopic, every exam.
+function chapterCounts(subs) {
+  let wrong = 0, skipped = 0
+  for (const data of Object.values(subs || {})) {
+    for (const ea of data.examsArr || []) {
+      wrong   += ea.wrong   || 0
+      skipped += ea.skipped || 0
+    }
+  }
+  return { wrong, skipped }
 }
