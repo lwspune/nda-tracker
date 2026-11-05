@@ -76,3 +76,11 @@ describe('IntegrityIncidents', () => {
     expect(screen.queryByTitle('Remove incident')).not.toBeInTheDocument()
   })
 })
+
+describe('IntegrityIncidents — readable dates', () => {
+  it('shows the exam date as "14 Jun 2026", never the stored ISO string', () => {
+    renderWithMode(<IntegrityIncidents lwsId="LWS-001" integrityIncidentsProp={[ROW]} />)
+    expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
+    expect(screen.queryByText('2026-06-14')).toBeNull()
+  })
+})

@@ -3,6 +3,7 @@ import { Card, Badge } from '../../components/ui'
 import QuestionCard from '../../components/ui/QuestionCard'
 import { getIssues } from './ExamHistoryTable'
 import { examMaxMarks } from '../../lib/analyticsHelpers'
+import { fmtDate } from '../../lib/dates'
 
 /**
  * FocusedExamResult — the "you clicked the result link" report.
@@ -52,7 +53,7 @@ export default function FocusedExamResult({ examId, exams }) {
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <div>
           <div className="text-[16px] font-extrabold text-ink leading-tight">{exam.name}</div>
-          {exam.date && <div className="text-[11px] font-mono text-ink-3 mt-0.5">{exam.date}</div>}
+          {exam.date && <div className="text-[11px] font-mono text-ink-3 mt-0.5">{fmtDate(exam.date) || exam.date}</div>}
         </div>
         <div className="flex items-center gap-2">
           <div className="text-[20px] font-extrabold text-ink">

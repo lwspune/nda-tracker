@@ -71,7 +71,7 @@ describe('FocusedExamResult', () => {
   it('shows the exam name, score, and percentage for a matching exam', () => {
     render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
     expect(screen.getByText('Maths Mock 3')).toBeInTheDocument()
-    expect(screen.getByText('2026-06-06')).toBeInTheDocument()
+    expect(screen.getByText('6 Jun 2026')).toBeInTheDocument()
     expect(screen.getByText(/8/)).toBeInTheDocument()
     expect(screen.getByText('67%')).toBeInTheDocument() // 8 / (3×4) = 67%
   })
@@ -212,5 +212,13 @@ describe('FocusedExamResult — offline exams', () => {
     render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
     expect(screen.getByText(/1 correct/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show only wrong/i })).toBeInTheDocument()
+  })
+})
+
+describe('FocusedExamResult — readable date', () => {
+  it('shows the exam date as "6 Jun 2026", never the stored ISO string', () => {
+    render(<FocusedExamResult examId="exam1" exams={[EXAM]} />)
+    expect(screen.getByText('6 Jun 2026')).toBeInTheDocument()
+    expect(screen.queryByText('2026-06-06')).toBeNull()
   })
 })

@@ -197,3 +197,18 @@ describe('ExamHistoryTable — Score carries its denominator', () => {
     expect(scoreCellOf('Unknown')).toBe('12')
   })
 })
+
+// Stored dates are ISO (2026-05-01); every other date in the app reads
+// "1 May 2026". The raw string reached students and parents (2026-11-05).
+describe('ExamHistoryTable — readable dates', () => {
+  it('shows the exam date as "1 May 2026", never the stored ISO string', () => {
+    render(<ExamHistoryTable scores={[{
+      name: 'Mock Test 1', date: '2026-05-01', score: 40, max: 100, pct: 0.4,
+      correct: 10, wrong: 5, na: 5,
+      exam: { id: 'exam1', name: 'Mock Test 1', date: '2026-05-01', marking: { correct: 4, wrong: -1 }, questions: [{ q: 1 }] },
+      student: { totalMarks: 40, correct: 10, incorrect: 5, notAttempted: 5, responses: { 1: 1 }, choices: {} },
+    }]} />)
+    expect(screen.getByText('1 May 2026')).toBeInTheDocument()
+    expect(screen.queryByText('2026-05-01')).toBeNull()
+  })
+})

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import useStore from '../../store/useStore'
 import { Card, CardTitle, Badge } from '../../components/ui'
+import { fmtDate } from '../../lib/dates'
 
 // Component returns null (no card rendered) when there are zero missed exams.
 // Same hide-when-empty pattern as `RecentIncidents`.
@@ -77,7 +78,7 @@ export default function MissedExams({ lwsId, exams = [], examAbsencesProp = null
             {enriched.map(row => (
               <tr key={row.examId} className="border-b border-border/50 hover:bg-surface-2">
                 <td className="py-2 pr-3 pl-4 font-medium" data-testid="missed-exam-name">{row.examName}</td>
-                <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{row.examDate}</td>
+                <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{fmtDate(row.examDate) || row.examDate}</td>
                 <td className="py-2 pr-3 text-ink-2">{row.examBatch || '—'}</td>
                 <td className="py-2 pr-4">
                   {row.notifiedAt

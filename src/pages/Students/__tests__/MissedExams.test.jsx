@@ -158,3 +158,13 @@ describe('MissedExams — sort order', () => {
     expect(names).toEqual(['Mock #3', 'Mock #2', 'Mock #1'])
   })
 })
+
+describe('MissedExams — readable dates', () => {
+  it('shows the exam date as "10 May 2026", never the stored ISO string', async () => {
+    render(<MissedExams lwsId="LWS-001" exams={exams} examAbsencesProp={[
+      { exam_id: 'e1', lws_id: 'LWS-001', marked_at: '2026-05-10T10:00Z', notified_at: null },
+    ]} />)
+    expect(await screen.findByText('10 May 2026')).toBeInTheDocument()
+    expect(screen.queryByText('2026-05-10')).toBeNull()
+  })
+})

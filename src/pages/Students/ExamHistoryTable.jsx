@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card, CardTitle, Badge } from '../../components/ui'
 import QuestionCard from '../../components/ui/QuestionCard'
 import FocusedExamResult from './FocusedExamResult'
+import { fmtDate } from '../../lib/dates'
 
 const PAGE_SIZE = 5
 
@@ -244,7 +245,7 @@ export default function ExamHistoryTable({ scores }) {
                         </button>
                       ) : s.name}
                     </td>
-                    <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{s.date}</td>
+                    <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{fmtDate(s.date) || s.date}</td>
                     {/* The denominator is load-bearing, not decoration: this column
                         interleaves paper sizes (a 30-Q chapter test maxes at 75, a
                         120-Q mock at 300), so read bare it ORDERS WRONG — 114.19

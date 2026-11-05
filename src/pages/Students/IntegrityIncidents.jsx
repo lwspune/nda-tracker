@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fmtTimestamp } from '../../lib/dates'
+import { fmtDate, fmtTimestamp } from '../../lib/dates'
 import useStore from '../../store/useStore'
 import { useMode } from '../../context/ModeContext'
 import { Card, CardTitle, Badge } from '../../components/ui'
@@ -67,7 +67,7 @@ export default function IntegrityIncidents({ lwsId, integrityIncidentsProp = nul
                   <Badge variant="red" className="ml-2">{r.status || 'admitted'}</Badge>
                   {r.note && <div className="text-[11px] text-ink-3 font-normal mt-0.5">{r.note}</div>}
                 </td>
-                <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{r.exam_date || '—'}</td>
+                <td className="py-2 pr-3 font-mono text-ink-3 whitespace-nowrap">{fmtDate(r.exam_date) || r.exam_date || '—'}</td>
                 <td className="py-2 pr-3 text-ink-2">{r.counterpart_name || '—'}</td>
                 <td className="py-2 pr-3 text-ink-3 whitespace-nowrap">
                   {r.shared_wrong != null
