@@ -53,6 +53,20 @@ const card = title => {
   return found
 }
 
+// 2026-11-05: the section and the cards collapse. The section opens by itself
+// only when something can be handed in; so do those cards. Everything else is
+// one row until tapped.
+const escape = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const sectionButton = () => screen.getByRole('button', { name: /^📤 homework/i })
+const openSection = () => { if (sectionButton().getAttribute('aria-expanded') === 'false') fireEvent.click(sectionButton()) }
+const cardButton = title => within(card(title)).getByRole('button', { name: new RegExp(escape(title)) })
+const openCard = title => {
+  openSection()
+  if (cardButton(title).getAttribute('aria-expanded') === 'false') fireEvent.click(cardButton(title))
+  return card(title)
+}
+const showComments = c => fireEvent.click(within(c).getByRole('button', { name: /comments on each question/i }))
+
 describe('StudentHomework', () => {
   beforeEach(() => { uploadToSignedUrl.mockClear(); vi.spyOn(console, 'error').mockImplementation(() => {}) })
   afterEach(() => vi.unstubAllGlobals())
@@ -84,9 +98,11 @@ describe('StudentHomework', () => {
   it('shows marks, feedback and each question for graded work', async () => {
     mockFetch()
     render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-    const c = await waitFor(() => card('Matrices'))
-    expect(within(c).getByText('7.5 / 10')).toBeInTheDocument()
+    await waitFor(() => card('Matrices'))
+    expect(within(card('Matrices')).getByText('7.5 / 10')).toBeInTheDocument()   // on the collapsed row
+    const c = openCard('Matrices')
     fireEvent.click(within(c).getByRole('button', { name: /see marks/i }))
+    showComments(c)
     expect(within(c).getByText('Neat row operations.')).toBeInTheDocument()
     expect(within(c).getByText('Sign error.')).toBeInTheDocument()
   })
@@ -111,7 +127,8 @@ describe('StudentHomework', () => {
     const open = async hw => {
       mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'A', homework: [hw] } }) })
       render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-      const c = await waitFor(() => card('Pair of lines'))
+      await screen.findByRole('button', { name: /^📤 homework/i })
+      const c = openCard('Pair of lines')
       fireEvent.click(within(c).getByRole('button', { name: /see marks/i }))
       return c
     }
@@ -162,6 +179,7 @@ describe('StudentHomework', () => {
         markedPages: [], reportUrl: null, pagesRemoved: false,
         grades: [{ position: 1, label: 'Q1', maxMarks: 15, outcome: 'scored', awarded: 10, earned: 'e', missing: 'Sign error.', cause: null, topic: null }],
       }))
+      showComments(c)
       expect(within(c).getByText('Sign error.')).toBeInTheDocument()
       expect(within(c).queryByRole('list', { name: /what to focus on/i })).toBeNull()
       expect(within(c).queryByText(/removed 30 days/i)).toBeNull()
@@ -236,7 +254,8 @@ describe('StudentHomework', () => {
     it('offers Replace on a waiting hand-in and not on a marked one', async () => {
       mockFetch()
       render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-      const c = await waitFor(() => card('Trig identities'))
+      await waitFor(() => card('Trig identities'))
+      const c = openCard('Trig identities')
       expect(within(c).queryByLabelText(/choose photos or pdf/i)).not.toBeInTheDocument()
       fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
       expect(within(c).getByLabelText(/choose photos or pdf/i)).toBeInTheDocument()
@@ -249,7 +268,8 @@ describe('StudentHomework', () => {
       const calls = mockFetch(okHandlers())
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
       render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-      const c = await waitFor(() => card('Trig identities'))
+      await waitFor(() => card('Trig identities'))
+      const c = openCard('Trig identities')
       fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
       fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [photo('n1.jpg'), photo('n2.jpg')] } })
       fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
@@ -262,7 +282,8 @@ describe('StudentHomework', () => {
       const calls = mockFetch(okHandlers())
       vi.spyOn(window, 'confirm').mockReturnValue(false)
       render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-      const c = await waitFor(() => card('Trig identities'))
+      await waitFor(() => card('Trig identities'))
+      const c = openCard('Trig identities')
       fireEvent.click(within(c).getByRole('button', { name: /replace my submission/i }))
       fireEvent.change(within(c).getByLabelText(/choose photos or pdf/i), { target: { files: [photo('n1.jpg'), photo('n2.jpg')] } })
       fireEvent.click(await within(c).findByRole('button', { name: /submit all 2 pages/i }))
@@ -380,7 +401,10 @@ describe('StudentHomework', () => {
     const show = list => {
       mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'Arjun', homework: list } }) })
       render(<StudentHomework mobile="9876543210" lwsId="L1" />)
-      return screen.findByRole('region', { name: /calculation errors across homeworks/i })
+      return screen.findByRole('button', { name: /^📤 homework/i }).then(() => {
+        openSection()
+        return screen.getByRole('region', { name: /calculation errors across homeworks/i })
+      })
     }
 
     it('adds up the marks lost across graded homework', async () => {
@@ -400,10 +424,11 @@ describe('StudentHomework', () => {
 
     it('opens that homework\'s marks when a row is tapped', async () => {
       const region = await show(LIST)
-      const c = card('Vectors')
-      expect(within(c).getByRole('button', { name: /see marks/i })).toHaveAttribute('aria-expanded', 'false')
+      // The card is collapsed, so the row must open the card as well as its marks.
+      expect(cardButton('Vectors')).toHaveAttribute('aria-expanded', 'false')
       fireEvent.click(within(region).getByRole('button', { name: /vectors/i }))
-      expect(within(c).getByRole('button', { name: /hide marks/i })).toHaveAttribute('aria-expanded', 'true')
+      expect(cardButton('Vectors')).toHaveAttribute('aria-expanded', 'true')
+      expect(within(card('Vectors')).getByRole('button', { name: /hide marks/i })).toHaveAttribute('aria-expanded', 'true')
     })
 
     it('says so when graded homework had no calculation errors', async () => {
@@ -418,5 +443,72 @@ describe('StudentHomework', () => {
       await screen.findByText('Trig identities')
       expect(screen.queryByRole('region', { name: /calculation errors/i })).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('StudentHomework — collapsed by default (2026-11-05)', () => {
+  beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}))
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  const only = list => {
+    mockFetch({ 'homework-list': () => ({ status: 200, json: { name: 'A', homework: list } }) })
+    render(<StudentHomework mobile="9876543210" lwsId="L1" />)
+    return screen.findByRole('button', { name: /^📤 homework/i })
+  }
+
+  it('says what is in the section on its header', async () => {
+    const header = await only(HOMEWORK)
+    expect(header).toHaveTextContent('2 to do · 1 waiting · 1 graded · 1 missed')
+  })
+
+  it('opens the section, and only the cards that can still be handed in, when something is due', async () => {
+    const header = await only(HOMEWORK)
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    expect(cardButton('Limits — Exercise 2.3')).toHaveAttribute('aria-expanded', 'true')
+    expect(cardButton('RD Sharma Ex 3.2')).toHaveAttribute('aria-expanded', 'true')
+    expect(within(card('Limits — Exercise 2.3')).getByLabelText(/choose photos or pdf/i)).toBeInTheDocument()
+    for (const t of ['Trig identities', 'Matrices', 'Vectors']) {
+      expect(cardButton(t)).toHaveAttribute('aria-expanded', 'false')
+    }
+    expect(within(card('Trig identities')).queryByRole('button', { name: /replace my submission/i })).toBeNull()
+    expect(within(card('Matrices')).queryByRole('button', { name: /see marks/i })).toBeNull()
+  })
+
+  it('keeps the status and the score on a collapsed row', async () => {
+    await only(HOMEWORK)
+    expect(within(card('Matrices')).getByText('Graded')).toBeInTheDocument()
+    expect(within(card('Matrices')).getByText('7.5 / 10')).toBeInTheDocument()
+    expect(within(card('Trig identities')).getByText(/waiting to be graded/i)).toBeInTheDocument()
+  })
+
+  it('starts closed when nothing is due, and opens on a tap', async () => {
+    const header = await only([HOMEWORK[3]])
+    expect(header).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('homework-card')).toBeNull()
+    fireEvent.click(header)
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    expect(card('Matrices')).toBeInTheDocument()
+  })
+
+  it('opens and closes a card from its row', async () => {
+    await only(HOMEWORK)
+    fireEvent.click(cardButton('Matrices'))
+    expect(within(card('Matrices')).getByRole('button', { name: /see marks/i })).toBeInTheDocument()
+    fireEvent.click(cardButton('Matrices'))
+    expect(within(card('Matrices')).queryByRole('button', { name: /see marks/i })).toBeNull()
+  })
+
+  it('keeps the comments behind a closed toggle in the marks', async () => {
+    await only(HOMEWORK)
+    const c = openCard('Matrices')
+    fireEvent.click(within(c).getByRole('button', { name: /see marks/i }))
+    const toggle = within(c).getByRole('button', { name: /comments on each question/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(c).queryByText('Neat row operations.')).toBeNull()
+    expect(within(c).queryByText('Sign error.')).toBeNull()
+    fireEvent.click(toggle)
+    expect(within(c).getByText('Neat row operations.')).toBeInTheDocument()
+    expect(within(c).getByText('Check the determinant sign.')).toBeInTheDocument()
+    expect(within(c).getByText('Sign error.')).toBeInTheDocument()
   })
 })

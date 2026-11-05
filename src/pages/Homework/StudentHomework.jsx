@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Card, Badge, Alert, Spinner } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import { ACCEPT, CAMERA_ACCEPT, SUBMISSIONS_BUCKET, validateUploadFiles } from '../../lib/assignments/upload'
@@ -33,13 +33,28 @@ export default function StudentHomework({ mobile, lwsId }) {
   // Which homework's marks are open: here, not in each card, so a row in the
   // calculation-errors card can open one.
   const [openMarks, setOpenMarks] = useState(() => new Set())
+  // Collapsed by default (2026-11-05): the section opens by itself only when
+  // something can still be handed in, and so do those cards, so a deadline is
+  // never hidden. Set once, on the first load — a reload after handing in must
+  // not close what the student has open.
+  const [sectionOpen, setSectionOpen] = useState(false)
+  const [openCards, setOpenCards] = useState(() => new Set())
+  const initialised = useRef(false)
+  const bodyId = useId()
 
   const known = Boolean(mobile && lwsId)
   const load = useCallback(async () => {
     const r = await post({ kind: 'homework-list', mobile, lwsId })
     if (!r.ok) { setError(r.body?.error || 'Could not load homework.'); setHomework([]); return }
     setError('')
-    setHomework(r.body.homework ?? [])
+    const list = r.body.homework ?? []
+    setHomework(list)
+    if (!initialised.current) {
+      initialised.current = true
+      const due = list.filter(h => h.canSubmit).map(h => h.id)
+      setOpenCards(new Set(due))
+      setSectionOpen(due.length > 0)
+    }
   }, [mobile, lwsId])
 
   // Fetch on mount: every setState in load() runs after the request resolves,
@@ -64,23 +79,67 @@ export default function StudentHomework({ mobile, lwsId }) {
     else next.add(id)
     return next
   })
+  const toggleCard = id => setOpenCards(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  // A calculation-errors row opens that homework's card as well as its marks:
+  // the card is usually collapsed (it is graded, so nothing is due on it).
   const openFromSummary = id => {
+    setOpenCards(prev => new Set(prev).add(id))
     setOpenMarks(prev => new Set(prev).add(id))
     requestAnimationFrame(() => document.getElementById(`homework-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
   }
 
   return (
     <div className="mb-6">
-      <div className="text-[13px] font-extrabold text-ink uppercase tracking-wide mb-2">📤 Homework</div>
-      <CalculationErrorsCard summary={summariseCalculationErrors(homework)} onOpen={openFromSummary} />
-      <div className="space-y-2">
-        {homework.map(h => (
-          <HomeworkCard key={h.id} hw={h} mobile={mobile} lwsId={lwsId} onHandedIn={load}
-                        showMarks={openMarks.has(h.id)} onToggleMarks={() => toggleMarks(h.id)} />
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={() => setSectionOpen(o => !o)}
+        aria-expanded={sectionOpen}
+        aria-controls={bodyId}
+        className="w-full flex items-center gap-2 mb-2 min-h-[44px] text-left rounded
+                   focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <span className="text-[13px] font-extrabold text-ink uppercase tracking-wide">📤 Homework</span>
+        <span className="ml-auto text-[12px] text-ink-3 text-right">{homeworkSummary(homework)}</span>
+        <span aria-hidden="true" className="text-ink-3">{sectionOpen ? '▴' : '▾'}</span>
+      </button>
+      {sectionOpen && (
+        <div id={bodyId}>
+          <CalculationErrorsCard summary={summariseCalculationErrors(homework)} onOpen={openFromSummary} />
+          <div className="space-y-2">
+            {homework.map(h => (
+              <HomeworkCard key={h.id} hw={h} mobile={mobile} lwsId={lwsId} onHandedIn={load}
+                            open={openCards.has(h.id)} onToggle={() => toggleCard(h.id)}
+                            showMarks={openMarks.has(h.id)} onToggleMarks={() => toggleMarks(h.id)} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+// "2 to do · 1 waiting · 4 graded · 1 missed" — the section header, so a
+// closed section still says whether anything needs doing. Same buckets as the
+// status badges: a sent-back hand-in that can be resubmitted is "to do", and a
+// held grade reads as waiting, exactly as its badge does.
+function homeworkSummary(list) {
+  let toDo = 0, waiting = 0, graded = 0, missed = 0
+  for (const h of list) {
+    const s = h.submission?.status
+    if (h.canSubmit) toDo++
+    else if (s === 'graded') graded++
+    else if (s === 'submitted') waiting++
+    else if (h.state === 'closed') missed++
+  }
+  return [
+    toDo && `${toDo} to do`, waiting && `${waiting} waiting`,
+    graded && `${graded} graded`, missed && `${missed} missed`,
+  ].filter(Boolean).join(' · ')
 }
 
 function statusBadge(hw) {
@@ -92,22 +151,37 @@ function statusBadge(hw) {
   return <Badge variant="blue">To do</Badge>
 }
 
-function HomeworkCard({ hw, mobile, lwsId, onHandedIn, showMarks, onToggleMarks }) {
+// One row until tapped (2026-11-05): title, deadline, status and — once graded
+// — the score, so a closed card still answers "how did I do". The parent
+// decides which cards start open (only those that can still be handed in).
+function HomeworkCard({ hw, mobile, lwsId, onHandedIn, open, onToggle, showMarks, onToggleMarks }) {
   const [replacing, setReplacing] = useState(false)
   const sub = hw.submission
+  const graded = sub?.status === 'graded'
 
   return (
     <Card id={`homework-${hw.id}`} data-testid="homework-card" className="flex flex-col gap-2 scroll-mt-[80px]">
-      <div className="flex items-start gap-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex items-start gap-2 w-full text-left rounded min-h-[44px]
+                   focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-bold text-ink">{hw.title}</div>
           <div className="text-[11px] text-ink-3 font-mono">
             {hw.subject} · out of {hw.maxMarks} · {hw.state === 'open' ? 'due' : 'was due'} {fmtDeadline(hw.dueAt)}
           </div>
         </div>
-        {statusBadge(hw)}
-      </div>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          {statusBadge(hw)}
+          {graded && <span className="text-[14px] font-bold font-mono text-ink">{sub.totalAwarded} / {sub.totalMax}</span>}
+        </div>
+        <span aria-hidden="true" className="text-ink-3 mt-0.5">{open ? '▴' : '▾'}</span>
+      </button>
 
+      {open && <>
       {hw.instructions && <p className="text-[13px] text-ink-2 whitespace-pre-line">{hw.instructions}</p>}
 
       {hw.questionFiles.length > 0 && (
@@ -136,11 +210,12 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn, showMarks, onToggleMarks 
         </div>
       )}
 
-      {sub?.status === 'graded' && (
+      {graded && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-[15px] font-bold font-mono text-ink">{sub.totalAwarded} / {sub.totalMax}</span>
-            <button className="text-[12px] font-semibold text-accent hover:underline"
+          {/* The score sits on the card's row above, open or closed. */}
+          <div>
+            <button className="text-[12px] font-semibold text-accent hover:underline min-h-[32px] rounded
+                               focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                     aria-expanded={showMarks} onClick={onToggleMarks}>
               {showMarks ? 'Hide marks' : 'See marks'}
             </button>
@@ -159,6 +234,7 @@ function HomeworkCard({ hw, mobile, lwsId, onHandedIn, showMarks, onToggleMarks 
                 onCancel={() => setReplacing(false)}
                 onHandedIn={() => { setReplacing(false); onHandedIn() }} />
       )}
+      </>}
     </Card>
   )
 }

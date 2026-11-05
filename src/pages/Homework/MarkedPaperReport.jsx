@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { buildPaperReport } from '../../lib/assignments/paperReport'
 
 // A graded homework, as the student reads it (2026-10-16): the score, where
@@ -58,25 +58,62 @@ function WhereMarksWent({ lost }) {
   )
 }
 
-function Focus({ focus, smallerFixes }) {
+function Focus({ focus }) {
   return (
     <div className="flex flex-col gap-1.5">
-      {focus.length > 0 && (
-        <>
-          <SectionTitle>What to focus on</SectionTitle>
-          <ul aria-label="What to focus on" className="flex flex-col gap-2">
-            {focus.map(f => (
-              <li key={f.label} className="rounded-lg border-l-[3px] border-accent bg-accent-soft px-3 py-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-semibold text-ink">{f.heading}</span>
-                  <span className="ml-auto shrink-0 font-mono text-ink-2">{f.label} · −{fmt(f.lost)}</span>
-                </div>
-                {f.missing && <div className="text-ink-2">{f.missing}</div>}
-              </li>
-            ))}
-          </ul>
-        </>
+      <SectionTitle>What to focus on</SectionTitle>
+      <ul aria-label="What to focus on" className="flex flex-col gap-2">
+        {focus.map(f => (
+          <li key={f.label} className="rounded-lg border-l-[3px] border-accent bg-accent-soft px-3 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="font-semibold text-ink">{f.heading}</span>
+              <span className="ml-auto shrink-0 font-mono text-ink-2">{f.label} · −{fmt(f.lost)}</span>
+            </div>
+            {f.missing && <div className="text-ink-2">{f.missing}</div>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// The written feedback — smaller fixes, what went well / what to work on, and
+// every question's comment — behind one closed toggle (owner decision,
+// 2026-11-05). Kept rather than removed: the marked pages are purged 30 days
+// after grading, and this is then the only place the comments remain on screen.
+function Comments({ smallerFixes, wentWell, nextSteps, grades }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={id}
+        className={`self-start text-[12.5px] font-semibold text-accent hover:underline min-h-[32px] rounded ${LINK_FOCUS}`}
+      >
+        Comments on each question <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div id={id} className="flex flex-col gap-3">
+          {smallerFixes.length > 0 && <SmallerFixes smallerFixes={smallerFixes} />}
+          {(wentWell || nextSteps) && (
+            <div className="flex flex-col gap-1">
+              {wentWell && <div><span className="font-semibold text-ink-2">What went well: </span>{wentWell}</div>}
+              {nextSteps && <div><span className="font-semibold text-ink-2">What to work on: </span>{nextSteps}</div>}
+            </div>
+          )}
+          <Questions grades={grades} />
+        </div>
       )}
+    </div>
+  )
+}
+
+function SmallerFixes({ smallerFixes }) {
+  return (
+    <div className="flex flex-col gap-1.5">
       {smallerFixes.length > 0 && (
         <ul aria-label="Smaller fixes" className="flex flex-col divide-y divide-border">
           {smallerFixes.map(f => (
@@ -153,12 +190,8 @@ export default function MarkedPaperReport({ sub }) {
     <div className="flex flex-col gap-4 text-[12.5px]">
       <Summary r={r} />
       {r.lost.length > 0 && <WhereMarksWent lost={r.lost} />}
-      {(r.focus.length > 0 || r.smallerFixes.length > 0) && <Focus focus={r.focus} smallerFixes={r.smallerFixes} />}
-      <div className="flex flex-col gap-1">
-        {sub.wentWell && <div><span className="font-semibold text-ink-2">What went well: </span>{sub.wentWell}</div>}
-        {sub.nextSteps && <div><span className="font-semibold text-ink-2">What to work on: </span>{sub.nextSteps}</div>}
-      </div>
-      <Questions grades={sub.grades} />
+      {r.focus.length > 0 && <Focus focus={r.focus} />}
+      <Comments smallerFixes={r.smallerFixes} wentWell={sub.wentWell} nextSteps={sub.nextSteps} grades={sub.grades} />
       {pages.length > 0 && <MarkedPages pages={pages} reportUrl={sub.reportUrl} />}
       {sub.pagesRemoved && (
         <p className="text-ink-3">
